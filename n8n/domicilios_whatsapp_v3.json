@@ -1,0 +1,310 @@
+{
+  "name": "domicilios_whatsapp_v3",
+  "nodes": [
+    {
+      "id": "wh_dom_1",
+      "name": "Webhook Domicilio",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 300],
+      "webhookId": "rest-dom-003",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "domicilios",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "parse_dom_1",
+      "name": "Extraer Remitente",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 300],
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst from = raw.From || raw.messages?.[0]?.from || raw.from || raw.sender || '';\nconst remitente = String(from).replace(/^whatsapp:\\+?/i, '').replace(/[^0-9]/g, '').slice(-10);\nif (!remitente) throw new Error('No se pudo extraer numero de remitente');\nreturn [{ json: { remitente, raw_payload: raw } }];"
+      }
+    },
+    {
+      "id": "validar_rem_db",
+      "name": "Validar Remitente en DB",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/authorized_numbers?phone=eq.{{ $json.remitente }}&is_active=eq.true&select=id,name",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_ANON_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_ANON_KEY }}" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "check_auth_1",
+      "name": "Remitente Autorizado?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [880, 300],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.length > 0 }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "resp_ign_1",
+      "name": "Responder No Autorizado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1100, 160],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"ok\":false,\"error\":\"Remitente no autorizado\"}",
+        "options": { "responseCode": 403 }
+      }
+    },
+    {
+      "id": "parse_msg_1",
+      "name": "Parsear Mensaje Pedido",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 440],
+      "parameters": {
+        "jsCode": "const raw = $('Extraer Remitente').first().json.raw_payload;\nconst body = raw.Body || raw.messages?.[0]?.text?.body || raw.text || raw.body || '';\nconst lines = body.split('\\n').map(l => l.trim()).filter(Boolean);\nconst extract = (keywords) => {\n  for (const line of lines) {\n    const lower = line.toLowerCase();\n    for (const kw of keywords) {\n      if (lower.includes(kw.toLowerCase())) {\n        const parts = line.split(':');\n        if (parts.length > 1) return parts.slice(1).join(':').trim();\n        const idx = lower.indexOf(kw.toLowerCase()) + kw.length;\n        return line.substring(idx).replace(/^[\\s:-]+/, '');\n      }\n    }\n  }\n  return null;\n};\nconst nombre_cliente = extract(['nombre cliente', 'nombre:', 'cliente']) || lines[1] || 'Cliente Domicilio';\nconst celular_raw = extract(['celular', 'telefono', 'numero']) || lines[2];\nconst direccion = extract(['direccion', 'dir:', 'ubicacion']) || lines[3] || null;\nconst metodo_pago = extract(['metodo pago', 'pago', 'efectivo', 'transferencia']) || lines[5] || null;\nconst monto_total_raw = extract(['monto total', 'total']) || lines[6];\nconst celular = celular_raw ? String(celular_raw).replace(/[\\s\\-\\(\\)]/g,'').replace(/^\\+?57/,'').replace(/^0/,'').slice(-10) : null;\nconst parseMonto = (val) => {\n  if (!val) return null;\n  const cleaned = String(val).replace(/\\$/g,'').replace(/\\./g,'').replace(',','.').trim();\n  const num = parseFloat(cleaned);\n  return isNaN(num) ? null : num;\n};\nconst monto_total = parseMonto(monto_total_raw);\nif (!celular || !/^3\\d{9}$/.test(celular)) throw new Error('No se encontro un celular valido en el mensaje');\nreturn [{ json: { nombre_cliente, celular, direccion, metodo_pago, monto_total, raw_message: body } }];"
+      }
+    },
+    {
+      "id": "buscar_gc_1",
+      "name": "Buscar en Google Contacts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, 440],
+      "parameters": {
+        "method": "GET",
+        "url": "https://people.googleapis.com/v1/people:searchContacts?query={{ $json.celular }}&readMask=names,phoneNumbers,addresses,metadata",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api"
+      }
+    },
+    {
+      "id": "check_gc_1",
+      "name": "Contacto Existe?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1540, 440],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ ($json.results || []).length > 0 }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "crear_gc_1",
+      "name": "Crear Contacto Nuevo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1760, 320],
+      "parameters": {
+        "method": "POST",
+        "url": "https://people.googleapis.com/v1/people:createContact",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"names\":[{\"givenName\":\"{{ $('Parsear Mensaje Pedido').item.json.nombre_cliente }}\"}],\"phoneNumbers\":[{\"value\":\"+57{{ $('Parsear Mensaje Pedido').item.json.celular }}\"}],\"addresses\":[{\"formattedValue\":\"{{ $('Parsear Mensaje Pedido').item.json.direccion || 'Sin direccion' }}\"}]}"
+      }
+    },
+    {
+      "id": "comparar_gc_1",
+      "name": "Comparar Datos Contacto",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1760, 560],
+      "parameters": {
+        "jsCode": "const results = $input.first().json.results || [];\nconst contactoExistente = results[0];\nconst datosNuevos = $('Parsear Mensaje Pedido').item.json;\nif (!contactoExistente) return [{ json: { actualizar: false } }];\nconst contactId = contactoExistente.resourceName;\nconst nombreActual = contactoExistente.names?.[0]?.givenName || '';\nconst direccionActual = contactoExistente.addresses?.[0]?.formattedValue || '';\nconst cambios = [];\nif (nombreActual.toLowerCase() !== datosNuevos.nombre_cliente.toLowerCase()) cambios.push('nombre');\nif (datosNuevos.direccion && direccionActual.toLowerCase() !== datosNuevos.direccion.toLowerCase()) cambios.push('direccion');\nreturn [{ json: { actualizar: cambios.length > 0, contactoId: contactId, datosNuevos, etag: contactoExistente.etag } }];"
+      }
+    },
+    {
+      "id": "check_upd_1",
+      "name": "Necesita Actualizar?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1980, 560],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.actualizar }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "actualizar_gc_1",
+      "name": "Actualizar Contacto",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2200, 480],
+      "parameters": {
+        "method": "PATCH",
+        "url": "https://people.googleapis.com/v1/{{ $('Comparar Datos Contacto').item.json.contactoId }}:updateContact?updatePersonFields=names,addresses",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"names\":[{\"givenName\":\"{{ $('Comparar Datos Contacto').item.json.datosNuevos.nombre_cliente }}\"}],\"addresses\":[{\"formattedValue\":\"{{ $('Comparar Datos Contacto').item.json.datosNuevos.direccion }}\"}],\"etag\":\"{{ $('Comparar Datos Contacto').item.json.etag }}\"}"
+      }
+    },
+    {
+      "id": "merge_gc_1",
+      "name": "Merge Google Contacts",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [2420, 420],
+      "parameters": {
+        "mode": "chooseBranch",
+        "output": "input1"
+      }
+    },
+    {
+      "id": "call_api_1",
+      "name": "Registrar en RestaurantQR API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2640, 420],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.RESTAURANT_API_URL }}/api/webhook/delivery",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-webhook-secret", "value": "={{ $env.WEBHOOK_DELIVERY_SECRET }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Parsear Mensaje Pedido').item.json) }}"
+      }
+    },
+    {
+      "id": "resp_ok_1",
+      "name": "Responder OK Domicilio",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2860, 420],
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ '<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response><Message>✅ ' + ($json.is_new ? 'Nuevo cliente registrado' : 'Cliente actualizado') + ': ' + $('Parsear Mensaje Pedido').item.json.nombre_cliente + ' (' + $('Parsear Mensaje Pedido').item.json.celular + '). Visita #' + $json.customer?.total_visits + ($json.reward ? ' 🎁 ' + $json.reward.title : '') + '</Message></Response>' }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              { "name": "Content-Type", "value": "text/xml" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "resp_err_parse",
+      "name": "Responder Error Parseo",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1320, 600],
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response><Message>❌ No pude encontrar un número de celular válido. Reenvía el mensaje con el número del cliente (10 dígitos, empieza con 3).</Message></Response>",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              { "name": "Content-Type", "value": "text/xml" }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook Domicilio": {
+      "main": [[{"node": "Extraer Remitente", "type": "main", "index": 0}]]
+    },
+    "Extraer Remitente": {
+      "main": [[{"node": "Validar Remitente en DB", "type": "main", "index": 0}]]
+    },
+    "Validar Remitente en DB": {
+      "main": [[{"node": "Remitente Autorizado?", "type": "main", "index": 0}]]
+    },
+    "Remitente Autorizado?": {
+      "main": [
+        [{"node": "Responder No Autorizado", "type": "main", "index": 0}],
+        [{"node": "Parsear Mensaje Pedido", "type": "main", "index": 0}]
+      ]
+    },
+    "Parsear Mensaje Pedido": {
+      "main": [[{"node": "Buscar en Google Contacts", "type": "main", "index": 0}]]
+    },
+    "Buscar en Google Contacts": {
+      "main": [[{"node": "Contacto Existe?", "type": "main", "index": 0}]]
+    },
+    "Contacto Existe?": {
+      "main": [
+        [{"node": "Crear Contacto Nuevo", "type": "main", "index": 0}],
+        [{"node": "Comparar Datos Contacto", "type": "main", "index": 0}]
+      ]
+    },
+    "Crear Contacto Nuevo": {
+      "main": [[{"node": "Merge Google Contacts", "type": "main", "index": 0}]]
+    },
+    "Comparar Datos Contacto": {
+      "main": [[{"node": "Necesita Actualizar?", "type": "main", "index": 0}]]
+    },
+    "Necesita Actualizar?": {
+      "main": [
+        [{"node": "Merge Google Contacts", "type": "main", "index": 1}],
+        [{"node": "Actualizar Contacto", "type": "main", "index": 0}]
+      ]
+    },
+    "Actualizar Contacto": {
+      "main": [[{"node": "Merge Google Contacts", "type": "main", "index": 1}]]
+    },
+    "Merge Google Contacts": {
+      "main": [[{"node": "Registrar en RestaurantQR API", "type": "main", "index": 0}]]
+    },
+    "Registrar en RestaurantQR API": {
+      "main": [[{"node": "Responder OK Domicilio", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

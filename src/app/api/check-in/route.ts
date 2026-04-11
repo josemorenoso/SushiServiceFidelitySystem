@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      const updated = await incrementVisit(customer.id, customer.total_visits)
+      const updated = await incrementVisit(customer.id, customer.total_visits, 'qr')
       await createVisit({ customerId: customer.id, source: 'qr' })
 
       // Evaluar recompensa

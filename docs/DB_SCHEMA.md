@@ -1,7 +1,7 @@
 # Esquema de Base de Datos
 
 **Base de datos:** Supabase (PostgreSQL)
-**Última actualización:** 2026-04-07 22:09
+**Última actualización:** 2026-04-11 10:30
 
 ---
 
@@ -106,6 +106,8 @@ erDiagram
 | `city` | `text` | SI | `NULL` | Ciudad del cliente |
 | `total_visits` | `integer` | NO | `0` | Contador total de visitas |
 | `last_visit_at` | `timestamptz` | SI | `NULL` | Fecha de última visita |
+| `source_channels` | `text` | NO | `'qr'` | Origen del cliente: 'qr', 'delivery' o 'both' |
+| `last_campaign_at` | `timestamptz` | SI | `NULL` | Fecha de última campaña recibida (frequency cap) |
 | `created_at` | `timestamptz` | NO | `now()` | Fecha de creación |
 | `updated_at` | `timestamptz` | NO | `now()` | Última actualización |
 
@@ -206,6 +208,7 @@ CREATE POLICY "admin_update_customers" ON customers
 | `status` | `text` | NO | `'pending'` | Estado: 'pending', 'sent', 'delivered', 'failed' |
 | `twilio_sid` | `text` | SI | `NULL` | SID del mensaje en Twilio |
 | `sent_at` | `timestamptz` | SI | `NULL` | Fecha de envío |
+| `error_message` | `text` | SI | `NULL` | Detalle del error si falló |
 
 **Foreign Keys:**
 
@@ -245,6 +248,7 @@ CREATE POLICY "admin_update_customers" ON customers
 | 3 | `00003_delivery_fields.sql` | 2026-04-08 | Campos delivery en visits: address, payment_method, amount, raw_message | Pendiente |
 | 4 | `00004_campaigns.sql` | 2026-04-08 | Tablas campaigns + campaign_messages + índices + RLS | Pendiente |
 | 5 | `00005_add_city.sql` | 2026-04-08 | Campo city en customers + índice parcial | Pendiente |
+| 6 | `00006_source_channels_frequency_cap.sql` | 2026-04-11 | source_channels + last_campaign_at en customers, error_message en campaign_messages, backfill | Pendiente |
 
 ---
 

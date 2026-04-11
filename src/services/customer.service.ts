@@ -30,6 +30,7 @@ export async function createCustomer(params: {
   name: string
   birthday: string | null
   city: string | null
+  source?: 'qr' | 'delivery'
 }): Promise<Customer> {
   const supabase = getServiceClient()
   const { data, error } = await supabase
@@ -41,6 +42,7 @@ export async function createCustomer(params: {
       city: params.city,
       total_visits: 1,
       last_visit_at: new Date().toISOString(),
+      source_channels: params.source ?? 'qr',
     })
     .select()
     .single()
@@ -52,16 +54,35 @@ export async function createCustomer(params: {
   return data
 }
 
-export async function incrementVisit(customerId: string, currentVisits: number): Promise<Customer> {
+export async function incrementVisit(customerId: string, currentVisits: number, source?: 'qr' | 'delivery'): Promise<Customer> {
   const supabase = getServiceClient()
   const newVisits = currentVisits + 1
 
+  // If source provided, update source_channels accordingly
+  const updateData: Record<string, unknown> = {
+    total_visits: newVisits,
+    last_visit_at: new Date().toISOString(),
+  }
+
+  if (source) {
+    // Fetch current source_channels to determine if we need to upgrade to 'both'
+    const { data: current } = await supabase
+      .from('customers')
+      .select('source_channels')
+      .eq('id', customerId)
+      .single()
+
+    const currentSource = current?.source_channels ?? 'qr'
+    if (currentSource !== 'both' && currentSource !== source) {
+      updateData.source_channels = 'both'
+    } else if (currentSource !== 'both') {
+      updateData.source_channels = source
+    }
+  }
+
   const { data, error } = await supabase
     .from('customers')
-    .update({
-      total_visits: newVisits,
-      last_visit_at: new Date().toISOString(),
-    })
+    .update(updateData)
     .eq('id', customerId)
     .select()
     .single()

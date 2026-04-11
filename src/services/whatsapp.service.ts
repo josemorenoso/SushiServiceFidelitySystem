@@ -1,6 +1,6 @@
 import { formatPhoneForWhatsApp } from '@/lib/validators/phone'
 
-interface TwilioMessageResponse {
+export interface TwilioMessageResponse {
   sid: string
   status: string
 }
@@ -38,6 +38,36 @@ async function sendWhatsApp(to: string, body: string): Promise<TwilioMessageResp
     return { sid: message.sid, status: message.status }
   } catch (error) {
     console.error('[WhatsApp] Error enviando mensaje:', error)
+    return null
+  }
+}
+
+export async function sendTemplateMessage(
+  phone: string,
+  contentSid: string,
+  variables: Record<string, string>
+): Promise<TwilioMessageResponse | null> {
+  const config = getTwilioClient()
+  if (!config) {
+    console.warn('[WhatsApp] Twilio no configurado — mensaje no enviado')
+    return null
+  }
+
+  try {
+    const twilio = (await import('twilio')).default
+    const client = twilio(config.accountSid, config.authToken)
+
+    const message = await client.messages.create({
+      from: config.whatsappNumber,
+      to: formatPhoneForWhatsApp(phone),
+      contentSid,
+      contentVariables: JSON.stringify(variables),
+    })
+
+    console.log(`[WhatsApp] Template enviado: ${message.sid} (${contentSid})`)
+    return { sid: message.sid, status: message.status }
+  } catch (error) {
+    console.error('[WhatsApp] Error enviando template:', error)
     return null
   }
 }

@@ -19,6 +19,9 @@ import {
   Clock,
   XCircle,
   CloudUpload,
+  ChevronDown,
+  ShieldAlert,
+  Lightbulb,
 } from 'lucide-react'
 
 interface TwilioTemplate {
@@ -62,6 +65,8 @@ export default function TemplatesPage() {
   const [newCategory, setNewCategory] = useState('MARKETING')
   const [creating, setCreating] = useState(false)
   const [createResult, setCreateResult] = useState<string | null>(null)
+  const [showWarning, setShowWarning] = useState(false)
+  const [showTips, setShowTips] = useState(false)
 
   const fetchTemplates = useCallback(async () => {
     setSyncing(true)
@@ -248,10 +253,56 @@ export default function TemplatesPage() {
             </CardTitle>
             <CardDescription>
               Se creará directamente en Twilio Content API y se enviará para aprobación de WhatsApp.
-              Usa {'{{1}}'}, {'{{2}}'} como variables numeradas (formato Twilio).
+              Usa {'{{1}}'} = nombre, {'{{2}}'} = visitas, {'{{3}}'} = próxima recompensa.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
+            <button
+              type="button"
+              onClick={() => setShowWarning(!showWarning)}
+              className="flex items-center gap-2 w-full text-left text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 hover:bg-amber-100 transition-colors"
+            >
+              <ShieldAlert className="h-3.5 w-3.5 shrink-0" />
+              Advertencia importante sobre aprobación de Meta
+              <ChevronDown className={`h-3.5 w-3.5 ml-auto transition-transform ${showWarning ? 'rotate-180' : ''}`} />
+            </button>
+            {showWarning && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3 text-xs text-amber-800 space-y-1.5">
+                <p>Las plantillas pasan por aprobación de Meta (<strong>24 a 72 horas</strong>). Plantillas rechazadas repetidamente pueden <strong>afectar la reputación de tu número</strong> y eventualmente suspenderlo.</p>
+                <p className="font-medium">Evitar:</p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li>Contenido engañoso, amenazante o con lenguaje abusivo</li>
+                  <li>URLs acortadas (bit.ly, tinyurl) — Meta las rechaza</li>
+                  <li>Pedir datos sensibles (contraseñas, tarjetas, documentos)</li>
+                  <li>Plantillas idénticas a una previamente rechazada</li>
+                  <li>Exceso de emojis, MAYÚSCULAS o signos de exclamación</li>
+                  <li>Contenido que simule urgencia falsa (&quot;ÚLTIMA OPORTUNIDAD&quot;)</li>
+                </ul>
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setShowTips(!showTips)}
+              className="flex items-center gap-2 w-full text-left text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 hover:bg-blue-100 transition-colors"
+            >
+              <Lightbulb className="h-3.5 w-3.5 shrink-0" />
+              Recomendaciones para plantillas exitosas
+              <ChevronDown className={`h-3.5 w-3.5 ml-auto transition-transform ${showTips ? 'rotate-180' : ''}`} />
+            </button>
+            {showTips && (
+              <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-3 text-xs text-blue-800 space-y-1.5">
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li>Sé claro y directo — el cliente debe entender el mensaje en 3 segundos</li>
+                  <li>Personaliza con variables: {'{{1}}'} nombre, {'{{2}}'} visitas, {'{{3}}'} recompensa</li>
+                  <li>Incluye el nombre del negocio para que sepan quién les escribe</li>
+                  <li>Un solo CTA (call to action) claro: &quot;Visítanos&quot;, &quot;Pide tu domicilio&quot;</li>
+                  <li>Tono amigable y profesional — como le hablarías a un cliente en persona</li>
+                  <li>Categoría MARKETING para promos; UTILITY para confirmaciones y transacciones</li>
+                  <li>Máximo 1024 caracteres — lo ideal es menos de 200</li>
+                </ul>
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label className="text-xs">Nombre</Label>
               <Input

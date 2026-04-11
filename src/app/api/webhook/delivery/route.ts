@@ -53,11 +53,12 @@ export async function POST(request: NextRequest) {
         name: customerName,
         birthday: null,
         city: null,
+        source: 'delivery',
       })
       isNew = true
       action = 'created'
     } else {
-      customer = await incrementVisit(customer.id, customer.total_visits)
+      customer = await incrementVisit(customer.id, customer.total_visits, 'delivery')
     }
 
     await createVisit({

@@ -5,6 +5,55 @@
 
 ---
 
+## [0.13.0] — 2026-04-11 10:30
+
+### Added — Lógica de recompensas en plantillas, source_channels, frequency capping
+
+**Variables automáticas en plantillas de campaña:**
+- `reward.service.ts` — `getNextReward(visits)` busca siguiente recompensa activa
+- `reward.service.ts` — `buildRewardHint(visits, reward)` genera texto: "En tu visita 5 ganas: Sushi Tiger Gratis (te faltan 2)"
+- Campañas manuales ahora envían `{{1}}=nombre`, `{{2}}=visitas`, `{{3}}=próxima recompensa` automáticamente
+
+**Envío REAL de mensajes en campañas:**
+- `whatsapp.service.ts` — `sendTemplateMessage(phone, contentSid, variables)` usa Twilio Content API
+- `campaigns/manual/route.ts` — Reescrito completo: envía mensajes reales, registra twilio_sid, error_message por cada destinatario
+
+**Segmentación por canal de origen:**
+- `customers.source_channels` — 'qr' | 'delivery' | 'both'
+- Se actualiza automáticamente en check-in (QR) y delivery webhook
+- Si un cliente usa ambos canales → se marca como 'both'
+- Migración SQL con backfill basado en historial de visitas
+
+**Frequency capping (anti-spam):**
+- `customers.last_campaign_at` — Fecha de última campaña marketing recibida
+- Campañas manuales excluyen clientes contactados en los últimos 7 días
+- Response incluye `totalSkippedFrequencyCap` para transparencia
+
+**Warnings en creación de plantillas:**
+- Advertencia desplegable sobre aprobación de Meta + qué evitar
+- Recomendaciones desplegables para plantillas exitosas
+
+### Migración SQL requerida
+- `00006_source_channels_frequency_cap.sql` — Ejecutar en Supabase
+
+### Archivos afectados
+- `src/services/reward.service.ts` — getNextReward, buildRewardHint
+- `src/services/whatsapp.service.ts` — sendTemplateMessage (Content API)
+- `src/services/customer.service.ts` — source param en createCustomer/incrementVisit
+- `src/app/api/dashboard/campaigns/manual/route.ts` — Envío real + freq cap
+- `src/app/api/check-in/route.ts` — Pasa source='qr'
+- `src/app/api/webhook/delivery/route.ts` — Pasa source='delivery'
+- `src/types/database.types.ts` — source_channels, last_campaign_at
+- `src/app/(dashboard)/dashboard/templates/page.tsx` — Warnings desplegables
+- `supabase/migrations/00006_source_channels_frequency_cap.sql` — Nueva migración
+- `docs/DB_SCHEMA.md` — Actualizado
+
+**Build:** ✅ 28 rutas, 0 errores
+
+> **Request original:** Lógica recompensas en variables, segmentador qr/delivery, frequency capping, warnings en plantillas
+
+---
+
 ## [0.12.0] — 2026-04-10 23:30
 
 ### Fixed — Templates mostrando "Borrador" en dashboard

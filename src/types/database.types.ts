@@ -6,6 +6,8 @@ export interface Customer {
   city: string | null
   total_visits: number
   last_visit_at: string | null
+  source_channels: 'qr' | 'delivery' | 'both'
+  last_campaign_at: string | null
   created_at: string
   updated_at: string
 }
@@ -67,12 +69,14 @@ export interface Database {
     Tables: {
       customers: {
         Row: Customer
-        Insert: Omit<Customer, 'id' | 'created_at' | 'updated_at' | 'total_visits' | 'last_visit_at'> & {
+        Insert: Omit<Customer, 'id' | 'created_at' | 'updated_at' | 'total_visits' | 'last_visit_at' | 'source_channels' | 'last_campaign_at'> & {
           id?: string
           created_at?: string
           updated_at?: string
           total_visits?: number
           last_visit_at?: string | null
+          source_channels?: 'qr' | 'delivery' | 'both'
+          last_campaign_at?: string | null
         }
         Update: Partial<Omit<Customer, 'id' | 'created_at'>>
       }

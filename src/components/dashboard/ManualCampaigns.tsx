@@ -45,6 +45,7 @@ interface TwilioTemplate {
   friendly_name: string
   body: string
   approval_status: string
+  status: string
   category: string
 }
 
@@ -109,7 +110,8 @@ export function ManualCampaigns() {
       const res = await fetch('/api/dashboard/templates')
       const data = await res.json()
       const approved = (data.templates ?? []).filter(
-        (t: TwilioTemplate) => t.approval_status === 'approved'
+        (t: TwilioTemplate) =>
+          (t.approval_status || t.status)?.toLowerCase() === 'approved'
       )
       setTemplates(approved)
     } catch {

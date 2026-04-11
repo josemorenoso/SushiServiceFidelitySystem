@@ -44,6 +44,7 @@ export async function GET() {
       status?: string
       category?: string
       name?: string
+      channel_type?: string
       whatsapp?: {
         status?: string
         category?: string
@@ -58,7 +59,7 @@ export async function GET() {
       date_updated: string
       types: Record<string, { body?: string }>
       variables?: Record<string, string>
-      approval_requests?: TwilioApprovalRequests
+      approval_requests?: TwilioApprovalRequests | TwilioApprovalRequests[]
     }
 
     // Fetch approval status for each content item individually for reliability
@@ -66,43 +67,51 @@ export async function GET() {
 
     const templates = await Promise.all(
       contents.map(async (t) => {
-        // Try to get status from the content item first
         let approvalStatus = 'draft'
         let category = 'MARKETING'
 
-        const ar = t.approval_requests
-        if (ar) {
-          // Try direct status field
-          if (ar.status && ar.status !== 'draft') {
-            approvalStatus = ar.status
-          }
-          // Try nested whatsapp field
-          if (ar.whatsapp?.status) {
-            approvalStatus = ar.whatsapp.status
-          }
-          if (ar.category) category = ar.category
-          if (ar.whatsapp?.category) category = ar.whatsapp.category
+        // Helper to extract status from an approval object (handles multiple Twilio formats)
+        const extractFromApprovalObj = (ar: TwilioApprovalRequests) => {
+          const raw = ar.whatsapp?.status || ar.status || ''
+          if (raw) approvalStatus = raw.toLowerCase()
+          const cat = ar.whatsapp?.category || ar.category || ''
+          if (cat) category = cat
         }
 
-        // If still draft, fetch approval status from dedicated endpoint
-        if (approvalStatus === 'draft') {
-          try {
-            const approvalRes = await fetch(
-              `${TWILIO_CONTENT_API}/${t.sid}/ApprovalRequests/whatsapp`,
-              { headers: headers!, cache: 'no-store' }
+        const ar = t.approval_requests
+        if (ar) {
+          // approval_requests may be an array or a plain object depending on API version
+          if (Array.isArray(ar)) {
+            const whatsappEntry = (ar as TwilioApprovalRequests[]).find(
+              (item) => item.whatsapp?.status || item.status
             )
-            if (approvalRes.ok) {
-              const approvalData = await approvalRes.json()
-              if (approvalData.status) {
-                approvalStatus = approvalData.status
-              }
-              if (approvalData.category) {
-                category = approvalData.category
-              }
-            }
-          } catch {
-            // If individual fetch fails, keep draft status
+            if (whatsappEntry) extractFromApprovalObj(whatsappEntry)
+          } else {
+            extractFromApprovalObj(ar)
           }
+        }
+
+        // Fetch from the authoritative endpoint: GET /ApprovalRequests (without /whatsapp)
+        // Response structure: { whatsapp: { status: "approved", category: "MARKETING", ... } }
+        try {
+          const approvalRes = await fetch(
+            `${TWILIO_CONTENT_API}/${t.sid}/ApprovalRequests`,
+            { headers: headers!, cache: 'no-store' }
+          )
+          if (approvalRes.ok) {
+            const approvalData = await approvalRes.json()
+            const rawStatus = approvalData?.whatsapp?.status || ''
+            if (rawStatus) approvalStatus = rawStatus.toLowerCase()
+            const rawCategory = approvalData?.whatsapp?.category || ''
+            if (rawCategory) category = rawCategory
+          } else {
+            const errText = await approvalRes.text()
+            console.error(
+              `[Templates] ApprovalRequests fetch failed for ${t.sid}: ${approvalRes.status} ${errText}`
+            )
+          }
+        } catch (err) {
+          console.error(`[Templates] ApprovalRequests exception for ${t.sid}:`, err)
         }
 
         const body = t.types?.['twilio/text']?.body

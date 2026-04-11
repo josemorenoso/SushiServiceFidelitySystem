@@ -1,62 +1,93 @@
 import Link from "next/link";
-import Image from "next/image";
-import { QrCode, LayoutDashboard, Truck, UtensilsCrossed } from "lucide-react";
+import { QrCode, LayoutDashboard, UtensilsCrossed, Sparkles } from "lucide-react";
 
 export default function Home() {
   return (
-    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-red-50 via-white to-red-50/30 p-6">
-      <Image
-        src="/images/sushi-3.png"
-        alt=""
-        width={380}
-        height={480}
-        className="pointer-events-none absolute -right-16 top-8 opacity-[0.06] select-none"
-        priority
+    <div className="premium-bg relative flex min-h-screen flex-col items-center justify-center overflow-hidden p-6">
+      {/* Orb decorativo de fondo */}
+      <div
+        className="pointer-events-none absolute -top-32 -right-32 h-[480px] w-[480px] rounded-full opacity-[0.06]"
+        style={{ background: "radial-gradient(circle, #FF4D6D 0%, transparent 70%)" }}
       />
-      <Image
-        src="/images/sushi-1.png"
-        alt=""
-        width={260}
-        height={260}
-        className="pointer-events-none absolute -left-12 bottom-4 opacity-[0.07] select-none"
+      <div
+        className="pointer-events-none absolute -bottom-24 -left-24 h-[360px] w-[360px] rounded-full opacity-[0.05]"
+        style={{ background: "radial-gradient(circle, #E63946 0%, transparent 70%)" }}
       />
 
-      <div className="relative z-10 w-full max-w-md space-y-8 text-center">
-        <div className="flex flex-col items-center gap-3">
-          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10 ring-2 ring-primary/20 shadow-lg shadow-primary/10">
-            <UtensilsCrossed className="h-10 w-10 text-primary" />
+      <div className="animate-fade-in-up relative z-10 w-full max-w-sm">
+        {/* Header */}
+        <div className="mb-10 flex flex-col items-center gap-5 text-center">
+          <div
+            className="flex h-20 w-20 items-center justify-center rounded-full"
+            style={{
+              background: "linear-gradient(135deg, #FF4D6D 0%, #E63946 100%)",
+              boxShadow: "0 8px 28px rgba(230, 57, 70, 0.30)",
+            }}
+          >
+            <UtensilsCrossed className="h-9 w-9 text-white" strokeWidth={1.25} />
           </div>
-          <h1 className="text-3xl font-bold tracking-tight text-primary">Sushi Service</h1>
-          <p className="text-muted-foreground">
-            Programa de fidelidad — registra tu visita y gana premios
-          </p>
+
+          <div>
+            <h1
+              className="font-playfair text-[2.25rem] font-bold leading-tight"
+              style={{ color: "#1a1c1d", letterSpacing: "-0.02em" }}
+            >
+              Sushi Service
+            </h1>
+            <p
+              className="mt-2 text-sm font-medium"
+              style={{ color: "#9ca3af", letterSpacing: "0.01em" }}
+            >
+              Programa de fidelidad
+            </p>
+          </div>
         </div>
 
-        <div className="space-y-3">
+        {/* Card central */}
+        <div className="premium-card p-6 space-y-3">
+          {/* Badge */}
+          <div className="flex justify-center mb-5">
+            <span
+              className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-widest"
+              style={{
+                background: "rgba(255, 77, 109, 0.08)",
+                color: "#E63946",
+                letterSpacing: "0.05em",
+              }}
+            >
+              <Sparkles className="h-3 w-3" strokeWidth={1.5} />
+              Registra y gana premios
+            </span>
+          </div>
+
+          {/* CTA principal */}
           <Link
             href="/check-in"
-            className="flex h-14 w-full items-center justify-center gap-3 rounded-xl bg-primary text-primary-foreground text-lg font-medium transition-all hover:bg-primary/90 shadow-md shadow-primary/20 hover:shadow-lg hover:shadow-primary/30"
+            className="btn-premium flex h-[52px] w-full items-center justify-center gap-2.5 rounded-xl text-base font-semibold"
+            style={{ letterSpacing: "-0.01em" }}
           >
-            <QrCode className="h-5 w-5" />
+            <QrCode className="h-4 w-4" strokeWidth={1.5} />
             Registrar Visita
           </Link>
 
+          {/* CTA secundario */}
           <Link
             href="/dashboard"
-            className="flex h-14 w-full items-center justify-center gap-3 rounded-xl border border-border text-lg font-medium transition-all hover:bg-muted/80 backdrop-blur-sm bg-white/70"
+            className="btn-secondary-premium flex h-[52px] w-full items-center justify-center gap-2.5 rounded-xl text-sm font-medium"
+            style={{ color: "#6b7280", letterSpacing: "-0.01em" }}
           >
-            <LayoutDashboard className="h-5 w-5" />
+            <LayoutDashboard className="h-4 w-4" strokeWidth={1.5} />
             Panel Admin
           </Link>
         </div>
 
-        <div className="pt-4 text-xs text-muted-foreground">
-          <p>Escanea el QR en la mesa para registrar tu visita</p>
-          <p className="mt-1 flex items-center justify-center gap-1">
-            <Truck className="h-3 w-3" />
-            Domicilios se registran automáticamente vía WhatsApp
-          </p>
-        </div>
+        {/* Footer */}
+        <p
+          className="mt-6 text-center text-xs"
+          style={{ color: "#d1d5db" }}
+        >
+          Escanea el QR en tu mesa para registrar tu visita
+        </p>
       </div>
     </div>
   );

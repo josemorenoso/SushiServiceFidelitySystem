@@ -1,11 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Loader2, Phone, User, Calendar, MapPin } from 'lucide-react'
+import { Loader2, Phone, User, Calendar, MapPin, ArrowLeft } from 'lucide-react'
 import type {
   CheckInFormProps,
   CheckInStep,
@@ -46,7 +42,6 @@ export function CheckInForm({
 
       if (data.found && data.customer) {
         onLookupResult(data)
-        // Auto check-in
         const checkInRes = await fetch('/api/check-in', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -115,131 +110,205 @@ export function CheckInForm({
 
   if (step === 'phone') {
     return (
-      <Card className="w-full max-w-md mx-auto">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl">Bienvenido</CardTitle>
-          <CardDescription>Ingresa tu número de celular para continuar</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handlePhoneSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="phone">Número de celular</Label>
-              <div className="relative">
-                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="phone"
-                  type="tel"
-                  inputMode="numeric"
-                  placeholder="3001234567"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                  className="pl-10 text-lg h-12"
-                  maxLength={10}
-                  required
-                  autoFocus
-                />
-              </div>
-              <p className="text-xs text-muted-foreground">10 dígitos, empieza con 3</p>
-            </div>
-            <Button
-              type="submit"
-              className="w-full h-12 text-lg"
-              disabled={phone.length < 10 || loading}
+      <div className="premium-card animate-fade-in-up w-full p-7">
+        {/* Encabezado */}
+        <div className="mb-6 text-center">
+          <h2
+            className="font-playfair text-2xl font-bold"
+            style={{ color: "#1a1c1d", letterSpacing: "-0.02em" }}
+          >
+            Bienvenido
+          </h2>
+          <p className="mt-1 text-sm" style={{ color: "#9ca3af" }}>
+            Ingresa tu número de celular para continuar
+          </p>
+        </div>
+
+        <form onSubmit={handlePhoneSubmit} className="space-y-4">
+          <div className="space-y-1.5">
+            <label
+              htmlFor="phone"
+              className="text-xs font-semibold uppercase tracking-widest"
+              style={{ color: "#6b7280", letterSpacing: "0.05em" }}
             >
-              {loading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Buscando...
-                </>
-              ) : (
-                'Continuar'
-              )}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+              Número de celular
+            </label>
+            <div className="relative">
+              <Phone
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4"
+                strokeWidth={1.5}
+                style={{ color: "#9ca3af" }}
+              />
+              <input
+                id="phone"
+                type="tel"
+                inputMode="numeric"
+                placeholder="3001234567"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                className="input-premium w-full rounded-xl py-3.5 pl-10 pr-4 text-lg font-medium outline-none"
+                style={{ color: "#1a1c1d", letterSpacing: "-0.01em" }}
+                maxLength={10}
+                required
+                autoFocus
+              />
+            </div>
+            <p className="text-xs" style={{ color: "#d1d5db" }}>
+              10 dígitos, empieza con 3
+            </p>
+          </div>
+
+          <button
+            type="submit"
+            className="btn-premium mt-2 flex h-[52px] w-full items-center justify-center gap-2 rounded-xl text-sm font-semibold"
+            style={{ letterSpacing: "-0.01em" }}
+            disabled={phone.length < 10 || loading}
+          >
+            {loading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.5} />
+                Buscando...
+              </>
+            ) : (
+              'Continuar'
+            )}
+          </button>
+        </form>
+      </div>
     )
   }
 
   if (step === 'register') {
     return (
-      <Card className="w-full max-w-md mx-auto">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl">Regístrate</CardTitle>
-          <CardDescription>Es tu primera vez. ¡Completa tu registro!</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleRegisterSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Nombre</Label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="name"
-                  type="text"
-                  placeholder="Tu nombre"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="pl-10 text-lg h-12"
-                  required
-                  autoFocus
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="city">Ciudad</Label>
-              <div className="relative">
-                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="city"
-                  type="text"
-                  placeholder="Ej: Bogotá, Medellín..."
-                  value={city}
-                  onChange={(e) => setCity(e.target.value)}
-                  className="pl-10 text-lg h-12"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="birthday">Fecha de nacimiento (opcional)</Label>
-              <div className="relative">
-                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="birthday"
-                  type="date"
-                  value={birthday}
-                  onChange={(e) => setBirthday(e.target.value)}
-                  className="pl-10 text-lg h-12"
-                  max={new Date().toISOString().split('T')[0]}
-                />
-              </div>
-            </div>
-            <Button
-              type="submit"
-              className="w-full h-12 text-lg"
-              disabled={!name.trim() || name.trim().length < 2 || loading}
+      <div className="premium-card animate-fade-in-up w-full p-7">
+        {/* Encabezado */}
+        <div className="mb-6 text-center">
+          <h2
+            className="font-playfair text-2xl font-bold"
+            style={{ color: "#1a1c1d", letterSpacing: "-0.02em" }}
+          >
+            Regístrate
+          </h2>
+          <p className="mt-1 text-sm" style={{ color: "#9ca3af" }}>
+            Es tu primera vez. ¡Completa tu registro!
+          </p>
+        </div>
+
+        <form onSubmit={handleRegisterSubmit} className="space-y-4">
+          {/* Nombre */}
+          <div className="space-y-1.5">
+            <label
+              htmlFor="name"
+              className="text-xs font-semibold uppercase tracking-widest"
+              style={{ color: "#6b7280", letterSpacing: "0.05em" }}
             >
-              {loading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Registrando...
-                </>
-              ) : (
-                'Registrarme'
-              )}
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              className="w-full"
-              onClick={() => setStep('phone')}
-              disabled={loading}
+              Nombre
+            </label>
+            <div className="relative">
+              <User
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4"
+                strokeWidth={1.5}
+                style={{ color: "#9ca3af" }}
+              />
+              <input
+                id="name"
+                type="text"
+                placeholder="Tu nombre"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="input-premium w-full rounded-xl py-3.5 pl-10 pr-4 text-base outline-none"
+                style={{ color: "#1a1c1d" }}
+                required
+                autoFocus
+              />
+            </div>
+          </div>
+
+          {/* Ciudad */}
+          <div className="space-y-1.5">
+            <label
+              htmlFor="city"
+              className="text-xs font-semibold uppercase tracking-widest"
+              style={{ color: "#6b7280", letterSpacing: "0.05em" }}
             >
-              Volver
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+              Ciudad
+            </label>
+            <div className="relative">
+              <MapPin
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4"
+                strokeWidth={1.5}
+                style={{ color: "#9ca3af" }}
+              />
+              <input
+                id="city"
+                type="text"
+                placeholder="Ej: Bogotá, Medellín..."
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                className="input-premium w-full rounded-xl py-3.5 pl-10 pr-4 text-base outline-none"
+                style={{ color: "#1a1c1d" }}
+              />
+            </div>
+          </div>
+
+          {/* Fecha de nacimiento */}
+          <div className="space-y-1.5">
+            <label
+              htmlFor="birthday"
+              className="text-xs font-semibold uppercase tracking-widest"
+              style={{ color: "#6b7280", letterSpacing: "0.05em" }}
+            >
+              Cumpleaños{" "}
+              <span style={{ color: "#d1d5db", textTransform: "none", fontSize: "0.65rem" }}>
+                (opcional)
+              </span>
+            </label>
+            <div className="relative">
+              <Calendar
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4"
+                strokeWidth={1.5}
+                style={{ color: "#9ca3af" }}
+              />
+              <input
+                id="birthday"
+                type="date"
+                value={birthday}
+                onChange={(e) => setBirthday(e.target.value)}
+                className="input-premium w-full rounded-xl py-3.5 pl-10 pr-4 text-base outline-none"
+                style={{ color: "#1a1c1d" }}
+                max={new Date().toISOString().split('T')[0]}
+              />
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            className="btn-premium mt-2 flex h-[52px] w-full items-center justify-center gap-2 rounded-xl text-sm font-semibold"
+            style={{ letterSpacing: "-0.01em" }}
+            disabled={!name.trim() || name.trim().length < 2 || loading}
+          >
+            {loading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.5} />
+                Registrando...
+              </>
+            ) : (
+              'Registrarme'
+            )}
+          </button>
+
+          <button
+            type="button"
+            className="flex w-full items-center justify-center gap-1.5 py-2 text-sm font-medium transition-colors duration-200"
+            style={{ color: "#9ca3af" }}
+            onClick={() => setStep('phone')}
+            disabled={loading}
+          >
+            <ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.5} />
+            Volver
+          </button>
+        </form>
+      </div>
     )
   }
 

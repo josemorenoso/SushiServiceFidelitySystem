@@ -2,12 +2,7 @@
 
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Loader2, Lock, Mail, UtensilsCrossed } from 'lucide-react'
-import Image from 'next/image'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -41,81 +36,127 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-red-50 via-white to-stone-50 p-4">
-      <Image
-        src="/images/sushi-4.png"
-        alt=""
-        width={280}
-        height={400}
-        className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 opacity-[0.04] select-none"
-        priority
+    <div className="premium-bg relative flex min-h-screen items-center justify-center overflow-hidden p-4">
+      {/* Orb decorativo */}
+      <div
+        className="pointer-events-none absolute -top-24 -right-24 h-[400px] w-[400px] rounded-full opacity-[0.06]"
+        style={{ background: "radial-gradient(circle, #FF4D6D 0%, transparent 70%)" }}
       />
-      <Image
-        src="/images/sushi-2.png"
-        alt=""
-        width={300}
-        height={300}
-        className="pointer-events-none absolute -left-10 bottom-0 opacity-[0.05] select-none"
+      <div
+        className="pointer-events-none absolute -bottom-20 -left-20 h-[320px] w-[320px] rounded-full opacity-[0.05]"
+        style={{ background: "radial-gradient(circle, #E63946 0%, transparent 70%)" }}
       />
-      <Card className="relative z-10 w-full max-w-sm backdrop-blur-sm bg-white/90 shadow-xl">
-        <CardHeader className="text-center space-y-3">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 ring-2 ring-primary/20">
-            <UtensilsCrossed className="h-7 w-7 text-primary" />
+
+      <div className="animate-fade-in-up relative z-10 w-full max-w-sm">
+        {/* Header */}
+        <div className="mb-8 flex flex-col items-center gap-4 text-center">
+          <div
+            className="flex h-16 w-16 items-center justify-center rounded-full"
+            style={{
+              background: "linear-gradient(135deg, #FF4D6D 0%, #E63946 100%)",
+              boxShadow: "0 8px 24px rgba(230, 57, 70, 0.28)",
+            }}
+          >
+            <UtensilsCrossed className="h-7 w-7 text-white" strokeWidth={1.25} />
           </div>
-          <CardTitle className="text-2xl text-primary">Sushi Service</CardTitle>
-          <CardDescription>Panel de administración</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+          <div>
+            <h1
+              className="font-playfair text-3xl font-bold"
+              style={{ color: "#1a1c1d", letterSpacing: "-0.02em" }}
+            >
+              Sushi Service
+            </h1>
+            <p className="mt-1 text-sm" style={{ color: "#9ca3af" }}>
+              Panel de administración
+            </p>
+          </div>
+        </div>
+
+        {/* Card */}
+        <div className="premium-card p-7">
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {/* Email */}
+            <div className="space-y-1.5">
+              <label
+                htmlFor="email"
+                className="text-xs font-semibold uppercase tracking-widest"
+                style={{ color: "#6b7280", letterSpacing: "0.05em" }}
+              >
+                Email
+              </label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
+                <Mail
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4"
+                  strokeWidth={1.5}
+                  style={{ color: "#9ca3af" }}
+                />
+                <input
                   id="email"
                   type="email"
                   placeholder="admin@sushiservice.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="pl-10"
+                  className="input-premium w-full rounded-xl py-3 pl-10 pr-4 text-sm outline-none"
+                  style={{ color: "#1a1c1d" }}
                   required
                   autoFocus
                 />
               </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Contraseña</Label>
+
+            {/* Contraseña */}
+            <div className="space-y-1.5">
+              <label
+                htmlFor="password"
+                className="text-xs font-semibold uppercase tracking-widest"
+                style={{ color: "#6b7280", letterSpacing: "0.05em" }}
+              >
+                Contraseña
+              </label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
+                <Lock
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4"
+                  strokeWidth={1.5}
+                  style={{ color: "#9ca3af" }}
+                />
+                <input
                   id="password"
                   type="password"
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="pl-10"
+                  className="input-premium w-full rounded-xl py-3 pl-10 pr-4 text-sm outline-none"
+                  style={{ color: "#1a1c1d" }}
                   required
                 />
               </div>
             </div>
 
             {error && (
-              <p className="text-sm text-destructive text-center">{error}</p>
+              <p className="rounded-xl px-4 py-2.5 text-sm text-center"
+                style={{ background: "rgba(230, 57, 70, 0.07)", color: "#E63946" }}>
+                {error}
+              </p>
             )}
 
-            <Button type="submit" className="w-full" disabled={loading}>
+            <button
+              type="submit"
+              className="btn-premium mt-1 flex h-[52px] w-full items-center justify-center gap-2 rounded-xl text-sm font-semibold"
+              style={{ letterSpacing: "-0.01em" }}
+              disabled={loading}
+            >
               {loading ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.5} />
                   Ingresando...
                 </>
               ) : (
                 'Iniciar sesión'
               )}
-            </Button>
+            </button>
           </form>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   )
 }

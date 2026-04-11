@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import Image from 'next/image'
 import { CheckInForm, CheckInSuccess } from '@/components/features/check-in'
 import { Toaster, toast } from 'sonner'
 import { UtensilsCrossed } from 'lucide-react'
@@ -44,34 +43,45 @@ export default function CheckInPage() {
   }
 
   return (
-    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-red-50 via-white to-stone-50 p-4">
-      <Image
-        src="/images/sushi-1.png"
-        alt=""
-        width={220}
-        height={220}
-        className="pointer-events-none absolute -right-8 top-6 opacity-[0.06] select-none"
-        priority
+    <div className="premium-bg relative flex min-h-screen flex-col items-center justify-center overflow-hidden p-4">
+      {/* Orb decorativo */}
+      <div
+        className="pointer-events-none absolute -top-28 -right-28 h-[420px] w-[420px] rounded-full opacity-[0.05]"
+        style={{ background: "radial-gradient(circle, #FF4D6D 0%, transparent 70%)" }}
       />
-      <Image
-        src="/images/sushi-5.png"
-        alt=""
-        width={200}
-        height={300}
-        className="pointer-events-none absolute -left-6 bottom-0 opacity-[0.05] select-none"
+      <div
+        className="pointer-events-none absolute -bottom-20 -left-20 h-[300px] w-[300px] rounded-full opacity-[0.04]"
+        style={{ background: "radial-gradient(circle, #E63946 0%, transparent 70%)" }}
       />
 
       <Toaster position="top-center" richColors />
 
-      <div className="relative z-10 mb-8 flex flex-col items-center gap-2">
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 ring-2 ring-primary/20 shadow-lg shadow-primary/10">
-          <UtensilsCrossed className="h-8 w-8 text-primary" />
+      {/* Header de marca */}
+      <div className="animate-fade-in-up relative z-10 mb-7 flex flex-col items-center gap-3 text-center">
+        <div
+          className="flex h-14 w-14 items-center justify-center rounded-full"
+          style={{
+            background: "linear-gradient(135deg, #FF4D6D 0%, #E63946 100%)",
+            boxShadow: "0 6px 20px rgba(230, 57, 70, 0.26)",
+          }}
+        >
+          <UtensilsCrossed className="h-6 w-6 text-white" strokeWidth={1.25} />
         </div>
-        <h1 className="text-xl font-semibold tracking-tight text-primary">Sushi Service</h1>
-        <p className="text-xs text-muted-foreground">Programa de fidelidad</p>
+        <div>
+          <h1
+            className="font-playfair text-2xl font-bold"
+            style={{ color: "#1a1c1d", letterSpacing: "-0.02em" }}
+          >
+            Sushi Service
+          </h1>
+          <p className="mt-0.5 text-xs font-medium" style={{ color: "#9ca3af" }}>
+            Programa de fidelidad
+          </p>
+        </div>
       </div>
 
-      <div className="relative z-10">
+      {/* Contenido */}
+      <div className="relative z-10 w-full max-w-md">
         {state.view === 'form' && (
           <CheckInForm
             onLookupResult={() => {}}

@@ -2,7 +2,7 @@
 
 **Base URL:** `/api`
 **Autenticación:** Bearer Token (JWT) — Supabase Auth
-**Última actualización:** 2026-04-10 16:30
+**Última actualización:** 2026-04-10 22:50
 
 ---
 
@@ -37,6 +37,7 @@ Webhooks validan origen por número autorizado o `CRON_SECRET`.
 | GET | /api/dashboard/analytics | Analytics completos del dashboard | Admin JWT |
 | GET | /api/dashboard/templates | Listar plantillas Twilio Content API | Admin JWT |
 | POST | /api/dashboard/templates | Crear plantilla + submit aprobación WhatsApp | Admin JWT |
+| POST | /api/dashboard/check-in-override | Registrar visita extra (admin override) | Admin JWT |
 
 ---
 

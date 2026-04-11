@@ -5,6 +5,51 @@
 
 ---
 
+## [0.11.0] — 2026-04-10 22:50
+
+### Fixed — Login, QR Preview, Política Meta WhatsApp
+
+**Login múltiples clicks (Fix):**
+- `login/page.tsx` — Reemplazado `router.push()` por `window.location.href` para full-page reload
+- Las cookies de Supabase Auth ahora se envían correctamente en la primera navegación
+- Eliminado `useRouter` innecesario
+
+**QR no aparece en vista previa (Fix):**
+- `dashboard/qr/page.tsx` — Reemplazado `<canvas>` por `<img src={dataUrl}>` 
+- Eliminada race condition: `QRCode.toCanvas` se llamaba antes de que el canvas estuviera en el DOM
+- QR ahora se muestra inmediatamente al cargar la página
+
+**Campañas: Selector de plantillas aprobadas (Fix — Política Meta):**
+- `ManualCampaigns.tsx` — Eliminado textarea de "mensaje personalizado" 
+- Reemplazado por selector de plantillas aprobadas de Twilio Content API
+- Meta/WhatsApp requiere pre-approved templates para mensajes business-initiated fuera del service window de 24h
+- Si no hay plantillas aprobadas → muestra advertencia con link a sección Plantillas
+- Botón "Sincronizar" para refrescar lista de plantillas desde Twilio
+
+### Added — Rate Limiting Check-in + Admin Override
+
+**Rate limiting check-in (máx 1/día):**
+- `api/check-in/route.ts` — Ventana de duplicados aumentada de 60min a 1440min (24h)
+- Mensaje claro: "Solo puedes registrar una visita por día"
+
+**Admin override para visitas extra:**
+- `api/dashboard/check-in-override/route.ts` — Endpoint protegido (Admin JWT)
+- Permite registrar visita adicional con motivo, saltando el rate limit
+- La visita queda registrada con nota "Override admin: [razón]"
+
+### Archivos afectados
+- `src/app/(auth)/login/page.tsx` — Fix login
+- `src/app/(dashboard)/dashboard/qr/page.tsx` — Fix QR preview
+- `src/components/dashboard/ManualCampaigns.tsx` — Template selector
+- `src/app/api/check-in/route.ts` — Rate limit 24h
+- `src/app/api/dashboard/check-in-override/route.ts` — Nuevo endpoint
+
+**Build:** ✅ 28 rutas, 0 errores
+
+> **Request original:** Fix login multi-click, QR vacío, campañas con mensaje libre viola política Meta, agregar rate limit check-in 1/día + admin override
+
+---
+
 ## [0.10.0] — 2026-04-10 16:30
 
 ### Added — Conexión Twilio Real, Vercel Crons, n8n Workflows, Diagnóstico

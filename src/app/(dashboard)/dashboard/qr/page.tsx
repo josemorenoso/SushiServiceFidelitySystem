@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,7 +13,6 @@ export default function QrPage() {
   const [baseUrl, setBaseUrl] = useState('')
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
 
   const checkInUrl = baseUrl ? `${baseUrl}/check-in` : ''
 
@@ -41,18 +40,6 @@ export default function QrPage() {
         errorCorrectionLevel: 'H',
       })
       setQrDataUrl(dataUrl)
-
-      if (canvasRef.current) {
-        await QRCode.toCanvas(canvasRef.current, checkInUrl, {
-          width: 300,
-          margin: 2,
-          color: {
-            dark: '#991B1B',
-            light: '#FFFFFF',
-          },
-          errorCorrectionLevel: 'H',
-        })
-      }
     } catch {
       // silent
     }
@@ -150,7 +137,7 @@ export default function QrPage() {
 
               {qrDataUrl ? (
                 <div className="rounded-xl border p-2 shadow-sm">
-                  <canvas ref={canvasRef} className="rounded-lg" />
+                  <img src={qrDataUrl} alt="QR Code Sushi Service" width={300} height={300} className="rounded-lg" />
                 </div>
               ) : (
                 <div className="flex h-[300px] w-[300px] items-center justify-center rounded-xl bg-muted">

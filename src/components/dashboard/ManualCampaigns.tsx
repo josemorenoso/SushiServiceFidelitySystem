@@ -25,6 +25,9 @@ import {
   Calendar,
   Hash,
   CheckCircle,
+  AlertTriangle,
+  RefreshCw,
+  FileText,
 } from 'lucide-react'
 import { CampaignCostEstimate } from './TwilioWallet'
 
@@ -37,6 +40,14 @@ interface CampaignFilters {
   source: 'all' | 'qr_only' | 'delivery_only'
 }
 
+interface TwilioTemplate {
+  sid: string
+  friendly_name: string
+  body: string
+  approval_status: string
+  category: string
+}
+
 interface PresetCampaign {
   id: string
   name: string
@@ -46,7 +57,6 @@ interface PresetCampaign {
   bg: string
   border: string
   filters: Partial<CampaignFilters>
-  template: string
 }
 
 const PRESETS: PresetCampaign[] = [
@@ -59,7 +69,6 @@ const PRESETS: PresetCampaign[] = [
     bg: 'bg-emerald-50',
     border: 'border-emerald-200',
     filters: { source: 'delivery_only', minVisits: '1' },
-    template: '¡Hola {{name}}! 🍣 Sabemos que amas nuestros domicilios. Ven a visitarnos al restaurante y disfruta de una experiencia única. ¡Tu primera visita tiene un regalo especial! 🎁 — Sushi Service',
   },
   {
     id: 'invite_delivery',
@@ -70,7 +79,6 @@ const PRESETS: PresetCampaign[] = [
     bg: 'bg-blue-50',
     border: 'border-blue-200',
     filters: { source: 'qr_only', minVisits: '1' },
-    template: '¡Hola {{name}}! 🏠 ¿Sabías que puedes pedir Sushi Service a domicilio? Escríbenos y te llevamos tus favoritos a la puerta de tu casa. ¡Primer domicilio con descuento! 🍣🛵 — Sushi Service',
   },
 ]
 
@@ -88,10 +96,32 @@ export function ManualCampaigns() {
   const [matchCount, setMatchCount] = useState<number | null>(null)
   const [loadingCount, setLoadingCount] = useState(false)
   const [selectedPreset, setSelectedPreset] = useState<PresetCampaign | null>(null)
-  const [customMessage, setCustomMessage] = useState('')
+  const [templates, setTemplates] = useState<TwilioTemplate[]>([])
+  const [selectedTemplate, setSelectedTemplate] = useState<TwilioTemplate | null>(null)
+  const [loadingTemplates, setLoadingTemplates] = useState(false)
   const [confirmDialog, setConfirmDialog] = useState(false)
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
+
+  const fetchTemplates = useCallback(async () => {
+    setLoadingTemplates(true)
+    try {
+      const res = await fetch('/api/dashboard/templates')
+      const data = await res.json()
+      const approved = (data.templates ?? []).filter(
+        (t: TwilioTemplate) => t.approval_status === 'approved'
+      )
+      setTemplates(approved)
+    } catch {
+      setTemplates([])
+    } finally {
+      setLoadingTemplates(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchTemplates()
+  }, [fetchTemplates])
 
   const fetchCount = useCallback(async (f: CampaignFilters) => {
     setLoadingCount(true)
@@ -123,12 +153,12 @@ export function ManualCampaigns() {
 
   const handlePresetSelect = (preset: PresetCampaign) => {
     setSelectedPreset(preset)
-    setCustomMessage(preset.template)
     const newFilters = { ...emptyFilters, ...preset.filters }
     setFilters(newFilters)
   }
 
   const handleSend = async () => {
+    if (!selectedTemplate) return
     setSending(true)
     try {
       await fetch('/api/dashboard/campaigns/manual', {
@@ -137,7 +167,8 @@ export function ManualCampaigns() {
         body: JSON.stringify({
           name: selectedPreset?.name ?? 'Campaña Manual',
           filters,
-          messageTemplate: customMessage,
+          templateSid: selectedTemplate.sid,
+          messageTemplate: selectedTemplate.body,
         }),
       })
       setSent(true)
@@ -151,7 +182,7 @@ export function ManualCampaigns() {
   const handleReset = () => {
     setFilters(emptyFilters)
     setSelectedPreset(null)
-    setCustomMessage('')
+    setSelectedTemplate(null)
     setConfirmDialog(false)
     setSent(false)
   }
@@ -185,7 +216,7 @@ export function ManualCampaigns() {
               <CardDescription className="text-xs">{preset.description}</CardDescription>
             </CardHeader>
             <CardContent>
-              <p className="text-xs text-muted-foreground italic line-clamp-2">&quot;{preset.template}&quot;</p>
+              <p className="text-xs text-muted-foreground italic line-clamp-2">{preset.description}</p>
             </CardContent>
           </Card>
         ))}
@@ -300,24 +331,64 @@ export function ManualCampaigns() {
             <CampaignCostEstimate recipientCount={matchCount ?? 0} />
           </div>
 
-          <div className="space-y-1.5">
-            <Label className="text-xs">Mensaje de la campaña</Label>
-            <textarea
-              value={customMessage}
-              onChange={(e) => setCustomMessage(e.target.value)}
-              placeholder="Escribe el mensaje para tus clientes... Usa {{name}} para personalizar."
-              rows={3}
-              className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
-            />
-            <p className="text-[11px] text-muted-foreground">
-              Variables disponibles: {'{{name}}'} = nombre del cliente
-            </p>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs flex items-center gap-1">
+                <FileText className="h-3 w-3" /> Plantilla aprobada por WhatsApp
+              </Label>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={fetchTemplates}
+                disabled={loadingTemplates}
+                className="h-6 text-xs gap-1"
+              >
+                <RefreshCw className={`h-3 w-3 ${loadingTemplates ? 'animate-spin' : ''}`} />
+                Sincronizar
+              </Button>
+            </div>
+
+            {templates.length === 0 && !loadingTemplates && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                <div>
+                  <p className="font-medium">No hay plantillas aprobadas</p>
+                  <p className="mt-1">Meta/WhatsApp requiere que los mensajes de campañas usen plantillas pre-aprobadas. Ve a <strong>Plantillas</strong> para crear y enviar plantillas a aprobación.</p>
+                </div>
+              </div>
+            )}
+
+            {loadingTemplates && (
+              <p className="text-xs text-muted-foreground">Cargando plantillas...</p>
+            )}
+
+            {templates.length > 0 && (
+              <div className="space-y-2">
+                {templates.map((t) => (
+                  <div
+                    key={t.sid}
+                    onClick={() => setSelectedTemplate(t)}
+                    className={`cursor-pointer rounded-lg border p-3 text-xs transition-all hover:shadow-sm ${
+                      selectedTemplate?.sid === t.sid
+                        ? 'border-primary ring-2 ring-primary/20 bg-primary/5'
+                        : 'border-border'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-medium">{t.friendly_name}</span>
+                      <Badge variant="outline" className="text-[10px]">{t.category}</Badge>
+                    </div>
+                    <p className="text-muted-foreground line-clamp-2 italic">&quot;{t.body}&quot;</p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="flex gap-2">
             <Button
               onClick={() => setConfirmDialog(true)}
-              disabled={!customMessage.trim() || (matchCount ?? 0) === 0}
+              disabled={!selectedTemplate || (matchCount ?? 0) === 0}
               className="gap-2 flex-1"
             >
               <Send className="h-4 w-4" />
@@ -352,9 +423,12 @@ export function ManualCampaigns() {
 
             <CampaignCostEstimate recipientCount={matchCount ?? 0} />
 
-            <div className="rounded-lg bg-muted/50 p-3 text-xs italic">
-              &quot;{customMessage.slice(0, 200)}{customMessage.length > 200 ? '...' : ''}&quot;
-            </div>
+            {selectedTemplate && (
+              <div className="rounded-lg bg-muted/50 p-3 text-xs space-y-1">
+                <p className="font-medium">{selectedTemplate.friendly_name}</p>
+                <p className="italic">&quot;{selectedTemplate.body}&quot;</p>
+              </div>
+            )}
 
             {sent && (
               <div className="rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-800 flex items-center gap-2">

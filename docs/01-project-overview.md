@@ -20,17 +20,18 @@ Plataforma integral (Full-Stack) de fidelización, CRM y automatización de mark
 | Estilos | TailwindCSS | 4.x |
 | Componentes UI | shadcn/ui + Lucide React | latest |
 | Mensajería | Twilio SDK (WhatsApp) | - |
-| Deploy | Vercel (pendiente) | - |
+| Deploy | Vercel | Producción |
 
 ## Estado del Proyecto
 | Fase | Descripción | Estado |
 |------|-------------|--------|
-| 1 | Setup + Auth + Estructura base | [x] Completo |
-| 2 | QR Check-in (Registro presencial) | [x] Completo (falta migración en Supabase) |
-| 3 | Webhook Domicilios (WhatsApp + n8n + Google Contacts) | [x] Completo (falta config n8n) |
-| 4 | Campañas y Automatizaciones (Cron) | [x] Completo (falta migración + CRON_SECRET) |
-| 5 | Dashboard Administrativo | [x] Completo (falta crear usuario Supabase Auth) |
-| 6 | Polish + Deploy | [ ] Pendiente |
+| 1 | Setup + Auth + Estructura base | ✅ Completo |
+| 2 | QR Check-in (Registro presencial) | ✅ Completo |
+| 3 | Webhook Domicilios (WhatsApp + n8n + Google Contacts) | ✅ Completo — n8n en producción |
+| 4 | Campañas y Automatizaciones (Cron) | ✅ Completo — Vercel crons configurados |
+| 5 | Dashboard Administrativo | ✅ Completo — Twilio conectado ($20 saldo) |
+| 6 | Deploy Vercel + Fixes post-deploy | ✅ v0.12.0 — Login, QR, Templates, Rate Limit |
+| 7 | MVP Producción | 🔧 En progreso — ver NEXT_STEPS.md |
 
 ## Principio Fundamental
 > El sistema debe ser simple para el cliente final (solo ingresa su celular) y poderoso para el administrador (dashboard con métricas, campañas y gestión completa).

@@ -37,6 +37,7 @@ const STATUS_MAP: Record<string, { label: string; icon: typeof CheckCircle; colo
   approved: { label: 'Aprobada', icon: CheckCircle, color: 'text-green-600 bg-green-50 border-green-200' },
   pending: { label: 'Pendiente', icon: Clock, color: 'text-amber-600 bg-amber-50 border-amber-200' },
   rejected: { label: 'Rechazada', icon: XCircle, color: 'text-red-600 bg-red-50 border-red-200' },
+  unsubmitted: { label: 'Sin enviar', icon: FileText, color: 'text-gray-600 bg-gray-50 border-gray-200' },
   draft: { label: 'Borrador', icon: FileText, color: 'text-gray-600 bg-gray-50 border-gray-200' },
   received: { label: 'En revisión', icon: Clock, color: 'text-blue-600 bg-blue-50 border-blue-200' },
 }
@@ -176,7 +177,7 @@ export default function TemplatesPage() {
           </h2>
           <div className="grid gap-3">
             {twilioTemplates.map((t) => {
-              const statusInfo = STATUS_MAP[t.status] || STATUS_MAP.draft
+              const statusInfo = STATUS_MAP[t.status] || STATUS_MAP[t.status?.toLowerCase()] || STATUS_MAP.draft
               const catInfo = CATEGORY_MAP[t.category] || CATEGORY_MAP.MARKETING
               const StatusIcon = statusInfo.icon
               return (

@@ -5,6 +5,37 @@
 
 ---
 
+## [0.12.0] — 2026-04-10 23:30
+
+### Fixed — Templates mostrando "Borrador" en dashboard
+
+**Templates approval status (Fix crítico):**
+- `api/dashboard/templates/route.ts` — Reescrito parseo de approval status:
+  - Intenta `approval_requests.status` (directo)
+  - Intenta `approval_requests.whatsapp.status` (nested)
+  - Si sigue en "draft" → fetch individual a `/Content/{sid}/ApprovalRequests/whatsapp`
+- Ahora retorna ambos nombres de campo: `name`/`friendly_name` y `status`/`approval_status`
+- `ManualCampaigns.tsx` ya puede filtrar por `approval_status === 'approved'` correctamente
+- Plantillas aprobadas en Twilio ahora se muestran como "Aprobada" en el dashboard
+
+### Changed — Niveles de clientes: metales preciosos
+
+**Tier names actualizados:**
+- `constants/rankings.ts` — Diamante(25+) > Platino(18+) > Oro(12+) > Plata(7+) > Bronce(3+) > Nuevo(1+)
+- Emojis, gradientes y colores actualizados para cada nivel
+- Impacta: CustomerTiers, PowerRanking, analytics
+
+### Archivos afectados
+- `src/app/api/dashboard/templates/route.ts` — Fix approval status
+- `src/constants/rankings.ts` — Nuevos tier names
+- `src/app/(dashboard)/dashboard/templates/page.tsx` — Status map actualizado
+
+**Build:** ✅ 28 rutas, 0 errores
+
+> **Request original:** Plantillas aprobadas en Twilio aparecen como borradores; cambiar tiers anime por metales preciosos
+
+---
+
 ## [0.11.0] — 2026-04-10 22:50
 
 ### Fixed — Login, QR Preview, Política Meta WhatsApp

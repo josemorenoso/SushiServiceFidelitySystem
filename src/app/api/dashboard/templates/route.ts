@@ -40,6 +40,16 @@ export async function GET() {
     }
 
     const data = await res.json()
+    interface TwilioApprovalRequests {
+      status?: string
+      category?: string
+      name?: string
+      whatsapp?: {
+        status?: string
+        category?: string
+        rejection_reason?: string
+      }
+    }
     interface TwilioContentItem {
       sid: string
       friendly_name: string
@@ -48,26 +58,74 @@ export async function GET() {
       date_updated: string
       types: Record<string, { body?: string }>
       variables?: Record<string, string>
-      approval_requests?: {
-        status: string
-        category?: string
-      }
+      approval_requests?: TwilioApprovalRequests
     }
 
-    const templates = (data.contents || []).map((t: TwilioContentItem) => ({
-      sid: t.sid,
-      name: t.friendly_name,
-      language: t.language,
-      status: t.approval_requests?.status || 'draft',
-      category: t.approval_requests?.category || 'MARKETING',
-      body: t.types?.['twilio/text']?.body
-        || t.types?.['twilio/quick-reply']?.body
-        || t.types?.['twilio/card']?.body
-        || '(tipo no textual)',
-      variables: t.variables || {},
-      createdAt: t.date_created,
-      updatedAt: t.date_updated,
-    }))
+    // Fetch approval status for each content item individually for reliability
+    const contents: TwilioContentItem[] = data.contents || []
+
+    const templates = await Promise.all(
+      contents.map(async (t) => {
+        // Try to get status from the content item first
+        let approvalStatus = 'draft'
+        let category = 'MARKETING'
+
+        const ar = t.approval_requests
+        if (ar) {
+          // Try direct status field
+          if (ar.status && ar.status !== 'draft') {
+            approvalStatus = ar.status
+          }
+          // Try nested whatsapp field
+          if (ar.whatsapp?.status) {
+            approvalStatus = ar.whatsapp.status
+          }
+          if (ar.category) category = ar.category
+          if (ar.whatsapp?.category) category = ar.whatsapp.category
+        }
+
+        // If still draft, fetch approval status from dedicated endpoint
+        if (approvalStatus === 'draft') {
+          try {
+            const approvalRes = await fetch(
+              `${TWILIO_CONTENT_API}/${t.sid}/ApprovalRequests/whatsapp`,
+              { headers: headers!, cache: 'no-store' }
+            )
+            if (approvalRes.ok) {
+              const approvalData = await approvalRes.json()
+              if (approvalData.status) {
+                approvalStatus = approvalData.status
+              }
+              if (approvalData.category) {
+                category = approvalData.category
+              }
+            }
+          } catch {
+            // If individual fetch fails, keep draft status
+          }
+        }
+
+        const body = t.types?.['twilio/text']?.body
+          || t.types?.['twilio/quick-reply']?.body
+          || t.types?.['twilio/card']?.body
+          || t.types?.['twilio/list-picker']?.body
+          || '(tipo no textual)'
+
+        return {
+          sid: t.sid,
+          friendly_name: t.friendly_name,
+          name: t.friendly_name,
+          language: t.language,
+          approval_status: approvalStatus,
+          status: approvalStatus,
+          category,
+          body,
+          variables: t.variables || {},
+          createdAt: t.date_created,
+          updatedAt: t.date_updated,
+        }
+      })
+    )
 
     return NextResponse.json({ templates })
   } catch (error) {

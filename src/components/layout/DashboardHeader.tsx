@@ -30,7 +30,7 @@ export function DashboardHeader() {
   }
 
   return (
-    <header className="flex h-14 items-center justify-between border-b px-4">
+    <header className="glass-header flex h-14 items-center justify-between px-5">
       <div className="flex items-center gap-2 md:hidden">
         <Sheet>
           <SheetTrigger className="inline-flex items-center justify-center rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">

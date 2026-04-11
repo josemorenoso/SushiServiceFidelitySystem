@@ -26,12 +26,19 @@ export function DashboardSidebar() {
   const pathname = usePathname()
 
   return (
-    <aside className="hidden md:flex md:w-60 md:flex-col md:border-r md:bg-muted/30">
-      <div className="flex h-14 items-center gap-2 border-b px-4">
-        <UtensilsCrossed className="h-5 w-5 text-primary" />
-        <span className="font-semibold text-primary">Sushi Service</span>
+    <aside className="glass-sidebar hidden md:flex md:w-60 md:flex-col">
+      <div className="flex h-14 items-center gap-2 px-5" style={{ borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
+        <div
+          className="flex h-7 w-7 items-center justify-center rounded-lg"
+          style={{ background: 'linear-gradient(135deg, #FF4D6D 0%, #E63946 100%)' }}
+        >
+          <UtensilsCrossed className="h-3.5 w-3.5 text-white" strokeWidth={1.5} />
+        </div>
+        <span className="font-playfair text-base font-bold" style={{ color: '#1a1c1d', letterSpacing: '-0.02em' }}>
+          Sushi Service
+        </span>
       </div>
-      <nav className="flex-1 space-y-1 p-3">
+      <nav className="flex-1 space-y-0.5 p-3">
         {navItems.map((item) => {
           const isActive = pathname === item.href
           return (
@@ -39,13 +46,18 @@ export function DashboardSidebar() {
               key={item.href}
               href={item.href}
               className={cn(
-                'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200',
                 isActive
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                  ? 'text-white'
+                  : 'hover:bg-black/[0.04]'
               )}
+              style={isActive ? {
+                background: 'linear-gradient(135deg, #FF4D6D 0%, #E63946 100%)',
+                boxShadow: '0 4px 12px rgba(230, 57, 70, 0.25)',
+                color: '#fff',
+              } : { color: '#6b7280' }}
             >
-              <item.icon className="h-4 w-4" />
+              <item.icon className="h-4 w-4" strokeWidth={1.5} />
               {item.label}
             </Link>
           )

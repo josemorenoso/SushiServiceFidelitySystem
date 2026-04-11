@@ -27,13 +27,14 @@ export function GrowthChart({ data, loading }: GrowthChartProps) {
   }))
 
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base font-semibold">
-          Crecimiento de Clientes
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
+    <div className="dashboard-card p-6">
+      <h3
+        className="font-playfair mb-4 text-lg font-bold"
+        style={{ color: '#1a1c1d', letterSpacing: '-0.02em' }}
+      >
+        Crecimiento de Clientes
+      </h3>
+      <div>
         {loading ? (
           <Skeleton className="h-[280px] w-full" />
         ) : (
@@ -58,7 +59,7 @@ export function GrowthChart({ data, loading }: GrowthChartProps) {
                 dataKey="count"
                 name="Nuevos hoy"
                 fill="url(#gradientNew)"
-                radius={[4, 4, 0, 0]}
+                radius={[8, 8, 0, 0]}
               />
               <Line
                 yAxisId="right"
@@ -72,7 +73,7 @@ export function GrowthChart({ data, loading }: GrowthChartProps) {
             </ComposedChart>
           </ResponsiveContainer>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 }

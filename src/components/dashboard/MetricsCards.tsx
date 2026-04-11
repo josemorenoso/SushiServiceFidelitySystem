@@ -1,8 +1,8 @@
 'use client'
 
-import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Users, ShoppingBag, UserPlus, Star, Cake, QrCode, TrendingUp } from 'lucide-react'
+import { MiniSparkline } from './MiniSparkline'
 import type { AnalyticsSummary } from '@/types/analytics.types'
 
 interface MetricsCardsProps {
@@ -11,34 +11,112 @@ interface MetricsCardsProps {
 }
 
 const metricsConfig = [
-  { key: 'visitsToday' as const, label: 'Visitas Hoy', icon: TrendingUp, color: 'text-green-600', bg: 'bg-green-50' },
-  { key: 'qrToday' as const, label: 'QR Hoy', icon: QrCode, color: 'text-blue-600', bg: 'bg-blue-50' },
-  { key: 'deliveriesToday' as const, label: 'Domicilios Hoy', icon: ShoppingBag, color: 'text-purple-600', bg: 'bg-purple-50' },
-  { key: 'newCustomersToday' as const, label: 'Nuevos Hoy', icon: UserPlus, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-  { key: 'totalCustomers' as const, label: 'Total Clientes', icon: Users, color: 'text-indigo-600', bg: 'bg-indigo-50' },
-  { key: 'frequentCustomers' as const, label: 'Frecuentes (3+)', icon: Star, color: 'text-amber-600', bg: 'bg-amber-50' },
-  { key: 'birthdaysToday' as const, label: 'Cumpleaños Hoy', icon: Cake, color: 'text-pink-600', bg: 'bg-pink-50' },
+  {
+    key: 'visitsToday' as const,
+    label: 'Visitas Hoy',
+    icon: TrendingUp,
+    color: '#10b981',
+    bg: 'rgba(16, 185, 129, 0.1)',
+    trend: 'up' as const,
+  },
+  {
+    key: 'qrToday' as const,
+    label: 'QR Hoy',
+    icon: QrCode,
+    color: '#3b82f6',
+    bg: 'rgba(59, 130, 246, 0.1)',
+    trend: 'stable' as const,
+  },
+  {
+    key: 'deliveriesToday' as const,
+    label: 'Domicilios Hoy',
+    icon: ShoppingBag,
+    color: '#8b5cf6',
+    bg: 'rgba(139, 92, 246, 0.1)',
+    trend: 'up' as const,
+  },
+  {
+    key: 'newCustomersToday' as const,
+    label: 'Nuevos Hoy',
+    icon: UserPlus,
+    color: '#06b6d4',
+    bg: 'rgba(6, 182, 212, 0.1)',
+    trend: 'up' as const,
+  },
+  {
+    key: 'totalCustomers' as const,
+    label: 'Total Clientes',
+    icon: Users,
+    color: '#6366f1',
+    bg: 'rgba(99, 102, 241, 0.1)',
+    trend: 'up' as const,
+  },
+  {
+    key: 'frequentCustomers' as const,
+    label: 'Frecuentes (3+)',
+    icon: Star,
+    color: '#f59e0b',
+    bg: 'rgba(245, 158, 11, 0.1)',
+    trend: 'stable' as const,
+  },
+  {
+    key: 'birthdaysToday' as const,
+    label: 'Cumpleaños Hoy',
+    icon: Cake,
+    color: '#ec4899',
+    bg: 'rgba(236, 72, 153, 0.1)',
+    trend: 'stable' as const,
+  },
 ]
 
 export function MetricsCards({ summary, loading }: MetricsCardsProps) {
   return (
-    <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
-      {metricsConfig.map((m) => (
-        <Card key={m.key} className="relative overflow-hidden">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <div className={`rounded-lg p-1.5 ${m.bg}`}>
-                <m.icon className={`h-4 w-4 ${m.color}`} />
-              </div>
+    <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
+      {metricsConfig.map((m, i) => (
+        <div key={m.key} className="metric-card rounded-2xl p-4 overflow-hidden relative">
+          {/* Icono */}
+          <div className="flex items-center justify-between mb-3">
+            <div
+              className="flex h-8 w-8 items-center justify-center rounded-xl"
+              style={{ background: m.bg }}
+            >
+              <m.icon className="h-4 w-4" strokeWidth={1.5} style={{ color: m.color }} />
             </div>
-            {loading ? (
-              <Skeleton className="h-8 w-16" />
-            ) : (
-              <p className="text-2xl font-bold tracking-tight">{summary?.[m.key] ?? 0}</p>
-            )}
-            <p className="text-xs text-muted-foreground mt-1">{m.label}</p>
-          </CardContent>
-        </Card>
+          </div>
+
+          {/* Número */}
+          {loading ? (
+            <Skeleton className="h-8 w-14 mb-1" />
+          ) : (
+            <p
+              className="tabular-nums leading-none"
+              style={{
+                fontSize: '1.75rem',
+                fontWeight: 700,
+                letterSpacing: '-0.05em',
+                color: '#1a1c1d',
+                fontFamily: 'var(--font-inter)',
+              }}
+            >
+              {summary?.[m.key] ?? 0}
+            </p>
+          )}
+
+          {/* Label */}
+          <p
+            className="mt-1 text-xs font-semibold uppercase"
+            style={{ color: '#9ca3af', letterSpacing: '0.04em' }}
+          >
+            {m.label}
+          </p>
+
+          {/* Sparkline */}
+          {!loading && (
+            <div className="absolute bottom-3 right-3 opacity-80">
+              <MiniSparkline trend={m.trend} color={m.color} delay={i * 80} />
+            </div>
+          )}
+        </div>
       ))}
     </div>
   )

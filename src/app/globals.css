@@ -150,6 +150,106 @@
   animation: fade-in-up 0.55s cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
+/* ─── Dashboard Keyframes ───────────────────────────────── */
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-8px); }
+}
+
+@keyframes bubble-pop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.15); }
+  70%  { transform: scale(0.95); }
+  100% { transform: scale(1.08); }
+}
+
+@keyframes draw-sparkline {
+  from { stroke-dashoffset: 1; }
+  to   { stroke-dashoffset: 0; }
+}
+
+/* ─── Dashboard Utilities ───────────────────────────────── */
+@utility animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+@utility animate-bubble-pop {
+  animation: bubble-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* ─── Dashboard CSS Classes ─────────────────────────────── */
+
+/* Fondo del área principal del dashboard */
+.dashboard-bg {
+  background-color: #F9F8F6;
+  background-image: radial-gradient(ellipse at 50% 0%, #ffffff 0%, #F9F8F6 70%);
+}
+
+/* Sidebar glassmorphism */
+.glass-sidebar {
+  background: rgba(255, 255, 255, 0.72) !important;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 4px 0 30px rgba(0, 0, 0, 0.03) !important;
+  border-right: none !important;
+}
+
+/* Header glassmorphism */
+.glass-header {
+  background: rgba(255, 255, 255, 0.72) !important;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.03) !important;
+  border-bottom: none !important;
+}
+
+/* Card de métricas con hover elevation */
+.metric-card {
+  background: #ffffff !important;
+  border: none !important;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04) !important;
+  transition: transform 300ms cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 300ms cubic-bezier(0.4, 0, 0.2, 1) !important;
+  cursor: default;
+}
+
+.metric-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08) !important;
+}
+
+/* Sparkline animado */
+.sparkline-path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: draw-sparkline 1.5s ease-out forwards;
+  pathLength: 1;
+}
+
+/* Burbuja flotante */
+.bubble-float {
+  animation: float var(--float-duration, 3s) ease-in-out infinite;
+}
+
+/* Fila de ranking sin borde, con hover */
+.ranking-row {
+  border: none !important;
+  border-radius: 12px;
+  transition: background 200ms ease;
+}
+
+.ranking-row:hover {
+  background: rgba(249, 248, 246, 0.9) !important;
+}
+
+/* Card del dashboard (charts, etc.) */
+.dashboard-card {
+  background: #ffffff !important;
+  border: none !important;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04) !important;
+  border-radius: 16px !important;
+}
+
 /* ─── Premium Design Classes ────────────────────────────── */
 
 /* Fondo marfil con textura noise sutil */

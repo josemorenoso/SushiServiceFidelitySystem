@@ -26,15 +26,16 @@ export function VisitsChart({ data, loading }: VisitsChartProps) {
   }))
 
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base font-semibold">
-          Visitas Diarias — Últimos 30 días
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
+    <div className="dashboard-card p-6">
+      <h3
+        className="font-playfair mb-4 text-lg font-bold"
+        style={{ color: '#1a1c1d', letterSpacing: '-0.02em' }}
+      >
+        Visitas Diarias — Últimos 30 días
+      </h3>
+      <div>
         {loading ? (
-          <Skeleton className="h-[300px] w-full" />
+          <Skeleton className="h-[300px] w-full rounded-xl" />
         ) : (
           <ResponsiveContainer width="100%" height={300}>
             <AreaChart data={formatted} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
@@ -75,7 +76,7 @@ export function VisitsChart({ data, loading }: VisitsChartProps) {
             </AreaChart>
           </ResponsiveContainer>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 }

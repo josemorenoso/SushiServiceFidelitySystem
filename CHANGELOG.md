@@ -5,6 +5,104 @@
 
 ---
 
+## [0.15.0] — 2026-04-11 — Rediseño visual premium (Dashboard Métricas)
+
+### Changed — Identidad visual del panel administrativo: glassmorphism, burbujas animadas, sparklines
+
+**Layout y estructura:**
+- `src/app/(dashboard)/layout.tsx` — `dashboard-bg` (fondo marfil + gradiente radial al centro), padding generoso `p-6 md:p-8`
+- `src/app/(dashboard)/dashboard/page.tsx` — `space-y-8` (32px+ entre secciones), título Playfair Display
+- `src/components/layout/DashboardSidebar.tsx` — Glassmorphism `rgba(255,255,255,0.72)` + `backdrop-filter: blur(20px)`, icono CTA con gradiente carmesí, nav items con gradiente en activo
+- `src/components/layout/DashboardHeader.tsx` — Glassmorphism idéntico al sidebar, sin border-bottom
+
+**MetricsCards:**
+- `src/components/dashboard/MetricsCards.tsx` — `.metric-card` con hover `translateY(-4px)` + sombra profunda, números Inter 700 `letter-spacing: -0.05em`, sparklines animados por card
+- `src/components/dashboard/MiniSparkline.tsx` — **NUEVO**: SVG inline 60×22px, animación `stroke-dashoffset` 1→0 en 1.5s ease-out, tipos `up/down/stable`
+
+**Burbujas en Riesgo:**
+- `src/components/dashboard/AtRiskBubbles.tsx` — Colores pasteles desaturados (rojo/naranja/violeta), float animation asincrónica (3.1s/3.8s/4.5s), spring `bubble-pop` al click, Dialog premium sin bordes duros con header coloreado según burbuja, botón de envío con gradiente carmesí
+
+**Gráficos y Ranking:**
+- `src/components/dashboard/VisitsChart.tsx` — `.dashboard-card` reemplaza `Card` de shadcn, título Playfair
+- `src/components/dashboard/GrowthChart.tsx` — `.dashboard-card`, barras `radius={[8,8,0,0]}`
+- `src/components/dashboard/CustomerTiers.tsx` — `.dashboard-card`
+- `src/components/dashboard/PowerRanking.tsx` — `.dashboard-card`, sin bordes de celda, `.ranking-row` hover suave `rgba(249,248,246,0.9)`
+
+**globals.css — Nuevas clases:**
+- `.dashboard-bg`, `.glass-sidebar`, `.glass-header`, `.metric-card`, `.dashboard-card`, `.ranking-row`, `.sparkline-path`, `.bubble-float`
+- Keyframes: `float`, `bubble-pop`, `draw-sparkline`
+- Utilities: `animate-float`, `animate-bubble-pop`
+
+### Archivos creados
+- `src/components/dashboard/MiniSparkline.tsx` — Componente sparkline animado
+- `docs/features/design-system.md` — Documentación del sistema de diseño premium
+- `docs/features/dashboard-metrics-redesign.md` — Especificación del rediseño
+
+### Archivos modificados
+- `src/app/globals.css` — Clases y keyframes del dashboard
+- `src/app/(dashboard)/layout.tsx`
+- `src/app/(dashboard)/dashboard/page.tsx`
+- `src/components/layout/DashboardSidebar.tsx`
+- `src/components/layout/DashboardHeader.tsx`
+- `src/components/dashboard/MetricsCards.tsx`
+- `src/components/dashboard/AtRiskBubbles.tsx`
+- `src/components/dashboard/VisitsChart.tsx`
+- `src/components/dashboard/GrowthChart.tsx`
+- `src/components/dashboard/CustomerTiers.tsx`
+- `src/components/dashboard/PowerRanking.tsx`
+
+### Request original
+> Modificar la sección de métricas: 1) Layout "Airy" con fondo #F9F8F6 gradiente radial, sidebar/topnav glassmorphism blur(20px), spacing mínimo 32px. 2) Cards con hover translateY(-4px), sparklines animados 1.5s ease-out, tipografía Inter 700 letter-spacing -0.05em. 3) Burbujas en riesgo: colores pasteles, float animation, spring elastic al click, Quick Action Popover con gradiente carmesí. 4) Gráficas de barras rounded radius:8px, tablas sin bordes, hover por fila completa.
+
+---
+
+## [0.14.0] — 2026-04-11 — Rediseño visual premium (páginas públicas)
+
+### Changed — Identidad visual completa de páginas públicas y login
+
+**Fuentes:**
+- `layout.tsx` — Reemplazado Geist Sans por Inter + Playfair Display (Google Fonts)
+- `globals.css` — `--font-sans: var(--font-inter)` · `--font-heading: var(--font-playfair-display)`
+
+**Sistema de diseño premium (globals.css):**
+- Keyframe `fade-in-up` para entrada suave desde 20px abajo
+- Utility `font-playfair` · utility `animate-fade-in-up`
+- `.premium-bg` — Fondo marfil `#F9F8F6` con textura noise SVG (opacity 0.02)
+- `.premium-card` — `border-radius: 24px`, `box-shadow: 0 10px 40px rgba(0,0,0,0.04)`
+- `.btn-premium` — Gradiente `#FF4D6D → #E63946`, hover `scale(1.02)`, transición 300ms cubic-bezier
+- `.btn-secondary-premium` — Glassmorphism blanco con backdrop-blur 12px
+- `.input-premium` — Ghost border `rgba(226,190,192,0.35)`, focus glow rojo
+
+**Páginas rediseñadas:**
+- `src/app/page.tsx` — Landing: orbs decorativos, card premium, badge animado, botón gradiente
+- `src/app/(auth)/login/page.tsx` — Login: inputs nativos, sin shadcn Card, Playfair en título
+- `src/app/(public)/check-in/page.tsx` — Fondo marfil, header de marca premium
+- `src/components/features/check-in/CheckInForm.tsx` — Labels metadata, inputs ghost, botón gradiente
+- `src/components/features/check-in/CheckInSuccess.tsx` — Cards con gradiente verde/rojo, ícono dorado para recompensa
+
+**Iconografía:**
+- Todos los íconos de páginas públicas: `strokeWidth={1.25}` o `{1.5}` (ultra-thin)
+
+**Git:**
+- Branch: `feat/visual-redesign` (main preservado como backup)
+
+### Archivos afectados
+- `src/app/layout.tsx` — Fuentes Inter + Playfair Display
+- `src/app/globals.css` — Sistema premium completo
+- `src/app/page.tsx` — Rediseño landing
+- `src/app/(auth)/login/page.tsx` — Rediseño login
+- `src/app/(public)/check-in/page.tsx` — Rediseño wrapper check-in
+- `src/components/features/check-in/CheckInForm.tsx` — Rediseño formulario
+- `src/components/features/check-in/CheckInSuccess.tsx` — Rediseño pantalla de éxito
+
+### Docs afectados
+- `docs/features/design-system.md` — CREADO (sistema de diseño premium)
+
+### Request original
+> Quiero modificar la pagina principal, todo lo que es la pagina de panel admin/registrar visita - ingresar numero y pagina de registro de visita. Fundamentos Estéticos: Fondo #F9F8F6 (Marfil Suave), Card Central con border-radius 24px, Tipografía Playfair Display para títulos, Botón Primario gradiente #FF4D6D a #E63946 con scale(1.02) en hover, Micro-interacciones: fade-in slide-up 20px.
+
+---
+
 ## [0.13.0] — 2026-04-11 10:30
 
 ### Added — Lógica de recompensas en plantillas, source_channels, frequency capping

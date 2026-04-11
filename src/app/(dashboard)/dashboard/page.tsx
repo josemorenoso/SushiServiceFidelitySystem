@@ -15,9 +15,14 @@ export default function DashboardPage() {
   const { data, loading } = useDashboardAnalytics()
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Dashboard</h1>
+        <h1
+          className="font-playfair text-3xl font-bold"
+          style={{ color: '#1a1c1d', letterSpacing: '-0.02em' }}
+        >
+          Métricas
+        </h1>
         <DemoToggle />
       </div>
 
@@ -31,7 +36,7 @@ export default function DashboardPage() {
 
       <VisitsChart data={data?.visitsPerDay ?? []} loading={loading} />
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-8 lg:grid-cols-2">
         <GrowthChart data={data?.newCustomersPerDay ?? []} loading={loading} />
         <CustomerTiers tiers={data?.customerTiers ?? []} loading={loading} />
       </div>

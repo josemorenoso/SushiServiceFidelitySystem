@@ -13,13 +13,14 @@ export function CustomerTiers({ tiers, loading }: CustomerTiersProps) {
   const total = tiers.reduce((sum, t) => sum + t.count, 0)
 
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base font-semibold">
-          Niveles de Clientes
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
+    <div className="dashboard-card p-6">
+      <h3
+        className="font-playfair mb-4 text-lg font-bold"
+        style={{ color: '#1a1c1d', letterSpacing: '-0.02em' }}
+      >
+        Niveles de Clientes
+      </h3>
+      <div>
         {loading ? (
           <Skeleton className="h-[280px] w-full" />
         ) : (
@@ -54,7 +55,7 @@ export function CustomerTiers({ tiers, loading }: CustomerTiersProps) {
             )}
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 }

@@ -1,66 +1,133 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
-import { Loader2, UtensilsCrossed } from 'lucide-react'
+import { useEffect, useRef } from 'react'
+import { DemoProvider, useDemo } from '@/contexts/DemoContext'
+import { useDashboardAnalytics } from '@/hooks/useDashboardAnalytics'
+import { MetricsCards } from '@/components/dashboard/MetricsCards'
+import { VisitsChart } from '@/components/dashboard/VisitsChart'
+import { GrowthChart } from '@/components/dashboard/GrowthChart'
+import { CustomerTiers } from '@/components/dashboard/CustomerTiers'
+import { AtRiskBubbles } from '@/components/dashboard/AtRiskBubbles'
+import { PowerRanking } from '@/components/dashboard/PowerRanking'
+import {
+  LayoutDashboard,
+  Users,
+  Gift,
+  Megaphone,
+  QrCode,
+  UtensilsCrossed,
+  FileText,
+} from 'lucide-react'
 
-export default function DemoPage() {
-  const [error, setError] = useState('')
+const navItems = [
+  { label: 'Métricas', icon: LayoutDashboard, active: true },
+  { label: 'Clientes', icon: Users, active: false },
+  { label: 'Recompensas', icon: Gift, active: false },
+  { label: 'Campañas', icon: Megaphone, active: false },
+  { label: 'Código QR', icon: QrCode, active: false },
+  { label: 'Plantillas', icon: FileText, active: false },
+]
 
+function DemoDashboardContent() {
+  const { isDemo, toggleDemo } = useDemo()
+  const { data, loading } = useDashboardAnalytics()
+  const hasActivated = useRef(false)
+
+  // Activa modo demo una sola vez al montar
   useEffect(() => {
-    const loginDemo = async () => {
-      const supabase = createClient()
-      const { error: authError } = await supabase.auth.signInWithPassword({
-        email: process.env.NEXT_PUBLIC_DEMO_EMAIL!,
-        password: process.env.NEXT_PUBLIC_DEMO_PASSWORD!,
-      })
-
-      if (authError) {
-        setError('No se pudo iniciar el demo. Intenta más tarde.')
-        return
-      }
-
-      window.location.href = '/dashboard'
+    if (hasActivated.current) return
+    hasActivated.current = true
+    if (!isDemo) {
+      localStorage.setItem('restaurantqr_demo', 'true')
+      toggleDemo()
     }
-
-    loginDemo()
-  }, [])
+  }, [isDemo, toggleDemo])
 
   return (
-    <div className="premium-bg relative flex min-h-screen items-center justify-center overflow-hidden p-4">
-      <div
-        className="pointer-events-none absolute -top-24 -right-24 h-[400px] w-[400px] rounded-full opacity-[0.06]"
-        style={{ background: 'radial-gradient(circle, #FF4D6D 0%, transparent 70%)' }}
-      />
-      <div
-        className="pointer-events-none absolute -bottom-20 -left-20 h-[320px] w-[320px] rounded-full opacity-[0.05]"
-        style={{ background: 'radial-gradient(circle, #E63946 0%, transparent 70%)' }}
-      />
-
-      <div className="animate-fade-in-up relative z-10 flex flex-col items-center gap-6 text-center">
+    <div className="flex h-screen overflow-hidden">
+      {/* Sidebar visual — sin links de navegación para no redirigir a /login */}
+      <aside className="glass-sidebar hidden md:flex md:w-60 md:flex-col">
         <div
-          className="flex h-16 w-16 items-center justify-center rounded-full"
-          style={{
-            background: 'linear-gradient(135deg, #FF4D6D 0%, #E63946 100%)',
-            boxShadow: '0 8px 24px rgba(230, 57, 70, 0.28)',
-          }}
+          className="flex h-14 items-center gap-2 px-5"
+          style={{ borderBottom: '1px solid rgba(0,0,0,0.04)' }}
         >
-          <UtensilsCrossed className="h-7 w-7 text-white" strokeWidth={1.25} />
+          <div
+            className="flex h-7 w-7 items-center justify-center rounded-lg"
+            style={{ background: 'linear-gradient(135deg, #FF4D6D 0%, #E63946 100%)' }}
+          >
+            <UtensilsCrossed className="h-3.5 w-3.5 text-white" strokeWidth={1.5} />
+          </div>
+          <span
+            className="font-playfair text-base font-bold"
+            style={{ color: '#1a1c1d', letterSpacing: '-0.02em' }}
+          >
+            Sushi Service
+          </span>
         </div>
+        <nav className="flex-1 space-y-0.5 p-3">
+          {navItems.map((item) => (
+            <div
+              key={item.label}
+              className="flex cursor-default items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium"
+              style={
+                item.active
+                  ? {
+                      background: 'linear-gradient(135deg, #FF4D6D 0%, #E63946 100%)',
+                      boxShadow: '0 4px 12px rgba(230, 57, 70, 0.25)',
+                      color: '#fff',
+                    }
+                  : { color: '#6b7280' }
+              }
+            >
+              <item.icon className="h-4 w-4" strokeWidth={1.5} />
+              {item.label}
+            </div>
+          ))}
+        </nav>
+      </aside>
 
-        {error ? (
-          <div className="premium-card px-8 py-6">
-            <p className="text-sm" style={{ color: '#E63946' }}>{error}</p>
+      {/* Contenido principal */}
+      <div className="flex flex-1 flex-col overflow-hidden">
+        {/* Header sin botón de logout */}
+        <header className="glass-header flex h-14 items-center justify-between px-5">
+          <div className="hidden md:block">
+            <h2 className="text-sm font-medium text-muted-foreground">
+              Panel de Administración — Sushi Service
+            </h2>
           </div>
-        ) : (
-          <div className="premium-card px-8 py-6 flex flex-col items-center gap-3">
-            <Loader2 className="h-5 w-5 animate-spin" style={{ color: '#E63946' }} />
-            <p className="text-sm font-medium" style={{ color: '#6b7280' }}>
-              Cargando demo...
-            </p>
+          <span className="animate-pulse rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
+            DEMOSTRACIÓN
+          </span>
+        </header>
+
+        {/* Dashboard */}
+        <main className="dashboard-bg flex-1 overflow-y-auto p-6 md:p-8">
+          <div className="space-y-8">
+            <h1
+              className="font-playfair text-3xl font-bold"
+              style={{ color: '#1a1c1d', letterSpacing: '-0.02em' }}
+            >
+              Métricas
+            </h1>
+            <MetricsCards summary={data?.summary ?? null} loading={loading} />
+            <VisitsChart data={data?.visitsPerDay ?? []} loading={loading} />
+            <div className="grid gap-8 lg:grid-cols-2">
+              <GrowthChart data={data?.newCustomersPerDay ?? []} loading={loading} />
+              <CustomerTiers tiers={data?.customerTiers ?? []} loading={loading} />
+            </div>
+            <AtRiskBubbles groups={data?.atRiskGroups ?? []} loading={loading} isDemo />
+            <PowerRanking customers={data?.topCustomers ?? []} loading={loading} />
           </div>
-        )}
+        </main>
       </div>
     </div>
+  )
+}
+
+export default function DemoPage() {
+  return (
+    <DemoProvider>
+      <DemoDashboardContent />
+    </DemoProvider>
   )
 }

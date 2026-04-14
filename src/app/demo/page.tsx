@@ -1,6 +1,5 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
 import { DemoProvider, useDemo } from '@/contexts/DemoContext'
 import { useDashboardAnalytics } from '@/hooks/useDashboardAnalytics'
 import { MetricsCards } from '@/components/dashboard/MetricsCards'
@@ -29,19 +28,7 @@ const navItems = [
 ]
 
 function DemoDashboardContent() {
-  const { isDemo, toggleDemo } = useDemo()
   const { data, loading } = useDashboardAnalytics()
-  const hasActivated = useRef(false)
-
-  // Activa modo demo una sola vez al montar
-  useEffect(() => {
-    if (hasActivated.current) return
-    hasActivated.current = true
-    if (!isDemo) {
-      localStorage.setItem('restaurantqr_demo', 'true')
-      toggleDemo()
-    }
-  }, [isDemo, toggleDemo])
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -125,6 +112,11 @@ function DemoDashboardContent() {
 }
 
 export default function DemoPage() {
+  // Fuerza el flag ANTES de que DemoProvider monte para que lo lea en su propio useEffect
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('restaurantqr_demo', 'true')
+  }
+
   return (
     <DemoProvider>
       <DemoDashboardContent />

@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { useDemo } from '@/contexts/DemoContext'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 import { LogOut, Menu, QrCode, LayoutDashboard, Users, Gift, Megaphone, UtensilsCrossed, FileText } from 'lucide-react'
@@ -21,8 +22,13 @@ const navItems = [
 export function DashboardHeader() {
   const router = useRouter()
   const pathname = usePathname()
+  const { isDemo } = useDemo()
 
   const handleLogout = async () => {
+    if (isDemo) {
+      router.push('/demo')
+      return
+    }
     const supabase = createClient()
     await supabase.auth.signOut()
     router.push('/login')

@@ -5,6 +5,22 @@
 
 ---
 
+## [0.16.0] — 2026-04-14 — Demo auto-login
+
+### Added — Ruta /demo para acceso directo al dashboard sin formulario de login
+
+**Archivos creados:**
+- `src/app/demo/page.tsx` — Página client que hace signInWithPassword con credenciales demo y redirige a /dashboard
+- `docs/features/demo-login.md` — Documentación de la feature
+
+**Variables de entorno requeridas:**
+- `NEXT_PUBLIC_DEMO_EMAIL` — Email del usuario demo
+- `NEXT_PUBLIC_DEMO_PASSWORD` — Contraseña del usuario demo
+
+**Request original:** Crear link de demo para landing page que auto-loguea al dashboard
+
+---
+
 ## [0.15.0] — 2026-04-11 — Rediseño visual premium (Dashboard Métricas)
 
 ### Changed — Identidad visual del panel administrativo: glassmorphism, burbujas animadas, sparklines

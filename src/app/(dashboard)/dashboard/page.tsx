@@ -14,6 +14,7 @@ import { PowerRanking } from '@/components/dashboard/PowerRanking'
 import { VisitHeatmap } from '@/components/dashboard/VisitHeatmap'
 import { AcquisitionChannelChart } from '@/components/dashboard/AcquisitionChannelChart'
 import { ReactivationRateChart } from '@/components/dashboard/ReactivationRateChart'
+import { BlackTierSection } from '@/components/dashboard/BlackTierSection'
 import { CustomerDetailDialog } from '@/components/dashboard/CustomerDetailDialog'
 import type { Customer } from '@/types/database.types'
 
@@ -54,24 +55,27 @@ export default function DashboardPage() {
 
       <MetricsCards summary={data?.summary ?? null} loading={loading} />
 
-      <ROICard data={data?.roiEstimate ?? null} loading={loading} />
+      <div className="grid gap-8 lg:grid-cols-2">
+        <CustomerTiers tiers={data?.customerTiers ?? []} loading={loading} />
+        <ROICard data={data?.roiEstimate ?? null} loading={loading} />
+      </div>
+
+      <BlackTierSection customers={data?.topCustomers ?? []} loading={loading} onCustomerClick={handleCustomerClick} />
 
       <VisitsChart data={data?.visitsPerDay ?? []} loading={loading} />
 
-      <ReactivationRateChart data={data?.reactivationRate ?? []} loading={loading} />
+      <PowerRanking customers={data?.topCustomers ?? []} loading={loading} onCustomerClick={handleCustomerClick} />
 
       <div className="grid gap-8 lg:grid-cols-2">
         <GrowthChart data={data?.newCustomersPerDay ?? []} loading={loading} />
-        <CustomerTiers tiers={data?.customerTiers ?? []} loading={loading} />
+        <AtRiskBubbles groups={data?.atRiskGroups ?? []} loading={loading} isDemo={isDemo} />
       </div>
 
       <VisitHeatmap data={data?.heatmap ?? []} loading={loading} />
 
       <AcquisitionChannelChart data={data?.acquisitionByMonth ?? []} loading={loading} />
 
-      <AtRiskBubbles groups={data?.atRiskGroups ?? []} loading={loading} isDemo={isDemo} />
-
-      <PowerRanking customers={data?.topCustomers ?? []} loading={loading} onCustomerClick={handleCustomerClick} />
+      <ReactivationRateChart data={data?.reactivationRate ?? []} loading={loading} />
 
       <CustomerDetailDialog
         customer={selectedCustomer}

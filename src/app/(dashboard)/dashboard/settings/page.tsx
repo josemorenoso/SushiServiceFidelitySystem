@@ -19,9 +19,12 @@ export default function SettingsPage() {
       .finally(() => setLoading(false))
   }, [])
 
+  const [saveError, setSaveError] = useState<string | null>(null)
+
   const handleSave = async () => {
     setSaving(true)
     setSaved(false)
+    setSaveError(null)
     try {
       const res = await fetch('/api/dashboard/settings', {
         method: 'PUT',
@@ -31,13 +34,20 @@ export default function SettingsPage() {
       if (res.ok) {
         setSaved(true)
         setTimeout(() => setSaved(false), 3000)
+      } else {
+        const data = await res.json()
+        setSaveError(data.error ?? 'Error guardando')
       }
     } catch {
-      // silently fail
+      setSaveError('Error de conexi\u00f3n')
     } finally {
       setSaving(false)
     }
   }
+
+  const formattedValue = avgTicket
+    ? new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(Number(avgTicket))
+    : ''
 
   return (
     <div className="space-y-8">
@@ -115,9 +125,21 @@ export default function SettingsPage() {
           </button>
         </div>
 
+        {formattedValue && (
+          <p className="text-sm mt-3 font-medium" style={{ color: '#10b981' }}>
+            Valor actual: {formattedValue}
+          </p>
+        )}
+
+        {saveError && (
+          <p className="text-xs mt-2 font-medium" style={{ color: '#ef4444' }}>
+            {saveError}
+          </p>
+        )}
+
         <p className="text-xs mt-4 italic" style={{ color: '#b0b0b0' }}>
-          Ejemplo: si tu ticket promedio es $35,000 COP y el sistema reactivó 10 clientes,
-          el ROI estimado del mes es $350,000 COP.
+          Ingresa el valor en pesos colombianos (ej: 60000 para $60,000 COP).
+          El ROI se calcula como: clientes reactivados \u00d7 ticket promedio.
         </p>
       </div>
     </div>

@@ -35,11 +35,10 @@ interface CustomerDetailDialogProps {
 
 function getGradientColors(gradient: string): string {
   const colorMap: Record<string, string> = {
-    'from-cyan-300 to-blue-600': '#67E8F9, #2563EB',
+    'from-neutral-900 to-neutral-700': '#171717, #404040',
     'from-slate-300 to-slate-600': '#CBD5E1, #475569',
     'from-yellow-400 to-amber-600': '#FACC15, #D97706',
     'from-gray-300 to-gray-500': '#D1D5DB, #6B7280',
-    'from-orange-400 to-amber-700': '#FB923C, #B45309',
     'from-emerald-400 to-green-600': '#34D399, #16A34A',
   }
   return colorMap[gradient] ?? '#9CA3AF, #4B5563'

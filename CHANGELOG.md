@@ -5,6 +5,67 @@
 
 ---
 
+## [0.19.0] — 2026-04-15 — QR Mesa + Power System v2 + Black Tier + Dashboard Reorder
+
+### Added — QR por Mesa
+- Cada mesa genera su propio QR con parámetro `?mesa=N`
+- Selector de mesas con botones + vista previa por mesa
+- Botón "Descargar TODAS las mesas" (batch)
+- `table_number` almacenado en cada visita para analytics
+- Migración `00009_table_number.sql`
+- Anti-fraude: detección de 3+ registros seguidos con misma mesa (preparado)
+
+### Changed — Sistema de Poder v2
+- Nuevo: 🥈 Plata(3) → 🥇 Oro(6) → ⚜️ Platino(9) → 👑 Black(12)
+- Eliminado: Diamante, Bronce, Nuevo tiene minVisits=0
+- Colores Black: fondo negro con dorado (#FFD700)
+- `LEVEL_THRESHOLDS` exportado para reuso
+
+### Added — Sección Clientes Black
+- Componente `BlackTierSection.tsx` con diseño dark/gold premium
+- Lista de clientes Black con avatar, visitas, badge VIP
+- Click abre CustomerDetailDialog
+- Panel de beneficios: 15% descuento, eventos exclusivos, prioridad
+- Empty state elegante cuando no hay clientes Black
+
+### Changed — Dashboard Layout Reordenado
+- Arriba: MetricsCards → Tiers + ROI → BlackTierSection
+- Medio: VisitsChart → PowerRanking → Growth + AtRisk
+- Abajo: Heatmap → AcquisitionChannel → ReactivationRate
+- Charts que necesitan datos históricos movidos al final
+
+### Fixed — Ticket Promedio
+- Settings PUT: cambiado de upsert a update/insert explícito
+- Agregado formato COP en tiempo real debajo del input
+- Error handling visible si falla el guardado
+- Instrucción clara: "Ingresa en pesos colombianos (ej: 60000)"
+
+### Added — Documentación de flujos
+- `docs/features/flujo-plantillas-recompensas-campanas.md`
+- Flujo completo: check-in, recompensas, campañas auto/manual
+- Sistema de recompensas recomendado (visitas 3,5,6,8,9,10,12,15,20)
+- 4 plantillas recomendadas para aprobar en Twilio
+- Problemas conocidos documentados
+
+**Archivos creados:**
+- `src/components/dashboard/BlackTierSection.tsx`
+- `supabase/migrations/00009_table_number.sql`
+- `docs/features/flujo-plantillas-recompensas-campanas.md`
+
+**Archivos modificados:**
+- `src/constants/rankings.ts` — Power System v2
+- `src/app/(dashboard)/dashboard/page.tsx` — Layout reordenado + BlackTierSection
+- `src/app/(dashboard)/dashboard/qr/page.tsx` — QR por mesa completo
+- `src/app/(dashboard)/dashboard/settings/page.tsx` — Bug fix + formato COP
+- `src/app/api/dashboard/settings/route.ts` — update/insert explícito
+- `src/app/api/check-in/route.ts` — table_number en flujo
+- `src/components/features/check-in/CheckInForm.tsx` — lee ?mesa= de URL
+- `src/services/visit.service.ts` — tableNumber param
+- `src/types/database.types.ts` — table_number en Visit
+- `src/components/dashboard/CustomerDetailDialog.tsx` — gradient colors actualizados
+
+---
+
 ## [0.18.0] — 2026-04-15 — Customer Detail + Rewards CRUD + Consent + Frequency Cap
 
 ### Added — Customer Detail Dialog

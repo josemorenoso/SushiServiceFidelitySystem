@@ -22,6 +22,7 @@ export interface Visit {
   payment_method: string | null
   amount: number | null
   raw_message: string | null
+  table_number: number | null
   created_at: string
 }
 

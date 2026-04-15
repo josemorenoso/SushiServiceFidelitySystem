@@ -1,13 +1,13 @@
 # NEXT_STEPS — Contexto para nueva conversación
 
-> **Última actualización:** 2026-04-15 v0.18.0
+> **Última actualización:** 2026-04-15 v0.19.0
 > **Lee primero:** `METODO_AINNOVATE.md` (reglas IA) → este archivo (contexto)
 
 ---
 
 ## Estado actual del sistema
 
-**Versión:** 0.18.0 | **Deploy:** Vercel (producción) | **Build:** ✅ 33 rutas, 0 errores
+**Versión:** 0.19.0 | **Deploy:** Vercel (producción) | **Build:** ✅ 33 rutas, 0 errores
 
 ### Infraestructura operativa
 - **Vercel:** Proyecto conectado a GitHub, deploy automático
@@ -29,6 +29,7 @@
 
 | Versión | Feature | Detalle |
 |---------|---------|--------|
+| v0.19.0 | QR Mesa + Power System v2 + Black Tier | QR por mesa, Plata→Oro→Platino→Black, sección Black premium, dashboard reordenado, bug ticket promedio |
 | v0.18.0 | Customer Detail + Rewards CRUD + Consent + Freq Cap | Dialog perfil cliente, CRUD recompensas, checkbox consentimiento, frequency capping, opt-out badges |
 | v0.17.0 | Dashboard Analytics Expansion | 4 nuevas gráficas: Reactivación, ROI, Heatmap, Adquisición + Settings page |
 | v0.16.0 | Demo auto-login | Ruta /demo para acceso directo |
@@ -60,7 +61,11 @@
 6. **Ejecutar migración 00008** — `accepts_marketing` en customers (pendiente en Supabase)
 
 ### 🟡 Alto valor (diferenciador)
-6. **Dashboard público del cliente** — URL `/mi-cuenta/{uuid}` con visitas, nivel, próxima recompensa (analizado: viable, recomendado con UUID no teléfono)
+6. **Dashboard público del cliente** — URL `/mi-cuenta/{uuid}` con visitas, nivel, card que cambia de color por tier (Plata→Oro→Platino→Black). Recomendado con UUID no teléfono.
+7. **Ejecutar migraciones 008 y 009** — `accepts_marketing` + `table_number` en Supabase
+8. **Anti-fraude mesa** — Implementar detección: 3+ registros seguidos con misma mesa = sospechoso
+9. **Eventos exclusivos Black** — Admin crea eventos solo para clientes Black con notificación WhatsApp
+10. **Cron birthday/reactivation: migrar a plantillas aprobadas** — Actualmente usan free-text (falla fuera de 24h)
 7. **Notificación pre-recompensa** — "¡Te falta 1 visita para tu premio!"
 8. **Cupón con código único** — QR de cupón verificable, no solo "ven y pide"
 9. **Reportes semanales por email** al admin

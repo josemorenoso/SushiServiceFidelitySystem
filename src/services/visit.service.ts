@@ -18,6 +18,7 @@ export async function createVisit(params: {
   paymentMethod?: string
   amount?: number
   rawMessage?: string
+  tableNumber?: number | null
 }): Promise<Visit> {
   const supabase = getServiceClient()
   const { data, error } = await supabase
@@ -30,6 +31,7 @@ export async function createVisit(params: {
       payment_method: params.paymentMethod ?? null,
       amount: params.amount ?? null,
       raw_message: params.rawMessage ?? null,
+      table_number: params.tableNumber ?? null,
     })
     .select()
     .single()

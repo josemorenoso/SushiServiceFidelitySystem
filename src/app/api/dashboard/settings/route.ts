@@ -45,14 +45,33 @@ export async function PUT(req: NextRequest) {
   }
 
   const service = getServiceClient()
-  const { error } = await service
+
+  // Try update first, then insert if not exists
+  const { data: existing } = await service
     .from('admin_settings')
-    .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+    .select('key')
+    .eq('key', key)
+    .single()
+
+  let error
+  if (existing) {
+    const result = await service
+      .from('admin_settings')
+      .update({ value, updated_at: new Date().toISOString() })
+      .eq('key', key)
+    error = result.error
+  } else {
+    const result = await service
+      .from('admin_settings')
+      .insert({ key, value, updated_at: new Date().toISOString() })
+    error = result.error
+  }
 
   if (error) {
     console.error('[Settings] Error update:', error)
     return NextResponse.json({ error: 'Error guardando configuración' }, { status: 500 })
   }
 
+  console.log(`[Settings] Actualizado: ${key} = ${value}`)
   return NextResponse.json({ message: 'Configuración actualizada', key, value })
 }

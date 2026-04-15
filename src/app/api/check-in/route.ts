@@ -13,6 +13,7 @@ interface CheckInRequestBody {
   birthday?: string | null
   city?: string | null
   accepts_marketing?: boolean
+  table_number?: number | null
 }
 
 export async function POST(request: NextRequest) {
@@ -74,7 +75,7 @@ export async function POST(request: NextRequest) {
         accepts_marketing: body.accepts_marketing ?? true,
       })
 
-      await createVisit({ customerId: customer.id, source: 'qr' })
+      await createVisit({ customerId: customer.id, source: 'qr', tableNumber: body.table_number ?? null })
 
       // WhatsApp de bienvenida (best-effort)
       sendWelcomeMessage(cleaned, customer.name).catch((err) =>
@@ -124,7 +125,7 @@ export async function POST(request: NextRequest) {
       }
 
       const updated = await incrementVisit(customer.id, customer.total_visits, 'qr')
-      await createVisit({ customerId: customer.id, source: 'qr' })
+      await createVisit({ customerId: customer.id, source: 'qr', tableNumber: body.table_number ?? null })
 
       // Evaluar recompensa
       const reward = await checkRewardForVisit(updated.total_visits)

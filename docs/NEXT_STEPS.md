@@ -1,13 +1,13 @@
 # NEXT_STEPS — Contexto para nueva conversación
 
-> **Última actualización:** 2026-04-11 v0.12.0
+> **Última actualización:** 2026-04-15 v0.18.0
 > **Lee primero:** `METODO_AINNOVATE.md` (reglas IA) → este archivo (contexto)
 
 ---
 
 ## Estado actual del sistema
 
-**Versión:** 0.12.0 | **Deploy:** Vercel (producción) | **Build:** ✅ 28 rutas, 0 errores
+**Versión:** 0.18.0 | **Deploy:** Vercel (producción) | **Build:** ✅ 33 rutas, 0 errores
 
 ### Infraestructura operativa
 - **Vercel:** Proyecto conectado a GitHub, deploy automático
@@ -22,6 +22,16 @@
 - **Dashboard:** https://restaurant-fidelity-system-9tirrpmc1-josemorenosos-projects.vercel.app/dashboard
 - **n8n:** https://n8n.almojabananet.me
 - **Google Maps Review:** https://share.google/XDfNCZIn7QFQaAME9
+
+---
+
+## Nuevas features (v0.13.0–v0.17.0)
+
+| Versión | Feature | Detalle |
+|---------|---------|--------|
+| v0.18.0 | Customer Detail + Rewards CRUD + Consent + Freq Cap | Dialog perfil cliente, CRUD recompensas, checkbox consentimiento, frequency capping, opt-out badges |
+| v0.17.0 | Dashboard Analytics Expansion | 4 nuevas gráficas: Reactivación, ROI, Heatmap, Adquisición + Settings page |
+| v0.16.0 | Demo auto-login | Ruta /demo para acceso directo |
 
 ---
 
@@ -43,13 +53,14 @@
 
 ### 🔴 Sin esto NO se puede cobrar
 1. **Envío real de mensajes en campañas** — `campaigns/manual/route.ts` crea records pero NO envía por Twilio. Implementar `twilio.messages.create()` con la plantilla seleccionada
-2. **Frequency capping** — Campo `last_campaign_at` en `customers` + check 7 días entre campañas/marketing por cliente
-3. **Opt-out / STOP** — Manejar respuesta "STOP" → marcar `opted_out = true` → excluir de campañas
+2. ~~**Frequency capping**~~ ✅ Implementado v0.18.0 — 7 días entre marketing, no afecta seguimiento
+3. ~~**Opt-out / Consent**~~ ✅ Implementado v0.18.0 — Checkbox registro + `accepts_marketing` + auto-excluye campañas. Falta: webhook STOP de WhatsApp
 4. **Google Contacts sync real** — Crear workflow n8n que reciba webhook y cree/actualice contacto. Agregar `N8N_GOOGLE_CONTACTS_WEBHOOK_URL` en env vars
 5. **Error handling de envío** — Registrar errores de Twilio por mensaje, reintentos, status de delivery
+6. **Ejecutar migración 00008** — `accepts_marketing` en customers (pendiente en Supabase)
 
 ### 🟡 Alto valor (diferenciador)
-6. **Dashboard público del cliente** — URL `/mi-cuenta/{phone}` con visitas, nivel, próxima recompensa
+6. **Dashboard público del cliente** — URL `/mi-cuenta/{uuid}` con visitas, nivel, próxima recompensa (analizado: viable, recomendado con UUID no teléfono)
 7. **Notificación pre-recompensa** — "¡Te falta 1 visita para tu premio!"
 8. **Cupón con código único** — QR de cupón verificable, no solo "ven y pide"
 9. **Reportes semanales por email** al admin

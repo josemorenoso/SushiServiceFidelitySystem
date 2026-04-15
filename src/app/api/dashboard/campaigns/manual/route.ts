@@ -64,7 +64,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Fetch matching customers
-    let query = db.from('customers').select('id, phone, name, total_visits, last_campaign_at, source_channels')
+    let query = db.from('customers').select('id, phone, name, total_visits, last_campaign_at, source_channels, accepts_marketing')
+    query = query.eq('accepts_marketing', true)
     if (filters.city) query = query.ilike('city', `%${filters.city}%`)
     if (filters.minVisits) query = query.gte('total_visits', parseInt(filters.minVisits))
     if (filters.maxVisits) query = query.lte('total_visits', parseInt(filters.maxVisits))

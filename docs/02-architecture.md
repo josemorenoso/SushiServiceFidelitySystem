@@ -80,6 +80,7 @@ Tablas principales previstas:
 - **campaigns** — Campañas de marketing (manuales y automáticas)
 - **campaign_messages** — Mensajes enviados por campaña
 - **authorized_numbers** — Números de meseros autorizados para webhook
+- **admin_settings** — Configuración del admin (key-value: ticket promedio, etc.)
 - **admin_users** — Administradores del dashboard (vía Supabase Auth)
 
 ## Flujo de Datos

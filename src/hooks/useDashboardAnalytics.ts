@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useDemo } from '@/contexts/DemoContext'
 import type { DashboardAnalytics } from '@/types/analytics.types'
 
@@ -9,6 +9,11 @@ export function useDashboardAnalytics() {
   const [realData, setRealData] = useState<DashboardAnalytics | null>(null)
   const [realLoading, setRealLoading] = useState(false)
   const [realError, setRealError] = useState<string | null>(null)
+  const [refreshKey, setRefreshKey] = useState(0)
+
+  const refetch = useCallback(() => {
+    setRefreshKey((k) => k + 1)
+  }, [])
 
   useEffect(() => {
     if (isDemo) return
@@ -23,13 +28,14 @@ export function useDashboardAnalytics() {
       .then((data) => setRealData(data))
       .catch((err) => setRealError(err.message))
       .finally(() => setRealLoading(false))
-  }, [isDemo])
+  }, [isDemo, refreshKey])
 
   if (isDemo) {
     return {
       data: demoData,
       loading: demoLoading,
       error: demoError,
+      refetch,
     }
   }
 
@@ -37,5 +43,6 @@ export function useDashboardAnalytics() {
     data: realData,
     loading: realLoading,
     error: realError,
+    refetch,
   }
 }

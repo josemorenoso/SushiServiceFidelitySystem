@@ -2,7 +2,7 @@
 
 **Base URL:** `/api`
 **Autenticación:** Bearer Token (JWT) — Supabase Auth
-**Última actualización:** 2026-04-10 22:50
+**Última actualización:** 2026-04-15 12:30
 
 ---
 
@@ -38,6 +38,13 @@ Webhooks validan origen por número autorizado o `CRON_SECRET`.
 | GET | /api/dashboard/templates | Listar plantillas Twilio Content API | Admin JWT |
 | POST | /api/dashboard/templates | Crear plantilla + submit aprobación WhatsApp | Admin JWT |
 | POST | /api/dashboard/check-in-override | Registrar visita extra (admin override) | Admin JWT |
+| GET | /api/dashboard/settings | Obtener configuración del admin | Admin JWT |
+| PUT | /api/dashboard/settings | Actualizar configuración | Admin JWT |
+| GET | /api/dashboard/customers/:id | Detalle de un cliente | Admin JWT |
+| GET | /api/dashboard/customers/:id/next-reward | Próxima recompensa del cliente | Admin JWT |
+| POST | /api/dashboard/rewards | Crear recompensa | Admin JWT |
+| DELETE | /api/dashboard/rewards?id=X | Eliminar recompensa | Admin JWT |
+| PATCH | /api/dashboard/rewards | Toggle activa/inactiva | Admin JWT |
 
 ---
 
@@ -349,6 +356,46 @@ Crea y ejecuta campaña manual con filtros.
   "approval": { "sid": "HXxxxxxxxxxx", "status": "received" }
 }
 ```
+
+---
+
+### Settings (Admin)
+
+**`GET /api/dashboard/settings`** — Admin JWT
+
+Retorna todas las configuraciones como objeto clave-valor.
+
+**Response 200:**
+```json
+{
+  "avg_ticket": "35000"
+}
+```
+
+---
+
+**`PUT /api/dashboard/settings`** — Admin JWT
+
+Actualiza una configuración por clave.
+
+**Request:**
+```json
+{
+  "key": "avg_ticket",
+  "value": "42000"
+}
+```
+
+**Response 200:**
+```json
+{
+  "message": "Configuración actualizada",
+  "key": "avg_ticket",
+  "value": "42000"
+}
+```
+
+**Response 400:** `{ "error": "key y value son requeridos" }`
 
 ---
 

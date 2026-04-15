@@ -19,6 +19,7 @@ export function CheckInForm({
   const [name, setName] = useState('')
   const [birthday, setBirthday] = useState('')
   const [city, setCity] = useState('')
+  const [acceptsMarketing, setAcceptsMarketing] = useState(true)
   const [loading, setLoading] = useState(false)
 
   const handlePhoneSubmit = async (e: React.FormEvent) => {
@@ -90,6 +91,7 @@ export function CheckInForm({
           name: name.trim(),
           birthday: birthday || null,
           city: city.trim() || null,
+          accepts_marketing: acceptsMarketing,
         }),
       })
 
@@ -279,6 +281,24 @@ export function CheckInForm({
                 max={new Date().toISOString().split('T')[0]}
               />
             </div>
+          </div>
+
+          {/* Consentimiento de comunicaciones */}
+          <div className="flex items-start gap-2.5 mt-1">
+            <input
+              id="accepts_marketing"
+              type="checkbox"
+              checked={acceptsMarketing}
+              onChange={(e) => setAcceptsMarketing(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-gray-300 accent-[#E63946] cursor-pointer"
+            />
+            <label
+              htmlFor="accepts_marketing"
+              className="text-xs leading-relaxed cursor-pointer"
+              style={{ color: "#6b7280" }}
+            >
+              Acepto ser parte de la familia y recibir regalos, recompensas y comunicaciones por WhatsApp
+            </label>
           </div>
 
           <button

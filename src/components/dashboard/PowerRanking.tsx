@@ -6,6 +6,7 @@ import type { RankedCustomer } from '@/types/analytics.types'
 interface PowerRankingProps {
   customers: RankedCustomer[]
   loading: boolean
+  onCustomerClick?: (customerId: string) => void
 }
 
 function PositionBadge({ pos }: { pos: number }) {
@@ -22,7 +23,7 @@ function PositionBadge({ pos }: { pos: number }) {
   )
 }
 
-export function PowerRanking({ customers, loading }: PowerRankingProps) {
+export function PowerRanking({ customers, loading, onCustomerClick }: PowerRankingProps) {
   return (
     <div className="dashboard-card p-6">
       <h3
@@ -49,7 +50,8 @@ export function PowerRanking({ customers, loading }: PowerRankingProps) {
             return (
               <div
                 key={c.id}
-                className="ranking-row flex items-center gap-3 px-3 py-2.5"
+                className="ranking-row flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-all hover:bg-black/[0.02]"
+                onClick={() => onCustomerClick?.(c.id)}
               >
                 <PositionBadge pos={c.position} />
 

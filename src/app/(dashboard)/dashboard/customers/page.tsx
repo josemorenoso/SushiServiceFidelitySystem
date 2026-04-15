@@ -14,7 +14,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Search, ChevronLeft, ChevronRight, Users } from 'lucide-react'
+import { Search, ChevronLeft, ChevronRight, Users, MessageCircleOff } from 'lucide-react'
+import { CustomerDetailDialog } from '@/components/dashboard/CustomerDetailDialog'
 import type { Customer } from '@/types/database.types'
 
 export default function CustomersPage() {
@@ -23,6 +24,8 @@ export default function CustomersPage() {
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
+  const [detailOpen, setDetailOpen] = useState(false)
   const limit = 15
 
   const fetchCustomers = useCallback(async () => {
@@ -109,8 +112,21 @@ export default function CustomersPage() {
                 </TableHeader>
                 <TableBody>
                   {customers.map((c) => (
-                    <TableRow key={c.id}>
-                      <TableCell className="font-medium">{c.name}</TableCell>
+                    <TableRow
+                      key={c.id}
+                      className="cursor-pointer hover:bg-muted/50 transition-colors"
+                      onClick={() => { setSelectedCustomer(c); setDetailOpen(true) }}
+                    >
+                      <TableCell className="font-medium">
+                        <span className="flex items-center gap-1.5">
+                          {c.name}
+                          {!c.accepts_marketing && (
+                            <span title="No acepta marketing">
+                              <MessageCircleOff className="h-3.5 w-3.5 text-red-400 shrink-0" />
+                            </span>
+                          )}
+                        </span>
+                      </TableCell>
                       <TableCell className="font-mono text-sm">{c.phone}</TableCell>
                       <TableCell className="text-center">
                         <Badge variant={c.total_visits >= 5 ? 'default' : 'secondary'}>
@@ -159,6 +175,13 @@ export default function CustomersPage() {
           )}
         </CardContent>
       </Card>
+
+      <CustomerDetailDialog
+        customer={selectedCustomer}
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        onVisitsAdded={fetchCustomers}
+      />
     </div>
   )
 }

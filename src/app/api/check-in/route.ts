@@ -12,6 +12,7 @@ interface CheckInRequestBody {
   name?: string
   birthday?: string | null
   city?: string | null
+  accepts_marketing?: boolean
 }
 
 export async function POST(request: NextRequest) {
@@ -70,6 +71,7 @@ export async function POST(request: NextRequest) {
         name: name.trim(),
         birthday: birthday ?? null,
         city: city?.trim() || null,
+        accepts_marketing: body.accepts_marketing ?? true,
       })
 
       await createVisit({ customerId: customer.id, source: 'qr' })

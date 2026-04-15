@@ -7,6 +7,10 @@ import type {
   TierCount,
   RiskGroup,
   RankedCustomer,
+  HeatmapCell,
+  AcquisitionChannel,
+  ReactivationData,
+  ROIEstimate,
 } from '@/types/analytics.types'
 
 function daysBetween(d1: Date, d2: Date): number {
@@ -143,6 +147,56 @@ export function computeDemoAnalytics(customers: DemoCustomer[]): DashboardAnalyt
     }
   })
 
+  // --- Demo Heatmap ---
+  const DAY_LABELS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
+  const heatmap: HeatmapCell[] = []
+  for (let d = 0; d < 7; d++) {
+    for (let h = 0; h < 24; h++) {
+      const isWeekend = d === 0 || d === 6
+      const isPeak = h >= 11 && h <= 14 || h >= 18 && h <= 21
+      const base = isPeak ? (isWeekend ? 12 : 8) : (h >= 8 && h <= 22 ? 3 : 0)
+      heatmap.push({
+        day: d, hour: h,
+        dayLabel: DAY_LABELS[d],
+        hourLabel: h === 0 ? '12am' : h < 12 ? `${h}am` : h === 12 ? '12pm' : `${h - 12}pm`,
+        count: Math.floor(base + Math.random() * base),
+      })
+    }
+  }
+
+  // --- Demo Acquisition by Month ---
+  const acquisitionByMonth: AcquisitionChannel[] = []
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const label = d.toLocaleDateString('es-CO', { month: 'short', year: '2-digit' })
+    acquisitionByMonth.push({
+      month: label,
+      qr: Math.floor(10 + Math.random() * 20),
+      delivery: Math.floor(5 + Math.random() * 15),
+    })
+  }
+
+  // --- Demo Reactivation Rate ---
+  const reactivationRate: ReactivationData[] = []
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const label = d.toLocaleDateString('es-CO', { month: 'short', year: '2-digit' })
+    const sent = Math.floor(5 + Math.random() * 15)
+    const returned = Math.floor(Math.random() * sent * 0.6)
+    reactivationRate.push({
+      month: label, sent, returned,
+      rate: sent > 0 ? Math.round((returned / sent) * 100) : 0,
+    })
+  }
+
+  // --- Demo ROI ---
+  const lastReact = reactivationRate[reactivationRate.length - 1]
+  const roiEstimate: ROIEstimate = {
+    reactivatedThisMonth: lastReact?.returned ?? 0,
+    avgTicket: 35000,
+    estimatedROI: (lastReact?.returned ?? 0) * 35000,
+  }
+
   return {
     summary: {
       totalCustomers: customers.length,
@@ -159,5 +213,9 @@ export function computeDemoAnalytics(customers: DemoCustomer[]): DashboardAnalyt
     customerTiers,
     atRiskGroups,
     topCustomers,
+    heatmap,
+    acquisitionByMonth,
+    reactivationRate,
+    roiEstimate,
   }
 }

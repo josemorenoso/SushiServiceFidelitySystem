@@ -11,6 +11,7 @@ import {
   QrCode,
   UtensilsCrossed,
   FileText,
+  Settings,
 } from 'lucide-react'
 
 const navItems = [
@@ -20,6 +21,7 @@ const navItems = [
   { href: '/dashboard/campaigns', label: 'Campañas', icon: Megaphone },
   { href: '/dashboard/qr', label: 'Código QR', icon: QrCode },
   { href: '/dashboard/templates', label: 'Plantillas', icon: FileText },
+  { href: '/dashboard/settings', label: 'Ajustes', icon: Settings },
 ]
 
 export function DashboardSidebar() {

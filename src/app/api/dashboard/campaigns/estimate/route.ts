@@ -27,6 +27,7 @@ export async function GET(request: NextRequest) {
 
     const db = getServiceClient()
     let query = db.from('customers').select('id', { count: 'exact', head: true })
+    query = query.eq('accepts_marketing', true)
 
     if (city) {
       query = query.ilike('city', `%${city}%`)

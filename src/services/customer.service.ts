@@ -31,6 +31,7 @@ export async function createCustomer(params: {
   birthday: string | null
   city: string | null
   source?: 'qr' | 'delivery'
+  accepts_marketing?: boolean
 }): Promise<Customer> {
   const supabase = getServiceClient()
   const { data, error } = await supabase
@@ -43,6 +44,7 @@ export async function createCustomer(params: {
       total_visits: 1,
       last_visit_at: new Date().toISOString(),
       source_channels: params.source ?? 'qr',
+      accepts_marketing: params.accepts_marketing ?? true,
     })
     .select()
     .single()

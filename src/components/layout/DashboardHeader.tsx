@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useDemo } from '@/contexts/DemoContext'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
-import { LogOut, Menu, QrCode, LayoutDashboard, Users, Gift, Megaphone, UtensilsCrossed, FileText } from 'lucide-react'
+import { LogOut, Menu, QrCode, LayoutDashboard, Users, Gift, Megaphone, UtensilsCrossed, FileText, Settings } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
@@ -17,6 +17,7 @@ const navItems = [
   { href: '/dashboard/campaigns', label: 'Campañas', icon: Megaphone },
   { href: '/dashboard/qr', label: 'Código QR', icon: QrCode },
   { href: '/dashboard/templates', label: 'Plantillas', icon: FileText },
+  { href: '/dashboard/settings', label: 'Ajustes', icon: Settings },
 ]
 
 export function DashboardHeader() {

@@ -5,6 +5,124 @@
 
 ---
 
+## [0.18.0] — 2026-04-15 — Customer Detail + Rewards CRUD + Consent + Frequency Cap
+
+### Added — Customer Detail Dialog
+- Componente `CustomerDetailDialog.tsx` con info completa del cliente
+- Click en filas de PowerRanking y Clientes abre el detalle
+- Muestra: nombre, teléfono, ciudad, cumpleaños, tier, visitas, canal, inactividad
+- Muestra próxima recompensa (API `GET /api/dashboard/customers/:id/next-reward`)
+- Asignar visitas manualmente (cantidad + razón) desde el dialog
+- API `GET /api/dashboard/customers/:id` para detalle individual
+
+### Added — Rewards CRUD (crear/borrar/activar)
+- Botón "Nueva Recompensa" → Dialog con visita # + premio
+- Auto-genera template de WhatsApp con vista previa en tiempo real
+- Toggle activar/desactivar recompensa (PATCH)
+- Eliminar recompensa con confirmación (DELETE)
+- API: POST, DELETE, PATCH en `/api/dashboard/rewards`
+
+### Added — Consentimiento de comunicaciones
+- Checkbox en formulario de registro: "Acepto ser parte de la familia..."
+- Campo `accepts_marketing` (boolean, default true) en customers
+- Migración `00008_accepts_marketing.sql`
+- Icono ✕ en lista de clientes para los que no aceptan marketing
+- CustomerDetailDialog muestra estado de opt-in/opt-out
+
+### Changed — Campañas: auto-excluyen clientes sin consentimiento
+- Campañas manuales (`/api/dashboard/campaigns/manual`) filtran `accepts_marketing=true`
+- Estimación de audiencia (`/api/dashboard/campaigns/estimate`) filtra `accepts_marketing=true`
+- Cron reactivación excluye clientes con `accepts_marketing=false`
+- Cron cumpleaños NO filtra (transaccional, no marketing)
+
+### Changed — Frequency capping verificado
+- Campañas manuales: 7 días entre marketing por cliente via `last_campaign_at`
+- Cron birthday/reactivation: NO afectados (usan `hasRecentCampaignMessage` por tipo)
+- Solo campañas marketing actualizan `last_campaign_at`
+
+### Changed — Hook `useDashboardAnalytics` con refetch
+- Agregado `refetch()` para recargar datos después de acciones admin
+
+**Archivos creados:**
+- `src/components/dashboard/CustomerDetailDialog.tsx`
+- `src/app/api/dashboard/customers/[id]/route.ts`
+- `src/app/api/dashboard/customers/[id]/next-reward/route.ts`
+- `supabase/migrations/00008_accepts_marketing.sql`
+
+**Archivos modificados:**
+- `src/types/database.types.ts` — accepts_marketing en Customer
+- `src/services/customer.service.ts` — createCustomer con accepts_marketing
+- `src/app/api/check-in/route.ts` — pasar accepts_marketing
+- `src/components/features/check-in/CheckInForm.tsx` — checkbox consentimiento
+- `src/components/dashboard/PowerRanking.tsx` — onCustomerClick prop
+- `src/app/(dashboard)/dashboard/page.tsx` — CustomerDetailDialog + handleCustomerClick
+- `src/app/(dashboard)/dashboard/customers/page.tsx` — rows clickable + opt-out badge
+- `src/app/(dashboard)/dashboard/rewards/page.tsx` — CRUD completo
+- `src/app/api/dashboard/rewards/route.ts` — POST, DELETE, PATCH
+- `src/app/api/dashboard/campaigns/manual/route.ts` — filtro accepts_marketing
+- `src/app/api/dashboard/campaigns/estimate/route.ts` — filtro accepts_marketing
+- `src/services/campaign.service.ts` — findInactiveCustomers excluye opted-out
+- `src/hooks/useDashboardAnalytics.ts` — refetch()
+
+---
+
+## [0.17.0] — 2026-04-15 — Métricas avanzadas + ROI + Heatmap + Ajustes
+
+### Added — 4 nuevas gráficas/métricas + página de Ajustes
+
+**Tasa de Reactivación (`ReactivationRateChart.tsx`):**
+- Gráfica ComposedChart: barras (enviados vs volvieron) + línea (tasa %)
+- Cruza campaign_messages + visits para medir ROI real de campañas de reactivación
+- Últimos 6 meses, badge con tasa promedio global
+
+**Card ROI Estimado (`ROICard.tsx`):**
+- Fórmula: clientes_reactivados × ticket_promedio
+- Muestra retorno estimado del sistema en COP
+- Link directo a /dashboard/settings para ajustar ticket promedio
+
+**Mapa de Calor de Visitas (`VisitHeatmap.tsx`):**
+- Heatmap Día × Hora (7 días × horas 8am-10pm)
+- Últimos 6 meses de visitas
+- Tooltips con conteo, leyenda de colores, diseño responsive
+
+**Canal de Adquisición por Mes (`AcquisitionChannelChart.tsx`):**
+- Stacked bar: QR vs Domicilio por mes (últimos 6 meses)
+- Basado en customers.source_channels
+
+**Página de Ajustes (`/dashboard/settings`):**
+- Configuración de ticket promedio (COP)
+- API PUT /api/dashboard/settings para guardar configuración
+- Tabla admin_settings (key-value) con RLS
+
+**Navegación:**
+- Nuevo item "Ajustes" en sidebar y header mobile
+
+### Migración SQL requerida
+- `supabase/migrations/00007_admin_settings.sql` — Ejecutar en Supabase
+
+### Archivos creados
+- `src/components/dashboard/ReactivationRateChart.tsx`
+- `src/components/dashboard/ROICard.tsx`
+- `src/components/dashboard/VisitHeatmap.tsx`
+- `src/components/dashboard/AcquisitionChannelChart.tsx`
+- `src/app/(dashboard)/dashboard/settings/page.tsx`
+- `src/app/api/dashboard/settings/route.ts`
+- `supabase/migrations/00007_admin_settings.sql`
+
+### Archivos modificados
+- `src/types/analytics.types.ts` — HeatmapCell, AcquisitionChannel, ReactivationData, ROIEstimate
+- `src/services/dashboard.service.ts` — getFullAnalytics ampliado (heatmap, acquisition, reactivation, ROI)
+- `src/lib/demo-analytics.ts` — Demo data para las 4 nuevas métricas
+- `src/app/(dashboard)/dashboard/page.tsx` — Integra los 4 nuevos componentes
+- `src/components/layout/DashboardSidebar.tsx` — Nav item Ajustes
+- `src/components/layout/DashboardHeader.tsx` — Nav item Ajustes (mobile)
+
+**Build:** ✅ 29 rutas, 0 errores
+
+> **Request original:** Añadir gráficas: Tasa de Reactivación, ROI Estimado, Heatmap Día×Hora, Canal de Adquisición por Mes, y apartado de ticket promedio en Ajustes
+
+---
+
 ## [0.16.0] — 2026-04-14 — Demo auto-login
 
 ### Added — Ruta /demo para acceso directo al dashboard sin formulario de login

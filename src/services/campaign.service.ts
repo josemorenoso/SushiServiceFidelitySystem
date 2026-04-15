@@ -46,6 +46,7 @@ export async function findInactiveCustomers(): Promise<Customer[]> {
     .select('*')
     .lt('last_visit_at', cutoffDate)
     .not('last_visit_at', 'is', null)
+    .eq('accepts_marketing', true)
 
   if (error) {
     throw new Error(`Error buscando inactivos: ${error.message}`)

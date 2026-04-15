@@ -8,6 +8,7 @@ export interface Customer {
   last_visit_at: string | null
   source_channels: 'qr' | 'delivery' | 'both'
   last_campaign_at: string | null
+  accepts_marketing: boolean
   created_at: string
   updated_at: string
 }
@@ -77,6 +78,7 @@ export interface Database {
           last_visit_at?: string | null
           source_channels?: 'qr' | 'delivery' | 'both'
           last_campaign_at?: string | null
+          accepts_marketing?: boolean
         }
         Update: Partial<Omit<Customer, 'id' | 'created_at'>>
       }

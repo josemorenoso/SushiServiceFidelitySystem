@@ -8,6 +8,10 @@ import type {
   TierCount,
   RiskGroup,
   RankedCustomer,
+  HeatmapCell,
+  AcquisitionChannel,
+  ReactivationData,
+  ROIEstimate,
 } from '@/types/analytics.types'
 
 function getServiceClient() {
@@ -126,14 +130,26 @@ export async function getFullAnalytics(): Promise<DashboardAnalytics> {
   const month = String(now.getMonth() + 1).padStart(2, '0')
   const day = String(now.getDate()).padStart(2, '0')
 
+  const sixMonthsAgo = new Date(now)
+  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6)
+  const sixMonthsAgoStr = formatDate(sixMonthsAgo)
+
   const [
     { data: allCustomers },
     { data: recentVisits },
     { data: birthdayData },
+    { data: allVisits6m },
+    { data: reactivationCampaigns },
+    { data: reactivationMessages },
+    { data: settingsData },
   ] = await Promise.all([
     supabase.from('customers').select('*').order('total_visits', { ascending: false }),
     supabase.from('visits').select('id, customer_id, source, created_at').gte('created_at', thirtyDaysAgoStr),
     supabase.from('customers').select('id').not('birthday', 'is', null).like('birthday', `%-${month}-${day}`),
+    supabase.from('visits').select('id, customer_id, source, created_at').gte('created_at', sixMonthsAgoStr),
+    supabase.from('campaigns').select('id, type, executed_at').eq('type', 'reactivation').not('executed_at', 'is', null),
+    supabase.from('campaign_messages').select('id, campaign_id, customer_id, sent_at, status'),
+    supabase.from('admin_settings').select('key, value').eq('key', 'avg_ticket'),
   ])
 
   const customers: Customer[] = allCustomers ?? []
@@ -234,6 +250,123 @@ export async function getFullAnalytics(): Promise<DashboardAnalytics> {
   const newToday = newCustMap[todayStr] ?? 0
   const newWeek = customers.filter((c) => new Date(c.created_at) >= weekAgo).length
 
+  // --- HEATMAP: Día × Hora de visitas (últimos 6 meses) ---
+  const DAY_LABELS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
+  const heatmapGrid: Record<string, number> = {}
+  for (let d = 0; d < 7; d++) {
+    for (let h = 0; h < 24; h++) {
+      heatmapGrid[`${d}-${h}`] = 0
+    }
+  }
+  for (const v of (allVisits6m ?? [])) {
+    const vDate = new Date(v.created_at)
+    const dayOfWeek = vDate.getDay()
+    const hour = vDate.getHours()
+    heatmapGrid[`${dayOfWeek}-${hour}`]++
+  }
+  const heatmap: HeatmapCell[] = []
+  for (let d = 0; d < 7; d++) {
+    for (let h = 0; h < 24; h++) {
+      heatmap.push({
+        day: d,
+        hour: h,
+        dayLabel: DAY_LABELS[d],
+        hourLabel: h === 0 ? '12am' : h < 12 ? `${h}am` : h === 12 ? '12pm' : `${h - 12}pm`,
+        count: heatmapGrid[`${d}-${h}`],
+      })
+    }
+  }
+
+  // --- ACQUISITION CHANNEL BY MONTH (últimos 6 meses) ---
+  const acqMap: Record<string, { qr: number; delivery: number }> = {}
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    acqMap[key] = { qr: 0, delivery: 0 }
+  }
+  for (const c of customers) {
+    const cMonth = c.created_at.substring(0, 7)
+    if (acqMap[cMonth]) {
+      const src = c.source_channels
+      if (src === 'delivery') acqMap[cMonth].delivery++
+      else if (src === 'both') {
+        acqMap[cMonth].qr++
+        acqMap[cMonth].delivery++
+      } else {
+        acqMap[cMonth].qr++
+      }
+    }
+  }
+  const acquisitionByMonth: AcquisitionChannel[] = Object.entries(acqMap)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([m, v]) => {
+      const d = new Date(m + '-15')
+      const label = d.toLocaleDateString('es-CO', { month: 'short', year: '2-digit' })
+      return { month: label, qr: v.qr, delivery: v.delivery }
+    })
+
+  // --- REACTIVATION RATE (por mes, últimos 6 meses) ---
+  const campaigns6m = (reactivationCampaigns ?? [])
+  const messages6m = (reactivationMessages ?? [])
+  const visits6m = (allVisits6m ?? [])
+
+  const reactivationMap: Record<string, { sent: Set<string>; returned: Set<string> }> = {}
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    reactivationMap[key] = { sent: new Set(), returned: new Set() }
+  }
+
+  for (const campaign of campaigns6m) {
+    if (!campaign.executed_at) continue
+    const campaignMonth = campaign.executed_at.substring(0, 7)
+    if (!reactivationMap[campaignMonth]) continue
+
+    const campaignDate = new Date(campaign.executed_at)
+    const sevenDaysLater = new Date(campaignDate.getTime() + 7 * 24 * 60 * 60 * 1000)
+
+    const campaignMsgs = messages6m.filter((m: { campaign_id: string }) => m.campaign_id === campaign.id)
+    const customerIds = campaignMsgs.map((m: { customer_id: string }) => m.customer_id)
+
+    for (const cid of customerIds) {
+      reactivationMap[campaignMonth].sent.add(cid)
+    }
+
+    for (const v of visits6m) {
+      const vDate = new Date(v.created_at)
+      if (customerIds.includes(v.customer_id) && vDate >= campaignDate && vDate <= sevenDaysLater) {
+        reactivationMap[campaignMonth].returned.add(v.customer_id)
+      }
+    }
+  }
+
+  const reactivationRate: ReactivationData[] = Object.entries(reactivationMap)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([m, v]) => {
+      const d = new Date(m + '-15')
+      const label = d.toLocaleDateString('es-CO', { month: 'short', year: '2-digit' })
+      const sent = v.sent.size
+      const returned = v.returned.size
+      return {
+        month: label,
+        sent,
+        returned,
+        rate: sent > 0 ? Math.round((returned / sent) * 100) : 0,
+      }
+    })
+
+  // --- ROI ESTIMATE ---
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const currentMonthReactivation = reactivationMap[currentMonth]
+  const reactivatedThisMonth = currentMonthReactivation ? currentMonthReactivation.returned.size : 0
+  const avgTicketStr = settingsData?.[0]?.value ?? '35000'
+  const avgTicket = parseFloat(avgTicketStr) || 35000
+  const roiEstimate: ROIEstimate = {
+    reactivatedThisMonth,
+    avgTicket,
+    estimatedROI: reactivatedThisMonth * avgTicket,
+  }
+
   return {
     summary: {
       totalCustomers: customers.length,
@@ -250,5 +383,9 @@ export async function getFullAnalytics(): Promise<DashboardAnalytics> {
     customerTiers,
     atRiskGroups,
     topCustomers,
+    heatmap,
+    acquisitionByMonth,
+    reactivationRate,
+    roiEstimate,
   }
 }

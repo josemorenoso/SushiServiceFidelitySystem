@@ -1,7 +1,7 @@
 # Esquema de Base de Datos
 
 **Base de datos:** Supabase (PostgreSQL)
-**Última actualización:** 2026-04-11 10:30
+**Última actualización:** 2026-04-15 12:30
 
 ---
 
@@ -71,6 +71,12 @@ erDiagram
         timestamp created_at
     }
 
+    admin_settings {
+        text key PK
+        text value
+        timestamp updated_at
+    }
+
     customers ||--o{ visits : "has many"
     customers ||--o{ campaign_messages : "receives"
     campaigns ||--o{ campaign_messages : "sends"
@@ -88,6 +94,7 @@ erDiagram
 | 4 | [campaigns](#campaigns) | Campañas de marketing | SI | Admin: CRUD completo |
 | 5 | [campaign_messages](#campaign_messages) | Mensajes enviados por campaña | SI | Admin: lectura |
 | 6 | [authorized_numbers](#authorized_numbers) | Números de meseros autorizados | SI | Admin: CRUD completo |
+| 7 | [admin_settings](#admin_settings) | Configuración del admin (key-value) | SI | Admin: SELECT, INSERT, UPDATE |
 
 ---
 
@@ -108,6 +115,7 @@ erDiagram
 | `last_visit_at` | `timestamptz` | SI | `NULL` | Fecha de última visita |
 | `source_channels` | `text` | NO | `'qr'` | Origen del cliente: 'qr', 'delivery' o 'both' |
 | `last_campaign_at` | `timestamptz` | SI | `NULL` | Fecha de última campaña recibida (frequency cap) |
+| `accepts_marketing` | `boolean` | NO | `true` | Si el cliente acepta comunicaciones de marketing |
 | `created_at` | `timestamptz` | NO | `now()` | Fecha de creación |
 | `updated_at` | `timestamptz` | NO | `now()` | Última actualización |
 
@@ -239,6 +247,43 @@ CREATE POLICY "admin_update_customers" ON customers
 
 ---
 
+### admin_settings
+
+> Tabla key-value para configuraciones del administrador (ticket promedio, etc.).
+
+| Columna | Tipo | Nullable | Default | Descripción |
+|---------|------|----------|---------|-------------|
+| `key` | `text` | NO | - | PK — clave de configuración (ej: 'avg_ticket') |
+| `value` | `text` | NO | - | Valor de la configuración |
+| `updated_at` | `timestamptz` | NO | `now()` | Última actualización |
+
+**Índices:**
+
+| Nombre | Columnas | Tipo |
+|--------|----------|------|
+| `admin_settings_pkey` | `key` | PRIMARY KEY |
+
+**Seed data:**
+
+| key | value | Descripción |
+|-----|-------|-------------|
+| `avg_ticket` | `35000` | Ticket promedio en COP para cálculo de ROI |
+
+**Políticas RLS:**
+
+```sql
+CREATE POLICY "admin_select_settings" ON admin_settings
+  FOR SELECT USING (auth.role() = 'authenticated');
+
+CREATE POLICY "admin_update_settings" ON admin_settings
+  FOR UPDATE USING (auth.role() = 'authenticated');
+
+CREATE POLICY "admin_insert_settings" ON admin_settings
+  FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+```
+
+---
+
 ## Historial de Migraciones
 
 | # | Archivo | Fecha | Descripción | Estado |
@@ -249,6 +294,8 @@ CREATE POLICY "admin_update_customers" ON customers
 | 4 | `00004_campaigns.sql` | 2026-04-08 | Tablas campaigns + campaign_messages + índices + RLS | Pendiente |
 | 5 | `00005_add_city.sql` | 2026-04-08 | Campo city en customers + índice parcial | Pendiente |
 | 6 | `00006_source_channels_frequency_cap.sql` | 2026-04-11 | source_channels + last_campaign_at en customers, error_message en campaign_messages, backfill | Pendiente |
+| 7 | `00007_admin_settings.sql` | 2026-04-15 | Tabla admin_settings (key-value) + seed avg_ticket + RLS | Pendiente |
+| 8 | `00008_accepts_marketing.sql` | 2026-04-15 | Campo accepts_marketing en customers + backfill | Pendiente |
 
 ---
 
@@ -279,3 +326,4 @@ $$ LANGUAGE plpgsql;
 | campaigns | Admin | Admin | Admin | Admin |
 | campaign_messages | Admin | Service | Service | NO |
 | authorized_numbers | Admin | Admin | Admin | Admin |
+| admin_settings | Admin | Admin | Admin | NO |

@@ -58,6 +58,33 @@ export interface RankedCustomer {
   position: number
 }
 
+export interface HeatmapCell {
+  day: number
+  hour: number
+  dayLabel: string
+  hourLabel: string
+  count: number
+}
+
+export interface AcquisitionChannel {
+  month: string
+  qr: number
+  delivery: number
+}
+
+export interface ReactivationData {
+  month: string
+  sent: number
+  returned: number
+  rate: number
+}
+
+export interface ROIEstimate {
+  reactivatedThisMonth: number
+  avgTicket: number
+  estimatedROI: number
+}
+
 export interface DashboardAnalytics {
   summary: AnalyticsSummary
   visitsPerDay: DailyVisits[]
@@ -65,6 +92,10 @@ export interface DashboardAnalytics {
   customerTiers: TierCount[]
   atRiskGroups: RiskGroup[]
   topCustomers: RankedCustomer[]
+  heatmap: HeatmapCell[]
+  acquisitionByMonth: AcquisitionChannel[]
+  reactivationRate: ReactivationData[]
+  roiEstimate: ROIEstimate
 }
 
 export interface DemoCustomer {

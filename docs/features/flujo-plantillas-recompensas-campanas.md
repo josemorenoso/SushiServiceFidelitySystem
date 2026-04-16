@@ -1,31 +1,47 @@
 # Flujo Completo: Plantillas, Recompensas y Campañas
 
-> **Fecha:** 2026-04-15 | **Versión:** 0.19.0
+> **Fecha:** 2026-04-16 | **Versión:** 0.21.0
 > **Objetivo:** Documento operativo para entender y configurar rápido.
 
 ---
 
 ## 1. Conceptos clave
 
-### Plantillas WhatsApp (Twilio Content API)
-- Son **mensajes pre-aprobados por Meta** que puedes enviar a clientes FUERA de la ventana de 24h.
-- Se crean en Dashboard > Plantillas. Twilio las envía a Meta para aprobación (puede tardar 24-48h).
-- **SOLO plantillas aprobadas** se pueden usar en campañas manuales.
-- Variables disponibles: `{{1}}` = nombre, `{{2}}` = visitas, `{{3}}` = hint de próxima recompensa.
+### ⚠️ REGLA FUNDAMENTAL: Solo plantillas aprobadas
 
-### Mensajes directos (free-text)
-- Solo se pueden enviar **dentro de las 24h** después de que el cliente interactúa.
-- Los mensajes de **bienvenida, welcome back, y recompensa** usan mensajes directos porque se envían justo cuando el cliente escanea el QR (dentro de la ventana de 24h).
-- **NO necesitan aprobación de Meta.**
+**NO existe ventana de 24h en este sistema.** La ventana de 24h de WhatsApp Business solo se abre cuando el CLIENTE envía un mensaje al número del negocio. En nuestro flujo, el cliente escanea un QR y registra datos en un formulario web — **nunca envía un mensaje de WhatsApp**.
+
+Por tanto: **TODOS los mensajes de WhatsApp (bienvenida, welcome back, recompensa, cumpleaños, reactivación, campañas) DEBEN usar plantillas aprobadas por Meta vía Twilio Content API.**
+
+Si una plantilla no está configurada para un tipo de mensaje, ese mensaje simplemente NO se envía (se loguea advertencia).
+
+### Plantillas WhatsApp (Twilio Content API)
+- Son **mensajes pre-aprobados por Meta**.
+- Se crean en Dashboard > Plantillas. Twilio las envía a Meta para aprobación (24-48h).
+- Se asignan a cada tipo de mensaje en Dashboard > Ajustes.
+
+### Mapeo estándar de variables
+
+| Tipo de mensaje | Variable {{1}} | Variable {{2}} | Variable {{3}} |
+|----------------|----------------|----------------|----------------|
+| **welcome** (registro) | nombre | — | — |
+| **welcome_back** (visita) | nombre | total visitas | hint próxima recompensa |
+| **reward** (milestone) | nombre | total visitas | nombre del premio |
+| **birthday** (cron) | nombre | — | — |
+| **reactivation** (cron) | nombre | total visitas | hint próxima recompensa |
+| **campaign** (manual) | nombre | total visitas | hint próxima recompensa |
+
+**Al crear plantillas en Twilio, usa `{{1}}`, `{{2}}`, `{{3}}` sabiendo qué valor tendrá cada una.**
 
 ### Recompensas (Rewards)
 - Se configuran en Dashboard > Recompensas.
-- Cada recompensa tiene: **visita #** + **premio** + **template de mensaje** (auto-generado).
-- Cuando un cliente alcanza una visita milestone, el sistema AUTOMÁTICAMENTE le envía el mensaje de recompensa por WhatsApp (free-text, dentro de la ventana de 24h del check-in).
+- Cada recompensa tiene: **visita #** + **premio**.
+- Cuando un cliente alcanza un milestone, el sistema envía la plantilla `reward` con `{{3}}=nombre del premio`.
 
 ### Campañas
-- **Automáticas (cron):** Birthday y Reactivación — se ejecutan diariamente sin intervención.
-- **Manuales:** Creadas por el admin en Dashboard > Campañas — usan plantillas aprobadas.
+- **Automáticas (cron):** Birthday y Reactivación — requieren plantilla configurada en Ajustes.
+- **Manuales:** Dashboard > Campañas — plantilla aprobada + filtros de segmentación.
+- **Black exclusivas:** Preset predefinido para clientes con 10+ visitas.
 
 ---
 
@@ -47,28 +63,28 @@ Cliente escanea QR → Ingresa teléfono
     │ (1/día)                    │           │
     │         │                  └─────┬─────┘
     └────┬────┘                        │
-         │                        WhatsApp:
-    ┌────▼────┐                  "¡Bienvenido!"
-    │¿Milestone│                  (free-text)
+         │                        WhatsApp PLANTILLA:
+    ┌────▼────┐                  welcome_template_sid
+    │¿Milestone│                  {{1}}=nombre
     │ de reward?│
     │          │
-    ├── SÍ ───► WhatsApp: "¡Felicidades {{name}}! Visita #X,
-    │            ganaste: [premio]" (free-text, template de reward)
+    ├── SÍ ───► WhatsApp PLANTILLA: reward_template_sid
+    │            {{1}}=nombre, {{2}}=visitas, {{3}}=premio
     │
-    └── NO ───► WhatsApp: "¡Hola de nuevo {{name}}!
-                 Visita #X. ¡Sigue acumulando!" (free-text)
+    └── NO ───► WhatsApp PLANTILLA: welcome_back_template_sid
+                 {{1}}=nombre, {{2}}=visitas, {{3}}=hint recompensa
 ```
 
 ### Mensajes por tipo de check-in:
 
-| Situación | Mensaje | Tipo | Template necesaria? |
-|-----------|---------|------|---------------------|
-| Primera vez (registro) | "¡Hola {{name}}! Bienvenido a nuestro programa..." | Free-text | NO |
-| Visita normal | "¡Hola de nuevo {{name}}! Visita #X..." | Free-text | NO |
-| Visita = milestone reward | "¡Felicidades {{name}}! Visita #X, ganaste: [premio]" | Free-text (auto-generado) | NO |
-| Rate limit (ya vino hoy) | Se muestra en pantalla, NO envía WhatsApp | UI only | NO |
+| Situación | Plantilla en Ajustes | Variables |
+|-----------|---------------------|-----------|
+| Primera vez (registro) | `welcome_template_sid` | {{1}}=nombre |
+| Visita normal | `welcome_back_template_sid` | {{1}}=nombre, {{2}}=visitas, {{3}}=hint |
+| Visita = milestone reward | `reward_template_sid` | {{1}}=nombre, {{2}}=visitas, {{3}}=premio |
+| Rate limit (ya vino hoy) | No envía — solo UI | — |
 
-**Importante:** Todos los mensajes de check-in son **free-text** porque se envían en el momento del escaneo (dentro de la ventana 24h). No necesitan plantilla aprobada.
+**Si la plantilla no está configurada en Ajustes, el mensaje NO se envía** (se loguea warning).
 
 ---
 
@@ -81,8 +97,7 @@ Cliente escanea QR → Ingresa teléfono
 3. Ingresa:
    - **Visita #:** La meta (ej: 3, 6, 9, 12)
    - **Premio:** Lo que gana el cliente (ej: "Rollo California gratis")
-4. El sistema **auto-genera** el mensaje de WhatsApp
-5. Verás vista previa del mensaje antes de crear
+4. El sistema auto-genera el mensaje para preview, pero el envío real usa la plantilla `reward_template_sid`.
 
 ### ¿Qué pasa cuando un cliente llega a la meta?
 
@@ -91,27 +106,19 @@ Cliente hace check-in → Sistema incrementa visitas → ¿total_visits == miles
                                                             │
                                                     SÍ ─────┤
                                                             │
-                                            Envía mensaje de recompensa
-                                            por WhatsApp (free-text):
-                                            "¡Felicidades Juan! 🎉 Has completado
-                                            tu visita #6 a Sushi Service.
-                                            Te has ganado: Rollo California gratis.
-                                            ¡Reclama tu premio en tu próxima visita! 🍣"
+                                            Lee reward_template_sid de Ajustes
+                                            Envía plantilla con:
+                                            {{1}}=nombre, {{2}}=visitas, {{3}}=premio
 ```
 
-### ¿Qué pasa con los que están CERCA de la recompensa?
+### Hint de próxima recompensa
 
-El **mensaje de welcome back** (visita normal sin recompensa) dice:
-> "¡Hola de nuevo {{name}}! 😊 Visita #X. ¡Sigue acumulando para ganar premios! 🌟"
-
-**Actualmente NO dice cuánto le falta.** Para mejorarlo, se debe modificar `sendWelcomeBackMessage` para incluir el hint de próxima recompensa. Esto es lo que vamos a mejorar.
-
-### ¿Y en campañas manuales?
-
-Cuando envías una campaña manual, el sistema automáticamente calcula la variable `{{3}}` como:
+El **mensaje de welcome back** incluye un hint automático en `{{3}}`:
 - Si le falta 1 visita: `"¡En tu próxima visita ganas: [premio]!"`
 - Si le faltan 2+: `"En tu visita #X ganas: [premio] (te faltan Y)"`
 - Si no hay más rewards: `"¡Sigue acumulando visitas para premios!"`
+
+Este mismo hint se usa en campañas manuales y reactivación.
 
 ---
 
@@ -122,27 +129,30 @@ Cuando envías una campaña manual, el sistema automáticamente calcula la varia
 - **A quién:** Clientes cuya fecha de cumpleaños coincide con HOY
 - **Protección:** No repite si ya envió en los últimos 365 días
 - **Tipo:** Transaccional (NO filtra `accepts_marketing`)
-- **Mensaje actual (free-text):**
-  > "¡Feliz cumpleaños {{name}}! 🎂🎉 De parte de todo nuestro equipo, te deseamos un día increíble. Pasa por el restaurante y reclama tu sorpresa de cumpleaños. ¡Te esperamos!"
-
-**⚠️ PROBLEMA:** Este mensaje se envía como free-text. Si el cliente no ha interactuado en >24h, Meta lo rechazará. **Para cumpleaños se DEBE usar una plantilla aprobada.** Esto se debe corregir.
+- **Plantilla:** `birthday_template_sid` (configurar en Ajustes)
+- **Variables:** `{{1}}=nombre`
+- **Sin plantilla configurada:** NO envía, retorna error indicando que falta configurar
 
 ### 🔄 Reactivación
 - **Cuándo:** Todos los días a las 10AM UTC (Vercel cron)
 - **A quién:** Clientes inactivos >7 días + `accepts_marketing=true`
 - **Protección:** No repite si ya envió reactivación en los últimos 30 días
 - **Tipo:** Marketing (SÍ filtra `accepts_marketing`)
-- **Mensaje actual (free-text):**
-  > "¡Hola {{name}}! 👋 Te extrañamos en el restaurante. Ha pasado un tiempo desde tu última visita. ¡Vuelve pronto y sigue acumulando premios! Tu próxima visita te acerca más a una recompensa especial. 🌟"
-
-**⚠️ PROBLEMA:** Mismo problema que cumpleaños — usa free-text pero estos clientes llevan >7 días sin interactuar. **Se DEBE usar plantilla aprobada.** Esto se debe corregir.
+- **Plantilla:** `reactivation_template_sid` (configurar en Ajustes)
+- **Variables:** `{{1}}=nombre, {{2}}=visitas, {{3}}=hint recompensa`
+- **Sin plantilla configurada:** NO envía, retorna error
 
 ### 📢 Campañas Manuales
 - **Cuándo:** Cuando el admin decide
 - **A quién:** Clientes que cumplan los filtros + `accepts_marketing=true` + no recibió campaña en 7 días
 - **Tipo:** Marketing
-- **Usa:** Plantillas aprobadas (Content API) ✅ **Correcto**
+- **Usa:** Plantilla seleccionada por el admin al crear la campaña
 - **Variables automáticas:** `{{1}}=nombre`, `{{2}}=visitas`, `{{3}}=hint recompensa`
+
+### 👑 Campañas Exclusivas Black
+- Preset predefinido en campañas manuales: **"Exclusiva Black"**
+- Filtra automáticamente: `minVisits=10` (solo clientes Black)
+- Usa la plantilla que el admin seleccione
 
 ---
 
@@ -244,7 +254,8 @@ Tu nivel actual: {{3}}
                     │                                  │
                     │  1. Crea recompensas (visita+premio)
                     │  2. Crea plantillas (Twilio)     │
-                    │  3. Configura ticket promedio     │
+                    │  3. Asigna plantillas en Ajustes │
+                    │  4. Configura ticket promedio     │
                     └──────────┬──────────────────────┘
                                │
           ┌────────────────────┼────────────────────┐
@@ -254,16 +265,28 @@ Tu nivel actual: {{3}}
     │ (QR scan) │      │ (diario)    │     │ MANUAL      │
     │           │      │             │     │ (admin)     │
     │ Reward?   │      │ Birthday    │     │ Plantilla   │
-    │ → msg auto│      │ Reactivación│     │ aprobada    │
-    │ (free-text)│      │ (plantilla) │     │ + filtros   │
+    │ → PLANTILLA│     │ Reactivación│     │ aprobada    │
+    │ aprobada  │      │ (PLANTILLA) │     │ + filtros   │
     └───────────┘      └─────────────┘     └─────────────┘
+
+    TODOS los mensajes usan PLANTILLAS APROBADAS.
+    Sin plantilla = no se envía mensaje.
 ```
 
 ---
 
-## 8. Problemas conocidos a corregir
+## 8. Configuración necesaria en Dashboard > Ajustes
 
-1. **Cron birthday/reactivation usan free-text** → Debe usar plantillas aprobadas (fuera de ventana 24h)
-2. **Welcome back NO incluye hint de recompensa** → Agregar "¡Te falta 1 visita para [premio]!"
-3. **Plantillas de Twilio requieren aprobación** → Crear las 4 plantillas recomendadas y esperar aprobación
-4. **Ticket promedio:** Bug donde el valor guardado no se refleja en el dashboard (investigar)
+| Key en admin_settings | Tipo de mensaje | Variables |
+|----------------------|-----------------|-----------|
+| `welcome_template_sid` | Bienvenida (registro nuevo) | {{1}}=nombre |
+| `welcome_back_template_sid` | Bienvenido de vuelta | {{1}}=nombre, {{2}}=visitas, {{3}}=hint |
+| `reward_template_sid` | Recompensa (milestone) | {{1}}=nombre, {{2}}=visitas, {{3}}=premio |
+| `birthday_template_sid` | Cumpleaños (cron) | {{1}}=nombre |
+| `reactivation_template_sid` | Reactivación (cron) | {{1}}=nombre, {{2}}=visitas, {{3}}=hint |
+
+### Problemas resueltos (v0.21.0)
+1. ~~Cron birthday/reactivation usan free-text~~ → ✅ Ahora usan plantillas, sin fallback free-text
+2. ~~Welcome back NO incluye hint de recompensa~~ → ✅ Incluye hint en {{3}}
+3. ~~Check-in usa free-text~~ → ✅ Todos los mensajes usan plantillas
+4. ~~No hay campañas Black~~ → ✅ Preset "Exclusiva Black" en campañas manuales

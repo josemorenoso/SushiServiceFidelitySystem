@@ -74,6 +74,76 @@ Si prefieres no usar Vercel Cron, puedes crear un workflow en n8n:
 
 ---
 
+## Workflow 4: Google Contacts Sync (Supabase → Google)
+
+**Estado del código:** ✅ Implementado en `src/services/google-contacts-sync.service.ts`
+**Estado del workflow n8n:** ⚠️ PENDIENTE de crear
+
+### Cómo funciona
+
+Cada vez que un cliente se registra o hace check-in (QR o delivery), el sistema envía un POST al webhook de n8n con todos los datos del cliente. n8n debe crear o actualizar el contacto en Google Contacts.
+
+```
+Cliente escanea QR → Supabase (crear/actualizar) → POST webhook n8n → n8n crea/actualiza Google Contact
+```
+
+### Payload que envía el sistema
+
+```json
+{
+  "celular": "+573001234567",
+  "nombre_cliente": "Juan Pérez",
+  "cumpleanos": "1990-05-15",
+  "ciudad": "Bogotá",
+  "total_visitas": 5,
+  "direccion": "Calle 100 #15-20",
+  "source": "qr",
+  "action": "created"
+}
+```
+
+### Pasos para crear el workflow en n8n
+
+#### 1. Crear nuevo workflow "Google Contacts Sync"
+
+#### 2. Nodo 1: Webhook (trigger)
+- **Method:** POST
+- **Path:** `google-contacts-sync`
+- **Response Mode:** Immediately
+
+#### 3. Nodo 2: IF (¿action = created?)
+- Condición: `{{$json.action}}` equals `created`
+- **True** → Nodo 3A (crear contacto)
+- **False** → Nodo 3B (actualizar contacto)
+
+#### 4. Nodo 3A: Google Contacts — Create Contact
+- **Autenticación:** OAuth2 con cuenta de Google del negocio
+- **Campos a mapear:**
+  - Name: `{{$json.nombre_cliente}}`
+  - Phone: `{{$json.celular}}`
+  - Birthday: `{{$json.cumpleanos}}`
+  - Notes: `Visitas: {{$json.total_visitas}} | Ciudad: {{$json.ciudad}} | Fuente: {{$json.source}}`
+  - Group: "Clientes Sushi Service" (crear grupo en Google Contacts primero)
+
+#### 5. Nodo 3B: Google Contacts — Update Contact
+- **Buscar por:** teléfono (`{{$json.celular}}`)
+- **Actualizar:** Name, Notes (con visitas actualizadas)
+
+#### 6. Activar y copiar URL del webhook
+- La URL será algo como: `https://n8n.almojabananet.me/webhook/google-contacts-sync`
+
+#### 7. Configurar variable de entorno en Vercel
+```
+N8N_GOOGLE_CONTACTS_WEBHOOK_URL=https://n8n.almojabananet.me/webhook/google-contacts-sync
+```
+
+### Notas importantes
+- El sync es **fire-and-forget**: si n8n falla, el flujo principal (check-in/delivery) NO se rompe
+- El timeout es de 10 segundos
+- Si `N8N_GOOGLE_CONTACTS_WEBHOOK_URL` no está configurada, el sync simplemente se omite con un log warning
+
+---
+
 ## Variables de entorno necesarias en n8n
 
 | Variable | Descripción |

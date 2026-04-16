@@ -28,6 +28,8 @@ import {
   AlertTriangle,
   RefreshCw,
   FileText,
+  Crown,
+  Gift,
 } from 'lucide-react'
 import { CampaignCostEstimate } from './TwilioWallet'
 
@@ -80,6 +82,26 @@ const PRESETS: PresetCampaign[] = [
     bg: 'bg-blue-50',
     border: 'border-blue-200',
     filters: { source: 'qr_only', minVisits: '1' },
+  },
+  {
+    id: 'black_exclusive',
+    name: 'Exclusiva Black',
+    description: 'Solo clientes Black (10+ visitas). Eventos privados, ofertas VIP, o agradecimiento especial.',
+    icon: Crown,
+    color: 'text-amber-500',
+    bg: 'bg-gradient-to-r from-gray-900/5 to-amber-50',
+    border: 'border-amber-300',
+    filters: { minVisits: '10' },
+  },
+  {
+    id: 'near_reward',
+    name: 'Cerca de un Premio',
+    description: 'Clientes entre 2 y 9 visitas que están cerca de alcanzar su próxima recompensa. ¡Motivarlos a volver!',
+    icon: Gift,
+    color: 'text-purple-600',
+    bg: 'bg-purple-50',
+    border: 'border-purple-200',
+    filters: { minVisits: '2', maxVisits: '9' },
   },
 ]
 

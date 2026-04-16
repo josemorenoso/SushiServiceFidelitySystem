@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { validatePhone } from '@/lib/validators/phone'
 import { findCustomerByPhone, createCustomer, incrementVisit } from '@/services/customer.service'
 import { createVisit } from '@/services/visit.service'
-import { checkRewardForVisit } from '@/services/reward.service'
-import { sendWelcomeMessage, sendRewardMessage, sendWelcomeBackMessage } from '@/services/whatsapp.service'
+import { checkRewardForVisit, getNextReward, buildRewardHint } from '@/services/reward.service'
+import { sendTemplateMessage } from '@/services/whatsapp.service'
+import { getMultipleSettings } from '@/services/settings.service'
+import { syncGoogleContact } from '@/services/google-contacts-sync.service'
 
 interface DeliveryRequestBody {
   nombre_cliente: string
@@ -12,6 +14,23 @@ interface DeliveryRequestBody {
   metodo_pago?: string | null
   monto_total?: number | null
   raw_message?: string | null
+}
+
+async function sendDeliveryTemplate(
+  templateSid: string | undefined,
+  templateType: string,
+  phone: string,
+  variables: Record<string, string>
+): Promise<void> {
+  if (!templateSid) {
+    console.warn(`[Delivery] No hay plantilla configurada para "${templateType}" — mensaje NO enviado.`)
+    return
+  }
+  try {
+    await sendTemplateMessage(phone, templateSid, variables)
+  } catch (err) {
+    console.error(`[Delivery] Error enviando plantilla ${templateType}:`, err)
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -71,27 +90,38 @@ export async function POST(request: NextRequest) {
       rawMessage: raw_message ?? undefined,
     })
 
+    const settings = await getMultipleSettings(['welcome_template_sid', 'welcome_back_template_sid', 'reward_template_sid'])
     const reward = await checkRewardForVisit(customer.total_visits)
 
     if (isNew) {
-      sendWelcomeMessage(cleaned, customer.name).catch((err) =>
-        console.error('[Delivery] Error WhatsApp bienvenida:', err)
-      )
+      sendDeliveryTemplate(settings.welcome_template_sid, 'welcome', cleaned, { '1': customer.name })
     } else if (reward) {
-      sendRewardMessage(
-        cleaned,
-        customer.name,
-        customer.total_visits,
-        reward.title,
-        reward.message_template
-      ).catch((err) =>
-        console.error('[Delivery] Error WhatsApp recompensa:', err)
-      )
+      sendDeliveryTemplate(settings.reward_template_sid, 'reward', cleaned, {
+        '1': customer.name,
+        '2': String(customer.total_visits),
+        '3': reward.title,
+      })
     } else {
-      sendWelcomeBackMessage(cleaned, customer.name, customer.total_visits).catch((err) =>
-        console.error('[Delivery] Error WhatsApp welcome back:', err)
-      )
+      const nextReward = await getNextReward(customer.total_visits)
+      const rewardHint = buildRewardHint(customer.total_visits, nextReward)
+      sendDeliveryTemplate(settings.welcome_back_template_sid, 'welcome_back', cleaned, {
+        '1': customer.name,
+        '2': String(customer.total_visits),
+        '3': rewardHint,
+      })
     }
+
+    // Google Contacts sync (best-effort)
+    syncGoogleContact({
+      phone: cleaned,
+      name: customer.name,
+      address: direccion ?? null,
+      totalVisits: customer.total_visits,
+      source: 'delivery',
+      action,
+    }).catch((err: unknown) =>
+      console.error('[Delivery] Error sync Google Contacts:', err)
+    )
 
     return NextResponse.json({
       ok: true,

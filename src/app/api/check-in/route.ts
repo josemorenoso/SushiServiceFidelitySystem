@@ -3,7 +3,8 @@ import { validatePhone } from '@/lib/validators/phone'
 import { findCustomerByPhone, createCustomer, incrementVisit } from '@/services/customer.service'
 import { createVisit, getRecentVisit } from '@/services/visit.service'
 import { checkRewardForVisit, getNextReward, buildRewardHint } from '@/services/reward.service'
-import { sendWelcomeMessage, sendRewardMessage, sendWelcomeBackMessage } from '@/services/whatsapp.service'
+import { sendTemplateMessage } from '@/services/whatsapp.service'
+import { getMultipleSettings } from '@/services/settings.service'
 import { syncGoogleContact } from '@/services/google-contacts-sync.service'
 
 interface CheckInRequestBody {
@@ -14,6 +15,28 @@ interface CheckInRequestBody {
   city?: string | null
   accepts_marketing?: boolean
   table_number?: number | null
+}
+
+/**
+ * Envía plantilla WhatsApp de forma best-effort.
+ * Si no hay SID configurado, solo loguea advertencia.
+ * Variables estándar: {{1}}=nombre, {{2}}=visitas, {{3}}=hint/premio
+ */
+async function sendCheckinTemplate(
+  templateSid: string | undefined,
+  templateType: string,
+  phone: string,
+  variables: Record<string, string>
+): Promise<void> {
+  if (!templateSid) {
+    console.warn(`[CheckIn] No hay plantilla configurada para "${templateType}" — mensaje NO enviado. Configúrala en Dashboard > Ajustes.`)
+    return
+  }
+  try {
+    await sendTemplateMessage(phone, templateSid, variables)
+  } catch (err) {
+    console.error(`[CheckIn] Error enviando plantilla ${templateType}:`, err)
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -82,9 +105,13 @@ export async function POST(request: NextRequest) {
         console.error('[CheckIn] Error creando visita (registro continuará):', visitErr)
       }
 
-      // WhatsApp de bienvenida (best-effort)
-      sendWelcomeMessage(cleaned, customer.name).catch((err) =>
-        console.error('[CheckIn] Error enviando WhatsApp bienvenida:', err)
+      // WhatsApp de bienvenida (best-effort, plantilla)
+      const settings = await getMultipleSettings(['welcome_template_sid'])
+      sendCheckinTemplate(
+        settings.welcome_template_sid,
+        'welcome',
+        cleaned,
+        { '1': customer.name }
       )
 
       // Google Contacts sync (best-effort)
@@ -96,7 +123,7 @@ export async function POST(request: NextRequest) {
         totalVisits: customer.total_visits,
         source: 'qr',
         action: 'created',
-      }).catch((err) =>
+      }).catch((err: unknown) =>
         console.error('[CheckIn] Error sync Google Contacts:', err)
       )
 
@@ -135,19 +162,19 @@ export async function POST(request: NextRequest) {
       const updated = await incrementVisit(customer.id, customer.total_visits, 'qr')
       await createVisit({ customerId: customer.id, source: 'qr', tableNumber: body.table_number ?? null })
 
+      // Fetch settings para plantillas
+      const settings = await getMultipleSettings(['welcome_back_template_sid', 'reward_template_sid'])
+
       // Evaluar recompensa
       const reward = await checkRewardForVisit(updated.total_visits)
 
       if (reward) {
-        // WhatsApp de recompensa (best-effort)
-        sendRewardMessage(
+        // WhatsApp de recompensa (plantilla)
+        sendCheckinTemplate(
+          settings.reward_template_sid,
+          'reward',
           cleaned,
-          updated.name,
-          updated.total_visits,
-          reward.title,
-          reward.message_template
-        ).catch((err) =>
-          console.error('[CheckIn] Error enviando WhatsApp recompensa:', err)
+          { '1': updated.name, '2': String(updated.total_visits), '3': reward.title }
         )
 
         return NextResponse.json({
@@ -161,9 +188,12 @@ export async function POST(request: NextRequest) {
       const nextReward = await getNextReward(updated.total_visits)
       const rewardHint = buildRewardHint(updated.total_visits, nextReward)
 
-      // WhatsApp de bienvenido de vuelta (best-effort) — con hint de recompensa
-      sendWelcomeBackMessage(cleaned, updated.name, updated.total_visits, rewardHint).catch((err) =>
-        console.error('[CheckIn] Error enviando WhatsApp welcome back:', err)
+      // WhatsApp de bienvenido de vuelta (plantilla)
+      sendCheckinTemplate(
+        settings.welcome_back_template_sid,
+        'welcome_back',
+        cleaned,
+        { '1': updated.name, '2': String(updated.total_visits), '3': rewardHint }
       )
 
       // Google Contacts sync (best-effort)
@@ -173,7 +203,7 @@ export async function POST(request: NextRequest) {
         totalVisits: updated.total_visits,
         source: 'qr',
         action: 'updated',
-      }).catch((err) =>
+      }).catch((err: unknown) =>
         console.error('[CheckIn] Error sync Google Contacts:', err)
       )
 

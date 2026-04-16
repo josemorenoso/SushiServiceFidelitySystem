@@ -1,3 +1,23 @@
+/**
+ * WhatsApp Service — SOLO PLANTILLAS APROBADAS
+ *
+ * IMPORTANTE: No existe ventana de 24h en este sistema.
+ * El cliente escanea un QR y registra datos, pero NUNCA envía un mensaje
+ * WhatsApp al negocio. Por tanto, los mensajes free-text (body) NUNCA
+ * serán entregados por Meta/WhatsApp.
+ *
+ * TODOS los mensajes deben enviarse mediante plantillas aprobadas
+ * (Twilio Content API con contentSid).
+ *
+ * Mapeo estándar de variables por tipo de plantilla:
+ *   welcome:       {{1}}=nombre
+ *   welcome_back:  {{1}}=nombre, {{2}}=total_visitas, {{3}}=hint_recompensa
+ *   reward:        {{1}}=nombre, {{2}}=total_visitas, {{3}}=nombre_premio
+ *   birthday:      {{1}}=nombre
+ *   reactivation:  {{1}}=nombre, {{2}}=total_visitas, {{3}}=hint_recompensa
+ *   campaign:      {{1}}=nombre, {{2}}=total_visitas, {{3}}=hint_recompensa
+ */
+
 import { formatPhoneForWhatsApp } from '@/lib/validators/phone'
 
 export interface TwilioMessageResponse {
@@ -15,31 +35,6 @@ function getTwilioClient() {
   }
 
   return { accountSid, authToken, whatsappNumber }
-}
-
-async function sendWhatsApp(to: string, body: string): Promise<TwilioMessageResponse | null> {
-  const config = getTwilioClient()
-  if (!config) {
-    console.warn('[WhatsApp] Twilio no configurado — mensaje no enviado')
-    return null
-  }
-
-  try {
-    const twilio = (await import('twilio')).default
-    const client = twilio(config.accountSid, config.authToken)
-
-    const message = await client.messages.create({
-      from: config.whatsappNumber,
-      to: formatPhoneForWhatsApp(to),
-      body,
-    })
-
-    console.log(`[WhatsApp] Mensaje enviado: ${message.sid}`)
-    return { sid: message.sid, status: message.status }
-  } catch (error) {
-    console.error('[WhatsApp] Error enviando mensaje:', error)
-    return null
-  }
 }
 
 export async function sendTemplateMessage(
@@ -64,71 +59,10 @@ export async function sendTemplateMessage(
       contentVariables: JSON.stringify(variables),
     })
 
-    console.log(`[WhatsApp] Template enviado: ${message.sid} (${contentSid})`)
+    console.log(`[WhatsApp] Template enviado: ${message.sid} (contentSid=${contentSid})`)
     return { sid: message.sid, status: message.status }
   } catch (error) {
-    console.error('[WhatsApp] Error enviando template:', error)
+    console.error(`[WhatsApp] Error enviando template ${contentSid}:`, error)
     return null
   }
-}
-
-export async function sendWelcomeMessage(phone: string, name: string): Promise<TwilioMessageResponse | null> {
-  const body = `¡Hola ${name}! 👋 Bienvenido/a a nuestro restaurante. Gracias por registrarte en nuestro programa de fidelidad. ¡Cada visita cuenta! 🎉`
-  return sendWhatsApp(phone, body)
-}
-
-export async function sendRewardMessage(
-  phone: string,
-  name: string,
-  visits: number,
-  rewardTitle: string,
-  messageTemplate: string
-): Promise<TwilioMessageResponse | null> {
-  const body = messageTemplate
-    .replace('{{name}}', name)
-    .replace('{{visits}}', String(visits))
-
-  return sendWhatsApp(phone, body)
-}
-
-export async function sendWelcomeBackMessage(
-  phone: string,
-  name: string,
-  visits: number,
-  rewardHint?: string
-): Promise<TwilioMessageResponse | null> {
-  let body = `¡Hola de nuevo ${name}! 😊 Qué gusto verte otra vez. Esta es tu visita #${visits}.`
-  if (rewardHint) {
-    body += `\n\n🎁 ${rewardHint}`
-  } else {
-    body += ' ¡Sigue acumulando para ganar premios! 🌟'
-  }
-  return sendWhatsApp(phone, body)
-}
-
-export async function sendBirthdayMessage(
-  phone: string,
-  name: string,
-  template: string
-): Promise<TwilioMessageResponse | null> {
-  const body = template.replace('{{name}}', name)
-  return sendWhatsApp(phone, body)
-}
-
-export async function sendReactivationMessage(
-  phone: string,
-  name: string,
-  template: string
-): Promise<TwilioMessageResponse | null> {
-  const body = template.replace('{{name}}', name)
-  return sendWhatsApp(phone, body)
-}
-
-export async function sendCampaignMessage(
-  phone: string,
-  name: string,
-  template: string
-): Promise<TwilioMessageResponse | null> {
-  const body = template.replace('{{name}}', name)
-  return sendWhatsApp(phone, body)
 }

@@ -5,6 +5,61 @@
 
 ---
 
+## [0.21.0] — 2026-04-16 — TEMPLATE-ONLY WhatsApp + Campañas Black + Google Contacts Doc
+
+### BREAKING — Eliminado free-text WhatsApp por completo
+- **Problema:** No existe ventana de 24h porque el cliente NUNCA envía un mensaje WhatsApp al negocio (solo escanea QR). Los mensajes free-text NUNCA serían entregados por Meta.
+- **Solución:** Todos los mensajes ahora usan PLANTILLAS APROBADAS vía Twilio Content API.
+- Se eliminó `sendWhatsApp()` (free-text) de `whatsapp.service.ts`
+- Se eliminaron todas las funciones wrapper (sendWelcomeMessage, sendRewardMessage, etc.)
+- Solo queda `sendTemplateMessage(phone, contentSid, variables)` como único punto de envío
+
+### Added — 5 plantillas configurables en Dashboard > Ajustes
+- `welcome_template_sid` — Registro nuevo ({{1}}=nombre)
+- `welcome_back_template_sid` — Visita recurrente ({{1}}=nombre, {{2}}=visitas, {{3}}=hint)
+- `reward_template_sid` — Milestone recompensa ({{1}}=nombre, {{2}}=visitas, {{3}}=premio)
+- `birthday_template_sid` — Cron cumpleaños ({{1}}=nombre)
+- `reactivation_template_sid` — Cron reactivación ({{1}}=nombre, {{2}}=visitas, {{3}}=hint)
+- Componente `TemplateSelector` reutilizable con hint de variables y preview
+
+### Added — Settings service compartido
+- Nuevo `src/services/settings.service.ts` con `getSettingValue()` y `getMultipleSettings()`
+- Elimina duplicación de código en crons y check-in
+
+### Changed — Cron birthday/reactivation sin fallback free-text
+- Si no hay plantilla configurada → NO envía, retorna error claro
+- Ya no existe fallback a free-text (que nunca funcionaría)
+
+### Added — Campañas exclusivas Black
+- Preset "Exclusiva Black" (minVisits=10) en campañas manuales
+- Preset "Cerca de un Premio" (minVisits=2, maxVisits=9) para motivar visitas
+
+### Changed — Delivery webhook migrado a plantillas
+- `webhook/delivery/route.ts` ahora usa `sendTemplateMessage` + `getMultipleSettings`
+- Añadido Google Contacts sync al delivery
+
+### Added — Documentación Google Contacts sync
+- `docs/n8n-workflows/README.md` — Workflow 4: paso a paso para crear en n8n
+- Incluye: payload completo, nodos a crear, variable de entorno
+
+### Changed — Documentación actualizada
+- `docs/features/flujo-plantillas-recompensas-campanas.md` — Reescrito completamente: eliminada info de 24h, todo refleja plantillas
+- Mapeo estándar de variables documentado por tipo de mensaje
+
+**Archivos modificados/creados:**
+- `src/services/whatsapp.service.ts` — Solo sendTemplateMessage, eliminado free-text
+- `src/services/settings.service.ts` — NUEVO: getSettingValue + getMultipleSettings
+- `src/app/api/check-in/route.ts` — Usa plantillas + settings service
+- `src/app/api/webhook/delivery/route.ts` — Usa plantillas + Google sync
+- `src/app/api/cron/birthday/route.ts` — Sin fallback, usa settings service
+- `src/app/api/cron/reactivation/route.ts` — Sin fallback, usa settings service + reward hint
+- `src/app/(dashboard)/dashboard/settings/page.tsx` — 5 template selectors + TemplateSelector component
+- `src/components/dashboard/ManualCampaigns.tsx` — Presets Black exclusive + cerca de premio
+- `docs/features/flujo-plantillas-recompensas-campanas.md` — Reescrito
+- `docs/n8n-workflows/README.md` — +Workflow 4 Google Contacts
+
+---
+
 ## [0.20.0] — 2026-04-16 — Bug Fix Crítico + Tiers sin Nuevo + Cron Templates + Welcome Hint
 
 ### Fixed — Bug Crítico Check-in (registro no avanzaba)

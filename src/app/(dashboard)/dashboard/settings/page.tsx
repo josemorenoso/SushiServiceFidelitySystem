@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { Settings, DollarSign, Save, Loader2, CheckCircle, Crown, CalendarHeart, Mail, RefreshCw } from 'lucide-react'
+import { Settings, DollarSign, Save, Loader2, CheckCircle, Crown, CalendarHeart, Mail, RefreshCw, MessageCircle, Gift, UserPlus } from 'lucide-react'
 
 interface TwilioTemplate {
   sid: string
@@ -31,6 +31,44 @@ function SaveButton({ saving, saved, onClick, disabled }: { saving: boolean; sav
   )
 }
 
+interface TemplateSelectorProps {
+  label: string
+  icon: React.ReactNode
+  hint: string
+  value: string
+  onChange: (sid: string) => void
+  templates: TwilioTemplate[]
+}
+
+function TemplateSelector({ label, icon, hint, value, onChange, templates }: TemplateSelectorProps) {
+  const selected = templates.find((t) => t.sid === value)
+  return (
+    <div className="space-y-1.5">
+      <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest" style={{ color: '#6b7280' }}>
+        {icon}
+        {label}
+      </label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="input-premium w-full rounded-xl py-2.5 px-3 text-sm"
+        style={{ border: '1px solid rgba(226,190,192,0.35)', background: 'rgba(255,255,255,0.8)', color: '#1a1c1d' }}
+      >
+        <option value="">— Sin plantilla (NO se enviará mensaje) —</option>
+        {templates.map((t) => (
+          <option key={t.sid} value={t.sid}>{t.friendly_name}</option>
+        ))}
+      </select>
+      <p className="text-[10px]" style={{ color: '#b0b0b0' }}>{hint}</p>
+      {selected && (
+        <p className="text-xs italic" style={{ color: '#9ca3af' }}>
+          {selected.body?.slice(0, 120)}{(selected.body?.length ?? 0) > 120 ? '...' : ''}
+        </p>
+      )}
+    </div>
+  )
+}
+
 const DEFAULT_BLACK_BENEFITS = [
   '15% descuento permanente',
   'Eventos exclusivos',
@@ -53,13 +91,16 @@ export default function SettingsPage() {
   const [benefitsSaving, setBenefitsSaving] = useState(false)
   const [benefitsSaved, setBenefitsSaved] = useState(false)
 
-  // Cron templates
+  // Templates (ALL message types)
   const [templates, setTemplates] = useState<TwilioTemplate[]>([])
   const [templatesLoading, setTemplatesLoading] = useState(true)
+  const [welcomeTemplateSid, setWelcomeTemplateSid] = useState('')
+  const [welcomeBackTemplateSid, setWelcomeBackTemplateSid] = useState('')
+  const [rewardTemplateSid, setRewardTemplateSid] = useState('')
   const [birthdayTemplateSid, setBirthdayTemplateSid] = useState('')
   const [reactivationTemplateSid, setReactivationTemplateSid] = useState('')
-  const [cronSaving, setCronSaving] = useState(false)
-  const [cronSaved, setCronSaved] = useState(false)
+  const [templatesSaving, setTemplatesSaving] = useState(false)
+  const [templatesSaved, setTemplatesSaved] = useState(false)
 
   const saveSetting = useCallback(async (key: string, value: string) => {
     const res = await fetch('/api/dashboard/settings', {
@@ -84,6 +125,9 @@ export default function SettingsPage() {
         if (settingsData.black_benefits) {
           try { setBenefits(JSON.parse(settingsData.black_benefits)) } catch { /* keep default */ }
         }
+        if (settingsData.welcome_template_sid) setWelcomeTemplateSid(settingsData.welcome_template_sid)
+        if (settingsData.welcome_back_template_sid) setWelcomeBackTemplateSid(settingsData.welcome_back_template_sid)
+        if (settingsData.reward_template_sid) setRewardTemplateSid(settingsData.reward_template_sid)
         if (settingsData.birthday_template_sid) setBirthdayTemplateSid(settingsData.birthday_template_sid)
         if (settingsData.reactivation_template_sid) setReactivationTemplateSid(settingsData.reactivation_template_sid)
 
@@ -124,18 +168,21 @@ export default function SettingsPage() {
     }
   }
 
-  const handleSaveCron = async () => {
-    setCronSaving(true)
-    setCronSaved(false)
+  const handleSaveTemplates = async () => {
+    setTemplatesSaving(true)
+    setTemplatesSaved(false)
     try {
       await Promise.all([
+        saveSetting('welcome_template_sid', welcomeTemplateSid),
+        saveSetting('welcome_back_template_sid', welcomeBackTemplateSid),
+        saveSetting('reward_template_sid', rewardTemplateSid),
         saveSetting('birthday_template_sid', birthdayTemplateSid),
         saveSetting('reactivation_template_sid', reactivationTemplateSid),
       ])
-      setCronSaved(true)
-      setTimeout(() => setCronSaved(false), 3000)
+      setTemplatesSaved(true)
+      setTimeout(() => setTemplatesSaved(false), 3000)
     } catch { /* silent */ } finally {
-      setCronSaving(false)
+      setTemplatesSaving(false)
     }
   }
 
@@ -239,16 +286,25 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* ─── PLANTILLAS CAMPAÑAS AUTOMÁTICAS ─── */}
+      {/* ─── PLANTILLAS WHATSAPP (TODAS) ─── */}
       <div className="dashboard-card p-6 max-w-2xl">
-        <div className="flex items-center gap-3 mb-6">
+        <div className="flex items-center gap-3 mb-2">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ background: 'rgba(99, 102, 241, 0.15)' }}>
             <Mail className="h-5 w-5" strokeWidth={1.5} style={{ color: '#6366f1' }} />
           </div>
           <div>
-            <h2 className="text-base font-bold" style={{ color: '#1a1c1d' }}>Campañas Automáticas</h2>
-            <p className="text-xs" style={{ color: '#9ca3af' }}>Selecciona qué plantilla aprobada usar para cumpleaños y reactivación.</p>
+            <h2 className="text-base font-bold" style={{ color: '#1a1c1d' }}>Plantillas WhatsApp</h2>
+            <p className="text-xs" style={{ color: '#9ca3af' }}>Asigna una plantilla aprobada a cada tipo de mensaje.</p>
           </div>
+        </div>
+
+        <div className="rounded-lg p-3 mb-4" style={{ background: 'rgba(239, 68, 68, 0.06)', border: '1px solid rgba(239, 68, 68, 0.15)' }}>
+          <p className="text-xs font-medium" style={{ color: '#DC2626' }}>
+            ⚠️ TODOS los mensajes de WhatsApp requieren plantilla aprobada por Meta. No existe ventana de 24h porque el cliente nunca envía un mensaje al negocio.
+          </p>
+          <p className="text-xs mt-1" style={{ color: '#7F1D1D' }}>
+            Sin plantilla configurada = el mensaje NO se enviará.
+          </p>
         </div>
 
         {templatesLoading ? (
@@ -260,66 +316,64 @@ export default function SettingsPage() {
           <div className="rounded-lg p-4 text-center" style={{ background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.2)' }}>
             <p className="text-sm font-medium" style={{ color: '#D97706' }}>No hay plantillas aprobadas</p>
             <p className="text-xs mt-1" style={{ color: '#92400E' }}>
-              Ve a Dashboard &gt; Plantillas, crea al menos una para cumpleaños y una para reactivación, y espera aprobación de Meta.
+              Ve a Dashboard &gt; Plantillas, crea las plantillas necesarias y espera aprobación de Meta.
             </p>
           </div>
         ) : (
           <div className="space-y-4">
-            {/* Birthday template */}
-            <div className="space-y-1.5">
-              <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest" style={{ color: '#6b7280' }}>
-                <CalendarHeart className="h-3.5 w-3.5" style={{ color: '#6366f1' }} />
-                Plantilla de Cumpleaños
-              </label>
-              <select
-                value={birthdayTemplateSid}
-                onChange={(e) => setBirthdayTemplateSid(e.target.value)}
-                className="input-premium w-full rounded-xl py-2.5 px-3 text-sm"
-                style={{ border: '1px solid rgba(226,190,192,0.35)', background: 'rgba(255,255,255,0.8)', color: '#1a1c1d' }}
-              >
-                <option value="">— Sin plantilla (usa texto libre) —</option>
-                {approvedTemplates.map((t) => (
-                  <option key={t.sid} value={t.sid}>{t.friendly_name}</option>
-                ))}
-              </select>
-              {birthdayTemplateSid && (
-                <p className="text-xs italic" style={{ color: '#9ca3af' }}>
-                  {approvedTemplates.find((t) => t.sid === birthdayTemplateSid)?.body?.slice(0, 120)}...
-                </p>
-              )}
-            </div>
+            {/* Welcome (registro nuevo) */}
+            <TemplateSelector
+              label="Bienvenida (registro nuevo)"
+              icon={<UserPlus className="h-3.5 w-3.5" style={{ color: '#10B981' }} />}
+              hint="Variables: {{1}}=nombre"
+              value={welcomeTemplateSid}
+              onChange={setWelcomeTemplateSid}
+              templates={approvedTemplates}
+            />
 
-            {/* Reactivation template */}
-            <div className="space-y-1.5">
-              <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest" style={{ color: '#6b7280' }}>
-                <RefreshCw className="h-3.5 w-3.5" style={{ color: '#6366f1' }} />
-                Plantilla de Reactivación
-              </label>
-              <select
-                value={reactivationTemplateSid}
-                onChange={(e) => setReactivationTemplateSid(e.target.value)}
-                className="input-premium w-full rounded-xl py-2.5 px-3 text-sm"
-                style={{ border: '1px solid rgba(226,190,192,0.35)', background: 'rgba(255,255,255,0.8)', color: '#1a1c1d' }}
-              >
-                <option value="">— Sin plantilla (usa texto libre) —</option>
-                {approvedTemplates.map((t) => (
-                  <option key={t.sid} value={t.sid}>{t.friendly_name}</option>
-                ))}
-              </select>
-              {reactivationTemplateSid && (
-                <p className="text-xs italic" style={{ color: '#9ca3af' }}>
-                  {approvedTemplates.find((t) => t.sid === reactivationTemplateSid)?.body?.slice(0, 120)}...
-                </p>
-              )}
-            </div>
+            {/* Welcome Back (visita recurrente) */}
+            <TemplateSelector
+              label="Bienvenido de vuelta (visita)"
+              icon={<MessageCircle className="h-3.5 w-3.5" style={{ color: '#3B82F6' }} />}
+              hint="Variables: {{1}}=nombre, {{2}}=visitas, {{3}}=hint recompensa"
+              value={welcomeBackTemplateSid}
+              onChange={setWelcomeBackTemplateSid}
+              templates={approvedTemplates}
+            />
 
-            <SaveButton saving={cronSaving} saved={cronSaved} onClick={handleSaveCron} disabled={cronSaving} />
+            {/* Reward (milestone) */}
+            <TemplateSelector
+              label="Recompensa (milestone)"
+              icon={<Gift className="h-3.5 w-3.5" style={{ color: '#F59E0B' }} />}
+              hint="Variables: {{1}}=nombre, {{2}}=visitas, {{3}}=nombre del premio"
+              value={rewardTemplateSid}
+              onChange={setRewardTemplateSid}
+              templates={approvedTemplates}
+            />
+
+            {/* Birthday */}
+            <TemplateSelector
+              label="Cumpleaños (cron diario)"
+              icon={<CalendarHeart className="h-3.5 w-3.5" style={{ color: '#EC4899' }} />}
+              hint="Variables: {{1}}=nombre"
+              value={birthdayTemplateSid}
+              onChange={setBirthdayTemplateSid}
+              templates={approvedTemplates}
+            />
+
+            {/* Reactivation */}
+            <TemplateSelector
+              label="Reactivación (cron diario)"
+              icon={<RefreshCw className="h-3.5 w-3.5" style={{ color: '#F97316' }} />}
+              hint="Variables: {{1}}=nombre, {{2}}=visitas, {{3}}=hint recompensa"
+              value={reactivationTemplateSid}
+              onChange={setReactivationTemplateSid}
+              templates={approvedTemplates}
+            />
+
+            <SaveButton saving={templatesSaving} saved={templatesSaved} onClick={handleSaveTemplates} disabled={templatesSaving} />
           </div>
         )}
-
-        <p className="text-xs mt-4 italic" style={{ color: '#b0b0b0' }}>
-          Si seleccionas una plantilla, el cron la enviará vía Twilio Content API (funciona fuera de 24h). Sin plantilla, usa texto libre (solo funciona dentro de la ventana de 24h).
-        </p>
       </div>
     </div>
   )

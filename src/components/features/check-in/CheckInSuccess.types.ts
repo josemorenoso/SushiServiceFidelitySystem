@@ -6,5 +6,6 @@ export interface CheckInSuccessProps {
     title: string
     message: string
   } | null
+  nextRewardHint?: string | null
   onReset: () => void
 }

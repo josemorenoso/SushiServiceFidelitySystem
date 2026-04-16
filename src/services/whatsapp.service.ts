@@ -94,9 +94,15 @@ export async function sendRewardMessage(
 export async function sendWelcomeBackMessage(
   phone: string,
   name: string,
-  visits: number
+  visits: number,
+  rewardHint?: string
 ): Promise<TwilioMessageResponse | null> {
-  const body = `¡Hola de nuevo ${name}! 😊 Qué gusto verte otra vez. Esta es tu visita #${visits}. ¡Sigue acumulando para ganar premios! 🌟`
+  let body = `¡Hola de nuevo ${name}! 😊 Qué gusto verte otra vez. Esta es tu visita #${visits}.`
+  if (rewardHint) {
+    body += `\n\n🎁 ${rewardHint}`
+  } else {
+    body += ' ¡Sigue acumulando para ganar premios! 🌟'
+  }
   return sendWhatsApp(phone, body)
 }
 

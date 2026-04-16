@@ -31,6 +31,11 @@ export interface CheckInResult {
     title: string
     message: string
   } | null
+  nextReward?: {
+    milestone: number
+    title: string
+    hint: string
+  } | null
 }
 
 export type CheckInStep = 'phone' | 'register' | 'loading'

@@ -21,18 +21,23 @@ export async function createVisit(params: {
   tableNumber?: number | null
 }): Promise<Visit> {
   const supabase = getServiceClient()
+  const insertPayload: Record<string, unknown> = {
+    customer_id: params.customerId,
+    source: params.source,
+    notes: params.notes ?? null,
+    address: params.address ?? null,
+    payment_method: params.paymentMethod ?? null,
+    amount: params.amount ?? null,
+    raw_message: params.rawMessage ?? null,
+  }
+  // Only include table_number if present (requires migration 00009)
+  if (params.tableNumber != null) {
+    insertPayload.table_number = params.tableNumber
+  }
+
   const { data, error } = await supabase
     .from('visits')
-    .insert({
-      customer_id: params.customerId,
-      source: params.source,
-      notes: params.notes ?? null,
-      address: params.address ?? null,
-      payment_method: params.paymentMethod ?? null,
-      amount: params.amount ?? null,
-      raw_message: params.rawMessage ?? null,
-      table_number: params.tableNumber ?? null,
-    })
+    .insert(insertPayload)
     .select()
     .single()
 

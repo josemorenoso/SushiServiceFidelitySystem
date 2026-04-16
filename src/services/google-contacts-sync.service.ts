@@ -7,6 +7,9 @@
 interface ContactSyncPayload {
   phone: string
   name: string
+  birthday?: string | null
+  city?: string | null
+  totalVisits?: number
   address?: string | null
   source: 'qr' | 'delivery'
   action: 'created' | 'updated'
@@ -27,6 +30,9 @@ export async function syncGoogleContact(payload: ContactSyncPayload): Promise<vo
       body: JSON.stringify({
         celular: payload.phone,
         nombre_cliente: payload.name,
+        cumpleanos: payload.birthday ?? null,
+        ciudad: payload.city ?? null,
+        total_visitas: payload.totalVisits ?? null,
         direccion: payload.address ?? null,
         source: payload.source,
         action: payload.action,

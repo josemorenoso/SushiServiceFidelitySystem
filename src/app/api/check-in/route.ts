@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { validatePhone } from '@/lib/validators/phone'
 import { findCustomerByPhone, createCustomer, incrementVisit } from '@/services/customer.service'
 import { createVisit, getRecentVisit } from '@/services/visit.service'
-import { checkRewardForVisit } from '@/services/reward.service'
+import { checkRewardForVisit, getNextReward, buildRewardHint } from '@/services/reward.service'
 import { sendWelcomeMessage, sendRewardMessage, sendWelcomeBackMessage } from '@/services/whatsapp.service'
 import { syncGoogleContact } from '@/services/google-contacts-sync.service'
 
@@ -75,7 +75,12 @@ export async function POST(request: NextRequest) {
         accepts_marketing: body.accepts_marketing ?? true,
       })
 
-      await createVisit({ customerId: customer.id, source: 'qr', tableNumber: body.table_number ?? null })
+      // Visita (best-effort — no debe bloquear el registro)
+      try {
+        await createVisit({ customerId: customer.id, source: 'qr', tableNumber: body.table_number ?? null })
+      } catch (visitErr) {
+        console.error('[CheckIn] Error creando visita (registro continuará):', visitErr)
+      }
 
       // WhatsApp de bienvenida (best-effort)
       sendWelcomeMessage(cleaned, customer.name).catch((err) =>
@@ -86,6 +91,9 @@ export async function POST(request: NextRequest) {
       syncGoogleContact({
         phone: cleaned,
         name: customer.name,
+        birthday: customer.birthday ?? null,
+        city: customer.city ?? null,
+        totalVisits: customer.total_visits,
         source: 'qr',
         action: 'created',
       }).catch((err) =>
@@ -149,8 +157,12 @@ export async function POST(request: NextRequest) {
         })
       }
 
-      // WhatsApp de bienvenido de vuelta (best-effort)
-      sendWelcomeBackMessage(cleaned, updated.name, updated.total_visits).catch((err) =>
+      // Fetch next reward for hint
+      const nextReward = await getNextReward(updated.total_visits)
+      const rewardHint = buildRewardHint(updated.total_visits, nextReward)
+
+      // WhatsApp de bienvenido de vuelta (best-effort) — con hint de recompensa
+      sendWelcomeBackMessage(cleaned, updated.name, updated.total_visits, rewardHint).catch((err) =>
         console.error('[CheckIn] Error enviando WhatsApp welcome back:', err)
       )
 
@@ -158,6 +170,7 @@ export async function POST(request: NextRequest) {
       syncGoogleContact({
         phone: cleaned,
         name: updated.name,
+        totalVisits: updated.total_visits,
         source: 'qr',
         action: 'updated',
       }).catch((err) =>
@@ -168,6 +181,7 @@ export async function POST(request: NextRequest) {
         message: 'welcome_back',
         customer: { name: updated.name, total_visits: updated.total_visits },
         reward: null,
+        nextReward: nextReward ? { ...nextReward, hint: rewardHint } : null,
       })
     }
 

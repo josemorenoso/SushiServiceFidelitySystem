@@ -7,9 +7,23 @@ import {
   recordCampaignMessage,
   finalizeCampaign,
 } from '@/services/campaign.service'
-import { sendReactivationMessage } from '@/services/whatsapp.service'
+import { sendReactivationMessage, sendTemplateMessage } from '@/services/whatsapp.service'
+import { createClient } from '@supabase/supabase-js'
 
-const REACTIVATION_TEMPLATE = '¡Hola {{name}}! 👋 Te extrañamos en el restaurante. Ha pasado un tiempo desde tu última visita. ¡Vuelve pronto y sigue acumulando premios! Tu próxima visita te acerca más a una recompensa especial. 🌟'
+const REACTIVATION_FALLBACK = '¡Hola {{name}}! 👋 Te extrañamos en el restaurante. Ha pasado un tiempo desde tu última visita. ¡Vuelve pronto y sigue acumulando premios! Tu próxima visita te acerca más a una recompensa especial. 🌟'
+
+function getServiceClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) throw new Error('Missing Supabase env vars')
+  return createClient(url, key)
+}
+
+async function getSettingValue(key: string): Promise<string | null> {
+  const supabase = getServiceClient()
+  const { data } = await supabase.from('admin_settings').select('value').eq('key', key).single()
+  return data?.value ?? null
+}
 
 async function handleCron() {
   try {
@@ -25,7 +39,10 @@ async function handleCron() {
       })
     }
 
-    const campaign = await getOrCreateTodayCampaign('reactivation', REACTIVATION_TEMPLATE)
+    const templateSid = await getSettingValue('reactivation_template_sid')
+    const useTemplate = !!templateSid
+
+    const campaign = await getOrCreateTodayCampaign('reactivation', useTemplate ? `template:${templateSid}` : REACTIVATION_FALLBACK)
     let sent = 0
     let failed = 0
 
@@ -34,7 +51,12 @@ async function handleCron() {
       if (alreadySent) continue
 
       try {
-        const result = await sendReactivationMessage(customer.phone, customer.name, REACTIVATION_TEMPLATE)
+        let result
+        if (useTemplate && templateSid) {
+          result = await sendTemplateMessage(customer.phone, templateSid, { '1': customer.name })
+        } else {
+          result = await sendReactivationMessage(customer.phone, customer.name, REACTIVATION_FALLBACK)
+        }
 
         await recordCampaignMessage({
           campaignId: campaign.id,
@@ -65,6 +87,7 @@ async function handleCron() {
       sent,
       failed,
       total_inactive_customers: customers.length,
+      mode: useTemplate ? 'template' : 'free-text',
     })
   } catch (error) {
     console.error('[Cron Reactivation] Error:', error)

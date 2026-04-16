@@ -7,9 +7,23 @@ import {
   recordCampaignMessage,
   finalizeCampaign,
 } from '@/services/campaign.service'
-import { sendBirthdayMessage } from '@/services/whatsapp.service'
+import { sendBirthdayMessage, sendTemplateMessage } from '@/services/whatsapp.service'
+import { createClient } from '@supabase/supabase-js'
 
-const BIRTHDAY_TEMPLATE = '¡Feliz cumpleaños {{name}}! 🎂🎉 De parte de todo nuestro equipo, te deseamos un día increíble. Pasa por el restaurante y reclama tu sorpresa de cumpleaños. ¡Te esperamos!'
+const BIRTHDAY_FALLBACK = '¡Feliz cumpleaños {{name}}! 🎂🎉 De parte de todo nuestro equipo, te deseamos un día increíble. Pasa por el restaurante y reclama tu sorpresa de cumpleaños. ¡Te esperamos!'
+
+function getServiceClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) throw new Error('Missing Supabase env vars')
+  return createClient(url, key)
+}
+
+async function getSettingValue(key: string): Promise<string | null> {
+  const supabase = getServiceClient()
+  const { data } = await supabase.from('admin_settings').select('value').eq('key', key).single()
+  return data?.value ?? null
+}
 
 async function handleCron() {
   try {
@@ -25,7 +39,10 @@ async function handleCron() {
       })
     }
 
-    const campaign = await getOrCreateTodayCampaign('birthday', BIRTHDAY_TEMPLATE)
+    const templateSid = await getSettingValue('birthday_template_sid')
+    const useTemplate = !!templateSid
+
+    const campaign = await getOrCreateTodayCampaign('birthday', useTemplate ? `template:${templateSid}` : BIRTHDAY_FALLBACK)
     let sent = 0
     let failed = 0
 
@@ -34,7 +51,12 @@ async function handleCron() {
       if (alreadySent) continue
 
       try {
-        const result = await sendBirthdayMessage(customer.phone, customer.name, BIRTHDAY_TEMPLATE)
+        let result
+        if (useTemplate && templateSid) {
+          result = await sendTemplateMessage(customer.phone, templateSid, { '1': customer.name })
+        } else {
+          result = await sendBirthdayMessage(customer.phone, customer.name, BIRTHDAY_FALLBACK)
+        }
 
         await recordCampaignMessage({
           campaignId: campaign.id,
@@ -65,6 +87,7 @@ async function handleCron() {
       sent,
       failed,
       total_birthday_customers: customers.length,
+      mode: useTemplate ? 'template' : 'free-text',
     })
   } catch (error) {
     console.error('[Cron Birthday] Error:', error)

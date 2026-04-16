@@ -9,7 +9,7 @@ import type { CheckInResult, RegisterResult } from '@/components/features/check-
 type PageState =
   | { view: 'form' }
   | { view: 'success'; type: 'welcome'; customerName: string; totalVisits: number }
-  | { view: 'success'; type: 'welcome_back'; customerName: string; totalVisits: number; reward: CheckInResult['reward'] }
+  | { view: 'success'; type: 'welcome_back'; customerName: string; totalVisits: number; reward: CheckInResult['reward']; nextRewardHint?: string | null }
   | { view: 'success'; type: 'duplicate'; customerName: string; totalVisits: number }
 
 export default function CheckInPage() {
@@ -31,6 +31,7 @@ export default function CheckInPage() {
       customerName: result.customer.name,
       totalVisits: result.customer.total_visits,
       reward: result.reward,
+      nextRewardHint: result.nextReward?.hint ?? null,
     })
   }
 
@@ -97,6 +98,7 @@ export default function CheckInPage() {
             customerName={state.customerName}
             totalVisits={state.totalVisits}
             reward={state.type === 'welcome_back' ? state.reward : null}
+            nextRewardHint={state.type === 'welcome_back' ? state.nextRewardHint : null}
             onReset={handleReset}
           />
         )}

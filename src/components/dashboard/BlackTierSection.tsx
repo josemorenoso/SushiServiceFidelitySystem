@@ -7,10 +7,20 @@ import type { RankedCustomer } from '@/types/analytics.types'
 interface BlackTierSectionProps {
   customers: RankedCustomer[]
   loading: boolean
+  benefits?: string[]
   onCustomerClick?: (customerId: string) => void
 }
 
-export function BlackTierSection({ customers, loading, onCustomerClick }: BlackTierSectionProps) {
+const DEFAULT_BENEFITS = [
+  '15% descuento permanente',
+  'Eventos exclusivos',
+  'Prioridad en reservas',
+  'Sorpresas especiales',
+]
+
+const BENEFIT_ICONS = [Gift, CalendarHeart, Star, Sparkles]
+
+export function BlackTierSection({ customers, loading, benefits, onCustomerClick }: BlackTierSectionProps) {
   const blackCustomers = customers.filter((c) => c.rank === 'Black')
 
   if (loading) {
@@ -80,7 +90,7 @@ export function BlackTierSection({ customers, loading, onCustomerClick }: BlackT
               Aún no hay clientes Black
             </p>
             <p className="text-xs mt-1" style={{ color: '#525252' }}>
-              El primer cliente en alcanzar 12 visitas desbloqueará este nivel
+              El primer cliente en alcanzar 10 visitas desbloqueará este nivel
             </p>
           </div>
         ) : (
@@ -129,22 +139,15 @@ export function BlackTierSection({ customers, loading, onCustomerClick }: BlackT
             Beneficios Black
           </p>
           <div className="grid grid-cols-2 gap-2">
-            <div className="flex items-center gap-2">
-              <Gift className="h-3.5 w-3.5 flex-shrink-0" style={{ color: '#a3a3a3' }} />
-              <span className="text-xs" style={{ color: '#a3a3a3' }}>15% descuento permanente</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <CalendarHeart className="h-3.5 w-3.5 flex-shrink-0" style={{ color: '#a3a3a3' }} />
-              <span className="text-xs" style={{ color: '#a3a3a3' }}>Eventos exclusivos</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Star className="h-3.5 w-3.5 flex-shrink-0" style={{ color: '#a3a3a3' }} />
-              <span className="text-xs" style={{ color: '#a3a3a3' }}>Prioridad en reservas</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-3.5 w-3.5 flex-shrink-0" style={{ color: '#a3a3a3' }} />
-              <span className="text-xs" style={{ color: '#a3a3a3' }}>Sorpresas especiales</span>
-            </div>
+            {(benefits && benefits.length > 0 ? benefits : DEFAULT_BENEFITS).map((benefit, i) => {
+              const Icon = BENEFIT_ICONS[i % BENEFIT_ICONS.length]
+              return (
+                <div key={i} className="flex items-center gap-2">
+                  <Icon className="h-3.5 w-3.5 flex-shrink-0" style={{ color: '#a3a3a3' }} />
+                  <span className="text-xs" style={{ color: '#a3a3a3' }}>{benefit}</span>
+                </div>
+              )
+            })}
           </div>
         </div>
 

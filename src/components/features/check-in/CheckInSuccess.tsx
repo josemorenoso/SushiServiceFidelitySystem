@@ -10,6 +10,7 @@ export function CheckInSuccess({
   customerName,
   totalVisits,
   reward,
+  nextRewardHint,
   onReset,
 }: CheckInSuccessProps) {
   const [showReview, setShowReview] = useState(false)
@@ -109,6 +110,17 @@ export function CheckInSuccess({
           </h3>
           <p className="mt-1.5 text-sm" style={{ color: "#b45309" }}>
             Te enviamos los detalles por WhatsApp. ¡Muestra el mensaje para reclamar tu premio!
+          </p>
+        </div>
+      )}
+
+      {nextRewardHint && !reward && (
+        <div
+          className="premium-card p-4 text-center"
+          style={{ border: '1px solid rgba(16, 185, 129, 0.2)' }}
+        >
+          <p className="text-sm font-medium" style={{ color: '#059669' }}>
+            🎁 {nextRewardHint}
           </p>
         </div>
       )}

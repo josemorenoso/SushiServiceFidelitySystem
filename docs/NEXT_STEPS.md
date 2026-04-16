@@ -1,13 +1,13 @@
 # NEXT_STEPS — Contexto para nueva conversación
 
-> **Última actualización:** 2026-04-15 v0.19.0
+> **Última actualización:** 2026-04-16 v0.20.0
 > **Lee primero:** `METODO_AINNOVATE.md` (reglas IA) → este archivo (contexto)
 
 ---
 
 ## Estado actual del sistema
 
-**Versión:** 0.19.0 | **Deploy:** Vercel (producción) | **Build:** ✅ 33 rutas, 0 errores
+**Versión:** 0.20.0 | **Deploy:** Vercel (producción) | **Build:** ✅ 33 rutas, 0 errores
 
 ### Infraestructura operativa
 - **Vercel:** Proyecto conectado a GitHub, deploy automático
@@ -29,7 +29,8 @@
 
 | Versión | Feature | Detalle |
 |---------|---------|--------|
-| v0.19.0 | QR Mesa + Power System v2 + Black Tier | QR por mesa, Plata→Oro→Platino→Black, sección Black premium, dashboard reordenado, bug ticket promedio |
+| v0.20.0 | Bug Fix Crítico + Tiers v3 + Cron Templates | Fix registro QR, Plata(0)→Oro(4)→Platino(7)→Black(10), beneficios editables, plantillas seleccionables, welcome hint |
+| v0.19.0 | QR Mesa + Power System v2 + Black Tier | QR por mesa, sección Black premium, dashboard reordenado, bug ticket promedio |
 | v0.18.0 | Customer Detail + Rewards CRUD + Consent + Freq Cap | Dialog perfil cliente, CRUD recompensas, checkbox consentimiento, frequency capping, opt-out badges |
 | v0.17.0 | Dashboard Analytics Expansion | 4 nuevas gráficas: Reactivación, ROI, Heatmap, Adquisición + Settings page |
 | v0.16.0 | Demo auto-login | Ruta /demo para acceso directo |
@@ -46,7 +47,7 @@
 | Rate limit check-in | `api/check-in/route.ts` | Máx 1 visita/día (1440 min) |
 | Admin override check-in | `api/dashboard/check-in-override/route.ts` | Endpoint protegido para visitas extra |
 | Templates "Borrador" | `api/dashboard/templates/route.ts` | Fetch approval status por SID individual |
-| Tiers → metales preciosos | `constants/rankings.ts` | 💎Diamante > ⚜️Platino > 🥇Oro > 🥈Plata > 🥉Bronce > ✨Nuevo |
+| Tiers v3 (sin Nuevo) | `constants/rankings.ts` | 🥈Plata(0) > 🥇Oro(4) > ⚜️Platino(7) > 👑Black(10) |
 
 ---
 

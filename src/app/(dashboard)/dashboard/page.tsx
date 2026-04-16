@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useDemo } from '@/contexts/DemoContext'
 import { useDashboardAnalytics } from '@/hooks/useDashboardAnalytics'
 import { DemoToggle } from '@/components/dashboard/DemoToggle'
@@ -23,6 +23,18 @@ export default function DashboardPage() {
   const { data, loading, refetch } = useDashboardAnalytics()
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
+  const [blackBenefits, setBlackBenefits] = useState<string[] | undefined>(undefined)
+
+  useEffect(() => {
+    fetch('/api/dashboard/settings')
+      .then((r) => r.json())
+      .then((s) => {
+        if (s.black_benefits) {
+          try { setBlackBenefits(JSON.parse(s.black_benefits)) } catch { /* ignore */ }
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   const handleCustomerClick = useCallback(async (customerId: string) => {
     try {
@@ -60,7 +72,7 @@ export default function DashboardPage() {
         <ROICard data={data?.roiEstimate ?? null} loading={loading} />
       </div>
 
-      <BlackTierSection customers={data?.topCustomers ?? []} loading={loading} onCustomerClick={handleCustomerClick} />
+      <BlackTierSection customers={data?.topCustomers ?? []} loading={loading} benefits={blackBenefits} onCustomerClick={handleCustomerClick} />
 
       <VisitsChart data={data?.visitsPerDay ?? []} loading={loading} />
 

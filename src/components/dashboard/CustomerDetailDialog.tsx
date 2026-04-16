@@ -39,7 +39,6 @@ function getGradientColors(gradient: string): string {
     'from-slate-300 to-slate-600': '#CBD5E1, #475569',
     'from-yellow-400 to-amber-600': '#FACC15, #D97706',
     'from-gray-300 to-gray-500': '#D1D5DB, #6B7280',
-    'from-emerald-400 to-green-600': '#34D399, #16A34A',
   }
   return colorMap[gradient] ?? '#9CA3AF, #4B5563'
 }

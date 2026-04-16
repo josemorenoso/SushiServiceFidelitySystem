@@ -5,6 +5,61 @@
 
 ---
 
+## [0.20.0] — 2026-04-16 — Bug Fix Crítico + Tiers sin Nuevo + Cron Templates + Welcome Hint
+
+### Fixed — Bug Crítico Check-in (registro no avanzaba)
+- **Causa raíz:** `createVisit` enviaba `table_number: null` a Supabase, pero migración 00009 no estaba ejecutada → columna inexistente → error 500
+- **Fix 1:** `visit.service.ts` ahora solo incluye `table_number` en el insert si es non-null
+- **Fix 2:** `check-in/route.ts` register: `createVisit` ahora es best-effort (try/catch), no bloquea el registro si falla
+- El cliente se crea correctamente y la UI avanza al éxito aunque la visita falle
+
+### Changed — Tiers: Eliminado "Nuevo", todos inician en Plata
+- Plata: 0+ visitas (desde la primera)
+- Oro: 4+ visitas
+- Platino: 7+ visitas
+- Black: 10+ visitas
+- **Impacto:** Black se alcanza en 10 visitas (antes eran 12+3 de "Nuevo" = 15 percibidas)
+
+### Added — Beneficios Black editables desde Ajustes
+- Nueva sección en Settings con editor de beneficios (agregar/editar/eliminar)
+- Se guardan como JSON en `admin_settings` key `black_benefits`
+- `BlackTierSection` lee los beneficios dinámicamente desde props
+- Dashboard pasa benefits de settings a BlackTierSection
+
+### Added — Campañas automáticas con plantilla seleccionable
+- En Settings: selectores de plantilla Twilio aprobada para cumpleaños y reactivación
+- Se guardan como `birthday_template_sid` y `reactivation_template_sid` en `admin_settings`
+- Cron birthday: si hay template SID, usa `sendTemplateMessage` (funciona fuera de 24h)
+- Cron reactivation: mismo patrón; fallback a free-text si no hay template
+
+### Changed — Welcome Back incluye hint de próxima recompensa
+- Check-in API: busca `getNextReward()` y envía hint en respuesta
+- WhatsApp welcome back: incluye "🎁 En tu visita X ganas: [premio]"
+- Pantalla de éxito: muestra card verde con hint de próxima recompensa
+
+### Changed — Google Contacts sync mejorado
+- Payload ahora incluye: birthday, city, totalVisits (datos organizados de Supabase)
+- El flujo es: QR→Supabase→n8n webhook→Google Contacts (usa datos limpios de DB)
+
+**Archivos modificados:**
+- `src/services/visit.service.ts` — Fix: table_number condicional
+- `src/app/api/check-in/route.ts` — Fix: createVisit best-effort + nextReward hint
+- `src/constants/rankings.ts` — Eliminado Nuevo, Plata(0) Oro(4) Platino(7) Black(10)
+- `src/app/(dashboard)/dashboard/settings/page.tsx` — Reescrito: +beneficios Black +plantillas cron
+- `src/app/api/cron/birthday/route.ts` — Lee template SID de settings
+- `src/app/api/cron/reactivation/route.ts` — Lee template SID de settings
+- `src/services/whatsapp.service.ts` — sendWelcomeBackMessage +rewardHint
+- `src/services/google-contacts-sync.service.ts` — Payload expandido
+- `src/components/dashboard/BlackTierSection.tsx` — Benefits dinámicos + 10 visitas
+- `src/components/dashboard/CustomerDetailDialog.tsx` — Gradients actualizados
+- `src/components/features/check-in/CheckInSuccess.tsx` — Muestra nextRewardHint
+- `src/components/features/check-in/CheckInSuccess.types.ts` — +nextRewardHint
+- `src/components/features/check-in/CheckInForm.types.ts` — +nextReward en CheckInResult
+- `src/app/(public)/check-in/page.tsx` — Pasa nextRewardHint a CheckInSuccess
+- `src/app/(dashboard)/dashboard/page.tsx` — Fetch blackBenefits + useEffect
+
+---
+
 ## [0.19.0] — 2026-04-15 — QR Mesa + Power System v2 + Black Tier + Dashboard Reorder
 
 ### Added — QR por Mesa

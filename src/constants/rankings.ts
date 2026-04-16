@@ -1,16 +1,15 @@
 export const POWER_RANKS = [
-  { name: 'Black', minVisits: 12, emoji: '\ud83d\udc51', gradient: 'from-neutral-900 to-neutral-700', bg: 'bg-neutral-950', border: 'border-neutral-600', text: 'text-neutral-100', glow: 'shadow-neutral-500/60', color: '#1a1a1a', labelColor: '#FFD700' },
-  { name: 'Platino', minVisits: 9, emoji: '\u269c\ufe0f', gradient: 'from-slate-300 to-slate-600', bg: 'bg-slate-50', border: 'border-slate-400', text: 'text-slate-700', glow: 'shadow-slate-400/50', color: '#475569', labelColor: '#ffffff' },
-  { name: 'Oro', minVisits: 6, emoji: '\ud83e\udd47', gradient: 'from-yellow-400 to-amber-600', bg: 'bg-yellow-50', border: 'border-yellow-400', text: 'text-yellow-700', glow: 'shadow-yellow-400/50', color: '#D97706', labelColor: '#ffffff' },
-  { name: 'Plata', minVisits: 3, emoji: '\ud83e\udd48', gradient: 'from-gray-300 to-gray-500', bg: 'bg-gray-50', border: 'border-gray-400', text: 'text-gray-600', glow: 'shadow-gray-400/50', color: '#6B7280', labelColor: '#ffffff' },
-  { name: 'Nuevo', minVisits: 0, emoji: '\u2728', gradient: 'from-emerald-400 to-green-600', bg: 'bg-emerald-50', border: 'border-emerald-300', text: 'text-emerald-600', glow: 'shadow-emerald-300/50', color: '#10B981', labelColor: '#ffffff' },
+  { name: 'Black', minVisits: 10, emoji: '\ud83d\udc51', gradient: 'from-neutral-900 to-neutral-700', bg: 'bg-neutral-950', border: 'border-neutral-600', text: 'text-neutral-100', glow: 'shadow-neutral-500/60', color: '#1a1a1a', labelColor: '#FFD700' },
+  { name: 'Platino', minVisits: 7, emoji: '\u269c\ufe0f', gradient: 'from-slate-300 to-slate-600', bg: 'bg-slate-50', border: 'border-slate-400', text: 'text-slate-700', glow: 'shadow-slate-400/50', color: '#475569', labelColor: '#ffffff' },
+  { name: 'Oro', minVisits: 4, emoji: '\ud83e\udd47', gradient: 'from-yellow-400 to-amber-600', bg: 'bg-yellow-50', border: 'border-yellow-400', text: 'text-yellow-700', glow: 'shadow-yellow-400/50', color: '#D97706', labelColor: '#ffffff' },
+  { name: 'Plata', minVisits: 0, emoji: '\ud83e\udd48', gradient: 'from-gray-300 to-gray-500', bg: 'bg-gray-50', border: 'border-gray-400', text: 'text-gray-600', glow: 'shadow-gray-400/50', color: '#6B7280', labelColor: '#ffffff' },
 ] as const
 
 export const LEVEL_THRESHOLDS = {
-  plata: 3,
-  oro: 6,
-  platino: 9,
-  black: 12,
+  plata: 1,
+  oro: 4,
+  platino: 7,
+  black: 10,
 } as const
 
 export function getCustomerRank(totalVisits: number) {

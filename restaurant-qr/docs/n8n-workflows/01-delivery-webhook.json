@@ -1,0 +1,132 @@
+{
+  "name": "Sushi Service - Registro Domicilios WhatsApp",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sushi-delivery",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Twilio Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Twilio envía los datos de WhatsApp como form data\nconst body = $input.first().json.body || $input.first().json;\n\n// Mensaje entrante de WhatsApp\nconst rawMessage = body.Body || '';\nconst fromNumber = (body.From || '').replace('whatsapp:', '');\n\n// Parsear el mensaje - ajustar según formato real de pedidos\n// Formato esperado: \"Pedido de [Nombre]\\n[Dirección]\\n[Método pago]\\nTotal: $[monto]\"\nconst lines = rawMessage.split('\\n').map(l => l.trim()).filter(Boolean);\n\nlet nombre_cliente = 'Cliente Domicilio';\nlet direccion = null;\nlet metodo_pago = null;\nlet monto_total = null;\n\n// Intentar extraer nombre\nconst nameMatch = rawMessage.match(/(?:pedido de|nombre:?)\\s*(.+)/i);\nif (nameMatch) {\n  nombre_cliente = nameMatch[1].trim();\n} else if (lines.length > 0) {\n  nombre_cliente = lines[0];\n}\n\n// Intentar extraer dirección\nconst addrMatch = rawMessage.match(/(?:direcci[oó]n:?|dir:?)\\s*(.+)/i);\nif (addrMatch) {\n  direccion = addrMatch[1].trim();\n} else if (lines.length > 1) {\n  direccion = lines[1];\n}\n\n// Intentar extraer método de pago\nconst payMatch = rawMessage.match(/(?:pago:?|m[eé]todo:?)\\s*(.+)/i);\nif (payMatch) {\n  metodo_pago = payMatch[1].trim();\n}\n\n// Intentar extraer monto\nconst amountMatch = rawMessage.match(/(?:total:?|\\$)\\s*([\\d.,]+)/i);\nif (amountMatch) {\n  monto_total = parseFloat(amountMatch[1].replace(/[.,]/g, ''));\n}\n\nreturn [{\n  json: {\n    nombre_cliente,\n    celular: fromNumber,\n    direccion,\n    metodo_pago,\n    monto_total,\n    raw_message: rawMessage\n  }\n}];"
+      },
+      "id": "parse-message",
+      "name": "Parsear Mensaje",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [470, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.APP_URL}}/api/webhook/delivery",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-webhook-secret",
+              "value": "={{$env.WEBHOOK_DELIVERY_SECRET}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "nombre_cliente",
+              "value": "={{ $json.nombre_cliente }}"
+            },
+            {
+              "name": "celular",
+              "value": "={{ $json.celular }}"
+            },
+            {
+              "name": "direccion",
+              "value": "={{ $json.direccion }}"
+            },
+            {
+              "name": "metodo_pago",
+              "value": "={{ $json.metodo_pago }}"
+            },
+            {
+              "name": "monto_total",
+              "value": "={{ $json.monto_total }}"
+            },
+            {
+              "name": "raw_message",
+              "value": "={{ $json.raw_message }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-request",
+      "name": "Enviar a API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [690, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, message: 'Procesado' }) }}",
+        "options": {}
+      },
+      "id": "respond",
+      "name": "Responder OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [910, 300]
+    }
+  ],
+  "connections": {
+    "Twilio Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parsear Mensaje",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parsear Mensaje": {
+      "main": [
+        [
+          {
+            "node": "Enviar a API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar a API": {
+      "main": [
+        [
+          {
+            "node": "Responder OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

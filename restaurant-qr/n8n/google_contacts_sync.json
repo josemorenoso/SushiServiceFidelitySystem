@@ -1,0 +1,150 @@
+{
+  "name": "google_contacts_sync",
+  "nodes": [
+    {
+      "id": "wh_gc_1",
+      "name": "Webhook Google Contacts Sync",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 300],
+      "webhookId": "rest-gc-001",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "google-contacts-sync",
+        "responseMode": "lastNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "buscar_gc_2",
+      "name": "Buscar en Google Contacts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "https://people.googleapis.com/v1/people:searchContacts?query={{ $json.celular }}&readMask=names,phoneNumbers,addresses,metadata",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api"
+      }
+    },
+    {
+      "id": "check_gc_2",
+      "name": "Contacto Existe?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [660, 300],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ ($json.results || []).length > 0 }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "crear_gc_2",
+      "name": "Crear Contacto",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 200],
+      "parameters": {
+        "method": "POST",
+        "url": "https://people.googleapis.com/v1/people:createContact",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"names\":[{\"givenName\":\"{{ $('Webhook Google Contacts Sync').item.json.nombre_cliente }}\"}],\"phoneNumbers\":[{\"value\":\"+57{{ $('Webhook Google Contacts Sync').item.json.celular }}\"}],\"addresses\":[{\"formattedValue\":\"{{ $('Webhook Google Contacts Sync').item.json.direccion || 'Sin direccion' }}\"}]}"
+      }
+    },
+    {
+      "id": "comparar_gc_2",
+      "name": "Comparar Datos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 420],
+      "parameters": {
+        "jsCode": "const results = $input.first().json.results || [];\nconst contacto = results[0];\nconst datos = $('Webhook Google Contacts Sync').item.json;\nif (!contacto) return [{ json: { actualizar: false, synced: 'no_contact' } }];\nconst contactId = contacto.resourceName;\nconst nombreActual = contacto.names?.[0]?.givenName || '';\nconst direccionActual = contacto.addresses?.[0]?.formattedValue || '';\nconst cambios = [];\nif (datos.nombre_cliente && nombreActual.toLowerCase() !== datos.nombre_cliente.toLowerCase()) cambios.push('nombre');\nif (datos.direccion && direccionActual.toLowerCase() !== datos.direccion.toLowerCase()) cambios.push('direccion');\nreturn [{ json: { actualizar: cambios.length > 0, contactoId: contactId, datos, etag: contacto.etag, cambios } }];"
+      }
+    },
+    {
+      "id": "check_upd_2",
+      "name": "Necesita Actualizar?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1100, 420],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.actualizar }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "actualizar_gc_2",
+      "name": "Actualizar Contacto",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, 480],
+      "parameters": {
+        "method": "PATCH",
+        "url": "https://people.googleapis.com/v1/{{ $json.contactoId }}:updateContact?updatePersonFields=names,addresses",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"names\":[{\"givenName\":\"{{ $json.datos.nombre_cliente }}\"}],\"addresses\":[{\"formattedValue\":\"{{ $json.datos.direccion || '' }}\"}],\"etag\":\"{{ $json.etag }}\"}"
+      }
+    },
+    {
+      "id": "resp_skip",
+      "name": "No Necesita Update",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1320, 340],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "Webhook Google Contacts Sync": {
+      "main": [[{"node": "Buscar en Google Contacts", "type": "main", "index": 0}]]
+    },
+    "Buscar en Google Contacts": {
+      "main": [[{"node": "Contacto Existe?", "type": "main", "index": 0}]]
+    },
+    "Contacto Existe?": {
+      "main": [
+        [{"node": "Crear Contacto", "type": "main", "index": 0}],
+        [{"node": "Comparar Datos", "type": "main", "index": 0}]
+      ]
+    },
+    "Comparar Datos": {
+      "main": [[{"node": "Necesita Actualizar?", "type": "main", "index": 0}]]
+    },
+    "Necesita Actualizar?": {
+      "main": [
+        [{"node": "No Necesita Update", "type": "main", "index": 0}],
+        [{"node": "Actualizar Contacto", "type": "main", "index": 0}]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

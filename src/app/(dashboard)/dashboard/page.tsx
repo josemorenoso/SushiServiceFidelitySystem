@@ -14,6 +14,7 @@ import { PowerRanking } from '@/components/dashboard/PowerRanking'
 import { VisitHeatmap } from '@/components/dashboard/VisitHeatmap'
 import { AcquisitionChannelChart } from '@/components/dashboard/AcquisitionChannelChart'
 import { ReactivationRateChart } from '@/components/dashboard/ReactivationRateChart'
+import { CampaignEfficiencyChart } from '@/components/dashboard/CampaignEfficiencyChart'
 import { BlackTierSection } from '@/components/dashboard/BlackTierSection'
 import { CustomerDetailDialog } from '@/components/dashboard/CustomerDetailDialog'
 import type { Customer } from '@/types/database.types'
@@ -88,6 +89,8 @@ export default function DashboardPage() {
       <AcquisitionChannelChart data={data?.acquisitionByMonth ?? []} loading={loading} />
 
       <ReactivationRateChart data={data?.reactivationRate ?? []} loading={loading} />
+
+      <CampaignEfficiencyChart />
 
       <CustomerDetailDialog
         customer={selectedCustomer}

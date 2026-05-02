@@ -5,6 +5,7 @@ import { CheckInForm, CheckInSuccess } from '@/components/features/check-in'
 import { Toaster, toast } from 'sonner'
 import { UtensilsCrossed } from 'lucide-react'
 import type { CheckInResult, RegisterResult } from '@/components/features/check-in/CheckInForm.types'
+import { BRAND_NAME } from '@/lib/branding'
 
 type PageState =
   | { view: 'form' }
@@ -73,7 +74,7 @@ export default function CheckInPage() {
             className="font-playfair text-2xl font-bold"
             style={{ color: "#1a1c1d", letterSpacing: "-0.02em" }}
           >
-            Sushi Service
+            {BRAND_NAME}
           </h1>
           <p className="mt-0.5 text-xs font-medium" style={{ color: "#9ca3af" }}>
             Programa de fidelidad

@@ -97,40 +97,59 @@ export async function POST(request: NextRequest) {
 
     const skipped = (customers?.length ?? 0) - eligible.length
 
-    // Send real messages via Twilio Content API
+    // Pre-compute next rewards in a single query (evita N+1)
+    // Agrupa clientes por total_visits y calcula hint una sola vez por grupo
+    const uniqueVisitCounts = [...new Set(eligible.map((c) => c.total_visits))]
+    const hintByVisits: Record<number, string> = {}
+    await Promise.all(
+      uniqueVisitCounts.map(async (v) => {
+        const next = await getNextReward(v)
+        hintByVisits[v] = buildRewardHint(v, next)
+      })
+    )
+
+    // Send en paralelo en batches para evitar timeout + saturar Twilio
+    const BATCH_SIZE = 10
+    const now = new Date().toISOString()
     let sent = 0
     let failed = 0
     const messageRecords: { campaign_id: string; customer_id: string; status: string; twilio_sid: string | null; sent_at: string | null; error_message: string | null }[] = []
+    const sentCustomerIds: string[] = []
 
-    for (const customer of eligible) {
-      try {
-        // Build template variables: {{1}}=name, {{2}}=visits, {{3}}=next reward
-        const nextReward = await getNextReward(customer.total_visits)
-        const rewardHint = buildRewardHint(customer.total_visits, nextReward)
+    for (let i = 0; i < eligible.length; i += BATCH_SIZE) {
+      const batch = eligible.slice(i, i + BATCH_SIZE)
+      const results = await Promise.all(
+        batch.map(async (customer) => {
+          try {
+            const variables: Record<string, string> = {
+              '1': customer.name,
+              '2': String(customer.total_visits),
+              '3': hintByVisits[customer.total_visits] || '',
+            }
+            const result = await sendTemplateMessage(customer.phone, templateSid, variables)
+            return { customer, result, error: null as string | null }
+          } catch (err) {
+            return {
+              customer,
+              result: null,
+              error: err instanceof Error ? err.message : 'Error desconocido',
+            }
+          }
+        })
+      )
 
-        const variables: Record<string, string> = {
-          '1': customer.name,
-          '2': String(customer.total_visits),
-          '3': rewardHint,
-        }
-
-        const result = await sendTemplateMessage(customer.phone, templateSid, variables)
-
+      for (const { customer, result, error } of results) {
         if (result) {
           sent++
+          sentCustomerIds.push(customer.id)
           messageRecords.push({
             campaign_id: campaign.id,
             customer_id: customer.id,
             status: 'sent',
             twilio_sid: result.sid,
-            sent_at: new Date().toISOString(),
+            sent_at: now,
             error_message: null,
           })
-          // Update last_campaign_at
-          await db
-            .from('customers')
-            .update({ last_campaign_at: new Date().toISOString() })
-            .eq('id', customer.id)
         } else {
           failed++
           messageRecords.push({
@@ -139,20 +158,18 @@ export async function POST(request: NextRequest) {
             status: 'failed',
             twilio_sid: null,
             sent_at: null,
-            error_message: 'Twilio no configurado o error de envío',
+            error_message: error || 'Twilio no configurado o error de envío',
           })
         }
-      } catch (err) {
-        failed++
-        messageRecords.push({
-          campaign_id: campaign.id,
-          customer_id: customer.id,
-          status: 'failed',
-          twilio_sid: null,
-          sent_at: null,
-          error_message: err instanceof Error ? err.message : 'Error desconocido',
-        })
       }
+    }
+
+    // Bulk update last_campaign_at para todos los enviados (1 query)
+    if (sentCustomerIds.length > 0) {
+      await db
+        .from('customers')
+        .update({ last_campaign_at: now })
+        .in('id', sentCustomerIds)
     }
 
     // Bulk insert message records

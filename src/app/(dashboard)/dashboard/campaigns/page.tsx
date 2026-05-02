@@ -45,7 +45,7 @@ const autoCampaigns = [
     border: 'border-pink-200',
     description: 'Envía un saludo automático a los clientes que cumplen años hoy.',
     cron: 'Diario a las 8:00 AM',
-    template: '¡Feliz cumpleaños {{name}}! 🎂 Te esperamos hoy con un regalo especial en Sushi Service 🍣',
+    template: '¡Feliz cumpleaños {{name}}! 🎂 Te esperamos hoy con un regalo especial.',
   },
   {
     type: 'reactivation',
@@ -56,7 +56,7 @@ const autoCampaigns = [
     border: 'border-orange-200',
     description: 'Recupera clientes que no han visitado en más de 21 días.',
     cron: 'Diario a las 10:00 AM',
-    template: '¡Hola {{name}}! 👋 Te extrañamos en Sushi Service. Vuelve pronto, tenemos algo especial para ti 🍣',
+    template: '¡Hola {{name}}! 👋 Te extrañamos. Vuelve pronto, tenemos algo especial para ti.',
   },
 ]
 

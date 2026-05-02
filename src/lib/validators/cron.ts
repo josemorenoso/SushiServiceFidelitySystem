@@ -7,8 +7,8 @@ import { NextRequest } from 'next/server'
 export function validateCronSecret(request: NextRequest): boolean {
   const secret = process.env.CRON_SECRET
   if (!secret) {
-    console.warn('[Cron] CRON_SECRET no configurado')
-    return process.env.NODE_ENV === 'development'
+    console.error('[Cron] CRON_SECRET no configurado — rechazando request por seguridad')
+    return false
   }
 
   const authHeader = request.headers.get('authorization')

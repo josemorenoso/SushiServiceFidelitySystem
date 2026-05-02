@@ -17,6 +17,7 @@ import {
   UtensilsCrossed,
   FileText,
 } from 'lucide-react'
+import { BRAND_NAME } from '@/lib/branding'
 
 const navItems = [
   { label: 'Métricas', icon: LayoutDashboard, active: true },
@@ -48,7 +49,7 @@ function DemoDashboardContent() {
             className="font-playfair text-base font-bold"
             style={{ color: '#1a1c1d', letterSpacing: '-0.02em' }}
           >
-            Sushi Service
+            {BRAND_NAME}
           </span>
         </div>
         <nav className="flex-1 space-y-0.5 p-3">
@@ -79,7 +80,7 @@ function DemoDashboardContent() {
         <header className="glass-header flex h-14 items-center justify-between px-5">
           <div className="hidden md:block">
             <h2 className="text-sm font-medium text-muted-foreground">
-              Panel de Administración — Sushi Service
+              Panel de Administración — {BRAND_NAME}
             </h2>
           </div>
           <span className="animate-pulse rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">

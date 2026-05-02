@@ -38,7 +38,7 @@ import type { Reward } from '@/types/database.types'
 
 function buildPreviewTemplate(milestone: number, title: string): string {
   if (!milestone || !title) return ''
-  return `\u00a1Felicidades {{name}}! \ud83c\udf89 Has completado tu visita #${milestone} a Sushi Service. Como agradecimiento, te has ganado: ${title}. \u00a1Reclama tu premio en tu pr\u00f3xima visita! \ud83c\udf63`
+  return `\u00a1Felicidades {{name}}! \ud83c\udf89 Has completado tu visita #${milestone}. Como agradecimiento, te has ganado: ${title}. \u00a1Reclama tu premio en tu pr\u00f3xima visita!`
 }
 
 export default function RewardsPage() {

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Playfair_Display, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { BRAND_NAME, BRAND_TAGLINE, BRAND_DESCRIPTION } from "@/lib/branding";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -21,8 +22,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Sushi Service — Programa de Fidelidad",
-  description: "Registra tus visitas, acumula premios y disfruta de beneficios exclusivos en Sushi Service.",
+  title: `${BRAND_NAME} — ${BRAND_TAGLINE}`,
+  description: BRAND_DESCRIPTION,
 };
 
 export default function RootLayout({

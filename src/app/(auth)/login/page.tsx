@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Loader2, Lock, Mail, UtensilsCrossed } from 'lucide-react'
+import { BRAND_NAME } from '@/lib/branding'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -64,7 +65,7 @@ export default function LoginPage() {
               className="font-playfair text-3xl font-bold"
               style={{ color: "#1a1c1d", letterSpacing: "-0.02em" }}
             >
-              Sushi Service
+              {BRAND_NAME}
             </h1>
             <p className="mt-1 text-sm" style={{ color: "#9ca3af" }}>
               Panel de administración

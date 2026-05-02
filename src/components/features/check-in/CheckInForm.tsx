@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Loader2, Phone, User, Calendar, MapPin, ArrowLeft } from 'lucide-react'
 import type {
   CheckInFormProps,
@@ -21,6 +21,17 @@ export function CheckInForm({
   const [city, setCity] = useState('')
   const [acceptsMarketing, setAcceptsMarketing] = useState(true)
   const [loading, setLoading] = useState(false)
+  const [tableNumber, setTableNumber] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      const mesa = params.get('mesa')
+      if (mesa && !isNaN(parseInt(mesa))) {
+        setTableNumber(parseInt(mesa))
+      }
+    }
+  }, [])
 
   const handlePhoneSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -31,7 +42,7 @@ export function CheckInForm({
       const res = await fetch('/api/check-in', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, action: 'lookup' }),
+        body: JSON.stringify({ phone, action: 'lookup', table_number: tableNumber }),
       })
 
       const data = (await res.json()) as LookupResult & { error?: string; message?: string; customer?: { name: string; total_visits: number } }
@@ -46,7 +57,7 @@ export function CheckInForm({
         const checkInRes = await fetch('/api/check-in', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone, action: 'checkin' }),
+          body: JSON.stringify({ phone, action: 'checkin', table_number: tableNumber }),
         })
 
         const checkInData = await checkInRes.json()
@@ -92,6 +103,7 @@ export function CheckInForm({
           birthday: birthday || null,
           city: city.trim() || null,
           accepts_marketing: acceptsMarketing,
+          table_number: tableNumber,
         }),
       })
 

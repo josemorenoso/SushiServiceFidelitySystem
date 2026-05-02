@@ -13,6 +13,7 @@ import {
   FileText,
   Settings,
 } from 'lucide-react'
+import { BRAND_NAME } from '@/lib/branding'
 
 const navItems = [
   { href: '/dashboard', label: 'Métricas', icon: LayoutDashboard },
@@ -37,7 +38,7 @@ export function DashboardSidebar() {
           <UtensilsCrossed className="h-3.5 w-3.5 text-white" strokeWidth={1.5} />
         </div>
         <span className="font-playfair text-base font-bold" style={{ color: '#1a1c1d', letterSpacing: '-0.02em' }}>
-          Sushi Service
+          {BRAND_NAME}
         </span>
       </div>
       <nav className="flex-1 space-y-0.5 p-3">

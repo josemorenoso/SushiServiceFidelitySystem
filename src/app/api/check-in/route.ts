@@ -6,6 +6,14 @@ import { checkRewardForVisit, getNextReward, buildRewardHint } from '@/services/
 import { sendTemplateMessage } from '@/services/whatsapp.service'
 import { getMultipleSettings } from '@/services/settings.service'
 import { syncGoogleContact } from '@/services/google-contacts-sync.service'
+import { rateLimit, getClientIp } from '@/lib/rate-limit'
+
+// Rate limits por IP
+const LOOKUP_MAX = 30         // 30 lookups/min por IP (bajo para evitar enumeración)
+const REGISTER_MAX = 5        // 5 registros/hora por IP (anti-spam de cuentas falsas)
+const CHECKIN_MAX = 20        // 20 check-ins/min por IP
+const MINUTE = 60_000
+const HOUR = 3_600_000
 
 interface CheckInRequestBody {
   phone: string
@@ -57,6 +65,30 @@ export async function POST(request: NextRequest) {
         { error: 'Teléfono inválido', message: 'Ingresa un número colombiano válido (10 dígitos, empieza con 3)' },
         { status: 400 }
       )
+    }
+
+    // ─── RATE LIMITING por IP ───
+    const ip = getClientIp(request)
+    const rateLimitConfig = {
+      lookup: { max: LOOKUP_MAX, window: MINUTE },
+      register: { max: REGISTER_MAX, window: HOUR },
+      checkin: { max: CHECKIN_MAX, window: MINUTE },
+    }[action]
+
+    if (rateLimitConfig) {
+      const rl = rateLimit(`checkin:${action}:${ip}`, rateLimitConfig.max, rateLimitConfig.window)
+      if (!rl.allowed) {
+        return NextResponse.json(
+          {
+            error: 'Demasiadas solicitudes',
+            message: `Espera ${rl.retryAfterSeconds} segundos antes de intentar nuevamente.`,
+          },
+          {
+            status: 429,
+            headers: { 'Retry-After': String(rl.retryAfterSeconds) },
+          }
+        )
+      }
     }
 
     // ─── LOOKUP: buscar si el cliente existe ───
@@ -168,14 +200,37 @@ export async function POST(request: NextRequest) {
       // Evaluar recompensa
       const reward = await checkRewardForVisit(updated.total_visits)
 
+      // Google Contacts sync (best-effort) — siempre, incluso si hay recompensa
+      syncGoogleContact({
+        phone: cleaned,
+        name: updated.name,
+        totalVisits: updated.total_visits,
+        source: 'qr',
+        action: 'updated',
+      }).catch((err: unknown) =>
+        console.error('[CheckIn] Error sync Google Contacts:', err)
+      )
+
       if (reward) {
-        // WhatsApp de recompensa (plantilla)
-        sendCheckinTemplate(
-          settings.reward_template_sid,
-          'reward',
-          cleaned,
-          { '1': updated.name, '2': String(updated.total_visits), '3': reward.title }
-        )
+        // Envía plantilla de recompensa. Si no está configurada, fallback a welcome_back
+        // para que el cliente AL MENOS reciba algo si acaba de ganar un premio.
+        const rewardTemplateConfigured = !!settings.reward_template_sid
+        if (rewardTemplateConfigured) {
+          sendCheckinTemplate(
+            settings.reward_template_sid,
+            'reward',
+            cleaned,
+            { '1': updated.name, '2': String(updated.total_visits), '3': reward.title }
+          )
+        } else {
+          // Fallback: manda welcome_back con el título del premio en el hint
+          sendCheckinTemplate(
+            settings.welcome_back_template_sid,
+            'welcome_back (fallback por falta de template reward)',
+            cleaned,
+            { '1': updated.name, '2': String(updated.total_visits), '3': `¡Ganaste: ${reward.title}!` }
+          )
+        }
 
         return NextResponse.json({
           message: 'welcome_back',
@@ -194,17 +249,6 @@ export async function POST(request: NextRequest) {
         'welcome_back',
         cleaned,
         { '1': updated.name, '2': String(updated.total_visits), '3': rewardHint }
-      )
-
-      // Google Contacts sync (best-effort)
-      syncGoogleContact({
-        phone: cleaned,
-        name: updated.name,
-        totalVisits: updated.total_visits,
-        source: 'qr',
-        action: 'updated',
-      }).catch((err: unknown) =>
-        console.error('[CheckIn] Error sync Google Contacts:', err)
       )
 
       return NextResponse.json({

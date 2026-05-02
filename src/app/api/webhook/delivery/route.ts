@@ -6,6 +6,7 @@ import { checkRewardForVisit, getNextReward, buildRewardHint } from '@/services/
 import { sendTemplateMessage } from '@/services/whatsapp.service'
 import { getMultipleSettings } from '@/services/settings.service'
 import { syncGoogleContact } from '@/services/google-contacts-sync.service'
+import { rateLimit, getClientIp } from '@/lib/rate-limit'
 
 interface DeliveryRequestBody {
   nombre_cliente: string
@@ -35,11 +36,27 @@ async function sendDeliveryTemplate(
 
 export async function POST(request: NextRequest) {
   try {
+    // ─── AUTH (fail-closed): rechaza si secret no configurado ───
     const authHeader = request.headers.get('x-webhook-secret')
     const expectedSecret = process.env.WEBHOOK_DELIVERY_SECRET
 
-    if (expectedSecret && authHeader !== expectedSecret) {
+    if (!expectedSecret) {
+      console.error('[Delivery] WEBHOOK_DELIVERY_SECRET no configurado — rechazando request')
+      return NextResponse.json({ error: 'Webhook no configurado' }, { status: 503 })
+    }
+
+    if (authHeader !== expectedSecret) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
+    }
+
+    // ─── RATE LIMITING por IP ───
+    const ip = getClientIp(request)
+    const rl = rateLimit(`webhook-delivery:${ip}`, 60, 60_000) // 60/min por IP
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: 'Demasiadas solicitudes', retryAfter: rl.retryAfterSeconds },
+        { status: 429, headers: { 'Retry-After': String(rl.retryAfterSeconds) } }
+      )
     }
 
     const body = (await request.json()) as DeliveryRequestBody

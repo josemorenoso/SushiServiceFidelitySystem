@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { QrCode, LayoutDashboard, UtensilsCrossed, Sparkles } from "lucide-react";
+import { BRAND_NAME } from "@/lib/branding";
 
 export default function Home() {
   return (
@@ -32,7 +33,7 @@ export default function Home() {
               className="font-playfair text-[2.25rem] font-bold leading-tight"
               style={{ color: "#1a1c1d", letterSpacing: "-0.02em" }}
             >
-              Sushi Service
+              {BRAND_NAME}
             </h1>
             <p
               className="mt-2 text-sm font-medium"

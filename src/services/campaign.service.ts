@@ -26,6 +26,7 @@ export async function findBirthdayCustomers(): Promise<Customer[]> {
     .select('*')
     .not('birthday', 'is', null)
     .like('birthday', pattern)
+    .eq('accepts_marketing', true)
 
   if (error) {
     throw new Error(`Error buscando cumpleañeros: ${error.message}`)

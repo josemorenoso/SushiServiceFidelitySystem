@@ -28,7 +28,7 @@ export async function GET() {
 }
 
 function buildRewardTemplate(milestone: number, title: string): string {
-  return `\u00a1Felicidades {{name}}! \ud83c\udf89 Has completado tu visita #${milestone} a Sushi Service. Como agradecimiento, te has ganado: ${title}. \u00a1Reclama tu premio en tu pr\u00f3xima visita! \ud83c\udf63`
+  return `\u00a1Felicidades {{name}}! \ud83c\udf89 Has completado tu visita #${milestone}. Como agradecimiento, te has ganado: ${title}. \u00a1Reclama tu premio en tu pr\u00f3xima visita!`
 }
 
 export async function POST(request: NextRequest) {

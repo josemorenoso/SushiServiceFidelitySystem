@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Star, ExternalLink, Sparkles, X } from 'lucide-react'
+import { BRAND_NAME } from '@/lib/branding'
 
 const GOOGLE_MAPS_REVIEW_URL = process.env.NEXT_PUBLIC_GOOGLE_MAPS_REVIEW_URL || '#'
 
@@ -98,7 +99,7 @@ export function GoogleReviewPopup({
           <div className="px-6 py-5 space-y-4">
             <div className="text-center">
               <p className="text-sm text-muted-foreground mb-3">
-                ¿Cómo calificarías tu experiencia en Sushi Service?
+                ¿Cómo calificarías tu experiencia en {BRAND_NAME}?
               </p>
               <div className="flex justify-center gap-1.5">
                 {[1, 2, 3, 4, 5].map((n) => (

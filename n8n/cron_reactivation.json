@@ -1,0 +1,63 @@
+{
+  "name": "Cron Reactivación",
+  "nodes": [
+    {
+      "id": "cron_trigger",
+      "name": "Diario 10am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 300],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 15 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "call_reactivation",
+      "name": "Ejecutar Cron Reactivación",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.RESTAURANT_API_URL }}/api/cron/reactivation",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.CRON_SECRET }}" }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "log_result",
+      "name": "Log Resultado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 300],
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconsole.log(`[Cron Reactivation] Enviados: ${data.sent || 0}, Fallidos: ${data.failed || 0}, Inactivos: ${data.total_inactive_customers || 0}`);\nreturn [$input.first()];"
+      }
+    }
+  ],
+  "connections": {
+    "Diario 10am": {
+      "main": [[{"node": "Ejecutar Cron Reactivación", "type": "main", "index": 0}]]
+    },
+    "Ejecutar Cron Reactivación": {
+      "main": [[{"node": "Log Resultado", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

@@ -14,7 +14,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Search, ChevronLeft, ChevronRight, Users, MessageCircleOff } from 'lucide-react'
+import { Search, ChevronLeft, ChevronRight, Users, MessageCircleOff, Download, Upload } from 'lucide-react'
+import { toast } from 'sonner'
 import { CustomerDetailDialog } from '@/components/dashboard/CustomerDetailDialog'
 import type { Customer } from '@/types/database.types'
 
@@ -26,7 +27,109 @@ export default function CustomersPage() {
   const [loading, setLoading] = useState(true)
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
+  const [importing, setImporting] = useState(false)
   const limit = 15
+
+  const handleExportCSV = async () => {
+    try {
+      const res = await fetch('/api/dashboard/customers?limit=10000')
+      const data = await res.json()
+      const all: Customer[] = data.customers ?? []
+      if (all.length === 0) { toast.error('No hay clientes para exportar'); return }
+
+      const headers = ['nombre','telefono','visitas','cumpleanos','ciudad','canal','acepta_marketing','ultima_visita','creado']
+      const rows = all.map((c) => [
+        c.name,
+        c.phone,
+        String(c.total_visits),
+        c.birthday || '',
+        c.city || '',
+        c.source_channels,
+        c.accepts_marketing ? 'si' : 'no',
+        c.last_visit_at ? new Date(c.last_visit_at).toISOString().split('T')[0] : '',
+        new Date(c.created_at).toISOString().split('T')[0],
+      ])
+
+      const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
+      const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `clientes-${new Date().toISOString().split('T')[0]}.csv`
+      link.click()
+      URL.revokeObjectURL(url)
+      toast.success(`${all.length} clientes exportados`)
+    } catch {
+      toast.error('Error al exportar')
+    }
+  }
+
+  const handleImportCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImporting(true)
+    try {
+      const text = await file.text()
+      const lines = text.split('\n').filter(l => l.trim())
+      if (lines.length < 2) { toast.error('CSV vacío o sin datos'); return }
+
+      // Parse header
+      const headerLine = lines[0].toLowerCase()
+      const parseCSVLine = (line: string) => {
+        const result: string[] = []
+        let current = ''
+        let inQuotes = false
+        for (const char of line) {
+          if (char === '"') { inQuotes = !inQuotes; continue }
+          if (char === ',' && !inQuotes) { result.push(current.trim()); current = ''; continue }
+          current += char
+        }
+        result.push(current.trim())
+        return result
+      }
+
+      const headers = parseCSVLine(headerLine)
+      const nameIdx = headers.findIndex(h => h.includes('nombre') || h.includes('name'))
+      const phoneIdx = headers.findIndex(h => h.includes('telefono') || h.includes('phone') || h.includes('celular'))
+
+      if (phoneIdx === -1) { toast.error('CSV debe tener columna "telefono" o "celular"'); return }
+
+      let imported = 0
+      let skipped = 0
+
+      for (let i = 1; i < lines.length; i++) {
+        const cols = parseCSVLine(lines[i])
+        const phone = cols[phoneIdx]?.replace(/[^0-9]/g, '').slice(-10)
+        if (!phone || !/^3\d{9}$/.test(phone)) { skipped++; continue }
+
+        const name = cols[nameIdx] || 'Importado'
+        try {
+          const res = await fetch('/api/check-in', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone, action: 'lookup' }),
+          })
+          const data = await res.json()
+          if (data.found) { skipped++; continue }
+
+          await fetch('/api/check-in', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone, action: 'register', name, accepts_marketing: true }),
+          })
+          imported++
+        } catch { skipped++ }
+      }
+
+      toast.success(`Importados: ${imported}, Omitidos: ${skipped} (ya existían o inválidos)`)
+      fetchCustomers()
+    } catch {
+      toast.error('Error al importar CSV')
+    } finally {
+      setImporting(false)
+      e.target.value = ''
+    }
+  }
 
   const fetchCustomers = useCallback(async () => {
     setLoading(true)
@@ -67,7 +170,18 @@ export default function CustomersPage() {
           <Users className="h-6 w-6" />
           Clientes
         </h1>
-        <Badge variant="secondary">{total} total</Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant="secondary">{total} total</Badge>
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={handleExportCSV}>
+            <Download className="h-3.5 w-3.5" />
+            Exportar CSV
+          </Button>
+          <label className="inline-flex cursor-pointer items-center justify-center rounded-md border border-input bg-background px-3 h-8 text-xs font-medium hover:bg-accent gap-1.5">
+            <Upload className="h-3.5 w-3.5" />
+            {importing ? 'Importando...' : 'Importar CSV'}
+            <input type="file" accept=".csv" onChange={handleImportCSV} className="hidden" disabled={importing} />
+          </label>
+        </div>
       </div>
 
       <form onSubmit={handleSearch} className="flex gap-2">

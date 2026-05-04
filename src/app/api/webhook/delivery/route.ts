@@ -111,9 +111,9 @@ export async function POST(request: NextRequest) {
     const reward = await checkRewardForVisit(customer.total_visits)
 
     if (isNew) {
-      sendDeliveryTemplate(settings.welcome_template_sid, 'welcome', cleaned, { '1': customer.name })
+      await sendDeliveryTemplate(settings.welcome_template_sid, 'welcome', cleaned, { '1': customer.name })
     } else if (reward) {
-      sendDeliveryTemplate(settings.reward_template_sid, 'reward', cleaned, {
+      await sendDeliveryTemplate(settings.reward_template_sid, 'reward', cleaned, {
         '1': customer.name,
         '2': String(customer.total_visits),
         '3': reward.title,
@@ -121,24 +121,26 @@ export async function POST(request: NextRequest) {
     } else {
       const nextReward = await getNextReward(customer.total_visits)
       const rewardHint = buildRewardHint(customer.total_visits, nextReward)
-      sendDeliveryTemplate(settings.welcome_back_template_sid, 'welcome_back', cleaned, {
+      await sendDeliveryTemplate(settings.welcome_back_template_sid, 'welcome_back', cleaned, {
         '1': customer.name,
         '2': String(customer.total_visits),
         '3': rewardHint,
       })
     }
 
-    // Google Contacts sync (best-effort)
-    syncGoogleContact({
-      phone: cleaned,
-      name: customer.name,
-      address: direccion ?? null,
-      totalVisits: customer.total_visits,
-      source: 'delivery',
-      action,
-    }).catch((err: unknown) =>
+    // Google Contacts sync (awaited — Vercel mata fire-and-forget)
+    try {
+      await syncGoogleContact({
+        phone: cleaned,
+        name: customer.name,
+        address: direccion ?? null,
+        totalVisits: customer.total_visits,
+        source: 'delivery',
+        action,
+      })
+    } catch (err) {
       console.error('[Delivery] Error sync Google Contacts:', err)
-    )
+    }
 
     return NextResponse.json({
       ok: true,

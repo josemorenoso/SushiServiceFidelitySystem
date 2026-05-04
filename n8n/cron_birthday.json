@@ -1,0 +1,63 @@
+{
+  "name": "Cron Cumpleaños",
+  "nodes": [
+    {
+      "id": "cron_trigger",
+      "name": "Diario 8am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 300],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 13 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "call_birthday",
+      "name": "Ejecutar Cron Birthday",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.RESTAURANT_API_URL }}/api/cron/birthday",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.CRON_SECRET }}" }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "log_result",
+      "name": "Log Resultado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 300],
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconsole.log(`[Cron Birthday] Enviados: ${data.sent || 0}, Fallidos: ${data.failed || 0}, Total cumpleañeros: ${data.total_birthday_customers || 0}`);\nreturn [$input.first()];"
+      }
+    }
+  ],
+  "connections": {
+    "Diario 8am": {
+      "main": [[{"node": "Ejecutar Cron Birthday", "type": "main", "index": 0}]]
+    },
+    "Ejecutar Cron Birthday": {
+      "main": [[{"node": "Log Resultado", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

@@ -137,27 +137,29 @@ export async function POST(request: NextRequest) {
         console.error('[CheckIn] Error creando visita (registro continuará):', visitErr)
       }
 
-      // WhatsApp de bienvenida (best-effort, plantilla)
+      // WhatsApp de bienvenida — DEBE usar await para que Vercel no mate el proceso
       const settings = await getMultipleSettings(['welcome_template_sid'])
-      sendCheckinTemplate(
+      await sendCheckinTemplate(
         settings.welcome_template_sid,
         'welcome',
         cleaned,
         { '1': customer.name }
       )
 
-      // Google Contacts sync (best-effort)
-      syncGoogleContact({
-        phone: cleaned,
-        name: customer.name,
-        birthday: customer.birthday ?? null,
-        city: customer.city ?? null,
-        totalVisits: customer.total_visits,
-        source: 'qr',
-        action: 'created',
-      }).catch((err: unknown) =>
+      // Google Contacts sync (best-effort pero awaited para Vercel)
+      try {
+        await syncGoogleContact({
+          phone: cleaned,
+          name: customer.name,
+          birthday: customer.birthday ?? null,
+          city: customer.city ?? null,
+          totalVisits: customer.total_visits,
+          source: 'qr',
+          action: 'created',
+        })
+      } catch (err) {
         console.error('[CheckIn] Error sync Google Contacts:', err)
-      )
+      }
 
       return NextResponse.json(
         {
@@ -200,31 +202,31 @@ export async function POST(request: NextRequest) {
       // Evaluar recompensa
       const reward = await checkRewardForVisit(updated.total_visits)
 
-      // Google Contacts sync (best-effort) — siempre, incluso si hay recompensa
-      syncGoogleContact({
-        phone: cleaned,
-        name: updated.name,
-        totalVisits: updated.total_visits,
-        source: 'qr',
-        action: 'updated',
-      }).catch((err: unknown) =>
+      // Google Contacts sync (best-effort pero awaited para Vercel)
+      try {
+        await syncGoogleContact({
+          phone: cleaned,
+          name: updated.name,
+          totalVisits: updated.total_visits,
+          source: 'qr',
+          action: 'updated',
+        })
+      } catch (err) {
         console.error('[CheckIn] Error sync Google Contacts:', err)
-      )
+      }
 
       if (reward) {
         // Envía plantilla de recompensa. Si no está configurada, fallback a welcome_back
-        // para que el cliente AL MENOS reciba algo si acaba de ganar un premio.
         const rewardTemplateConfigured = !!settings.reward_template_sid
         if (rewardTemplateConfigured) {
-          sendCheckinTemplate(
+          await sendCheckinTemplate(
             settings.reward_template_sid,
             'reward',
             cleaned,
             { '1': updated.name, '2': String(updated.total_visits), '3': reward.title }
           )
         } else {
-          // Fallback: manda welcome_back con el título del premio en el hint
-          sendCheckinTemplate(
+          await sendCheckinTemplate(
             settings.welcome_back_template_sid,
             'welcome_back (fallback por falta de template reward)',
             cleaned,
@@ -243,8 +245,8 @@ export async function POST(request: NextRequest) {
       const nextReward = await getNextReward(updated.total_visits)
       const rewardHint = buildRewardHint(updated.total_visits, nextReward)
 
-      // WhatsApp de bienvenido de vuelta (plantilla)
-      sendCheckinTemplate(
+      // WhatsApp de bienvenido de vuelta (plantilla) — DEBE awaitar
+      await sendCheckinTemplate(
         settings.welcome_back_template_sid,
         'welcome_back',
         cleaned,

@@ -1,0 +1,201 @@
+{
+  "name": "domicilios_whatsapp_v4",
+  "nodes": [
+    {
+      "id": "wh_dom_1",
+      "name": "Webhook Domicilio",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 300],
+      "webhookId": "rest-dom-004",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "domicilios",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "parse_dom_1",
+      "name": "Extraer Remitente y Body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 300],
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst from = raw.From || raw.messages?.[0]?.from || raw.from || raw.sender || '';\nconst remitente = String(from).replace(/^whatsapp:\\+?/i, '').replace(/[^0-9]/g, '').slice(-10);\nconst body = raw.Body || raw.messages?.[0]?.text?.body || raw.text || raw.body || '';\nif (!remitente) throw new Error('No se pudo extraer numero de remitente');\nif (!body.trim()) throw new Error('Mensaje vacío');\nreturn [{ json: { remitente, body, raw_payload: raw } }];"
+      }
+    },
+    {
+      "id": "validar_rem_db",
+      "name": "Validar Remitente en DB",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/authorized_numbers?phone=eq.{{ $json.remitente }}&is_active=eq.true&select=id,name",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_ANON_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_ANON_KEY }}" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "check_auth_1",
+      "name": "Remitente Autorizado?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [880, 300],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.length > 0 }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "resp_ign_1",
+      "name": "Responder No Autorizado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1100, 160],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"ok\":false,\"error\":\"Remitente no autorizado\"}",
+        "options": { "responseCode": 403 }
+      }
+    },
+    {
+      "id": "ai_extract_1",
+      "name": "IA Extrae Datos del Pedido",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, 440],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.OPENAI_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'gpt-4o-mini', temperature: 0, max_tokens: 300, messages: [{ role: 'system', content: 'Eres un asistente que extrae datos de pedidos de domicilio desde mensajes de WhatsApp de un restaurante. Del mensaje del usuario, extrae estos campos en JSON estricto:\\n- nombre_cliente (string) — nombre del cliente. Si no hay nombre claro, usa \"Cliente Domicilio\"\\n- celular (string) — SOLO los 10 dígitos del celular colombiano (sin +57, sin espacios). Empieza con 3.\\n- direccion (string | null) — dirección de entrega\\n- metodo_pago (string | null) — efectivo, transferencia, nequi, daviplata, tarjeta, etc.\\n- monto_total (number | null) — valor total en COP como número (sin puntos, sin $, \"35mil\"=35000, \"50k\"=50000)\\n\\nSi no puedes extraer un campo, usa null. El celular es OBLIGATORIO.\\nResponde SOLO con el JSON válido, sin markdown, sin explicaciones, sin ```.' }, { role: 'user', content: $('Extraer Remitente y Body').first().json.body }] }) }}"
+      }
+    },
+    {
+      "id": "parse_ai_response",
+      "name": "Parsear Respuesta IA",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 440],
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst content = response.choices?.[0]?.message?.content || '';\nlet parsed;\ntry {\n  // Limpiar posibles backticks o whitespace\n  const cleaned = content.replace(/```json\\n?/g, '').replace(/```/g, '').trim();\n  parsed = JSON.parse(cleaned);\n} catch (e) {\n  throw new Error('La IA no devolvió JSON válido: ' + content.substring(0, 200));\n}\n\n// Validar celular\nlet celular = String(parsed.celular || '').replace(/[\\s\\-\\(\\)]/g, '').replace(/^\\+?57/, '').replace(/^0/, '').slice(-10);\nif (!/^3\\d{9}$/.test(celular)) {\n  throw new Error('No se encontró un celular colombiano válido. IA extrajo: ' + (parsed.celular || 'nada'));\n}\n\n// Normalizar monto\nlet monto_total = null;\nif (parsed.monto_total !== null && parsed.monto_total !== undefined) {\n  monto_total = typeof parsed.monto_total === 'number' ? parsed.monto_total : parseFloat(String(parsed.monto_total).replace(/[^0-9.]/g, ''));\n  if (isNaN(monto_total)) monto_total = null;\n}\n\nconst body = $('Extraer Remitente y Body').first().json.body;\n\nreturn [{ json: {\n  nombre_cliente: String(parsed.nombre_cliente || 'Cliente Domicilio').trim(),\n  celular,\n  direccion: parsed.direccion || null,\n  metodo_pago: parsed.metodo_pago || null,\n  monto_total,\n  raw_message: body\n} }];"
+      }
+    },
+    {
+      "id": "call_api_1",
+      "name": "Registrar en RestaurantQR API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1580, 440],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.RESTAURANT_API_URL }}/api/webhook/delivery",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-webhook-secret", "value": "={{ $env.WEBHOOK_DELIVERY_SECRET }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}"
+      }
+    },
+    {
+      "id": "resp_ok_1",
+      "name": "Responder OK Domicilio",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1820, 440],
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ '<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response><Message>✅ ' + ($json.is_new ? 'Nuevo cliente' : 'Cliente actualizado') + ': ' + $('Parsear Respuesta IA').first().json.nombre_cliente + ' (' + $('Parsear Respuesta IA').first().json.celular + '). Visita #' + ($json.customer?.total_visits || 1) + ($json.reward ? ' 🎁 ' + $json.reward.title : '') + '</Message></Response>' }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              { "name": "Content-Type", "value": "text/xml" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "resp_err_ai",
+      "name": "Responder Error IA",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1340, 600],
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response><Message>❌ No pude extraer los datos del pedido. Asegúrate de incluir al menos el número de celular del cliente (10 dígitos). Intenta de nuevo.</Message></Response>",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              { "name": "Content-Type", "value": "text/xml" }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook Domicilio": {
+      "main": [[{"node": "Extraer Remitente y Body", "type": "main", "index": 0}]]
+    },
+    "Extraer Remitente y Body": {
+      "main": [[{"node": "Validar Remitente en DB", "type": "main", "index": 0}]]
+    },
+    "Validar Remitente en DB": {
+      "main": [[{"node": "Remitente Autorizado?", "type": "main", "index": 0}]]
+    },
+    "Remitente Autorizado?": {
+      "main": [
+        [{"node": "Responder No Autorizado", "type": "main", "index": 0}],
+        [{"node": "IA Extrae Datos del Pedido", "type": "main", "index": 0}]
+      ]
+    },
+    "IA Extrae Datos del Pedido": {
+      "main": [[{"node": "Parsear Respuesta IA", "type": "main", "index": 0}]]
+    },
+    "Parsear Respuesta IA": {
+      "main": [[{"node": "Registrar en RestaurantQR API", "type": "main", "index": 0}]]
+    },
+    "Registrar en RestaurantQR API": {
+      "main": [[{"node": "Responder OK Domicilio", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "staticData": null
+}

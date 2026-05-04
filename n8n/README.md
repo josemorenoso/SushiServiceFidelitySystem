@@ -1,16 +1,78 @@
-# Guía de Workflows n8n — RestaurantQR
+# Guía de Workflows n8n — Constelarys Fidelity System
 
-## Resumen: ¿Qué cambió vs tu workflow v2?
+## Resumen
 
-Tu workflow v2 hacía **todo** en n8n (parseo, Google Contacts, Supabase). Ahora el flujo se **divide**:
-- **n8n** = recibe Twilio + parsea + Google Contacts
+- **n8n** = recibe mensajes WhatsApp (Twilio) + IA extrae datos + Google Contacts sync
 - **Next.js API** = toda la lógica de DB (clientes, visitas, recompensas, campañas)
 
-**Necesitas crear 2 workflows nuevos** (no modificar el v2):
+**Workflows a crear:**
+1. `domicilios_whatsapp_v4` — ⭐ **RECOMENDADO** — Parseo con IA (texto libre)
+2. `google_contacts_sync` — Sync QR check-in → Google Contacts
+3. `domicilios_whatsapp_v3` — (legacy, parseo con regex — solo si no quieres usar IA)
 
 ---
 
-## WORKFLOW 1: `domicilios_whatsapp_v3` (Domicilios)
+## WORKFLOW 1: `domicilios_whatsapp_v4` — Parseo con IA (RECOMENDADO)
+
+**Archivo JSON:** `n8n/domicilios_whatsapp_v4.json`
+**Importar en n8n:** Settings → Import from File → selecciona el JSON
+
+### ¿Por qué v4?
+
+El v3 requería que el mesero enviara el mensaje en formato exacto (nombre en línea 1, celular en línea 2, etc.). Si cambiaba el orden o el formato, fallaba.
+
+El v4 usa **OpenAI (gpt-4o-mini)** para entender texto libre. El mesero puede escribir como quiera:
+- "Pedido para Juan cel 3001234567 calle 100 #15 efectivo 35mil"
+- "nombre: María\ntel 300-123-4567\nCra 5 #10\ntransferencia\n$42.000"
+- "cliente pedro 3109876543 barrio kenedy casa 5 pago nequi total 28000"
+
+La IA extrae los campos automáticamente.
+
+### Flujo (8 nodos):
+
+```
+WhatsApp (Twilio) → Webhook → Extraer remitente + body
+  → Validar remitente en authorized_numbers (Supabase)
+  → [NO autorizado] → Responder 403
+  → [SÍ autorizado] → OpenAI extrae JSON del mensaje
+  → Parsear/validar respuesta IA (celular obligatorio)
+  → POST /api/webhook/delivery (datos estructurados)
+  → Responder TwiML al mesero (✅ o ❌)
+```
+
+### Variables de entorno de n8n requeridas:
+| Variable | Valor | Dónde configurar |
+|----------|-------|-----------------|
+| `SUPABASE_URL` | URL de tu proyecto Supabase | n8n → Settings → Variables |
+| `SUPABASE_ANON_KEY` | Anon key de Supabase | n8n → Settings → Variables |
+| `RESTAURANT_API_URL` | URL de tu app (ej: `https://tu-app.vercel.app`) | n8n → Settings → Variables |
+| `WEBHOOK_DELIVERY_SECRET` | Secret compartido con Next.js | n8n → Settings → Variables |
+| `OPENAI_API_KEY` | API Key de OpenAI | n8n → Settings → Variables |
+
+### Paso a paso:
+
+1. **Importar** `n8n/domicilios_whatsapp_v4.json` en n8n
+2. **Configurar las 5 variables** de entorno en n8n → Settings → Variables
+3. **Activar** el workflow y copiar la URL del webhook
+4. **En Twilio** → WhatsApp Sandbox → Webhook URL = URL del webhook de n8n
+5. **En `.env.local`** de Next.js: `WEBHOOK_DELIVERY_SECRET=el-mismo-secret`
+6. **Insertar números autorizados** en Supabase:
+   ```sql
+   INSERT INTO authorized_numbers (phone, name) VALUES
+   ('3155578231', 'Mesero 1'),
+   ('3011640544', 'Mesero 2');
+   ```
+
+### Costo de OpenAI por mensaje:
+- **gpt-4o-mini**: ~$0.00015 USD por mensaje (~150 input tokens + 80 output tokens)
+- 100 domicilios/día = **$0.015 USD/día** = ~$0.45 USD/mes = **~$1.800 COP/mes**
+
+### Google Contacts (NOTA):
+El v4 **no incluye** Google Contacts inline como el v3. En su lugar, el webhook `/api/webhook/delivery` ya dispara el sync a n8n via `google_contacts_sync` workflow (flujo separado, más limpio).
+
+---
+
+## WORKFLOW 2 (LEGACY): `domicilios_whatsapp_v3` (Domicilios sin IA)
 
 **Archivo JSON:** `n8n/domicilios_whatsapp_v3.json`
 **Importar en n8n:** Settings → Import from File → selecciona el JSON

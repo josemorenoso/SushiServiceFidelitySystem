@@ -43,3 +43,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Carpeta local de desarrollo (archivos ya sincronizados a src/)
+restaurant-qr/

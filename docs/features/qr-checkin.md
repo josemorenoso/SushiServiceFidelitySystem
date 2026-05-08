@@ -38,7 +38,11 @@ Tablas involucradas (detalle completo en `DB_SCHEMA.md`):
 4. **Encontrado** → Se suma +1 a `total_visits`, se actualiza `last_visit_at`
 5. Se crea un registro en `visits` con `source = 'qr'`
 6. Se evalúa si `total_visits` coincide con algún `visit_milestone` en `rewards`
-7. Si hay recompensa → Se envía WhatsApp de recompensa vía Twilio
+7. Decisión de plantilla WhatsApp (v0.23.0):
+   - **Milestone alcanzado** → `reward_template_sid` con `{{3}}=título del premio`.
+   - **Falta 1 al próximo premio** → `welcome_back_near_template_sid` con `{{3}}=título`.
+   - **Faltan 2+ al próximo premio** → `welcome_back_far_template_sid` con `{{3}}=título`.
+   - Si las near/far no están configuradas, fallback a `welcome_back_template_sid` (legacy).
 8. Se muestra pantalla de éxito: "¡Bienvenido de vuelta, [Nombre]! Visita #X"
 
 ## Componentes / Archivos

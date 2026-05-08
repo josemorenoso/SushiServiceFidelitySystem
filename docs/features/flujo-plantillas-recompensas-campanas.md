@@ -1,7 +1,14 @@
 # Flujo Completo: Plantillas, Recompensas y Campañas
 
-> **Fecha:** 2026-04-16 | **Versión:** 0.21.0
+> **Fecha:** 2026-05-07 | **Versión:** 0.23.0
 > **Objetivo:** Documento operativo para entender y configurar rápido.
+
+> **Cambios v0.23.0:** Plantillas WhatsApp granulares.
+> - Welcome Back se divide en `near` (faltan 1) y `far` (faltan ≥2).
+> - Reactivación se divide en `with_reward` y `no_reward`.
+> - `{{3}}` ahora siempre es **título del premio** (no una frase). La plantilla controla el texto.
+> - `rewards.visit_milestone` es nullable (recompensas sólo para reactivación/campañas).
+> - Campañas manuales aceptan `rewardId` ('auto' | uuid | 'none').
 
 ---
 
@@ -20,16 +27,20 @@ Si una plantilla no está configurada para un tipo de mensaje, ese mensaje simpl
 - Se crean en Dashboard > Plantillas. Twilio las envía a Meta para aprobación (24-48h).
 - Se asignan a cada tipo de mensaje en Dashboard > Ajustes.
 
-### Mapeo estándar de variables
+### Mapeo estándar de variables (v0.23.0)
 
-| Tipo de mensaje | Variable {{1}} | Variable {{2}} | Variable {{3}} |
-|----------------|----------------|----------------|----------------|
-| **welcome** (registro) | nombre | — | — |
-| **welcome_back** (visita) | nombre | total visitas | hint próxima recompensa |
-| **reward** (milestone) | nombre | total visitas | nombre del premio |
+| Tipo de mensaje | {{1}} | {{2}} | {{3}} |
+|----------------|--------|--------|--------|
+| **welcome** (registro nuevo) | nombre | — | — |
+| **welcome_back_near** (faltan 1 al premio) | nombre | total visitas | título próximo premio |
+| **welcome_back_far** (faltan ≥2 al premio) | nombre | total visitas | título próximo premio |
+| **reward** (milestone alcanzado) | nombre | total visitas | título del premio ganado |
 | **birthday** (cron) | nombre | — | — |
-| **reactivation** (cron) | nombre | total visitas | hint próxima recompensa |
-| **campaign** (manual) | nombre | total visitas | hint próxima recompensa |
+| **reactivation_no_reward** (cron, sin regalo) | nombre | — | — |
+| **reactivation_with_reward** (cron, con regalo fijo) | nombre | — | título del premio |
+| **campaign** (manual, modo `auto`) | nombre | total visitas | título próximo premio del cliente |
+| **campaign** (manual, modo `uuid`) | nombre | total visitas | título de un premio fijo elegido |
+| **campaign** (manual, modo `none`) | nombre | total visitas | — |
 
 **Al crear plantillas en Twilio, usa `{{1}}`, `{{2}}`, `{{3}}` sabiendo qué valor tendrá cada una.**
 
@@ -275,18 +286,30 @@ Tu nivel actual: {{3}}
 
 ---
 
-## 8. Configuración necesaria en Dashboard > Ajustes
+## 8. Configuración necesaria en Dashboard > Ajustes (v0.23.0)
 
 | Key en admin_settings | Tipo de mensaje | Variables |
 |----------------------|-----------------|-----------|
 | `welcome_template_sid` | Bienvenida (registro nuevo) | {{1}}=nombre |
-| `welcome_back_template_sid` | Bienvenido de vuelta | {{1}}=nombre, {{2}}=visitas, {{3}}=hint |
-| `reward_template_sid` | Recompensa (milestone) | {{1}}=nombre, {{2}}=visitas, {{3}}=premio |
+| `welcome_back_near_template_sid` | Visita: cerca de premio (faltan 1) | {{1}}=nombre, {{2}}=visitas, {{3}}=título premio |
+| `welcome_back_far_template_sid` | Visita: lejos de premio (faltan ≥2) | {{1}}=nombre, {{2}}=visitas, {{3}}=título premio |
+| `welcome_back_template_sid` | (Legacy) Fallback si no hay near/far | {{1}}=nombre, {{2}}=visitas, {{3}}=título premio |
+| `reward_template_sid` | Ganaste premio (milestone) | {{1}}=nombre, {{2}}=visitas, {{3}}=título del premio ganado |
 | `birthday_template_sid` | Cumpleaños (cron) | {{1}}=nombre |
-| `reactivation_template_sid` | Reactivación (cron) | {{1}}=nombre, {{2}}=visitas, {{3}}=hint |
+| `reactivation_no_reward_template_sid` | Reactivación SIN regalo | {{1}}=nombre |
+| `reactivation_with_reward_template_sid` | Reactivación CON regalo | {{1}}=nombre, {{3}}=título premio fijo |
+| `reactivation_reward_id` | UUID del reward fijo para reactivación | — |
+| `reactivation_template_sid` | (Legacy) Plantilla anterior única | {{1}}=nombre, {{2}}=visitas, {{3}}=hint |
 
 ### Problemas resueltos (v0.21.0)
 1. ~~Cron birthday/reactivation usan free-text~~ → ✅ Ahora usan plantillas, sin fallback free-text
 2. ~~Welcome back NO incluye hint de recompensa~~ → ✅ Incluye hint en {{3}}
 3. ~~Check-in usa free-text~~ → ✅ Todos los mensajes usan plantillas
 4. ~~No hay campañas Black~~ → ✅ Preset "Exclusiva Black" en campañas manuales
+
+### Problemas resueltos (v0.23.0)
+1. ~~Mismo welcome_back para "te falta 1" y "te faltan 5"~~ → ✅ near/far separados
+2. ~~Reactivación siempre con hint genérico~~ → ✅ admin elige sin regalo (6a) o con regalo fijo (6b)
+3. ~~Campaña manual no permite elegir qué reward mostrar~~ → ✅ body acepta `rewardId: 'auto' | uuid | 'none'`
+4. ~~`buildRewardHint` genera frase completa, no permite que la plantilla controle el texto~~ → ✅ `getRewardTitle()` devuelve sólo el título; la plantilla decide la frase
+5. ~~`rewards.visit_milestone` obligatorio impide rewards sólo-reactivación~~ → ✅ nullable

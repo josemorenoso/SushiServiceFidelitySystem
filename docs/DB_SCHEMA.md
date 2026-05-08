@@ -1,7 +1,7 @@
 # Esquema de Base de Datos
 
 **Base de datos:** Supabase (PostgreSQL)
-**Última actualización:** 2026-04-15 12:30
+**Última actualización:** 2026-05-07
 
 ---
 
@@ -172,16 +172,22 @@ CREATE POLICY "admin_update_customers" ON customers
 
 ### rewards
 
-> Configuración de recompensas que se otorgan al alcanzar metas de visitas.
+> Configuración de recompensas. `visit_milestone` puede ser NULL para recompensas que no se activan por visitas (uso en reactivación, campañas manuales).
 
 | Columna | Tipo | Nullable | Default | Descripción |
 |---------|------|----------|---------|-------------|
 | `id` | `uuid` | NO | `gen_random_uuid()` | PK |
-| `visit_milestone` | `integer` | NO | - | Número de visita que activa la recompensa (ej: 3, 5, 7) |
+| `visit_milestone` | `integer` | **SI** | `NULL` | Visita que activa la recompensa. NULL = no activa por visitas, sólo se usa manualmente. |
 | `title` | `text` | NO | - | Nombre de la recompensa |
-| `message_template` | `text` | NO | - | Template del mensaje WhatsApp |
+| `message_template` | `text` | NO | - | Texto de referencia (display en dashboard). El cuerpo real lo define la plantilla Twilio. |
 | `is_active` | `boolean` | NO | `true` | Si la recompensa está activa |
 | `created_at` | `timestamptz` | NO | `now()` | Fecha de creación |
+
+**Índices:**
+
+| Nombre | Columnas | Tipo | Descripción |
+|--------|----------|------|-------------|
+| `rewards_visit_milestone_unique` | `visit_milestone` | UNIQUE (parcial: WHERE visit_milestone IS NOT NULL) | Impide duplicados sólo cuando hay milestone |
 
 ---
 
@@ -297,6 +303,7 @@ CREATE POLICY "admin_insert_settings" ON admin_settings
 | 7 | `00007_admin_settings.sql` | 2026-04-15 | Tabla admin_settings (key-value) + seed avg_ticket + RLS | Pendiente |
 | 8 | `00008_accepts_marketing.sql` | 2026-04-15 | Campo accepts_marketing en customers + backfill | Pendiente |
 | 9 | `00009_table_number.sql` | 2026-04-15 | Campo table_number en visits + índice | Pendiente |
+| 10 | `00010_rewards_optional_milestone.sql` | 2026-05-07 | `rewards.visit_milestone` nullable + índice único parcial | Pendiente |
 
 ---
 

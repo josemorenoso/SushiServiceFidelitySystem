@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { validatePhone } from '@/lib/validators/phone'
 import { findCustomerByPhone, createCustomer, incrementVisit } from '@/services/customer.service'
 import { createVisit, getRecentVisit } from '@/services/visit.service'
-import { checkRewardForVisit, getNextReward, buildRewardHint } from '@/services/reward.service'
+import { checkRewardForVisit, getNextReward, getRewardTitle, getRemainingForReward } from '@/services/reward.service'
 import { sendTemplateMessage } from '@/services/whatsapp.service'
 import { getMultipleSettings } from '@/services/settings.service'
 import { syncGoogleContact } from '@/services/google-contacts-sync.service'
@@ -197,7 +197,12 @@ export async function POST(request: NextRequest) {
       await createVisit({ customerId: customer.id, source: 'qr', tableNumber: body.table_number ?? null })
 
       // Fetch settings para plantillas
-      const settings = await getMultipleSettings(['welcome_back_template_sid', 'reward_template_sid'])
+      const settings = await getMultipleSettings([
+        'welcome_back_template_sid',           // legacy fallback
+        'welcome_back_near_template_sid',      // remaining === 1
+        'welcome_back_far_template_sid',       // remaining >= 2
+        'reward_template_sid',
+      ])
 
       // Evaluar recompensa
       const reward = await checkRewardForVisit(updated.total_visits)
@@ -226,11 +231,16 @@ export async function POST(request: NextRequest) {
             { '1': updated.name, '2': String(updated.total_visits), '3': reward.title }
           )
         } else {
+          // Fallback: si no hay reward_template_sid, usa cualquier welcome_back disponible
+          // pasando reward.title en {{3}}. La plantilla decidirá cómo mostrarlo.
+          const fallbackSid = settings.welcome_back_far_template_sid
+            ?? settings.welcome_back_near_template_sid
+            ?? settings.welcome_back_template_sid
           await sendCheckinTemplate(
-            settings.welcome_back_template_sid,
+            fallbackSid,
             'welcome_back (fallback por falta de template reward)',
             cleaned,
-            { '1': updated.name, '2': String(updated.total_visits), '3': `¡Ganaste: ${reward.title}!` }
+            { '1': updated.name, '2': String(updated.total_visits), '3': reward.title }
           )
         }
 
@@ -241,23 +251,29 @@ export async function POST(request: NextRequest) {
         })
       }
 
-      // Fetch next reward for hint
+      // Fetch next reward y decidir near (faltan 1) vs far (faltan ≥2)
       const nextReward = await getNextReward(updated.total_visits)
-      const rewardHint = buildRewardHint(updated.total_visits, nextReward)
+      const remaining = getRemainingForReward(updated.total_visits, nextReward)
+      const rewardTitle = getRewardTitle(nextReward)
 
-      // WhatsApp de bienvenido de vuelta (plantilla) — DEBE awaitar
+      // Selección de plantilla: near/far si están configuradas, fallback al legacy welcome_back
+      const isNear = remaining === 1
+      const targetSid = isNear
+        ? (settings.welcome_back_near_template_sid ?? settings.welcome_back_template_sid)
+        : (settings.welcome_back_far_template_sid ?? settings.welcome_back_template_sid)
+
       await sendCheckinTemplate(
-        settings.welcome_back_template_sid,
-        'welcome_back',
+        targetSid,
+        isNear ? 'welcome_back_near' : 'welcome_back_far',
         cleaned,
-        { '1': updated.name, '2': String(updated.total_visits), '3': rewardHint }
+        { '1': updated.name, '2': String(updated.total_visits), '3': rewardTitle }
       )
 
       return NextResponse.json({
         message: 'welcome_back',
         customer: { name: updated.name, total_visits: updated.total_visits },
         reward: null,
-        nextReward: nextReward ? { ...nextReward, hint: rewardHint } : null,
+        nextReward: nextReward ? { ...nextReward, remaining } : null,
       })
     }
 

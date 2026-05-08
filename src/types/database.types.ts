@@ -28,7 +28,7 @@ export interface Visit {
 
 export interface Reward {
   id: string
-  visit_milestone: number
+  visit_milestone: number | null
   title: string
   message_template: string
   is_active: boolean

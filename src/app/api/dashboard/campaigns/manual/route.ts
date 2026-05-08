@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { sendTemplateMessage } from '@/services/whatsapp.service'
-import { getNextReward, buildRewardHint } from '@/services/reward.service'
+import { getNextReward, getRewardTitle, getRewardById } from '@/services/reward.service'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -23,6 +23,13 @@ interface ManualCampaignBody {
   }
   templateSid: string
   messageTemplate: string
+  /**
+   * Qué recompensa mostrar en {{3}}:
+   *  - 'auto' (default): próxima recompensa de cada cliente
+   *  - uuid: recompensa fija para todos los clientes
+   *  - 'none': la plantilla no usa {{3}} (sólo {{1}}, {{2}})
+   */
+  rewardId?: string | 'auto' | 'none'
 }
 
 const FREQUENCY_CAP_DAYS = 7
@@ -36,7 +43,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = (await request.json()) as ManualCampaignBody
-    const { name, filters, templateSid, messageTemplate } = body
+    const { name, filters, templateSid, messageTemplate, rewardId = 'auto' } = body
 
     if (!templateSid) {
       return NextResponse.json({ error: 'Plantilla requerida' }, { status: 400 })
@@ -97,16 +104,28 @@ export async function POST(request: NextRequest) {
 
     const skipped = (customers?.length ?? 0) - eligible.length
 
-    // Pre-compute next rewards in a single query (evita N+1)
-    // Agrupa clientes por total_visits y calcula hint una sola vez por grupo
-    const uniqueVisitCounts = [...new Set(eligible.map((c) => c.total_visits))]
-    const hintByVisits: Record<number, string> = {}
-    await Promise.all(
-      uniqueVisitCounts.map(async (v) => {
-        const next = await getNextReward(v)
-        hintByVisits[v] = buildRewardHint(v, next)
-      })
-    )
+    // Pre-compute reward titles según rewardId:
+    //  - 'auto': título de próxima recompensa por total_visits (1 query por valor único)
+    //  - 'none': sin {{3}}
+    //  - uuid: 1 sola query, mismo título para todos
+    const titleByVisits: Record<number, string> = {}
+    let fixedRewardTitle: string | null = null
+    let useReward3 = true
+
+    if (rewardId === 'none') {
+      useReward3 = false
+    } else if (rewardId && rewardId !== 'auto') {
+      const fixedReward = await getRewardById(rewardId)
+      fixedRewardTitle = fixedReward?.title ?? 'más beneficios'
+    } else {
+      const uniqueVisitCounts = [...new Set(eligible.map((c) => c.total_visits))]
+      await Promise.all(
+        uniqueVisitCounts.map(async (v) => {
+          const next = await getNextReward(v)
+          titleByVisits[v] = getRewardTitle(next)
+        })
+      )
+    }
 
     // Send en paralelo en batches para evitar timeout + saturar Twilio
     const BATCH_SIZE = 10
@@ -124,7 +143,9 @@ export async function POST(request: NextRequest) {
             const variables: Record<string, string> = {
               '1': customer.name,
               '2': String(customer.total_visits),
-              '3': hintByVisits[customer.total_visits] || '',
+            }
+            if (useReward3) {
+              variables['3'] = fixedRewardTitle ?? titleByVisits[customer.total_visits] ?? 'más beneficios'
             }
             const result = await sendTemplateMessage(customer.phone, templateSid, variables)
             return { customer, result, error: null as string | null }

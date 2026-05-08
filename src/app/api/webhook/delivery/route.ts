@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { validatePhone } from '@/lib/validators/phone'
 import { findCustomerByPhone, createCustomer, incrementVisit } from '@/services/customer.service'
 import { createVisit } from '@/services/visit.service'
-import { checkRewardForVisit, getNextReward, buildRewardHint } from '@/services/reward.service'
+import { checkRewardForVisit, getNextReward, getRewardTitle, getRemainingForReward } from '@/services/reward.service'
 import { sendTemplateMessage } from '@/services/whatsapp.service'
 import { getMultipleSettings } from '@/services/settings.service'
 import { syncGoogleContact } from '@/services/google-contacts-sync.service'
@@ -107,7 +107,13 @@ export async function POST(request: NextRequest) {
       rawMessage: raw_message ?? undefined,
     })
 
-    const settings = await getMultipleSettings(['welcome_template_sid', 'welcome_back_template_sid', 'reward_template_sid'])
+    const settings = await getMultipleSettings([
+      'welcome_template_sid',
+      'welcome_back_template_sid',           // legacy fallback
+      'welcome_back_near_template_sid',
+      'welcome_back_far_template_sid',
+      'reward_template_sid',
+    ])
     const reward = await checkRewardForVisit(customer.total_visits)
 
     if (isNew) {
@@ -120,11 +126,16 @@ export async function POST(request: NextRequest) {
       })
     } else {
       const nextReward = await getNextReward(customer.total_visits)
-      const rewardHint = buildRewardHint(customer.total_visits, nextReward)
-      await sendDeliveryTemplate(settings.welcome_back_template_sid, 'welcome_back', cleaned, {
+      const remaining = getRemainingForReward(customer.total_visits, nextReward)
+      const rewardTitle = getRewardTitle(nextReward)
+      const isNear = remaining === 1
+      const targetSid = isNear
+        ? (settings.welcome_back_near_template_sid ?? settings.welcome_back_template_sid)
+        : (settings.welcome_back_far_template_sid ?? settings.welcome_back_template_sid)
+      await sendDeliveryTemplate(targetSid, isNear ? 'welcome_back_near' : 'welcome_back_far', cleaned, {
         '1': customer.name,
         '2': String(customer.total_visits),
-        '3': rewardHint,
+        '3': rewardTitle,
       })
     }
 

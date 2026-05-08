@@ -173,12 +173,13 @@ export default function RewardsPage() {
               </TableHeader>
               <TableBody>
                 {rewards
-                  .sort((a, b) => a.visit_milestone - b.visit_milestone)
+                  .slice()
+                  .sort((a, b) => (a.visit_milestone ?? Infinity) - (b.visit_milestone ?? Infinity))
                   .map((r) => (
                   <TableRow key={r.id}>
                     <TableCell className="text-center">
                       <Badge variant="default" className="text-lg px-3 py-1">
-                        {r.visit_milestone}
+                        {r.visit_milestone ?? '—'}
                       </Badge>
                     </TableCell>
                     <TableCell className="font-medium">{r.title}</TableCell>

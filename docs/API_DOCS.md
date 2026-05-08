@@ -2,7 +2,7 @@
 
 **Base URL:** `/api`
 **Autenticación:** Bearer Token (JWT) — Supabase Auth
-**Última actualización:** 2026-04-15 12:30
+**Última actualización:** 2026-05-07
 
 ---
 
@@ -42,9 +42,9 @@ Webhooks validan origen por número autorizado o `CRON_SECRET`.
 | PUT | /api/dashboard/settings | Actualizar configuración | Admin JWT |
 | GET | /api/dashboard/customers/:id | Detalle de un cliente | Admin JWT |
 | GET | /api/dashboard/customers/:id/next-reward | Próxima recompensa del cliente | Admin JWT |
-| POST | /api/dashboard/rewards | Crear recompensa | Admin JWT |
+| POST | /api/dashboard/rewards | Crear recompensa (visit_milestone opcional) | Admin JWT |
 | DELETE | /api/dashboard/rewards?id=X | Eliminar recompensa | Admin JWT |
-| PATCH | /api/dashboard/rewards | Toggle activa/inactiva | Admin JWT |
+| PATCH | /api/dashboard/rewards | Actualizar `is_active`, `title` y/o `visit_milestone` | Admin JWT |
 
 ---
 
@@ -208,6 +208,13 @@ Recibe datos pre-parseados por n8n y registra cliente + visita en la DB.
 
 **Headers:** `Authorization: Bearer {CRON_SECRET}`
 
+**Settings que consume (en orden de prioridad):**
+1. `reactivation_with_reward_template_sid` + `reactivation_reward_id` → modo "vuelve y gana X" (`{{1}}=nombre, {{3}}=título premio fijo`)
+2. `reactivation_no_reward_template_sid` → modo "te echamos de menos" (sólo `{{1}}=nombre`)
+3. `reactivation_template_sid` (legacy) → fallback con `{{1}}, {{2}}, {{3}}=título próximo premio del cliente`
+
+Si ninguno está configurado, retorna `{ ok: false, error: "..." }` sin enviar.
+
 **Response 200:**
 ```json
 {
@@ -258,13 +265,22 @@ Crea y ejecuta campaña manual con filtros.
     "maxAge": "",
     "source": "delivery_only"
   },
-  "messageTemplate": "¡Hola {{name}}! Ven a visitarnos..."
+  "templateSid": "HXxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "messageTemplate": "preview text",
+  "rewardId": "auto"
 }
 ```
 
+**Campos:**
+- `templateSid` (requerido): SID de plantilla aprobada en Twilio.
+- `rewardId` (opcional, default `'auto'`):
+  - `'auto'` → `{{3}}` = título de la próxima recompensa de cada cliente.
+  - uuid → `{{3}}` = título de un reward fijo (igual para todos).
+  - `'none'` → no se envía `{{3}}` (úsalo si la plantilla sólo tiene `{{1}}` y/o `{{2}}`).
+
 **Response 200:**
 ```json
-{ "success": true, "campaignId": "uuid", "totalSent": 45 }
+{ "success": true, "campaignId": "uuid", "totalSent": 45, "totalFailed": 0, "totalSkippedFrequencyCap": 3 }
 ```
 
 ---

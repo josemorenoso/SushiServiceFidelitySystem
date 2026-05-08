@@ -5,6 +5,72 @@
 
 ---
 
+## [0.23.0] — 2026-05-07 — Plantillas WhatsApp granulares (near/far + reactivación con/sin regalo)
+
+### Request original
+> "Variables {{1}}-{{4}}, visit_milestone NULL, near/far, reactivación con/sin regalo, campañas con rewardId. La plantilla controla el texto, el código sólo pasa el título del premio en {{3}}."
+
+### Added — 4 nuevos settings en `admin_settings`
+- `welcome_back_near_template_sid` — Visita con próximo premio en visit+1
+- `welcome_back_far_template_sid` — Visita con próximo premio en visit+2 o más
+- `reactivation_no_reward_template_sid` — Reactivación "te echamos de menos" (sólo {{1}})
+- `reactivation_with_reward_template_sid` — Reactivación "vuelve y gana X" ({{1}}, {{3}})
+- `reactivation_reward_id` — UUID del reward fijo a ofrecer en reactivación
+
+### Added — Funciones en `reward.service.ts`
+- `getRewardTitle(nextReward)` — devuelve sólo el título (`'más beneficios'` si no hay)
+- `getRemainingForReward(currentVisits, nextReward)` — distancia al próximo premio (Infinity si no hay)
+- `getRewardById(id)` — fetch reward por uuid
+
+### Changed — Variables de plantillas (BREAKING para plantillas que asumían frase completa en {{3}})
+- `{{3}}` ahora es **título del premio** (sin frase). Las plantillas Twilio deben rediseñarse para incluir el contexto: "ganas: {{3}}", "podrás ganar: {{3}}", etc.
+- `welcome_back_template_sid` queda como fallback legacy si las near/far no están configuradas.
+- `reactivation_template_sid` queda como fallback legacy.
+
+### Changed — Lógica de envío
+- `check-in/route.ts`: elige near/far según `remaining === 1` o `≥2`. Pasa `{{3}} = nextReward.title`.
+- `webhook/delivery/route.ts`: misma lógica near/far.
+- `cron/reactivation/route.ts`: 3 modos (with_reward, no_reward, legacy). Si admin configura `reactivation_reward_id` + `reactivation_with_reward_template_sid` usa el modo with_reward.
+- `dashboard/campaigns/manual/route.ts`: body acepta `rewardId?: 'auto' | string | 'none'`.
+
+### Changed — `rewards.visit_milestone` ahora nullable
+- Permite crear rewards sin milestone (sólo para reactivación o campañas).
+- Migración: `00010_rewards_optional_milestone.sql` — `DROP NOT NULL` + índice único parcial.
+- POST `/api/dashboard/rewards`: acepta `visit_milestone === null`.
+- PATCH `/api/dashboard/rewards`: ahora también permite actualizar `title` y `visit_milestone`.
+
+### Removed
+- `buildRewardTemplate()` en `rewards/route.ts` (generaba texto con `{{name}}` que confundía al admin).
+
+### Deprecated
+- `buildRewardHint()` en `reward.service.ts` (reemplazado por `getRewardTitle`). Conservado 1 release de transición.
+
+### Files
+- ✏️ `src/services/reward.service.ts`
+- ✏️ `src/types/database.types.ts` (Reward.visit_milestone: number | null)
+- ✏️ `src/app/api/check-in/route.ts`
+- ✏️ `src/app/api/webhook/delivery/route.ts`
+- ✏️ `src/app/api/cron/reactivation/route.ts`
+- ✏️ `src/app/api/dashboard/campaigns/manual/route.ts`
+- ✏️ `src/app/api/dashboard/rewards/route.ts`
+- ✏️ `src/app/(dashboard)/dashboard/settings/page.tsx`
+- ➕ `supabase/migrations/00010_rewards_optional_milestone.sql`
+- ✏️ `docs/DB_SCHEMA.md`, `docs/features/qr-checkin.md`, `docs/features/delivery-webhook.md`, `docs/features/flujo-plantillas-recompensas-campanas.md`
+
+### Operación (admin debe hacer)
+1. Ejecutar migración `00010_rewards_optional_milestone.sql` en Supabase.
+2. Crear/editar 6 plantillas en Twilio con sintaxis `{{1}}, {{2}}, {{3}}` (no `{{name}}`):
+   - `bienvenida_primera_visita` — sólo {{1}}
+   - `visita_recurrente_cerca_premio` — {{1}}, {{2}}, {{3}}
+   - `visita_recurrente_lejos_premio` — {{1}}, {{2}}, {{3}}
+   - `ganaste_premio` — {{1}}, {{2}}, {{3}}
+   - `feliz_cumpleanos` — sólo {{1}}
+   - `reactivacion_sin_regalo` — sólo {{1}}
+   - `reactivacion_con_regalo` — {{1}}, {{3}}
+3. En Dashboard > Ajustes, asignar los 7 SIDs nuevos + recompensa de reactivación.
+
+---
+
 ## [0.21.0] — 2026-04-16 — TEMPLATE-ONLY WhatsApp + Campañas Black + Google Contacts Doc
 
 ### BREAKING — Eliminado free-text WhatsApp por completo

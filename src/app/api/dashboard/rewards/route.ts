@@ -27,10 +27,6 @@ export async function GET() {
   }
 }
 
-function buildRewardTemplate(milestone: number, title: string): string {
-  return `\u00a1Felicidades {{name}}! \ud83c\udf89 Has completado tu visita #${milestone}. Como agradecimiento, te has ganado: ${title}. \u00a1Reclama tu premio en tu pr\u00f3xima visita!`
-}
-
 export async function POST(request: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -40,38 +36,46 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { visit_milestone, title, message_template } = body
 
-    if (!visit_milestone || !title) {
+    if (!title || typeof title !== 'string' || title.trim().length === 0) {
       return NextResponse.json(
-        { error: 'visit_milestone y title son requeridos' },
+        { error: 'title es requerido' },
         { status: 400 }
       )
     }
 
-    const milestone = parseInt(String(visit_milestone))
-    if (isNaN(milestone) || milestone < 1) {
-      return NextResponse.json(
-        { error: 'visit_milestone debe ser un n\u00famero positivo' },
-        { status: 400 }
-      )
+    // visit_milestone es opcional. NULL = recompensa sin milestone (s\u00f3lo para reactivaci\u00f3n/campa\u00f1as).
+    let milestone: number | null = null
+    if (visit_milestone !== null && visit_milestone !== undefined && visit_milestone !== '') {
+      milestone = parseInt(String(visit_milestone))
+      if (isNaN(milestone) || milestone < 1) {
+        return NextResponse.json(
+          { error: 'visit_milestone debe ser un n\u00famero positivo o null' },
+          { status: 400 }
+        )
+      }
     }
 
     const db = getServiceClient()
 
-    // Check for duplicate milestone
-    const { data: existing } = await db
-      .from('rewards')
-      .select('id')
-      .eq('visit_milestone', milestone)
-      .single()
+    // Check for duplicate milestone s\u00f3lo cuando milestone NO es null
+    if (milestone !== null) {
+      const { data: existing } = await db
+        .from('rewards')
+        .select('id')
+        .eq('visit_milestone', milestone)
+        .single()
 
-    if (existing) {
-      return NextResponse.json(
-        { error: `Ya existe una recompensa para la visita #${milestone}` },
-        { status: 409 }
-      )
+      if (existing) {
+        return NextResponse.json(
+          { error: `Ya existe una recompensa para la visita #${milestone}` },
+          { status: 409 }
+        )
+      }
     }
 
-    const template = message_template || buildRewardTemplate(milestone, title.trim())
+    // message_template es opcional. La plantilla de Twilio define el cuerpo real;
+    // este campo se conserva como referencia / display en el dashboard.
+    const template = (typeof message_template === 'string' && message_template.trim()) || title.trim()
 
     const { data: reward, error } = await db
       .from('rewards')
@@ -121,15 +125,43 @@ export async function PATCH(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { id, is_active } = body
-    if (!id || typeof is_active !== 'boolean') {
-      return NextResponse.json({ error: 'id e is_active requeridos' }, { status: 400 })
+    const { id, is_active, title, visit_milestone } = body
+    if (!id) {
+      return NextResponse.json({ error: 'id requerido' }, { status: 400 })
+    }
+
+    const updates: Record<string, unknown> = {}
+
+    if (typeof is_active === 'boolean') updates.is_active = is_active
+
+    if (typeof title === 'string') {
+      const trimmed = title.trim()
+      if (trimmed.length === 0) {
+        return NextResponse.json({ error: 'title no puede ser vacío' }, { status: 400 })
+      }
+      updates.title = trimmed
+    }
+
+    if (visit_milestone !== undefined) {
+      if (visit_milestone === null || visit_milestone === '') {
+        updates.visit_milestone = null
+      } else {
+        const m = parseInt(String(visit_milestone))
+        if (isNaN(m) || m < 1) {
+          return NextResponse.json({ error: 'visit_milestone debe ser número positivo o null' }, { status: 400 })
+        }
+        updates.visit_milestone = m
+      }
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json({ error: 'Nada que actualizar' }, { status: 400 })
     }
 
     const db = getServiceClient()
     const { data: reward, error } = await db
       .from('rewards')
-      .update({ is_active })
+      .update(updates)
       .eq('id', id)
       .select()
       .single()

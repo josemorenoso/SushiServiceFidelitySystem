@@ -36,6 +36,13 @@ Tablas involucradas:
 8. Nuestra API crea/actualiza cliente + visita + evalúa recompensas
 9. n8n responde a Twilio con TwiML de confirmación
 
+### Plantilla WhatsApp por escenario (v0.23.0)
+- Cliente nuevo → `welcome_template_sid` (`{{1}}=nombre`)
+- Visita = milestone → `reward_template_sid` (`{{3}}=título premio`)
+- Falta 1 al próximo premio → `welcome_back_near_template_sid`
+- Faltan 2+ → `welcome_back_far_template_sid`
+- Sin near/far configurada → fallback a `welcome_back_template_sid` legacy
+
 ### Flujo QR Check-in → Google Contacts
 1. Cliente hace check-in por QR
 2. Nuestra API registra en DB

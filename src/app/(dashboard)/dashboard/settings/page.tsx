@@ -10,6 +10,13 @@ interface TwilioTemplate {
   body: string
 }
 
+interface RewardOption {
+  id: string
+  visit_milestone: number | null
+  title: string
+  is_active: boolean
+}
+
 function SaveButton({ saving, saved, onClick, disabled }: { saving: boolean; saved: boolean; onClick: () => void; disabled: boolean }) {
   return (
     <button
@@ -94,11 +101,15 @@ export default function SettingsPage() {
   // Templates (ALL message types)
   const [templates, setTemplates] = useState<TwilioTemplate[]>([])
   const [templatesLoading, setTemplatesLoading] = useState(true)
+  const [rewards, setRewards] = useState<RewardOption[]>([])
   const [welcomeTemplateSid, setWelcomeTemplateSid] = useState('')
-  const [welcomeBackTemplateSid, setWelcomeBackTemplateSid] = useState('')
+  const [welcomeBackNearTemplateSid, setWelcomeBackNearTemplateSid] = useState('')
+  const [welcomeBackFarTemplateSid, setWelcomeBackFarTemplateSid] = useState('')
   const [rewardTemplateSid, setRewardTemplateSid] = useState('')
   const [birthdayTemplateSid, setBirthdayTemplateSid] = useState('')
-  const [reactivationTemplateSid, setReactivationTemplateSid] = useState('')
+  const [reactivationNoRewardSid, setReactivationNoRewardSid] = useState('')
+  const [reactivationWithRewardSid, setReactivationWithRewardSid] = useState('')
+  const [reactivationRewardId, setReactivationRewardId] = useState('')
   const [templatesSaving, setTemplatesSaving] = useState(false)
   const [templatesSaved, setTemplatesSaved] = useState(false)
 
@@ -118,21 +129,32 @@ export default function SettingsPage() {
     Promise.all([
       fetch('/api/dashboard/settings').then((r) => r.json()),
       fetch('/api/dashboard/templates').then((r) => r.json()),
+      fetch('/api/dashboard/rewards').then((r) => r.json()),
     ])
-      .then(([settingsData, templatesData]) => {
+      .then(([settingsData, templatesData, rewardsData]) => {
         setSettings(settingsData)
         if (settingsData.avg_ticket) setAvgTicket(settingsData.avg_ticket)
         if (settingsData.black_benefits) {
           try { setBenefits(JSON.parse(settingsData.black_benefits)) } catch { /* keep default */ }
         }
         if (settingsData.welcome_template_sid) setWelcomeTemplateSid(settingsData.welcome_template_sid)
-        if (settingsData.welcome_back_template_sid) setWelcomeBackTemplateSid(settingsData.welcome_back_template_sid)
+        // near/far: si no hay valor, intenta usar el legacy welcome_back_template_sid como default
+        const legacyBack = settingsData.welcome_back_template_sid ?? ''
+        setWelcomeBackNearTemplateSid(settingsData.welcome_back_near_template_sid ?? legacyBack)
+        setWelcomeBackFarTemplateSid(settingsData.welcome_back_far_template_sid ?? legacyBack)
         if (settingsData.reward_template_sid) setRewardTemplateSid(settingsData.reward_template_sid)
         if (settingsData.birthday_template_sid) setBirthdayTemplateSid(settingsData.birthday_template_sid)
-        if (settingsData.reactivation_template_sid) setReactivationTemplateSid(settingsData.reactivation_template_sid)
+        // reactivación: legacy reactivation_template_sid migra a reactivation_no_reward por defecto
+        const legacyReact = settingsData.reactivation_template_sid ?? ''
+        setReactivationNoRewardSid(settingsData.reactivation_no_reward_template_sid ?? legacyReact)
+        setReactivationWithRewardSid(settingsData.reactivation_with_reward_template_sid ?? '')
+        setReactivationRewardId(settingsData.reactivation_reward_id ?? '')
 
         const allTemplates: TwilioTemplate[] = templatesData.templates ?? []
         setTemplates(allTemplates)
+
+        const allRewards: RewardOption[] = Array.isArray(rewardsData) ? rewardsData : []
+        setRewards(allRewards.filter((r) => r.is_active))
       })
       .catch(() => {})
       .finally(() => {
@@ -174,10 +196,13 @@ export default function SettingsPage() {
     try {
       await Promise.all([
         saveSetting('welcome_template_sid', welcomeTemplateSid),
-        saveSetting('welcome_back_template_sid', welcomeBackTemplateSid),
+        saveSetting('welcome_back_near_template_sid', welcomeBackNearTemplateSid),
+        saveSetting('welcome_back_far_template_sid', welcomeBackFarTemplateSid),
         saveSetting('reward_template_sid', rewardTemplateSid),
         saveSetting('birthday_template_sid', birthdayTemplateSid),
-        saveSetting('reactivation_template_sid', reactivationTemplateSid),
+        saveSetting('reactivation_no_reward_template_sid', reactivationNoRewardSid),
+        saveSetting('reactivation_with_reward_template_sid', reactivationWithRewardSid),
+        saveSetting('reactivation_reward_id', reactivationRewardId),
       ])
       setTemplatesSaved(true)
       setTimeout(() => setTemplatesSaved(false), 3000)
@@ -331,19 +356,29 @@ export default function SettingsPage() {
               templates={approvedTemplates}
             />
 
-            {/* Welcome Back (visita recurrente) */}
+            {/* Welcome Back NEAR (visita con próximo premio en visit+1) */}
             <TemplateSelector
-              label="Bienvenido de vuelta (visita)"
+              label="Visita: cerca de premio (faltan 1)"
               icon={<MessageCircle className="h-3.5 w-3.5" style={{ color: '#3B82F6' }} />}
-              hint="Variables: {{1}}=nombre, {{2}}=visitas, {{3}}=hint recompensa"
-              value={welcomeBackTemplateSid}
-              onChange={setWelcomeBackTemplateSid}
+              hint="Variables: {{1}}=nombre, {{2}}=visitas, {{3}}=título del próximo premio"
+              value={welcomeBackNearTemplateSid}
+              onChange={setWelcomeBackNearTemplateSid}
+              templates={approvedTemplates}
+            />
+
+            {/* Welcome Back FAR (visita con próximo premio en visit+2 o más) */}
+            <TemplateSelector
+              label="Visita: lejos de premio (faltan 2+)"
+              icon={<MessageCircle className="h-3.5 w-3.5" style={{ color: '#6366F1' }} />}
+              hint="Variables: {{1}}=nombre, {{2}}=visitas, {{3}}=título del próximo premio"
+              value={welcomeBackFarTemplateSid}
+              onChange={setWelcomeBackFarTemplateSid}
               templates={approvedTemplates}
             />
 
             {/* Reward (milestone) */}
             <TemplateSelector
-              label="Recompensa (milestone)"
+              label="Ganaste premio (milestone)"
               icon={<Gift className="h-3.5 w-3.5" style={{ color: '#F59E0B' }} />}
               hint="Variables: {{1}}=nombre, {{2}}=visitas, {{3}}=nombre del premio"
               value={rewardTemplateSid}
@@ -361,15 +396,49 @@ export default function SettingsPage() {
               templates={approvedTemplates}
             />
 
-            {/* Reactivation */}
+            {/* Reactivation SIN regalo */}
             <TemplateSelector
-              label="Reactivación (cron diario)"
+              label="Reactivación SIN regalo"
               icon={<RefreshCw className="h-3.5 w-3.5" style={{ color: '#F97316' }} />}
-              hint="Variables: {{1}}=nombre, {{2}}=visitas, {{3}}=hint recompensa"
-              value={reactivationTemplateSid}
-              onChange={setReactivationTemplateSid}
+              hint="Variables: {{1}}=nombre. Mensaje tipo 'te echamos de menos'."
+              value={reactivationNoRewardSid}
+              onChange={setReactivationNoRewardSid}
               templates={approvedTemplates}
             />
+
+            {/* Reactivation CON regalo */}
+            <TemplateSelector
+              label="Reactivación CON regalo"
+              icon={<RefreshCw className="h-3.5 w-3.5" style={{ color: '#EF4444' }} />}
+              hint="Variables: {{1}}=nombre, {{3}}=premio. Si está configurada y hay reward seleccionado abajo, se usa esta plantilla."
+              value={reactivationWithRewardSid}
+              onChange={setReactivationWithRewardSid}
+              templates={approvedTemplates}
+            />
+
+            {/* Reactivation reward picker */}
+            <div className="space-y-1.5">
+              <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest" style={{ color: '#6b7280' }}>
+                <Gift className="h-3.5 w-3.5" style={{ color: '#EF4444' }} />
+                Recompensa para reactivación CON regalo
+              </label>
+              <select
+                value={reactivationRewardId}
+                onChange={(e) => setReactivationRewardId(e.target.value)}
+                className="input-premium w-full rounded-xl py-2.5 px-3 text-sm"
+                style={{ border: '1px solid rgba(226,190,192,0.35)', background: 'rgba(255,255,255,0.8)', color: '#1a1c1d' }}
+              >
+                <option value="">— Sin recompensa fija (usa plantilla SIN regalo) —</option>
+                {rewards.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.title}{r.visit_milestone !== null ? ` (visita #${r.visit_milestone})` : ' (sin milestone)'}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[10px]" style={{ color: '#b0b0b0' }}>
+                Si seleccionas una recompensa Y configuras "Reactivación CON regalo", el cron usará esa plantilla con `{'{{3}}'}` = título del premio.
+              </p>
+            </div>
 
             <SaveButton saving={templatesSaving} saved={templatesSaved} onClick={handleSaveTemplates} disabled={templatesSaving} />
           </div>

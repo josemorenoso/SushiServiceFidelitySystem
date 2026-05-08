@@ -25,6 +25,7 @@ Webhooks validan origen por número autorizado o `CRON_SECRET`.
 | GET | /api/health/twilio | Test conexión Twilio (saldo) | NO |
 | POST | /api/check-in | Registrar visita (QR) | NO (público) |
 | POST | /api/webhook/delivery | Recibir datos de domicilio (n8n/Twilio) | x-webhook-secret |
+| POST | /api/webhook/twilio-incoming | Auto-responder mensajes entrantes al número | Twilio Signature |
 | GET/POST | /api/cron/birthday | Enviar felicitaciones de cumpleaños | CRON_SECRET |
 | GET/POST | /api/cron/reactivation | Enviar reactivaciones (21 días inactivos) | CRON_SECRET |
 | GET | /api/dashboard/metrics | Métricas generales | Admin JWT |

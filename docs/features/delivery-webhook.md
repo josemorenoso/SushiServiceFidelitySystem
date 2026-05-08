@@ -1,8 +1,8 @@
 # Feature: Webhook Domicilios (WhatsApp)
 
 > **Estado:** Completo (API + n8n workflows)
-> **Archivos clave:** `src/app/api/webhook/delivery/route.ts`, `src/services/google-contacts-sync.service.ts`, `n8n/domicilios_whatsapp_v3.json`, `n8n/google_contacts_sync.json`
-> **Dependencias:** @supabase/supabase-js, n8n (externo)
+> **Archivos clave:** `src/app/api/webhook/delivery/route.ts`, `src/services/google-contacts-sync.service.ts`, `n8n/domicilios_whatsapp_v4.json`, `n8n/google_contacts_sync.json`
+> **Dependencias:** @supabase/supabase-js, n8n (externo), OpenAI (parseo IA en n8n)
 
 ---
 
@@ -28,12 +28,12 @@ Tablas involucradas:
 ### Flujo Domicilios (Twilio → n8n → API)
 1. Cliente pide domicilio por WhatsApp al restaurante
 2. Mesero reenvía el mensaje al número de Twilio
-3. Twilio envía webhook a n8n (`domicilios_whatsapp_v3`)
+3. Twilio envía webhook a n8n (`domicilios_whatsapp_v4`)
 4. n8n extrae el remitente y valida en `authorized_numbers` (Supabase)
-5. n8n parsea el mensaje (nombre, celular, dirección, pago, monto)
+5. **OpenAI (gpt-4o-mini) extrae datos del texto libre** (nombre, celular, dirección, pago, monto) — ver `docs/features/delivery-ai-parsing.md`
 6. n8n busca/crea/actualiza contacto en Google Contacts
 7. n8n llama a `POST /api/webhook/delivery` con datos parseados
-8. Nuestra API crea/actualiza cliente + visita + evalúa recompensas
+8. Nuestra API crea/actualiza cliente + visita + evalúa recompensas (near/far/reward)
 9. n8n responde a Twilio con TwiML de confirmación
 
 ### Plantilla WhatsApp por escenario (v0.23.0)
@@ -70,7 +70,7 @@ El mesero reenvía un mensaje que contiene el teléfono del cliente. El sistema 
 | `src/services/customer.service.ts` | Reutiliza: findByPhone, createCustomer, incrementVisit |
 | `src/services/visit.service.ts` | Reutiliza: createVisit (con campos delivery) |
 | `src/services/reward.service.ts` | Reutiliza: checkRewardForVisit |
-| `n8n/domicilios_whatsapp_v3.json` | Workflow n8n: Twilio → parse → Google Contacts → API |
+| `n8n/domicilios_whatsapp_v4.json` | Workflow n8n: Twilio → IA parseo → Google Contacts → API |
 | `n8n/google_contacts_sync.json` | Workflow n8n: QR check-in → Google Contacts sync |
 
 ## API / Endpoints

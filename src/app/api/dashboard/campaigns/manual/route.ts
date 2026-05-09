@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { sendTemplateMessage } from '@/services/whatsapp.service'
 import { getNextReward, getRewardTitle, getRewardById } from '@/services/reward.service'
+import { FREQUENCY_CAP_DAYS, RECOVERY_ZONE_START_DAYS, RECOVERY_ZONE_END_DAYS } from '@/constants/rewards'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -31,8 +32,6 @@ interface ManualCampaignBody {
    */
   rewardId?: string | 'auto' | 'none'
 }
-
-const FREQUENCY_CAP_DAYS = 7
 
 export async function POST(request: NextRequest) {
   try {
@@ -71,7 +70,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Fetch matching customers
-    let query = db.from('customers').select('id, phone, name, total_visits, last_campaign_at, source_channels, accepts_marketing')
+    let query = db.from('customers').select('id, phone, name, total_visits, last_campaign_at, last_visit_at, source_channels, accepts_marketing')
     query = query.eq('accepts_marketing', true)
     if (filters.city) query = query.ilike('city', `%${filters.city}%`)
     if (filters.minVisits) query = query.gte('total_visits', parseInt(filters.minVisits))
@@ -96,13 +95,23 @@ export async function POST(request: NextRequest) {
 
     const { data: customers } = await query
 
-    // Frequency capping: exclude customers messaged within last 7 days
+    // Frequency cap: excluir clientes contactados en los últimos FREQUENCY_CAP_DAYS días
     const capCutoff = new Date(Date.now() - FREQUENCY_CAP_DAYS * 24 * 60 * 60 * 1000).toISOString()
-    const eligible = (customers ?? []).filter(
+    const afterFrequencyCap = (customers ?? []).filter(
       (c) => !c.last_campaign_at || c.last_campaign_at < capCutoff
     )
+    const skipped = (customers?.length ?? 0) - afterFrequencyCap.length
 
-    const skipped = (customers?.length ?? 0) - eligible.length
+    // Recovery Zone: excluir clientes entre RECOVERY_ZONE_START_DAYS y RECOVERY_ZONE_END_DAYS días
+    // sin visitar — están reservados para el cron de reactivación personalizado.
+    const zoneCutoffNear = new Date(Date.now() - RECOVERY_ZONE_START_DAYS * 24 * 60 * 60 * 1000).toISOString()
+    const zoneCutoffFar = new Date(Date.now() - RECOVERY_ZONE_END_DAYS * 24 * 60 * 60 * 1000).toISOString()
+    const eligible = afterFrequencyCap.filter((c) => {
+      if (!c.last_visit_at) return true
+      const inRecoveryZone = c.last_visit_at < zoneCutoffNear && c.last_visit_at >= zoneCutoffFar
+      return !inRecoveryZone
+    })
+    const skippedRecoveryZone = afterFrequencyCap.length - eligible.length
 
     // Pre-compute reward titles según rewardId:
     //  - 'auto': título de próxima recompensa por total_visits (1 query por valor único)
@@ -210,6 +219,7 @@ export async function POST(request: NextRequest) {
       totalSent: sent,
       totalFailed: failed,
       totalSkippedFrequencyCap: skipped,
+      totalSkippedRecoveryZone: skippedRecoveryZone,
     })
   } catch (error) {
     console.error('[ManualCampaign]', error)

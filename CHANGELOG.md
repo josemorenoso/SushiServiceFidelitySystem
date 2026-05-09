@@ -5,6 +5,46 @@
 
 ---
 
+## [0.24.0] — 2026-05-09 — Control de Tráfico Centralizado (Constelarys Fidelity System)
+
+### Request original
+> "Evitar colisión entre campañas manuales y crons automáticos. Implementar: Master Cap global 7 días, Jerarquía de Mensajes con Zona de Recuperación, y Reset por Interacción."
+
+### Problem solved
+Los motores de envío (cron reactivación y campañas manuales) operaban sin comunicarse entre sí, permitiendo que un cliente recibiera múltiples mensajes en días consecutivos.
+
+### Added — `src/constants/rewards.ts`
+- `FREQUENCY_CAP_DAYS = 7` — Constante única y centralizada para el cap global (antes hardcodeada en manual/route.ts)
+- `RECOVERY_ZONE_START_DAYS = 18` — Inicio de la Zona de Recuperación
+- `RECOVERY_ZONE_END_DAYS = 25` — Fin de la Zona de Recuperación
+
+### Added — `src/services/campaign.service.ts`
+- `updateCustomerLastCampaignAt(customerIds[])` — Bulk update de `last_campaign_at` para todos los enviados de un cron
+
+### Changed — `src/services/campaign.service.ts`
+- `findInactiveCustomers()` ahora filtra también por `last_campaign_at`: clientes contactados en los últimos 7 días quedan excluidos del cron de reactivación
+
+### Changed — `src/app/api/cron/reactivation/route.ts`
+- Recolecta `sentCustomerIds` durante el loop de envío
+- Llama `updateCustomerLastCampaignAt()` antes de `finalizeCampaign()` para actualizar el frequency cap global
+
+### Changed — `src/app/api/cron/birthday/route.ts`
+- Mismo patrón: recolecta `sentCustomerIds` y llama `updateCustomerLastCampaignAt()`
+
+### Changed — `src/app/api/dashboard/campaigns/manual/route.ts`
+- Importa `FREQUENCY_CAP_DAYS`, `RECOVERY_ZONE_START_DAYS`, `RECOVERY_ZONE_END_DAYS` desde constants (eliminada constante local)
+- Añade `last_visit_at` al select de clientes para poder evaluar la Recovery Zone
+- Aplica exclusión de Recovery Zone (clientes 18-25 días sin visitar) después del frequency cap
+- Response incluye nuevo campo `totalSkippedRecoveryZone`
+
+### Changed — `src/app/api/dashboard/campaigns/estimate/route.ts`
+- Aplica frequency cap y Recovery Zone en el count SQL para que el estimado sea exacto
+
+### Added — `docs/features/campaigns.md`
+- Documento completo del Control de Tráfico Centralizado: reglas, tabla de decisión, flujos por tipo, constantes
+
+---
+
 ## [0.23.0] — 2026-05-07 — Plantillas WhatsApp granulares (near/far + reactivación con/sin regalo)
 
 ### Request original

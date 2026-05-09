@@ -6,6 +6,7 @@ import {
   hasRecentCampaignMessage,
   recordCampaignMessage,
   finalizeCampaign,
+  updateCustomerLastCampaignAt,
 } from '@/services/campaign.service'
 import { sendTemplateMessage } from '@/services/whatsapp.service'
 import { getMultipleSettings } from '@/services/settings.service'
@@ -75,6 +76,7 @@ async function handleCron() {
     const campaign = await getOrCreateTodayCampaign('reactivation', `template:${templateSid}|mode:${mode}`)
     let sent = 0
     let failed = 0
+    const sentCustomerIds: string[] = []
 
     for (const customer of customers) {
       const alreadySent = await hasRecentCampaignMessage(customer.id, 'reactivation', 30)
@@ -110,8 +112,12 @@ async function handleCron() {
           errorMessage: result ? null : 'Twilio no configurado o error de envío',
         })
 
-        if (result) sent++
-        else failed++
+        if (result) {
+          sent++
+          sentCustomerIds.push(customer.id)
+        } else {
+          failed++
+        }
       } catch (error) {
         failed++
         await recordCampaignMessage({
@@ -123,6 +129,7 @@ async function handleCron() {
       }
     }
 
+    await updateCustomerLastCampaignAt(sentCustomerIds)
     await finalizeCampaign(campaign.id, sent)
 
     return NextResponse.json({

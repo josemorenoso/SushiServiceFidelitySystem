@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import type { Customer, Campaign, CampaignMessage } from '@/types/database.types'
-import { REACTIVATION_DAYS } from '@/constants/rewards'
+import { REACTIVATION_DAYS, FREQUENCY_CAP_DAYS } from '@/constants/rewards'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -36,11 +36,13 @@ export async function findBirthdayCustomers(): Promise<Customer[]> {
 }
 
 /**
- * Finds customers inactive for more than REACTIVATION_DAYS.
+ * Finds customers inactive for more than REACTIVATION_DAYS,
+ * respecting the global frequency cap (last_campaign_at).
  */
 export async function findInactiveCustomers(): Promise<Customer[]> {
   const supabase = getServiceClient()
   const cutoffDate = new Date(Date.now() - REACTIVATION_DAYS * 24 * 60 * 60 * 1000).toISOString()
+  const campaignCapDate = new Date(Date.now() - FREQUENCY_CAP_DAYS * 24 * 60 * 60 * 1000).toISOString()
 
   const { data, error } = await supabase
     .from('customers')
@@ -48,12 +50,29 @@ export async function findInactiveCustomers(): Promise<Customer[]> {
     .lt('last_visit_at', cutoffDate)
     .not('last_visit_at', 'is', null)
     .eq('accepts_marketing', true)
+    .or(`last_campaign_at.is.null,last_campaign_at.lt.${campaignCapDate}`)
 
   if (error) {
     throw new Error(`Error buscando inactivos: ${error.message}`)
   }
 
   return data ?? []
+}
+
+/**
+ * Updates last_campaign_at for a list of customers after a successful send.
+ * Call this after any cron or campaign that sends messages.
+ */
+export async function updateCustomerLastCampaignAt(customerIds: string[]): Promise<void> {
+  if (customerIds.length === 0) return
+  const supabase = getServiceClient()
+  const { error } = await supabase
+    .from('customers')
+    .update({ last_campaign_at: new Date().toISOString() })
+    .in('id', customerIds)
+  if (error) {
+    console.error(`Error actualizando last_campaign_at: ${error.message}`)
+  }
 }
 
 /**

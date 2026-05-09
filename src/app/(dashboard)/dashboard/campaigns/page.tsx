@@ -24,6 +24,7 @@ import {
 import { Megaphone, Cake, UserX, Send, Zap, Clock, CheckCircle, SlidersHorizontal } from 'lucide-react'
 import { ManualCampaigns } from '@/components/dashboard/ManualCampaigns'
 import { TwilioWallet } from '@/components/dashboard/TwilioWallet'
+import { SegmentRadar } from '@/components/dashboard/SegmentRadar'
 
 interface Campaign {
   id: string
@@ -115,6 +116,8 @@ export default function CampaignsPage() {
         <Megaphone className="h-6 w-6" />
         Campañas
       </h1>
+
+      <SegmentRadar />
 
       <div className="grid gap-4 md:grid-cols-2">
         {autoCampaigns.map((ac) => {

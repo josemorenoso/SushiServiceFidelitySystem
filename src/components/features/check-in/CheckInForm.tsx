@@ -72,7 +72,7 @@ export function CheckInForm({
         c.toLowerCase().includes(cityInput.toLowerCase())
       ).slice(0, 6)
     : []
-  const [acceptsMarketing, setAcceptsMarketing] = useState(true)
+  const [acceptsMarketing, setAcceptsMarketing] = useState(false)
   const [loading, setLoading] = useState(false)
   const [tableNumber, setTableNumber] = useState<number | null>(null)
 
@@ -414,7 +414,7 @@ export function CheckInForm({
             type="submit"
             className="btn-premium mt-2 flex h-[52px] w-full items-center justify-center gap-2 rounded-xl text-sm font-semibold"
             style={{ letterSpacing: "-0.01em" }}
-            disabled={!name.trim() || name.trim().length < 2 || loading}
+            disabled={!name.trim() || name.trim().length < 2 || !acceptsMarketing || loading}
           >
             {loading ? (
               <>

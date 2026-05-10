@@ -1,7 +1,35 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Loader2, Phone, User, MapPin, ArrowLeft } from 'lucide-react'
+
+const COLOMBIAN_CITIES = [
+  'Medellín','Envigado','Itagüí','Bello','Sabaneta','La Estrella','Caldas','Copacabana','Girardota','Barbosa',
+  'Bogotá','Soacha','Chía','Zipaquirá','Fusagasugá','Facatativá','Mosquera','Madrid','Funza',
+  'Cali','Palmira','Buenaventura','Tuluá','Cartago','Buga','Yumbo',
+  'Barranquilla','Soledad','Malambo','Sabanalarga',
+  'Cartagena','Turbaco',
+  'Bucaramanga','Floridablanca','Girón','Piedecuesta',
+  'Cúcuta','Villa del Rosario','Los Patios',
+  'Manizales','La Dorada','Villamaría',
+  'Pereira','Dosquebradas','Santa Rosa de Cabal',
+  'Armenia','Calarcá','Montenegro',
+  'Ibagué','Espinal','Girardot',
+  'Neiva','Pitalito','Garzón',
+  'Santa Marta','Ciénaga',
+  'Valledupar','Aguachica',
+  'Montería','Cereté',
+  'Villavicencio','Acacías',
+  'Pasto','Ipiales','Tumaco',
+  'Popayán','Santander de Quilichao',
+  'Riohacha','Maicao',
+  'Sincelejo','Corozal',
+  'Tunja','Duitama','Sogamoso',
+  'Florencia','San Vicente del Caguán',
+  'Yopal','Aguazul',
+  'Mocoa','Puerto Asís',
+  'Mitú','Leticia','Puerto Inírida','San José del Guaviare',
+].sort()
 import type {
   CheckInFormProps,
   CheckInStep,
@@ -25,6 +53,25 @@ export function CheckInForm({
     ? `${birthYear}-${birthMonth.padStart(2, '0')}-${birthDay.padStart(2, '0')}`
     : ''
   const [city, setCity] = useState('')
+  const [cityInput, setCityInput] = useState('')
+  const [cityOpen, setCityOpen] = useState(false)
+  const cityRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (cityRef.current && !cityRef.current.contains(e.target as Node)) {
+        setCityOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const cityMatches = cityInput.length > 0
+    ? COLOMBIAN_CITIES.filter((c) =>
+        c.toLowerCase().includes(cityInput.toLowerCase())
+      ).slice(0, 6)
+    : []
   const [acceptsMarketing, setAcceptsMarketing] = useState(true)
   const [loading, setLoading] = useState(false)
   const [tableNumber, setTableNumber] = useState<number | null>(null)
@@ -245,9 +292,9 @@ export function CheckInForm({
           </div>
 
           {/* Ciudad */}
-          <div className="space-y-1.5">
+          <div className="space-y-1.5" ref={cityRef}>
             <label
-              htmlFor="city"
+              htmlFor="city-input"
               className="text-xs font-semibold uppercase tracking-widest"
               style={{ color: "#6b7280", letterSpacing: "0.05em" }}
             >
@@ -255,19 +302,48 @@ export function CheckInForm({
             </label>
             <div className="relative">
               <MapPin
-                className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4"
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 z-10"
                 strokeWidth={1.5}
                 style={{ color: "#9ca3af" }}
               />
               <input
-                id="city"
+                id="city-input"
                 type="text"
-                placeholder="Ej: Bogotá, Medellín..."
-                value={city}
-                onChange={(e) => setCity(e.target.value)}
+                autoComplete="off"
+                placeholder="Escribe tu ciudad..."
+                value={city ? city : cityInput}
+                onChange={(e) => {
+                  setCity('')
+                  setCityInput(e.target.value)
+                  setCityOpen(true)
+                }}
+                onFocus={() => { if (!city) setCityOpen(true) }}
                 className="input-premium w-full rounded-xl py-3.5 pl-10 pr-4 text-base outline-none"
                 style={{ color: "#1a1c1d" }}
               />
+              {city && (
+                <button
+                  type="button"
+                  onClick={() => { setCity(''); setCityInput(''); setCityOpen(false) }}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-lg leading-none"
+                >
+                  ×
+                </button>
+              )}
+              {cityOpen && cityMatches.length > 0 && (
+                <ul className="absolute z-50 mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg overflow-hidden">
+                  {cityMatches.map((c) => (
+                    <li
+                      key={c}
+                      onMouseDown={() => { setCity(c); setCityInput(''); setCityOpen(false) }}
+                      className="cursor-pointer px-4 py-3 text-sm hover:bg-gray-50 active:bg-gray-100 border-b last:border-0 border-gray-100"
+                      style={{ color: "#1a1c1d" }}
+                    >
+                      {c}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </div>
 

@@ -131,14 +131,8 @@ export function GoogleReviewPopup({
             </div>
 
             <div className="rounded-xl bg-gradient-to-r from-yellow-50 to-orange-50 border border-yellow-200 p-4 text-center">
-              <div className="flex items-center justify-center gap-2 mb-1">
-                <Sparkles className="h-4 w-4 text-yellow-600" />
-                <span className="font-bold text-yellow-800 text-sm">INCENTIVO ESPECIAL</span>
-                <Sparkles className="h-4 w-4 text-yellow-600" />
-              </div>
-              <p className="text-xs text-yellow-700">
-                Déjanos tu reseña en Google y recibe un <strong>rollo cortesía</strong> en tu próxima visita.
-                Muestra tu reseña al mesero para reclamarlo.
+              <p className="text-sm text-yellow-800">
+                Tu opinión nos ayuda a crecer y a seguir dando lo mejor de nosotros cada día. ¡Gracias por compartirla!
               </p>
             </div>
 
@@ -152,7 +146,7 @@ export function GoogleReviewPopup({
             </Button>
 
             <p className="text-center text-[11px] text-muted-foreground">
-              Se abrirá Google Maps — escribe tu comentario para reclamar el incentivo
+              Se abrirá Google Maps — solo toma un momento
             </p>
           </div>
         </div>

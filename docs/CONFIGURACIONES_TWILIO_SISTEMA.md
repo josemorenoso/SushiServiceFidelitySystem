@@ -1,101 +1,112 @@
-# Configuraciones Twilio — Sistema RestaurantQR
+# Configuraciones Twilio — Sistema de Fidelización
 
-> **Última actualización:** 2026-05-07
-> **Objetivo:** Documentar TODA la configuración de Twilio que un nuevo restaurante necesita hacer para que el sistema funcione completo: opt-out, auto-respondedor anti-idiotas, plantillas, webhook de domicilios, y cron jobs.
+> **Última actualización:** 2026-05-09
+> **Versión:** 2.0 — Sistema Dopamínico con Niveles
+> **Objetivo:** Documentar la configuración completa de Twilio y la lógica de recompensas y comunicación que hace que este sistema justifique un precio high ticket para el restaurante.
 
 ---
 
 ## Tabla de Contenidos
 
 1. [Cuentas y números necesarios](#1-cuentas-y-números-necesarios)
-2. [Variables de entorno (.env)](#2-variables-de-entorno-env)
-3. [Opt-Out automático (STOP/BAJA)](#3-opt-out-automático-stopbaja)
-4. [Auto-respondedor anti-idiotas (cliente responde a Twilio)](#4-auto-respondedor-anti-idiotas)
-5. [Las 7 plantillas WhatsApp](#5-las-7-plantillas-whatsapp)
-6. [Webhook de domicilios (n8n + Twilio)](#6-webhook-de-domicilios)
-7. [Cron jobs (cumpleaños y reactivación)](#7-cron-jobs)
-8. [Checklist final por restaurante nuevo](#8-checklist-final-por-restaurante-nuevo)
+2. [Variables de entorno](#2-variables-de-entorno)
+3. [Opt-Out automático](#3-opt-out-automático)
+4. [Auto-respondedor anti-idiotas](#4-auto-respondedor-anti-idiotas)
+5. [Sistema de Niveles y Recompensas](#5-sistema-de-niveles-y-recompensas) ⭐
+6. [Plantillas WhatsApp — Nueva arquitectura](#6-plantillas-whatsapp--nueva-arquitectura) ⭐
+7. [Webhook de domicilios](#7-webhook-de-domicilios)
+8. [Cron jobs](#8-cron-jobs)
+9. [Por qué este sistema justifica high ticket](#9-por-qué-este-sistema-justifica-high-ticket)
+10. [Checklist de activación por cliente](#10-checklist-de-activación-por-cliente)
 
 ---
 
 ## 1. Cuentas y números necesarios
 
-### 1.1 Cuentas
+### 1.1 Infraestructura necesaria
 
-| Cuenta | Para qué | Costo aprox |
-|--------|----------|-------------|
-| **Twilio** | Envío de WhatsApp + recepción + Content API | ~$0.0058/msg MARKETING, ~$0.003/msg UTILITY |
-| **Meta WhatsApp Business** | Aprobación de plantillas | Gratis (Twilio gestiona) |
-| **Vercel** | Hosting de la app | Gratis hasta cierto uso |
-| **Supabase** | Base de datos | Gratis hasta 500MB |
+| Servicio | Para qué | Costo aprox |
+|----------|----------|-------------|
+| **Twilio** | Envío/recepción WhatsApp + Content API | ~$0.0058/msg MARKETING, ~$0.003/msg UTILITY |
+| **Meta WhatsApp Business** | Aprobación de plantillas | Gratis (Twilio lo gestiona) |
+| **Vercel** | Hosting de la app | Gratis (plan Hobby) |
+| **Supabase** | Base de datos PostgreSQL | Gratis hasta 500MB |
 
-### 1.2 Números de teléfono (CRÍTICO)
+### 1.2 DOS números obligatorios (CRÍTICO)
 
-Tu restaurante necesita **DOS números diferentes**:
+| Número | Función | Quién responde |
+|--------|---------|----------------|
+| **Twilio WhatsApp** | Envío automático de plantillas + recepción redirigida | Nadie humano — solo el sistema |
+| **WhatsApp del Restaurante** | Atención en vivo, pedidos, dudas | Staff del restaurante |
 
-| Número | Función | Quién atiende |
-|--------|---------|---------------|
-| **Twilio WhatsApp** (ej: `+14155238886`) | Envío automático de plantillas. Recibe respuestas pero las redirige automáticamente. | Nadie humano |
-| **WhatsApp del Restaurante** (ej: `+573001234567`) | Atiende clientes en vivo, recibe pedidos, responde dudas. | Mesero / dueño / CRM humano |
-
-⚠️ **Si pones el mismo número para ambos, vas a tener un caos.** El número Twilio debe ser exclusivo para automatización.
+⚠️ Mezclar ambos en el mismo número genera caos operativo. Son roles distintos.
 
 ---
 
-## 2. Variables de entorno (.env)
+## 2. Variables de entorno
 
 ```bash
-# ─── Twilio ───
-TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-TWILIO_AUTH_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-TWILIO_WHATSAPP_NUMBER=whatsapp:+14155238886
-
-# ─── Línea principal del restaurante (donde redirigir clientes) ───
-RESTAURANT_WHATSAPP_NUMBER=+573001234567
-RESTAURANT_WHATSAPP_LINK=https://wa.me/573001234567
-
-# ─── Webhooks ───
-WEBHOOK_DELIVERY_SECRET=secret-aleatorio-largo-aqui
-CRON_SECRET=otro-secret-aleatorio-largo
-
 # ─── Supabase ───
 NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=xxx
 SUPABASE_SERVICE_ROLE_KEY=xxx
+
+# ─── Twilio (línea automática) ───
+TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+TWILIO_AUTH_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+TWILIO_WHATSAPP_NUMBER=whatsapp:+573XXXXXXXXX
+
+# ─── Restaurante (línea humana) ───
+RESTAURANT_WHATSAPP_LINK=https://wa.me/573XXXXXXXXX
+
+# ─── Branding ───
+NEXT_PUBLIC_BRAND_NAME=Nombre del Restaurante
+NEXT_PUBLIC_BRAND_SHORT=NR
+NEXT_PUBLIC_BRAND_TAGLINE=Tu programa de fidelidad
+
+# ─── Seguridad ───
+CRON_SECRET=random-32-chars
+WEBHOOK_DELIVERY_SECRET=random-32-chars
+
+# ─── n8n ───
+N8N_BASE_URL=https://n8n.tudominio.com
+N8N_GOOGLE_CONTACTS_WEBHOOK_URL=https://n8n.tudominio.com/webhook/...
+
+# ─── Opcionales ───
+NEXT_PUBLIC_GOOGLE_MAPS_REVIEW_URL=https://g.page/r/...
 ```
 
 ---
 
-## 3. Opt-Out automático (STOP/BAJA)
+## 3. Opt-Out automático
 
 ### 3.1 Cómo funciona
 
-Cuando un cliente responde **STOP, BAJA, CANCELAR, FUERA, UNSUBSCRIBE, QUIT, END** al número Twilio:
+Cuando un cliente responde **STOP, BAJA, CANCELAR** al número Twilio:
 
-1. Twilio bloquea ese número automáticamente (filtro `OptOut`).
-2. Cualquier intento futuro de enviarle plantilla devuelve **error 21610** (Recipient has opted out).
-3. El bloqueo es permanente hasta que el cliente envíe **START, ALTA, SI**.
+1. Twilio bloquea ese número automáticamente.
+2. Futuros envíos devuelven error **21610** (opted out).
+3. El bloqueo se levanta cuando el cliente escribe **START, ALTA, ACEPTO**.
 
 ### 3.2 Configuración en Twilio Console
 
-1. Ve a **Twilio Console → Messaging → Settings → Opt-Out Management**.
-2. Verifica que esté **Enabled** (está por defecto).
-3. En **Custom Keywords**, agrega keywords en español:
-   - **Opt-out:** `BAJA, CANCELAR, FUERA, NO, BASTA`
-   - **Opt-in:** `ALTA, SI, ACEPTO`
-   - **Help:** `AYUDA, INFO`
-4. **Save**.
+**Twilio Console → Messaging → Settings → Opt-Out Management**
 
-### 3.3 Obligación legal en cada plantilla MARKETING
+| Sección | Keywords a agregar |
+|---------|-------------------|
+| Opt-out | `BAJA, CANCELAR, FUERA, BASTA` |
+| Opt-in | `ALTA, ACEPTO, QUIERO` |
+| Help | `AYUDA, INFO` |
 
-Meta exige que **toda plantilla MARKETING incluya opt-out visible en el cuerpo**. Por eso nuestras plantillas MARKETING terminan con:
+STOP en inglés ya está activado por defecto — no hace falta agregarlo.
 
+### 3.3 Obligación legal Meta
+
+Toda plantilla **MARKETING** debe incluir en el cuerpo:
 ```
 Para no recibir más mensajes responde STOP.
 ```
-
-Sin esa línea, Meta rechaza la plantilla en revisión.
-
-⚠️ Las plantillas **UTILITY** (bienvenida, premio ganado, cumpleaños) **NO necesitan** opt-out porque son transaccionales.
+Sin esta línea Meta rechaza la plantilla. Las plantillas **UTILITY** (transaccionales) están exentas.
 
 ---
 
@@ -103,274 +114,347 @@ Sin esa línea, Meta rechaza la plantilla en revisión.
 
 ### 4.1 El problema
 
-Los clientes son brutos. Reciben tu mensaje automático y responden cosas como:
-- "Hola"
-- "Muchas gracias"
-- "Y dónde queda?"
-- "Pueden traer a mi casa?"
-- "A qué hora abren?"
+El número Twilio envía mensajes automáticos. Los clientes responden cosas como "hola", "gracias", "¿dónde quedan?". Eso abre la ventana de 24h de WhatsApp Business sin nadie que la atienda → cliente frustrado.
 
-Esto **abre la ventana de 24h** de WhatsApp Business pero tu sistema no tiene nadie atendiéndola → el cliente queda colgado y te ve mal.
+### 4.2 Solución
 
-### 4.2 Solución: Webhook de auto-reply en Twilio
+Webhook en `/api/webhook/twilio-incoming` que detecta la intención del mensaje y responde redirigiendo al número humano del restaurante con un link `wa.me/...` de un solo tap.
 
-Cuando un cliente responde al número Twilio, Twilio dispara un webhook. Tu app responde con un mensaje TwiML que **redirige al cliente a la línea principal** mediante un link `wa.me/...`.
+### 4.3 Detección de intención
 
-### 4.3 Endpoint a crear en tu app
+| Intención | Keywords | Respuesta |
+|-----------|----------|-----------|
+| Pedido/domicilio | pedido, domicilio, delivery, ordenar | Redirige + contexto de pedidos |
+| Horario | horario, abierto, abren, cierran | Redirige + mención de horarios |
+| Ubicación | dirección, dónde, queda, ubicación | Redirige + mención de ubicación |
+| Default | cualquier otro mensaje | Redirige con mensaje genérico amable |
 
-Archivo: `src/app/api/webhook/twilio-incoming/route.ts`
-
-```ts
-import { NextRequest, NextResponse } from 'next/server'
-
-const RESTAURANT_LINK = process.env.RESTAURANT_WHATSAPP_LINK || 'https://wa.me/573001234567'
-
-// Palabras clave para respuestas específicas (opcional pero recomendado)
-const KEYWORDS = {
-  pedido: ['pedido', 'domicilio', 'delivery', 'comprar', 'ordenar'],
-  horario: ['horario', 'abierto', 'abren', 'cierran'],
-  ubicacion: ['direccion', 'ubicacion', 'donde', 'queda'],
-}
-
-function detectIntent(body: string): keyof typeof KEYWORDS | 'default' {
-  const text = body.toLowerCase()
-  for (const [intent, words] of Object.entries(KEYWORDS)) {
-    if (words.some((w) => text.includes(w))) return intent as keyof typeof KEYWORDS
-  }
-  return 'default'
-}
-
-function buildResponse(intent: keyof typeof KEYWORDS | 'default'): string {
-  const baseRedirect = `\n\n📲 Escríbenos en: ${RESTAURANT_LINK}`
-
-  switch (intent) {
-    case 'pedido':
-      return `🍽️ ¡Para pedidos a domicilio te atendemos directamente en la línea principal!${baseRedirect}`
-    case 'horario':
-      return `🕐 Estamos abiertos de Lunes a Domingo, 12pm a 10pm.${baseRedirect}`
-    case 'ubicacion':
-      return `📍 Estamos en [DIRECCIÓN]. Mapa: https://maps.google.com/?q=...${baseRedirect}`
-    default:
-      return `👋 Hola, este número es solo para mensajes automáticos.\n\nPara hablar con nosotros:${baseRedirect}\n\n¡Te respondemos rápido!`
-  }
-}
-
-export async function POST(request: NextRequest) {
-  const formData = await request.formData()
-  const body = (formData.get('Body') as string) || ''
-  const from = (formData.get('From') as string) || ''
-
-  // Twilio maneja los STOP/START automáticamente — no entran aquí.
-  // Solo llegan mensajes que NO son comandos de opt-out.
-
-  const intent = detectIntent(body)
-  const message = buildResponse(intent)
-
-  console.log(`[TwilioIncoming] ${from} dijo "${body}" → respuesta: ${intent}`)
-
-  // (Opcional) Notificar al dueño si es default (no clasificó)
-  // await notifyOwner(from, body)
-
-  const twiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Message>${message.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</Message>
-</Response>`
-
-  return new NextResponse(twiml, {
-    headers: { 'Content-Type': 'text/xml' },
-  })
-}
-```
+STOP/BAJA los intercepta Twilio antes — nunca llegan al webhook.
 
 ### 4.4 Configurar webhook en Twilio Console
 
-1. Ve a **Twilio Console → Messaging → Senders → WhatsApp Senders**.
-2. Click en tu número de WhatsApp.
-3. En la sección **"When a message comes in"**:
-   - URL: `https://tu-app.vercel.app/api/webhook/twilio-incoming`
-   - Método: **HTTP POST**
-4. **Save**.
+**Twilio Console → Messaging → Senders → WhatsApp Senders → [tu número] → "When a message comes in"**
 
-### 4.5 Las 3 capas anti-idiotas
+- URL: `https://tu-app.vercel.app/api/webhook/twilio-incoming`
+- Método: HTTP POST
 
-| Capa | Qué hace | Cubre |
-|------|----------|-------|
-| **1. Link `wa.me/...`** | Convierte 1 tap en conversación con el restaurante | 90% de los casos |
-| **2. Keywords** | Detecta intención y responde con info específica | Reduce 70% de respuestas humanas |
-| **3. Notificación al dueño** | Si nadie clasifica, notifica al dueño con el mensaje | Casos edge |
-
-### 4.6 Por qué `wa.me/` es mágico
-
-`https://wa.me/573001234567` es un link oficial de WhatsApp que:
-- En móvil: abre WhatsApp con la conversación al número listo para escribir.
-- En desktop: abre WhatsApp Web con la conversación.
-
-**El cliente NO tiene que copiar el número, agregarlo a contactos, ni nada.** Un solo tap y está hablando con quien sí responde.
+O via Messaging Service (recomendado): vincular el número al Messaging Service que ya tiene la URL configurada.
 
 ---
 
-## 5. Las 7 plantillas WhatsApp
+## 5. Sistema de Niveles y Recompensas
 
-Crear en **Twilio Console → Content API → Create Template** o desde tu Dashboard > Plantillas.
+> Esta es la sección más importante del sistema. Define la psicología de retención.
 
-### Reglas de oro de diseño
+### 5.1 Por qué este diseño y no otro
 
-| Regla | Por qué |
-|-------|---------|
-| Máximo 4 líneas de texto | WhatsApp móvil corta mensajes largos. |
-| 1 emoji por línea max | Más se ve spam. Meta penaliza. |
-| **NUNCA `{{name}}` literal** | Twilio sólo entiende `{{1}}, {{2}}, {{3}}`. |
-| MARKETING → STOP obligatorio | Sin opt-out, Meta rechaza. |
-| UTILITY no necesita STOP | Bienvenida, premio ganado, cumpleaños. |
+**El error clásico:** recompensa cada 5-6 visitas. El cliente llega a la 2ª visita sin recibir nada y no vuelve. El 60% de clientes nuevos abandona después de la primera visita en restaurantes sin sistema de fidelización.
 
-### Plantilla 1: `bienvenida_primera_visita`
-- **Categoría:** UTILITY
-- **Variables:** `{{1}}`=nombre
+**El principio dopamínico:** el cerebro humano se engancha más rápido cuando recibe recompensas frecuentes al inicio y luego pasa a un esquema de refuerzo variable. Es exactamente el mismo mecanismo que hace que los videojuegos sean adictivos.
+
+**Regla base:**
+- Visitas 1, 2 y 3: premio garantizado en CADA visita → enganche
+- A partir de la visita 4: premio cada 2 visitas → anticipación sostenida
+- Cada 3 visitas: sube de nivel → identidad y orgullo
+
+### 5.2 Niveles
+
+| Nivel | Visitas | Ícono | Mensaje de identidad |
+|-------|:-------:|:-----:|:---------------------|
+| **Plata** | 1 – 3 | 🥈 | "Bienvenido a la familia" |
+| **Oro** | 4 – 6 | 🥇 | "Ya eres parte de nuestro círculo" |
+| **Diamante** | 7 – 9 | 💎 | "Eres uno de nuestros clientes más especiales" |
+| **Black** | 10+ | ⚫ | "Acceso VIP permanente" |
+
+El cliente sube de nivel automáticamente al alcanzar la visita 4, 7 y 10. Cada subida de nivel tiene su propio mensaje especial y una recompensa de bienvenida al nuevo nivel.
+
+### 5.3 Calendario de Recompensas
+
+> Los títulos son sugeridos. El dueño los personaliza en Dashboard → Recompensas.
+
+| Visita | Premio sugerido | Nivel | Nota estratégica |
+|:------:|:----------------|:-----:|:-----------------|
+| **1** | 🥤 Bebida de bienvenida gratis | 🥈 Plata | Sorpresa inmediata — el cliente no lo espera |
+| **2** | 🍮 Postre gratis | 🥈 Plata | Refuerza el hábito antes de que desaparezca |
+| **3** | 🎟️ 15% de descuento | 🥈 Plata | Pico dopamínico — valor económico real |
+| 4 | *(sin premio)* | 🥇 Oro | Mensaje comunica: "en tu próxima visita tienes X" |
+| **5** | 🍽️ Entrada o aperitivo gratis | 🥇 Oro | Premio después de la espera — muy valorado |
+| 6 | *(sin premio)* | 🥇 Oro | Urgencia: "próxima visita = nivel Diamante + premio" |
+| **7** | 🏆 Plato principal gratis | 💎 Diamante | Premio de bienvenida al nivel — hito emocional |
+| 8 | *(sin premio)* | 💎 Diamante | |
+| **9** | 🍻 2x1 en cualquier plato | 💎 Diamante | Premio social — trae acompañante → 2x ingresos |
+| 10 | *(sin premio — sube a Black)* | ⚫ Black | La entrada al Black ES el premio |
+| **11** | 🎟️ 25% de descuento | ⚫ Black | |
+| 12 | *(sin premio)* | ⚫ Black | |
+| **13** | 🍾 Botella / bebida premium gratis | ⚫ Black | Exclusividad percibida |
+| 14 | *(sin premio)* | ⚫ Black | |
+| **15** | 🍽️🥂 Cena para dos | ⚫ Black | Premio aspiracional — boca a boca garantizado |
+| ...y así, cada 2 visitas | | ⚫ Black | El dueño define los premios Black |
+
+### 5.4 Economía de las recompensas (justificación al dueño)
+
+Con ticket promedio de $60,000 COP y **margen de contribución del 20% = $12,000 COP por visita**:
+
+| Premio | Costo real al restaurante | Visita que genera | Utilidad de esa visita | ROI |
+|--------|:-------------------------:|:-----------------:|:----------------------:|:---:|
+| Bebida gratis | ~$3,000 COP | $60,000 COP | $12,000 COP | **4x** |
+| Postre gratis | ~$4,000 COP | $60,000 COP | $12,000 COP | **3x** |
+| 15% descuento | ~$9,000 COP | $51,000 COP | $10,200 COP | **1.1x + fidelización** |
+| Plato principal | ~$12,000 COP | $60,000 COP | $12,000 COP | **1x + nivel Diamante** |
+| 2x1 | ~$15,000 COP | $120,000 COP (dos personas) | $24,000 COP | **1.6x + cliente nuevo** |
+
+> **Conclusión:** ningún premio pierde dinero si trae al cliente. El único escenario de pérdida es que el cliente reclame el premio sin consumir nada más, lo cual no ocurre en práctica (siempre piden algo adicional).
+
+### 5.5 Pendiente no urgente — configuración por el dueño
+
+> **TODO (baja prioridad):** Agregar en Dashboard → Ajustes la opción de que el dueño configure cada cuántas visitas sube de nivel (actualmente fijo en 3). Útil para restaurantes con tickets muy altos que prefieren umbrales en visita 5, 10, 20.
+
+---
+
+## 6. Plantillas WhatsApp — Nueva arquitectura
+
+### 6.1 De 7 a 6 plantillas con mayor impacto
+
+| # | Nombre | Categoría | Cuándo se usa |
+|---|--------|:---------:|:--------------|
+| 1 | `bienvenida_primera_visita` | UTILITY | Primera visita: registro nuevo |
+| 2 | `visita_con_premio` | UTILITY | Visita con recompensa ganada (sin subida de nivel) |
+| 3 | `subida_de_nivel` | UTILITY | Visita donde el cliente sube de nivel (visitas 4, 7, 10) |
+| 4 | `visita_sin_premio` | MARKETING | Visita sin recompensa — urgencia hacia la siguiente |
+| 5 | `feliz_cumpleanos` | UTILITY | Cron de cumpleaños |
+| 6 | `reactivacion` | MARKETING | Cron de reactivación (21+ días sin visita) |
+
+> Las antiguas plantillas near/far se reemplazan con las plantillas 2, 3 y 4 que comunican información específica y accionable en lugar de mensajes vagos.
+
+---
+
+### 6.2 Estructura de los mensajes: las 4 capas
+
+Cada mensaje post-visita debe activar 4 disparadores psicológicos:
 
 ```
-¡Hola {{1}}! 🎉 Bienvenid@ a [TU RESTAURANTE].
-
-Acabas de unirte a nuestra familia. En tu próxima visita
-te tenemos un beneficio especial.
-
-¡Te esperamos pronto! 🍽️
+[CAPA 1] Confirmación + celebración → "fuiste, eso importa"
+[CAPA 2] Estado actual (premio ganado o visitas acumuladas) → "hay algo para ti"
+[CAPA 3] Premio ESPECÍFICO de la próxima visita → URGENCIA
+[CAPA 4] Progreso de nivel → IDENTIDAD
 ```
 
-### Plantilla 2: `visita_recurrente_cerca_premio` ⭐
-- **Categoría:** MARKETING
-- **Variables:** `{{1}}`=nombre, `{{2}}`=visitas, `{{3}}`=título premio
+La clave está en que el cliente **siempre se vaya con algo pendiente de reclamar**. No es "vuelve pronto". Es "en tu próxima visita tienes [X] esperándote".
+
+---
+
+### 6.3 Plantilla 1 — `bienvenida_primera_visita`
+**Categoría:** UTILITY | **Variables:** `{{1}}`=nombre, `{{2}}`=premio_siguiente_visita
 
 ```
-¡Hola {{1}}! 🌟 Gracias por tu visita #{{2}}.
+¡Hola {{1}}! 🎉 Bienvenid@ a nuestra familia.
 
-🔥 ¡Estás a UNA visita de ganar: {{3}}!
+Acabas de unirte al programa y ya tienes algo esperándote:
 
-Vuelve pronto y reclámalo. ¡Te esperamos! 🎁
+🎁 En tu PRÓXIMA visita: {{2}}
+
+¡No lo dejes ir! Te esperamos pronto. 🥈 Nivel Plata activado.
+```
+
+> **Por qué funciona:** La primera visita termina con una promesa específica. El cliente sabe exactamente qué gana si regresa. Elimina el "¿para qué volver?".
+
+---
+
+### 6.4 Plantilla 2 — `visita_con_premio`
+**Categoría:** UTILITY | **Variables:** `{{1}}`=nombre, `{{2}}`=num_visita, `{{3}}`=bloque_premio_progreso
+
+```
+¡Hola {{1}}! 🏆 Visita #{{2}} — ¡ganaste!
+
+{{3}}
+```
+
+Donde `{{3}}` se construye dinámicamente:
+```
+🎁 GANASTE: [título del premio]
+📲 Muéstralo en tu PRÓXIMA visita para reclamarlo.
+
+👉 Visita [N+2]: [próximo premio específico]
+📊 Nivel: [ícono] [nombre nivel] — [N] visitas para [siguiente nivel]
+```
+
+**Ejemplo real — visita #2 (postre gratis):**
+```
+¡Hola María! 🏆 Visita #2 — ¡ganaste!
+
+🎁 GANASTE: Postre gratis 🍮
+📲 Muéstralo en tu PRÓXIMA visita para reclamarlo.
+
+👉 Visita 3: 15% de descuento te espera 🎟️
+📊 Nivel: 🥈 Plata — 1 visita para 🥇 Oro
+```
+
+---
+
+### 6.5 Plantilla 3 — `subida_de_nivel`
+**Categoría:** UTILITY | **Variables:** `{{1}}`=nombre, `{{2}}`=num_visita, `{{3}}`=bloque_nivel
+
+```
+¡Hola {{1}}! ⭐ Visita #{{2}} — ¡subiste de nivel!
+
+{{3}}
+```
+
+Donde `{{3}}`:
+```
+[ícono] NUEVO NIVEL: [nombre nivel]
+🏆 Premio de bienvenida: [título del premio]
+📲 Reclámalo en tu próxima visita.
+
+Lo que viene en [nombre nivel]:
+→ Visita [X]: [premio]
+→ Visita [Y]: [premio]
+```
+
+**Ejemplo real — visita #7 (sube a Diamante + plato gratis):**
+```
+¡Hola María! ⭐ Visita #7 — ¡subiste de nivel!
+
+💎 NUEVO NIVEL: Diamante
+🏆 Premio de bienvenida: Plato principal gratis 🍽️
+📲 Reclámalo en tu próxima visita.
+
+Lo que viene en Diamante:
+→ Visita 9: 2x1 en cualquier plato 🍻
+→ Visita 10: ¡Acceso al nivel Black! ⚫
+```
+
+---
+
+### 6.6 Plantilla 4 — `visita_sin_premio`
+**Categoría:** MARKETING | **Variables:** `{{1}}`=nombre, `{{2}}`=num_visita, `{{3}}`=bloque_urgencia
+
+```
+¡Hola {{1}}! 👋 Visita #{{2}} anotada.
+
+{{3}}
 
 Para no recibir más mensajes responde STOP.
 ```
 
-### Plantilla 3: `visita_recurrente_lejos_premio`
-- **Categoría:** MARKETING
-- **Variables:** `{{1}}`=nombre, `{{2}}`=visitas, `{{3}}`=título premio
-
+Donde `{{3}}`:
 ```
-Hola {{1}} 👋 Gracias por tu visita #{{2}}.
+🎯 PRÓXIMA VISITA: [título del próximo premio]
+No lo dejes pasar — te lo guardamos.
 
-Sigue acumulando visitas para ganar: {{3}}.
-Cada visita te acerca más al premio. 🎯
+📊 Nivel: [ícono] [nombre] — [N] visitas para [siguiente nivel]
+✨ En camino: [premio 2 visitas] → [premio de subida de nivel]
+```
 
-¡Te esperamos pronto!
+**Ejemplo real — visita #4 (sin premio, acaba de subir a Oro):**
+```
+¡Hola María! 👋 Visita #4 anotada.
+
+🎯 PRÓXIMA VISITA: Entrada gratis 🍽️
+No lo dejes pasar — te lo guardamos.
+
+📊 Nivel: 🥇 Oro — 3 visitas para 💎 Diamante
+✨ En camino: Entrada (#5) → Plato principal gratis (#7)
 
 Para no recibir más mensajes responde STOP.
 ```
 
-### Plantilla 4: `ganaste_premio` 🏆
-- **Categoría:** UTILITY
-- **Variables:** `{{1}}`=nombre, `{{2}}`=visitas, `{{3}}`=título premio
+---
+
+### 6.7 Plantilla 5 — `feliz_cumpleanos`
+**Categoría:** UTILITY | **Variables:** `{{1}}`=nombre, `{{2}}`=nivel_actual
 
 ```
-¡FELICIDADES {{1}}! 🎉🏆
+¡Feliz cumpleaños {{1}}! 🎂
 
-Llevas {{2}} visitas y te has ganado: {{3}}
+Hoy es tu día y queremos celebrarlo contigo.
+Pasa hoy por [RESTAURANTE] y reclama tu sorpresa de cumpleaños. 🎁
 
-📲 Muestra este mensaje en tu PRÓXIMA visita
-para reclamar tu premio.
-
-¡Nos vemos pronto! 🎁
+Te esperamos. Eres nuestro cliente {{2}} y eso lo celebramos. ✨
 ```
 
-⚠️ **"Muestra este mensaje en tu PRÓXIMA visita" es CRÍTICO** — el QR se escanea al final de la comida, así que el cliente gana hoy y redime mañana.
+---
 
-### Plantilla 5: `feliz_cumpleanos` 🎂
-- **Categoría:** UTILITY
-- **Variables:** `{{1}}`=nombre
-
-```
-¡Feliz cumpleaños {{1}}! 🎂🎉
-
-Hoy queremos celebrarte. Pasa por [TU RESTAURANTE]
-y reclama tu sorpresa de cumpleaños. 🎁
-
-¡Te esperamos para hacer tu día especial!
-```
-
-### Plantilla 6: `reactivacion_sin_regalo` 💔
-- **Categoría:** MARKETING
-- **Variables:** `{{1}}`=nombre
+### 6.8 Plantilla 6 — `reactivacion`
+**Categoría:** MARKETING | **Variables:** `{{1}}`=nombre, `{{2}}`=nivel_actual, `{{3}}`=bloque_regreso
 
 ```
-Hola {{1}} 👋 Te echamos de menos en [TU RESTAURANTE].
+Hola {{1}} 👋 Te echamos de menos.
 
-Hace tiempo que no te vemos por aquí. ¿Qué pasó?
-Volvamos a vernos pronto. 🍽️
+{{3}}
 
 Para no recibir más mensajes responde STOP.
 ```
 
-### Plantilla 7: `reactivacion_con_regalo` 🎁
-- **Categoría:** MARKETING
-- **Variables:** `{{1}}`=nombre, `{{3}}`=título premio
+Donde `{{3}}` varía según si hay regalo de reactivación configurado:
 
+**Sin regalo:**
 ```
-Hola {{1}} 💔 Te echamos de menos.
+Hace tiempo que no te vemos. Tu nivel {{2}} te sigue esperando,
+y con él, los premios que tienes por reclamar.
 
-Para que vuelvas, te tenemos un regalo:
-🎁 {{3}}
-
-Pasa por [TU RESTAURANTE] esta semana
-y reclámalo. ¡Te esperamos!
-
-Para no recibir más mensajes responde STOP.
+¿Volvemos? 🍽️
 ```
 
-### Asignación en Dashboard > Ajustes
+**Con regalo:**
+```
+Tu nivel {{2}} te extraña. Y para que vuelvas,
+te tenemos un regalo esperándote:
+🎁 [título del regalo]
+Pasa esta semana y reclámalo. ¡Te esperamos!
+```
 
-Una vez aprobadas (24-48h por Meta), asigna cada SID:
+---
+
+### 6.9 Lógica de selección de plantilla (motor de decisión)
+
+```
+DADO visita_numero y total_visitas del cliente:
+
+  SI es la primera visita del cliente (total = 1):
+    → Plantilla 1 (bienvenida)
+    → {{2}} = título del premio de la visita 2
+
+  SI visita_numero es umbral de nivel (4, 7, 10):
+    → Plantilla 3 (subida_de_nivel)
+    → {{3}} = nuevo nivel + premio de bienvenida + preview próximos 2 premios
+
+  SI existe premio para visita_numero:
+    → Plantilla 2 (visita_con_premio)
+    → {{3}} = premio_hoy + próximo_premio_específico + nivel + distancia_al_siguiente
+
+  SI NO existe premio para visita_numero:
+    → Plantilla 4 (visita_sin_premio)
+    → {{3}} = próximo_premio_específico (con urgencia) + nivel + preview próximos 2
+```
+
+---
+
+### 6.10 Asignación en Dashboard → Ajustes
+
+Una vez aprobadas por Meta (24-48h):
 
 | Selector | Plantilla |
 |----------|-----------|
-| Bienvenida (registro nuevo) | 1 |
-| Visita: cerca de premio (faltan 1) | 2 |
-| Visita: lejos de premio (faltan 2+) | 3 |
-| Ganaste premio (milestone) | 4 |
-| Cumpleaños (cron) | 5 |
-| Reactivación SIN regalo | 6 |
-| Reactivación CON regalo | 7 |
-| Recompensa para reactivación CON regalo | (selecciona un reward) |
+| Bienvenida (primera visita) | 1 — `bienvenida_primera_visita` |
+| Visita con premio | 2 — `visita_con_premio` |
+| Subida de nivel | 3 — `subida_de_nivel` |
+| Visita sin premio | 4 — `visita_sin_premio` |
+| Cumpleaños | 5 — `feliz_cumpleanos` |
+| Reactivación | 6 — `reactivacion` |
+| Recompensa para reactivación con regalo | (seleccionar un reward activo) |
 
 ---
 
-## 6. Webhook de domicilios
+## 7. Webhook de domicilios
 
-Para que el flujo de domicilios (mesero reenvía mensaje → n8n parsea → API crea cliente) funcione:
+### 7.1 Flujo
 
-### 6.1 Webhook de Twilio para domicilios
+Mesero reenvía mensaje de pedido al número Twilio → Twilio dispara webhook → sistema detecta si el remitente está en `authorized_numbers` → si SÍ, reenvía a n8n para parseo → si NO, responde con auto-redirect anti-idiotas.
 
-1. Ve a **Twilio Console → Messaging → Senders → WhatsApp Senders**.
-2. Click en tu número.
-3. ⚠️ Si ya configuraste el `twilio-incoming` arriba, **ese mismo webhook recibe TODOS los mensajes**.
-4. Para separar la lógica de domicilios: en el endpoint `twilio-incoming`, detecta si el remitente está en `authorized_numbers` (tabla Supabase). Si SÍ → reenvía a n8n para parseo de pedido. Si NO → auto-respondedor anti-idiotas.
+### 7.2 Configurar números autorizados
 
-### 6.2 Lógica recomendada en `twilio-incoming/route.ts`
-
-```ts
-// Pseudo-código
-const isAuthorized = await checkIfAuthorized(from)
-
-if (isAuthorized) {
-  // Es un mesero reenviando un pedido → forward a n8n
-  await forwardToN8n(body, from)
-  return twiml('✅ Pedido recibido')
-} else {
-  // Es un cliente respondiendo → auto-respondedor
-  return twiml(buildResponse(detectIntent(body)))
-}
-```
-
-### 6.3 Tabla `authorized_numbers` (ya existe en tu schema)
-
-Inserta los celulares de los meseros que están autorizados a reenviar pedidos:
+En **Supabase → SQL Editor**:
 
 ```sql
 INSERT INTO authorized_numbers (phone, name, is_active) VALUES
@@ -380,11 +464,16 @@ INSERT INTO authorized_numbers (phone, name, is_active) VALUES
 
 ---
 
-## 7. Cron jobs (cumpleaños y reactivación)
+## 8. Cron jobs
 
-### 7.1 Configurar en Vercel
+### 8.1 Horarios recomendados
 
-Tu `vercel.json` (o `vercel.ts`) debe tener:
+| Cron | Hora Colombia | Cron UTC | Por qué |
+|------|:-------------:|:--------:|:--------|
+| Cumpleaños | 8:00 AM | `0 13 * * *` | El cliente lo recibe al despertar |
+| Reactivación | 10:00 AM | `0 15 * * *` | Hora de mayor apertura de WhatsApp |
+
+### 8.2 Configuración en `vercel.json`
 
 ```json
 {
@@ -395,96 +484,90 @@ Tu `vercel.json` (o `vercel.ts`) debe tener:
 }
 ```
 
-- **Birthday:** 8am Colombia (13:00 UTC) diario.
-- **Reactivation:** 10am Colombia (15:00 UTC) diario.
-
-### 7.2 Variables de entorno
+### 8.3 Variable requerida
 
 ```bash
-CRON_SECRET=secret-aleatorio-largo
+CRON_SECRET=random-32-chars
 ```
 
-Vercel envía este secret en el header `Authorization: Bearer <secret>` automáticamente. Tu endpoint lo valida.
+---
 
-### 7.3 Configurar plantillas en Dashboard > Ajustes
+## 9. Por qué este sistema justifica high ticket
 
-Como ya cubrimos, asignar:
-- Cumpleaños → SID de plantilla 5
-- Reactivación SIN regalo → SID de plantilla 6
-- Reactivación CON regalo → SID de plantilla 7
-- Recompensa para reactivación → un reward (recomendado: el de menor costo, ej "Bebida gratis")
+### 9.1 El problema que resuelve
+
+Un restaurante promedio pierde el **60% de clientes nuevos después de su primera visita**. Sin sistema: el cliente viene, consume y desaparece. El dueño no tiene forma de saber quién es, cuándo volverá ni cómo traerlo de vuelta.
+
+Este sistema convierte ese 60% de fuga en un flujo de retención activa.
+
+### 9.2 El retorno económico real
+
+Con ticket promedio **$60,000 COP** y margen de contribución **20% = $12,000 COP/visita**:
+
+| Escenario | Número | Utilidad generada |
+|-----------|:------:|:-----------------:|
+| 50 clientes reactivados/mes (cron 21 días) | × $12,000 | **$600,000 COP** |
+| 30 clientes que pasan de 1 a 2 visitas/mes | × $12,000 | **$360,000 COP** |
+| 20 clientes que traen acompañante (2x1) | × $24,000 | **$480,000 COP** |
+| **Total incremental mensual** | | **$1,440,000 COP** |
+| Costo suscripción | | $149,000 COP |
+| **Retorno neto** | | **$1,291,000 COP = 9.6x ROI** |
+
+> Estos números son conservadores. Un restaurante con 300+ clientes activos ve retornos de 15-20x.
+
+### 9.3 Lo que el sistema hace solo (sin intervención del dueño)
+
+- ✅ Cliente nuevo → bienvenida + promesa del próximo premio automática
+- ✅ Cada visita → mensaje con premio específico pendiente → urgencia de regreso
+- ✅ Subida de nivel → hito emocional con preview de beneficios exclusivos
+- ✅ Día 21 sin visita → reactivación personalizada automática
+- ✅ Cumpleaños → mensaje sorpresa que genera visita garantizada
+- ✅ Cliente responde al número → redirigido sin fricción al humano
 
 ---
 
-## 8. Checklist final por restaurante nuevo
+## 10. Checklist de activación por cliente
 
-Para activar el sistema completo en un restaurante nuevo:
+### Técnico (Día 1 — 2-3 horas)
+- [ ] Crear proyecto Supabase + ejecutar 10 migraciones SQL
+- [ ] Crear usuario admin en Supabase Auth
+- [ ] Fork del repo → nuevo repo GitHub → deploy en Vercel
+- [ ] Configurar todas las variables de entorno en Vercel → Redeploy
+- [ ] Crear Messaging Service en Twilio + vincular número WhatsApp al servicio
+- [ ] Configurar webhook URL en Messaging Service
+- [ ] Configurar opt-out keywords en español en Twilio Console
 
-### Día 1: Setup técnico (2-3 horas)
-- [ ] Crear cuenta Twilio + comprar número WhatsApp Business.
-- [ ] Conseguir aprobación de Meta para el número (24-48h).
-- [ ] Conseguir un **segundo número** WhatsApp para atención humana del restaurante.
-- [ ] Configurar variables `.env` (TWILIO_*, RESTAURANT_WHATSAPP_LINK, secrets).
-- [ ] Deploy del proyecto en Vercel.
-- [ ] Conectar Supabase + ejecutar migraciones.
-- [ ] Configurar Opt-Out con keywords en español en Twilio Console.
+### Plantillas (Día 2 — 1 hora + 24-48h espera Meta)
+- [ ] Crear las 6 plantillas en Twilio Content API
+- [ ] Personalizar nombre del restaurante en cada plantilla
+- [ ] Marcar categoría correcta (UTILITY vs MARKETING)
+- [ ] Enviar a aprobación → esperar respuesta de Meta
 
-### Día 2: Plantillas (1 hora hands-on + 24-48h espera)
-- [ ] Crear las 7 plantillas en Twilio Content API o Dashboard > Plantillas.
-- [ ] Personalizar `[TU RESTAURANTE]` con el nombre real.
-- [ ] Marcar correctamente UTILITY vs MARKETING.
-- [ ] Esperar aprobación de Meta (1-2 días).
+### Dashboard (Día 3 — 30 min)
+- [ ] Recompensas: cargar el sistema sugerido o crear milestones personalizados
+- [ ] Ajustes: asignar los 6 SIDs de plantillas aprobadas
+- [ ] Ajustes: seleccionar recompensa para reactivación con regalo
+- [ ] Ajustes: configurar ticket promedio
 
-### Día 3: Auto-respondedor (30 min)
-- [ ] Crear endpoint `/api/webhook/twilio-incoming` con la lógica del doc.
-- [ ] Personalizar keywords en español del restaurante.
-- [ ] Configurar webhook URL en Twilio Console → WhatsApp Senders.
-- [ ] Probar enviando "hola" al número Twilio desde un celular personal.
+### Pruebas E2E (Día 4)
+- [ ] Escanear QR con celular personal → registrarse → recibir bienvenida con premio prometido
+- [ ] Repetir hasta visita 3 → verificar mensajes de premio correcto cada vez
+- [ ] Visita 4 → verificar subida a Oro + mensaje de urgencia hacia visita 5
+- [ ] Responder "hola" al número Twilio → verificar redirect a número humano
+- [ ] Responder "STOP" → verificar que no llegan más mensajes
 
-### Día 4: Configurar Dashboard
-- [ ] En Dashboard > Recompensas: crear los rewards (ej: visita 3, 6, 9, 12).
-- [ ] En Dashboard > Ajustes: asignar los 7 SIDs aprobados.
-- [ ] En Dashboard > Ajustes: seleccionar la recompensa para reactivación.
-- [ ] En Dashboard > Ajustes: configurar ticket promedio (para ROI).
-
-### Día 5: Pruebas E2E
-- [ ] Hacer check-in con celular personal nuevo → recibir bienvenida.
-- [ ] Repetir hasta llegar a milestone → recibir "ganaste premio".
-- [ ] Esperar 21+ días sin visita (o forzar `last_visit_at` antiguo en DB) → trigger manual del cron de reactivación.
-- [ ] Configurar fecha de cumpleaños hoy → trigger cron birthday.
-- [ ] Responder "hola" al Twilio → debe redirigir al WhatsApp humano.
-- [ ] Responder "STOP" → verificar que ya no llegan plantillas.
-
-### Día 6: Configurar n8n (si usa domicilios)
-- [ ] Importar workflow `domicilios_whatsapp_v3.json`.
-- [ ] Configurar credenciales Supabase + Google Contacts.
-- [ ] Insertar números autorizados de meseros en `authorized_numbers`.
-- [ ] Probar reenviando un mensaje de pedido desde un mesero.
-
-### Día 7: Operación
-- [ ] Capacitar al staff: "Si un cliente quiere redimir premio, debe escanear QR al INICIO de la visita, no al final."
-- [ ] Entregar QR físicos en mesas.
-- [ ] Monitorear primeras 100 visitas.
-
----
-
-## 9. Errores comunes y soluciones
-
-| Error | Causa | Solución |
-|-------|-------|----------|
-| 21610: Recipient has opted out | Cliente respondió STOP | Normal, respeta el opt-out |
-| 63016: Failed to send Freeform | Intentaste enviar texto libre fuera de la ventana de 24h | Usar plantillas SIEMPRE |
-| 63007: Channel could not find Twilio number | Número Twilio no aprobado por Meta aún | Esperar aprobación (24-48h) |
-| Plantilla rechazada por Meta | Falta opt-out en MARKETING, o uso de `{{name}}` en vez de `{{1}}` | Revisar reglas de diseño |
-| Cliente no recibe mensajes | accepts_marketing=false en customers, o opt-out previo | Verificar tabla customers + Twilio Opt-Out logs |
-| Webhook 403 | Falta `WEBHOOK_DELIVERY_SECRET` o `CRON_SECRET` | Verificar `.env` y header `x-webhook-secret` |
+### Operación (Día 5)
+- [ ] Capacitar staff: el QR se escanea al llegar, no al salir
+- [ ] Imprimir y plastificar QRs por mesa
+- [ ] Entregar acceso al dashboard al dueño
+- [ ] Monitorear primeras 50 visitas
 
 ---
 
 ## Referencias
 
-- Twilio WhatsApp Docs: https://www.twilio.com/docs/whatsapp
-- Twilio Content API (plantillas): https://www.twilio.com/docs/content
-- Meta Plantillas WhatsApp: https://developers.facebook.com/docs/whatsapp/business-management-api/message-templates
+- Twilio Content API: https://www.twilio.com/docs/content
+- Twilio WhatsApp: https://www.twilio.com/docs/whatsapp
 - Opt-Out Management: https://www.twilio.com/docs/messaging/features/how-to-configure-opt-in-keywords
-- Link `wa.me`: https://faq.whatsapp.com/5913398998672934
+- Meta plantillas: https://developers.facebook.com/docs/whatsapp/business-management-api/message-templates
+- WhatsApp wa.me: https://faq.whatsapp.com/5913398998672934

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Loader2, Phone, User, Calendar, MapPin, ArrowLeft } from 'lucide-react'
+import { Loader2, Phone, User, MapPin, ArrowLeft } from 'lucide-react'
 import type {
   CheckInFormProps,
   CheckInStep,
@@ -17,7 +17,13 @@ export function CheckInForm({
   const [step, setStep] = useState<CheckInStep>('phone')
   const [phone, setPhone] = useState('')
   const [name, setName] = useState('')
-  const [birthday, setBirthday] = useState('')
+  const [birthDay, setBirthDay] = useState('')
+  const [birthMonth, setBirthMonth] = useState('')
+  const [birthYear, setBirthYear] = useState('')
+
+  const birthday = birthDay && birthMonth && birthYear
+    ? `${birthYear}-${birthMonth.padStart(2, '0')}-${birthDay.padStart(2, '0')}`
+    : ''
   const [city, setCity] = useState('')
   const [acceptsMarketing, setAcceptsMarketing] = useState(true)
   const [loading, setLoading] = useState(false)
@@ -267,31 +273,46 @@ export function CheckInForm({
 
           {/* Fecha de nacimiento */}
           <div className="space-y-1.5">
-            <label
-              htmlFor="birthday"
-              className="text-xs font-semibold uppercase tracking-widest"
-              style={{ color: "#6b7280", letterSpacing: "0.05em" }}
-            >
+            <label className="text-xs font-semibold uppercase tracking-widest" style={{ color: "#6b7280", letterSpacing: "0.05em" }}>
               Cumpleaños{" "}
-              <span style={{ color: "#d1d5db", textTransform: "none", fontSize: "0.65rem" }}>
-                (opcional)
-              </span>
+              <span style={{ color: "#d1d5db", textTransform: "none", fontSize: "0.65rem" }}>(opcional)</span>
             </label>
-            <div className="relative">
-              <Calendar
-                className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4"
-                strokeWidth={1.5}
-                style={{ color: "#9ca3af" }}
-              />
-              <input
-                id="birthday"
-                type="date"
-                value={birthday}
-                onChange={(e) => setBirthday(e.target.value)}
-                className="input-premium w-full rounded-xl py-3.5 pl-10 pr-4 text-base outline-none"
-                style={{ color: "#1a1c1d" }}
-                max={new Date().toISOString().split('T')[0]}
-              />
+            <div className="grid grid-cols-3 gap-2">
+              <select
+                value={birthDay}
+                onChange={(e) => setBirthDay(e.target.value)}
+                className="input-premium w-full rounded-xl py-3.5 px-3 text-base outline-none appearance-none text-center"
+                style={{ color: birthDay ? "#1a1c1d" : "#9ca3af" }}
+              >
+                <option value="">Día</option>
+                {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
+                  <option key={d} value={String(d)}>{d}</option>
+                ))}
+              </select>
+
+              <select
+                value={birthMonth}
+                onChange={(e) => setBirthMonth(e.target.value)}
+                className="input-premium w-full rounded-xl py-3.5 px-3 text-base outline-none appearance-none text-center"
+                style={{ color: birthMonth ? "#1a1c1d" : "#9ca3af" }}
+              >
+                <option value="">Mes</option>
+                {['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'].map((m, i) => (
+                  <option key={i + 1} value={String(i + 1)}>{m}</option>
+                ))}
+              </select>
+
+              <select
+                value={birthYear}
+                onChange={(e) => setBirthYear(e.target.value)}
+                className="input-premium w-full rounded-xl py-3.5 px-3 text-base outline-none appearance-none text-center"
+                style={{ color: birthYear ? "#1a1c1d" : "#9ca3af" }}
+              >
+                <option value="">Año</option>
+                {Array.from({ length: 85 }, (_, i) => new Date().getFullYear() - 10 - i).map((y) => (
+                  <option key={y} value={String(y)}>{y}</option>
+                ))}
+              </select>
             </div>
           </div>
 

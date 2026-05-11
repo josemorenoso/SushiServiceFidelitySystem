@@ -29,9 +29,14 @@ Plataforma integral (Full-Stack) de fidelización, CRM y automatización de mark
 | 2 | QR Check-in (Registro presencial) | ✅ Completo |
 | 3 | Webhook Domicilios (WhatsApp + n8n + Google Contacts) | ✅ Completo — n8n en producción |
 | 4 | Campañas y Automatizaciones (Cron) | ✅ Completo — Vercel crons configurados |
-| 5 | Dashboard Administrativo | ✅ Completo — Twilio conectado ($20 saldo) |
-| 6 | Deploy Vercel + Fixes post-deploy | ✅ v0.12.0 — Login, QR, Templates, Rate Limit |
-| 7 | MVP Producción | 🔧 En progreso — ver NEXT_STEPS.md |
+| 5 | Dashboard Administrativo | ✅ Completo — Twilio conectado |
+| 6 | Deploy Vercel + Fixes post-deploy | ✅ v0.24.0 — Control de tráfico, frequency cap, recovery zone |
+| 7 | UX Check-in mejorado | ✅ v0.25–0.29 — Dropdowns, combobox ciudad, consentimiento legal |
+| 8 | Modelo clone-por-cliente | ✅ En producción — Sushi Service desplegado |
+| 9 | Radar de Segmentos + dashboard auto-refresh | ✅ v0.25.0 — SegmentRadar en campañas |
+
+## Modelo de Despliegue
+El sistema funciona como **clone-por-cliente**: cada restaurante tiene su propio proyecto Supabase + proyecto Vercel + rama GitHub, todos compartiendo una única cuenta Twilio (Messaging Service centralizado). La configuración por cliente se gestiona vía variables de entorno en Vercel.
 
 ## Principio Fundamental
 > El sistema debe ser simple para el cliente final (solo ingresa su celular) y poderoso para el administrador (dashboard con métricas, campañas y gestión completa).

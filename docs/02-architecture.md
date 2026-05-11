@@ -121,6 +121,10 @@ Admin login (Supabase Auth) → /dashboard → Métricas, Clientes, Recompensas,
 | `CRON_SECRET` | Secret para proteger rutas cron | privada | SI |
 | `WEBHOOK_DELIVERY_SECRET` | Secret para webhook de domicilios (n8n) | privada | SI |
 | `NEXT_PUBLIC_GOOGLE_MAPS_REVIEW_URL` | URL de reseñas Google Maps | pública | SI |
+| `RESTAURANT_WHATSAPP_LINK` | Enlace wa.me del restaurante para el auto-responder | privada | SI |
+| `NEXT_PUBLIC_BRAND_NAME` | Nombre completo del restaurante (ej: "Sushi Service") | pública | SI |
+| `NEXT_PUBLIC_BRAND_SHORT` | Nombre corto para UI compacta | pública | NO |
+| `NEXT_PUBLIC_BRAND_TAGLINE` | Tagline del restaurante | pública | NO |
 | `N8N_BASE_URL` | URL base de n8n | privada | NO |
 
 ## Convenciones del Proyecto
@@ -159,3 +163,15 @@ Admin login (Supabase Auth) → /dashboard → Métricas, Clientes, Recompensas,
 **Contexto:** Se necesita UI moderna y consistente con componentes accesibles.
 **Decisión:** Usar shadcn/ui (componentes copiados al proyecto) + TailwindCSS.
 **Consecuencias:** Control total sobre los componentes. No hay dependencia de librería externa de UI.
+
+### ADR-005: Modelo clone-por-cliente
+**Fecha:** 2026-05-09
+**Contexto:** Cada restaurante necesita sus propios datos aislados (clientes, campañas, configuración) pero el código es idéntico.
+**Decisión:** Un repositorio GitHub por cliente, un proyecto Supabase por cliente, un proyecto Vercel por cliente. Twilio compartido vía Messaging Service único.
+**Consecuencias:** Aislamiento total de datos. Deploy independiente por cliente. Costos Twilio centralizados. El código se mantiene en un repo plantilla y se sincroniza manualmente.
+
+### ADR-006: Frequency Cap y Recovery Zone centralizados en constants
+**Fecha:** 2026-05-09
+**Contexto:** Los umbrales de marketing (cap 7 días, recovery zone 18-25 días) estaban hardcodeados en distintos archivos.
+**Decisión:** Centralizar en `src/constants/rewards.ts` como `FREQUENCY_CAP_DAYS`, `RECOVERY_ZONE_START_DAYS`, `RECOVERY_ZONE_END_DAYS`.
+**Consecuencias:** Cambiar un número cambia el comportamiento en todos los motores (cron, manual, estimador, radar).

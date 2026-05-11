@@ -5,6 +5,50 @@
 
 ---
 
+## [0.29.0] — 2026-05-10 — Dashboard auto-refresh cada 60 segundos
+
+### Fixed
+- `src/hooks/useDashboardAnalytics.ts` — El hook cargaba datos una sola vez al montar. Si clientes se registraban con el dashboard ya abierto, las métricas quedaban desactualizadas hasta recargar la página. Ahora hace polling cada 60 segundos con `cache: 'no-store'`.
+
+---
+
+## [0.28.0] — 2026-05-10 — Consentimiento de marketing desmarcado por defecto (legal)
+
+### Fixed
+- `src/components/features/check-in/CheckInForm.tsx` — El checkbox `accepts_marketing` arrancaba marcado (`true`), lo que viola la Ley 1581 de 2012 (Colombia) que exige consentimiento explícito, previo e informado. Ahora inicia desmarcado (`false`) y el botón de registro permanece deshabilitado hasta que el usuario lo acepte activamente.
+
+---
+
+## [0.27.0] — 2026-05-10 — Ciudad con combobox autocomplete
+
+### Changed
+- `src/components/features/check-in/CheckInForm.tsx` — Reemplaza el input de texto libre para ciudad por un combobox con lista de ~70 ciudades colombianas. El usuario escribe la primera letra y ve hasta 6 sugerencias filtradas. Elimina errores de ortografía como "Medellin", "Medelli", "Envigdo".
+
+---
+
+## [0.26.0] — 2026-05-10 — Selector de cumpleaños con 3 dropdowns + popup reseña sin incentivo
+
+### Changed
+- `src/components/features/check-in/CheckInForm.tsx` — Reemplaza `input[type=date]` (dispara calendario nativo del browser) por 3 selects independientes: Día / Mes / Año. Combina el valor en formato `YYYY-MM-DD` antes de enviarlo a la API. Elimina import `Calendar` de lucide-react.
+- `src/components/features/check-in/GoogleReviewPopup.tsx` — Elimina el bloque "INCENTIVO ESPECIAL / rollo cortesía" que prometía un premio no autorizado. Reemplaza con mensaje cálido que valora la opinión sin prometer nada. Limpia el footer "para reclamar el incentivo".
+
+---
+
+## [0.25.0] — 2026-05-09 — Radar de Segmentos en campañas + webhook anti-idiotas mejorado
+
+### Added
+- `src/components/dashboard/SegmentRadar.tsx` — Componente de 4 tarjetas que muestra en tiempo real: Disponibles (0-17d), Zona Recuperación (18-25d), Perdidos (25+d), En Espera (<7d cap). Incluye porcentajes y tips de acción para cada segmento. Auto-refresh con botón manual.
+- `src/app/api/dashboard/campaigns/segments/route.ts` — Endpoint `GET /api/dashboard/campaigns/segments` que calcula los 4 segmentos usando `FREQUENCY_CAP_DAYS`, `RECOVERY_ZONE_START_DAYS`, `RECOVERY_ZONE_END_DAYS`. Protegido por Supabase Auth.
+- `docs/features/campaigns.md` — Documento completo del sistema de campañas y control de tráfico.
+
+### Changed
+- `src/app/(dashboard)/dashboard/campaigns/page.tsx` — Integra `<SegmentRadar />` en la parte superior de la página de campañas.
+- `src/app/api/webhook/twilio-incoming/route.ts` — Auto-responder mejorado con detección de intención (pedido, horario, ubicación) y enlace wa.me configurable via `RESTAURANT_WHATSAPP_LINK`. Manejo defensivo de STOP/BAJA/ALTA.
+- `.env.example` — Agrega `RESTAURANT_WHATSAPP_LINK`, `NEXT_PUBLIC_BRAND_NAME`, `NEXT_PUBLIC_BRAND_SHORT`, `NEXT_PUBLIC_BRAND_TAGLINE`.
+- `scripts/twilio-setup.mjs` — CLI para configurar Twilio via REST API (Messaging Service, webhook URL).
+
+---
+
 ## [0.24.0] — 2026-05-09 — Control de Tráfico Centralizado (Constelarys Fidelity System)
 
 ### Request original

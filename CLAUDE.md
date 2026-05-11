@@ -52,11 +52,19 @@
 | Archivo que se modifica | Doc que se debe leer |
 |------------------------|---------------------|
 | `src/app/(public)/check-in/*` | `docs/features/qr-checkin.md` |
+| `src/components/features/check-in/*` | `docs/features/qr-checkin.md` |
 | `src/app/api/webhook/delivery/*` | `docs/features/delivery-webhook.md` + `docs/03-security.md` |
+| `src/app/api/webhook/twilio-incoming/*` | `docs/features/campaigns.md` + `docs/03-security.md` |
 | `src/app/api/cron/*` | `docs/features/campaigns.md` |
+| `src/app/api/dashboard/campaigns/*` | `docs/features/campaigns.md` |
+| `src/app/(dashboard)/dashboard/campaigns/*` | `docs/features/campaigns.md` |
 | `src/app/(dashboard)/*` | `docs/features/dashboard.md` |
+| `src/components/dashboard/*` | `docs/features/dashboard.md` |
+| `src/hooks/useDashboardAnalytics.ts` | `docs/features/dashboard.md` |
 | `src/lib/supabase/*` | `docs/02-architecture.md` + `docs/03-security.md` |
-| `src/lib/twilio/*` | `docs/02-architecture.md` |
+| `src/lib/twilio/*` | `docs/02-architecture.md` + `docs/CONFIGURACIONES_TWILIO_SISTEMA.md` |
 | `src/services/*` | `docs/features/[feature].md` correspondiente |
+| `src/constants/rewards.ts` | `docs/features/campaigns.md` |
 | `supabase/migrations/*.sql` | `docs/DB_SCHEMA.md` |
 | `src/app/api/**` | `docs/API_DOCS.md` + `docs/features/[feature].md` |
+| `scripts/twilio-setup.mjs` | `docs/CONFIGURACIONES_TWILIO_SISTEMA.md` |

@@ -50,10 +50,12 @@ Tablas involucradas:
 4. n8n busca/crea/actualiza contacto en Google Contacts
 
 ### Formato Esperado del Mensaje
-El mesero reenvía un mensaje que contiene el teléfono del cliente. El sistema intenta extraerlo de:
-- Texto plano con número: "Pedido de 3001234567" → extrae 3001234567
-- Mensaje reenviado de WhatsApp: el campo `From` del mensaje original
-- Formato libre: busca patrón de 10 dígitos colombianos (3XXXXXXXXX)
+El mesero reenvía un mensaje que contiene el teléfono del cliente. El nodo `parse_dom_1` extrae el body de (en orden): `Body`, `messages[0].text.body`, `text`, `body`, `chatInput`, `message`. El remitente se obtiene de: `From`, `messages[0].from`, `from`, `sender`; si ninguno está presente (ej: n8n Chat Trigger), extrae el celular directamente del cuerpo del mensaje con los siguientes patrones (en orden de prioridad):
+1. `celular: +57 3XXXXXXXXX`
+2. `celular: 3XXXXXXXXX`
+3. número de 10 dígitos colombianos suelto (3XXXXXXXXX)
+
+**Formatos de número soportados:** `+57XXXXXXXXXX`, `57XXXXXXXXXX`, `XXXXXXXXXX` (10 dígitos).
 
 ### Casos de Error
 - Número del remitente no autorizado → 403 + ignorar

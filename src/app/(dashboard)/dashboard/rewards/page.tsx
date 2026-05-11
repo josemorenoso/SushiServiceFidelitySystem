@@ -31,15 +31,9 @@ import {
   ToggleRight,
   Loader2,
   Sparkles,
-  MessageSquare,
   AlertTriangle,
 } from 'lucide-react'
 import type { Reward } from '@/types/database.types'
-
-function buildPreviewTemplate(milestone: number, title: string): string {
-  if (!milestone || !title) return ''
-  return `\u00a1Felicidades {{name}}! \ud83c\udf89 Has completado tu visita #${milestone}. Como agradecimiento, te has ganado: ${title}. \u00a1Reclama tu premio en tu pr\u00f3xima visita!`
-}
 
 export default function RewardsPage() {
   const [rewards, setRewards] = useState<Reward[]>([])
@@ -90,7 +84,7 @@ export default function RewardsPage() {
       setCreateOpen(false)
       fetchRewards()
     } catch {
-      setCreateError('Error de conexi\u00f3n')
+      setCreateError('Error de conexión')
     } finally {
       setCreating(false)
     }
@@ -118,11 +112,6 @@ export default function RewardsPage() {
     } catch { /* best effort */ }
   }
 
-  const previewTemplate = buildPreviewTemplate(
-    parseInt(newMilestone) || 0,
-    newTitle
-  )
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -140,7 +129,7 @@ export default function RewardsPage() {
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Recompensas por Visitas</CardTitle>
           <CardDescription>
-            Cuando un cliente alcanza una meta de visitas, recibe autom\u00e1ticamente un mensaje de WhatsApp con su premio.
+            Cuando un cliente alcanza una meta de visitas, recibe automaticamente un mensaje de WhatsApp con su premio.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -166,7 +155,6 @@ export default function RewardsPage() {
                 <TableRow>
                   <TableHead className="text-center w-24">Visita #</TableHead>
                   <TableHead>Recompensa</TableHead>
-                  <TableHead className="hidden md:table-cell">Mensaje WhatsApp</TableHead>
                   <TableHead className="text-center w-24">Estado</TableHead>
                   <TableHead className="text-center w-28">Acciones</TableHead>
                 </TableRow>
@@ -183,9 +171,6 @@ export default function RewardsPage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="font-medium">{r.title}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground max-w-xs truncate hidden md:table-cell">
-                      {r.message_template}
-                    </TableCell>
                     <TableCell className="text-center">
                       <Badge variant={r.is_active ? 'default' : 'secondary'}>
                         {r.is_active ? 'Activa' : 'Inactiva'}
@@ -231,7 +216,7 @@ export default function RewardsPage() {
               Nueva Recompensa
             </DialogTitle>
             <DialogDescription>
-              Ingresa la meta de visitas y el premio. El mensaje de WhatsApp se genera autom\u00e1ticamente.
+              Ingresa la meta de visitas y el premio. El mensaje de WhatsApp se genera automaticamente.
             </DialogDescription>
           </DialogHeader>
 
@@ -258,18 +243,6 @@ export default function RewardsPage() {
                 />
               </div>
             </div>
-
-            {previewTemplate && (
-              <div className="rounded-lg border border-green-200 bg-green-50 p-3 space-y-1">
-                <p className="text-xs font-semibold text-green-800 flex items-center gap-1">
-                  <MessageSquare className="h-3.5 w-3.5" />
-                  Vista previa del mensaje autom\u00e1tico:
-                </p>
-                <p className="text-xs text-green-700 italic">
-                  &quot;{previewTemplate.replace('{{name}}', 'Juan')}&quot;
-                </p>
-              </div>
-            )}
 
             {createError && (
               <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800 flex items-center gap-2">

@@ -5,6 +5,18 @@
 
 ---
 
+## [0.30.0] — 2026-05-10 — Múltiples correcciones post-deploy (heatmap, n8n chat hook, rewards UI, segments radar)
+
+### Fixed
+- `src/services/dashboard.service.ts` — Heatmap usaba `getDay()`/`getHours()` en UTC, causando un desfase de 5 horas para Colombia (UTC-5). Ahora convierte a `America/Bogota` via `Intl` nativo antes de extraer día y hora.
+- `n8n/domicilios_whatsapp_v4.json` — Nodo `parse_dom_1`: solo buscaba remitente en `From/from/sender` (campos de Twilio). Cuando se usa un n8n Chat Trigger no existe campo `From` → lanzaba error. Ahora también soporta `chatInput`/`message` para el body, y extrae el celular del cuerpo del mensaje si no hay remitente en los campos estándar (regex: `celular: 3XXXXXXXXX`, `+57 3XXXXXXXXX`, o número suelto de 10 dígitos).
+- `src/app/(dashboard)/dashboard/rewards/page.tsx` — Eliminada columna "Mensaje WhatsApp" (`message_template`) de la tabla: los mensajes los define la plantilla Twilio, no este campo. Eliminados: `buildPreviewTemplate`, `previewTemplate`, bloque de vista previa verde en el dialog, e import `MessageSquare`.
+- `src/app/(dashboard)/dashboard/rewards/page.tsx` — Typo: "autom**á**ticamente" → "automaticamente" (sin acento) en `CardDescription` y `DialogDescription`.
+- `src/app/api/dashboard/campaigns/segments/route.ts` — Filtro `accepts_marketing` ahora incluye `NULL` (clientes legacy registrados antes de la migración de consentimiento). Antes `.eq('accepts_marketing', true)` excluía todos los NULL → radar mostraba 0 clientes.
+- `src/app/api/dashboard/campaigns/segments/route.ts` — Segmento "Perdidos": `last_visit_at IS NULL` ahora incluido con `.or('last_visit_at.is.null,...')`. Clientes sin ninguna visita registrada ya aparecen en el segmento correcto.
+
+---
+
 ## [0.29.0] — 2026-05-10 — Dashboard auto-refresh cada 60 segundos
 
 ### Fixed

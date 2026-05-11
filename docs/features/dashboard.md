@@ -53,6 +53,11 @@ Dar al administrador visibilidad completa del programa de fidelidad: cuántos cl
 - Icono: `UtensilsCrossed` de Lucide
 - QR color: rojo oscuro (#991B1B) sobre blanco
 
+## Notas de implementación
+
+### Heatmap — Zona horaria Colombia
+El heatmap de visitas (`src/services/dashboard.service.ts`) convierte `created_at` (UTC) a `America/Bogota` (UTC-5) usando `Intl` nativo antes de extraer `getDay()` y `getHours()`. Sin esta conversión las visitas de las 9 AM Colombia aparecerían en la franja de las 14hs (UTC).
+
 ## Restricciones
 - Solo admins autenticados acceden al dashboard
 - La ruta `/check-in` NO requiere auth (es pública)

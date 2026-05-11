@@ -260,8 +260,10 @@ export async function getFullAnalytics(): Promise<DashboardAnalytics> {
   }
   for (const v of (allVisits6m ?? [])) {
     const vDate = new Date(v.created_at)
-    const dayOfWeek = vDate.getDay()
-    const hour = vDate.getHours()
+    const colombiaStr = vDate.toLocaleString('en-US', { timeZone: 'America/Bogota' })
+    const colombiaDate = new Date(colombiaStr)
+    const dayOfWeek = colombiaDate.getDay()
+    const hour = colombiaDate.getHours()
     heatmapGrid[`${dayOfWeek}-${hour}`]++
   }
   const heatmap: HeatmapCell[] = []

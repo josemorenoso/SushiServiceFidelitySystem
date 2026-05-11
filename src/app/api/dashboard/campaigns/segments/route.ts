@@ -32,7 +32,7 @@ export async function GET() {
     const recoveryStart = daysAgo(RECOVERY_ZONE_END_DAYS)       // 25d ago
     const lostCutoff = daysAgo(RECOVERY_ZONE_END_DAYS)          // 25d ago
 
-    const base = db.from('customers').select('id', { count: 'exact', head: true }).eq('accepts_marketing', true)
+    const base = db.from('customers').select('id', { count: 'exact', head: true }).or('accepts_marketing.is.null,accepts_marketing.eq.true')
 
     // Activos: visitaron hace menos de 18d (fuera de recovery zone)
     const [{ count: activeCount }, { count: recoveryCount }, { count: lostCount }, { count: capCount }] =
@@ -48,7 +48,7 @@ export async function GET() {
 
         // Perdidos: más de 25d sin visitar (disponibles para campaña agresiva)
         base
-          .lt('last_visit_at', lostCutoff)
+          .or(`last_visit_at.is.null,last_visit_at.lt.${lostCutoff}`)
           .or(`last_campaign_at.is.null,last_campaign_at.lt.${capCutoff}`),
 
         // En cap: contactados en los últimos 7d (no pueden recibir nada)

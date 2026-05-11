@@ -18,16 +18,23 @@ export function useDashboardAnalytics() {
   useEffect(() => {
     if (isDemo) return
 
+    const load = () => {
+      fetch('/api/dashboard/analytics', { cache: 'no-store' })
+        .then((res) => {
+          if (!res.ok) throw new Error('Error cargando analytics')
+          return res.json()
+        })
+        .then((data) => setRealData(data))
+        .catch((err) => setRealError(err.message))
+        .finally(() => setRealLoading(false))
+    }
+
     setRealLoading(true)
     setRealError(null)
-    fetch('/api/dashboard/analytics')
-      .then((res) => {
-        if (!res.ok) throw new Error('Error cargando analytics')
-        return res.json()
-      })
-      .then((data) => setRealData(data))
-      .catch((err) => setRealError(err.message))
-      .finally(() => setRealLoading(false))
+    load()
+
+    const interval = setInterval(load, 60_000)
+    return () => clearInterval(interval)
   }, [isDemo, refreshKey])
 
   if (isDemo) {

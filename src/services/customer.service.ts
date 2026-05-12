@@ -95,3 +95,12 @@ export async function incrementVisit(customerId: string, currentVisits: number, 
 
   return data
 }
+
+export async function updateCustomerCityIfNull(customerId: string, city: string): Promise<void> {
+  const supabase = getServiceClient()
+  await supabase
+    .from('customers')
+    .update({ city })
+    .eq('id', customerId)
+    .is('city', null)
+}

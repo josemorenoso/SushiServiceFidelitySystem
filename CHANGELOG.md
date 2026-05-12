@@ -5,6 +5,24 @@
 
 ---
 
+## [0.32.0] — 2026-05-12 — Radar fix, templates con samples, ciudad en delivery, números autorizados
+
+### Fixed
+- `src/app/api/dashboard/campaigns/segments/route.ts` — **Radar mostrando 0 clientes**: el query builder de Supabase es mutable; reusar la misma variable `base` en `Promise.all` causaba que los filtros se apilaran en el mismo objeto. Ahora usa `getBase()` que crea un builder fresco por cada query.
+
+### Added
+- `src/app/(dashboard)/dashboard/templates/page.tsx` — **Valores de ejemplo para variables**: al crear una plantilla con `{{1}}`, `{{2}}`, etc. aparecen inputs para definir samples obligatorios. Sin esto, Meta aprueba la plantilla solo para mensajes de sesión (24h) pero no para outbound marketing. Botón cambiado de "Crear y Enviar" → "Enviar a Aprobación de WhatsApp".
+- `src/app/api/dashboard/authorized-numbers/route.ts` — API GET (listar) + POST (crear) números autorizados de meseros.
+- `src/app/api/dashboard/authorized-numbers/[id]/route.ts` — API PATCH (toggle activo) + DELETE (eliminar).
+- `src/app/(dashboard)/dashboard/authorized-numbers/page.tsx` — Página completa para gestionar meseros: tabla con toggle activo/inactivo, eliminar, agregar via dialog.
+- `src/components/layout/DashboardSidebar.tsx` — Link "Meseros" con icono ShieldCheck en sidebar.
+- `src/services/customer.service.ts` — `updateCustomerCityIfNull()` para actualizar ciudad de cliente existente si la recibe desde delivery.
+
+### Changed
+- `src/app/api/webhook/delivery/route.ts` — Ahora acepta campo `ciudad` en el payload. Si el cliente es nuevo, se guarda como `city`. Si ya existe y no tiene ciudad, se actualiza.
+
+---
+
 ## [0.31.0] — 2026-05-11 — UX: filtros de clientes, edición de cliente, tabs campañas, Settings unificado
 
 ### Added

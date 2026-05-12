@@ -9,7 +9,6 @@ import { Badge } from '@/components/ui/badge'
 import {
   FileText,
   Plus,
-  Save,
   Eye,
   AlertTriangle,
   MessageSquare,
@@ -67,6 +66,7 @@ export default function TemplatesPage() {
   const [createResult, setCreateResult] = useState<string | null>(null)
   const [showWarning, setShowWarning] = useState(false)
   const [showTips, setShowTips] = useState(false)
+  const [sampleVars, setSampleVars] = useState<Record<string, string>>({})
 
   const fetchTemplates = useCallback(async () => {
     setSyncing(true)
@@ -104,8 +104,16 @@ export default function TemplatesPage() {
     setPreview(previewed)
   }
 
+  const detectedVars = (() => {
+    const matches = newBody.match(/\{\{\d+\}\}/g) || []
+    const unique = [...new Set(matches)].sort()
+    return unique.map((v) => v.replace(/[{}]/g, ''))
+  })()
+
+  const allSamplesFilled = detectedVars.length === 0 || detectedVars.every((v) => (sampleVars[v] ?? '').trim().length > 0)
+
   const handleCreate = async () => {
-    if (!newName.trim() || !newBody.trim()) return
+    if (!newName.trim() || !newBody.trim() || !allSamplesFilled) return
     setCreating(true)
     setCreateResult(null)
     try {
@@ -117,13 +125,15 @@ export default function TemplatesPage() {
           body: newBody.trim(),
           category: newCategory,
           language: 'es',
+          variables: sampleVars,
         }),
       })
       const data = await res.json()
       if (data.success) {
-        setCreateResult('Plantilla creada y enviada para aprobación')
+        setCreateResult('Plantilla creada y enviada para aprobación de WhatsApp')
         setNewName('')
         setNewBody('')
+        setSampleVars({})
         setShowNew(false)
         fetchTemplates()
       } else {
@@ -328,16 +338,39 @@ export default function TemplatesPage() {
               <Label className="text-xs">Cuerpo del mensaje</Label>
               <textarea
                 value={newBody}
-                onChange={(e) => setNewBody(e.target.value)}
+                onChange={(e) => { setNewBody(e.target.value); setSampleVars({}) }}
                 placeholder="¡Hola {{1}}! Tu pedido #{{2}} está listo..."
                 rows={4}
                 className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none"
               />
             </div>
+
+            {detectedVars.length > 0 && (
+              <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-3 space-y-2">
+                <p className="text-xs font-semibold text-blue-800">Valores de ejemplo para variables</p>
+                <p className="text-[10px] text-blue-600">Meta requiere un valor de ejemplo para cada variable. Sin esto, la plantilla no será aprobada para mensajes directos de WhatsApp.</p>
+                {detectedVars.map((v) => (
+                  <div key={v} className="flex items-center gap-2">
+                    <span className="text-xs font-mono text-blue-700 w-10 shrink-0">{`{{${v}}}`}</span>
+                    <Input
+                      value={sampleVars[v] ?? ''}
+                      onChange={(e) => setSampleVars((prev) => ({ ...prev, [v]: e.target.value }))}
+                      placeholder={v === '1' ? 'Ej: María' : v === '2' ? 'Ej: 10' : 'Ej: Rollo California'}
+                      className="h-7 text-xs"
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="flex gap-2">
-              <Button onClick={handleCreate} disabled={!newName.trim() || !newBody.trim() || creating} className="gap-2">
-                {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                {creating ? 'Creando...' : 'Crear y Enviar a Aprobación'}
+              <Button
+                onClick={handleCreate}
+                disabled={!newName.trim() || !newBody.trim() || !allSamplesFilled || creating}
+                className="gap-2"
+              >
+                {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <CloudUpload className="h-4 w-4" />}
+                {creating ? 'Enviando...' : 'Enviar a Aprobación de WhatsApp'}
               </Button>
               <Button variant="outline" onClick={() => setShowNew(false)}>
                 Cancelar

@@ -12,6 +12,7 @@ import {
   UtensilsCrossed,
   FileText,
   Settings,
+  ShieldCheck,
 } from 'lucide-react'
 import { BRAND_NAME } from '@/lib/branding'
 
@@ -22,6 +23,7 @@ const navItems = [
   { href: '/dashboard/campaigns', label: 'Campañas', icon: Megaphone },
   { href: '/dashboard/qr', label: 'Código QR', icon: QrCode },
   { href: '/dashboard/templates', label: 'Plantillas', icon: FileText },
+  { href: '/dashboard/authorized-numbers', label: 'Meseros', icon: ShieldCheck },
   { href: '/dashboard/settings', label: 'Ajustes', icon: Settings },
 ]
 

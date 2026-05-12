@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { validatePhone } from '@/lib/validators/phone'
-import { findCustomerByPhone, createCustomer, incrementVisit } from '@/services/customer.service'
+import { findCustomerByPhone, createCustomer, incrementVisit, updateCustomerCityIfNull } from '@/services/customer.service'
 import { createVisit } from '@/services/visit.service'
 import { checkRewardForVisit, getNextReward, getRewardTitle, getRemainingForReward } from '@/services/reward.service'
 import { sendTemplateMessage } from '@/services/whatsapp.service'
@@ -15,6 +15,7 @@ interface DeliveryRequestBody {
   metodo_pago?: string | null
   monto_total?: number | null
   raw_message?: string | null
+  ciudad?: string | null
 }
 
 async function sendDeliveryTemplate(
@@ -60,7 +61,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = (await request.json()) as DeliveryRequestBody
-    const { nombre_cliente, celular, direccion, metodo_pago, monto_total, raw_message } = body
+    const { nombre_cliente, celular, direccion, metodo_pago, monto_total, raw_message, ciudad } = body
 
     if (!celular) {
       return NextResponse.json(
@@ -88,13 +89,16 @@ export async function POST(request: NextRequest) {
         phone: cleaned,
         name: customerName,
         birthday: null,
-        city: null,
+        city: ciudad ?? null,
         source: 'delivery',
       })
       isNew = true
       action = 'created'
     } else {
       customer = await incrementVisit(customer.id, customer.total_visits, 'delivery')
+      if (ciudad && !customer.city) {
+        await updateCustomerCityIfNull(customer.id, ciudad)
+      }
     }
 
     await createVisit({

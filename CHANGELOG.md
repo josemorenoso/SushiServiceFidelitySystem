@@ -5,6 +5,21 @@
 
 ---
 
+## [0.31.0] — 2026-05-11 — UX: filtros de clientes, edición de cliente, tabs campañas, Settings unificado
+
+### Added
+- `src/app/(dashboard)/dashboard/customers/page.tsx` — Barra de filtros por Canal (QR / Domicilio / Ambos), Nivel (Plata / Oro / Platino / Black) y Estado (Activos / Recuperación / Perdidos). Los filtros se envían como query params y se resetea la paginación al cambiar cualquier filtro.
+- `src/services/dashboard.service.ts` — `getCustomers` acepta parámetros `source`, `tier` y `status` para filtrar clientes en la DB.
+- `src/app/api/dashboard/customers/route.ts` — Extrae y pasa los nuevos parámetros de filtro al servicio.
+- `src/app/api/dashboard/customers/[id]/route.ts` — `PATCH` endpoint para editar datos del cliente: `name`, `birthday`, `city`, `accepts_marketing`.
+- `src/components/dashboard/CustomerDetailDialog.tsx` — Modo edición activado por botón lápiz en el header. Permite editar nombre, cumpleaños, ciudad y consentimiento de marketing. Guarda vía `PATCH /api/dashboard/customers/[id]`.
+
+### Changed
+- `src/app/(dashboard)/dashboard/campaigns/page.tsx` — Reestructurado con tabs (shadcn Tabs): **Automáticas** (campañas cron + TwilioWallet), **Manuales** (ManualCampaigns), **Historial** (tabla). El SegmentRadar queda sobre los tabs como vista global.
+- `src/app/(dashboard)/dashboard/settings/page.tsx` — Reemplazados todos los `<input>` nativos con shadcn `<Input>`, botones HTML con `<Button>`, y `<select>` estilizado con clases Tailwind consistentes con el design system. Eliminada la dependencia de `input-premium`.
+
+---
+
 ## [0.30.0] — 2026-05-10 — Múltiples correcciones post-deploy (heatmap, n8n chat hook, rewards UI, segments radar)
 
 ### Fixed

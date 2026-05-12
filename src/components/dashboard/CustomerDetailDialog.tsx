@@ -22,6 +22,7 @@ import {
   MessageCircle,
   MessageCircleOff,
   Clock,
+  Pencil,
 } from 'lucide-react'
 import { getCustomerRank } from '@/constants/rankings'
 import type { Customer } from '@/types/database.types'
@@ -50,11 +51,25 @@ export function CustomerDetailDialog({ customer, open, onOpenChange, onVisitsAdd
   const [addSuccess, setAddSuccess] = useState(false)
   const [nextReward, setNextReward] = useState<{ milestone: number; title: string } | null>(null)
 
+  const [editMode, setEditMode] = useState(false)
+  const [editName, setEditName] = useState('')
+  const [editBirthday, setEditBirthday] = useState('')
+  const [editCity, setEditCity] = useState('')
+  const [editMarketing, setEditMarketing] = useState(false)
+  const [editSaving, setEditSaving] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
+
   useEffect(() => {
     if (customer && open) {
       setAddCount('1')
       setReason('')
       setAddSuccess(false)
+      setEditMode(false)
+      setEditError(null)
+      setEditName(customer.name)
+      setEditBirthday(customer.birthday ?? '')
+      setEditCity(customer.city ?? '')
+      setEditMarketing(customer.accepts_marketing)
       fetch(`/api/dashboard/customers/${customer.id}/next-reward`)
         .then((r) => r.json())
         .then((d) => setNextReward(d.reward ?? null))
@@ -68,6 +83,31 @@ export function CustomerDetailDialog({ customer, open, onOpenChange, onVisitsAdd
   const daysInactive = customer.last_visit_at
     ? Math.floor((Date.now() - new Date(customer.last_visit_at).getTime()) / (1000 * 60 * 60 * 24))
     : null
+
+  const handleSaveEdit = async () => {
+    if (!customer) return
+    setEditSaving(true)
+    setEditError(null)
+    try {
+      const res = await fetch(`/api/dashboard/customers/${customer.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editName,
+          birthday: editBirthday || null,
+          city: editCity || null,
+          accepts_marketing: editMarketing,
+        }),
+      })
+      if (!res.ok) throw new Error('Error al guardar')
+      setEditMode(false)
+      onVisitsAdded?.()
+    } catch {
+      setEditError('No se pudo guardar los cambios')
+    } finally {
+      setEditSaving(false)
+    }
+  }
 
   const handleAddVisits = async () => {
     const count = parseInt(addCount)
@@ -98,7 +138,8 @@ export function CustomerDetailDialog({ customer, open, onOpenChange, onVisitsAdd
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-3">
+          <DialogTitle className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
             <span className="text-2xl">{rank.emoji}</span>
             <div>
               <p className="text-lg font-bold" style={{ color: '#1a1c1d' }}>
@@ -114,10 +155,66 @@ export function CustomerDetailDialog({ customer, open, onOpenChange, onVisitsAdd
                 {rank.name}
               </span>
             </div>
+          </div>
+          {!editMode && (
+            <button
+              onClick={() => setEditMode(true)}
+              className="rounded-md p-1.5 text-muted-foreground hover:bg-muted transition-colors"
+              title="Editar cliente"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+          )}
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
+          {/* Modo edición */}
+          {editMode ? (
+            <div className="space-y-3 rounded-xl p-3" style={{ background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.06)' }}>
+              <div>
+                <label className="text-[10px] uppercase font-semibold" style={{ color: '#9ca3af' }}>Nombre</label>
+                <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="mt-1" />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] uppercase font-semibold" style={{ color: '#9ca3af' }}>Cumpleaños</label>
+                  <Input type="date" value={editBirthday} onChange={(e) => setEditBirthday(e.target.value)} className="mt-1" />
+                </div>
+                <div>
+                  <label className="text-[10px] uppercase font-semibold" style={{ color: '#9ca3af' }}>Ciudad</label>
+                  <Input value={editCity} onChange={(e) => setEditCity(e.target.value)} placeholder="Ciudad" className="mt-1" />
+                </div>
+              </div>
+              <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={editMarketing}
+                  onChange={(e) => setEditMarketing(e.target.checked)}
+                  className="h-4 w-4 rounded border-input"
+                />
+                Acepta mensajes de marketing (WhatsApp)
+              </label>
+              {editError && <p className="text-xs" style={{ color: '#ef4444' }}>{editError}</p>}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setEditMode(false); setEditError(null) }}
+                  className="flex-1 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-muted"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleSaveEdit}
+                  disabled={editSaving}
+                  className="flex-1 rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition-all disabled:opacity-60"
+                  style={{ background: 'linear-gradient(135deg, #FF4D6D 0%, #E63946 100%)' }}
+                >
+                  {editSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin inline" /> : 'Guardar'}
+                </button>
+              </div>
+            </div>
+          ) : (
+          <>
           {/* Info básica */}
           <div className="grid grid-cols-2 gap-3">
             <div className="flex items-center gap-2 text-sm">
@@ -256,6 +353,8 @@ export function CustomerDetailDialog({ customer, open, onOpenChange, onVisitsAdd
               </Button>
             </div>
           </div>
+          </>
+          )}
         </div>
       </DialogContent>
     </Dialog>

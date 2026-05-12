@@ -32,3 +32,33 @@ export async function GET(
 
   return NextResponse.json(customer)
 }
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+
+  const { id } = await params
+  const body = await request.json()
+  const { name, birthday, city, accepts_marketing } = body
+
+  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
+  if (name !== undefined) updates.name = String(name).trim()
+  if (birthday !== undefined) updates.birthday = birthday || null
+  if (city !== undefined) updates.city = city || null
+  if (accepts_marketing !== undefined) updates.accepts_marketing = Boolean(accepts_marketing)
+
+  const db = getServiceClient()
+  const { data, error } = await db
+    .from('customers')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single()
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json(data)
+}

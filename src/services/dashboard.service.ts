@@ -71,17 +71,51 @@ export async function getCustomers(params: {
   page?: number
   limit?: number
   search?: string
+  source?: string
+  tier?: string
+  status?: string
 }): Promise<{ customers: Customer[]; total: number }> {
   const supabase = getServiceClient()
   const page = params.page ?? 1
   const limit = params.limit ?? 20
   const from = (page - 1) * limit
   const to = from + limit - 1
+  const now = new Date()
 
   let query = supabase.from('customers').select('*', { count: 'exact' })
 
   if (params.search) {
     query = query.or(`name.ilike.%${params.search}%,phone.ilike.%${params.search}%`)
+  }
+
+  if (params.source && params.source !== 'all') {
+    query = query.eq('source_channels', params.source)
+  }
+
+  if (params.tier && params.tier !== 'all') {
+    const tierRanges: Record<string, { min: number; max?: number }> = {
+      plata:   { min: 0, max: 3 },
+      oro:     { min: 4, max: 6 },
+      platino: { min: 7, max: 9 },
+      black:   { min: 10 },
+    }
+    const range = tierRanges[params.tier]
+    if (range) {
+      query = query.gte('total_visits', range.min)
+      if (range.max !== undefined) query = query.lte('total_visits', range.max)
+    }
+  }
+
+  if (params.status && params.status !== 'all') {
+    const activeCutoff = new Date(now.getTime() - 18 * 24 * 60 * 60 * 1000).toISOString()
+    const lostCutoff   = new Date(now.getTime() - 25 * 24 * 60 * 60 * 1000).toISOString()
+    if (params.status === 'active') {
+      query = query.gte('last_visit_at', activeCutoff)
+    } else if (params.status === 'inactive') {
+      query = query.lt('last_visit_at', activeCutoff).gte('last_visit_at', lostCutoff)
+    } else if (params.status === 'lost') {
+      query = query.or(`last_visit_at.is.null,last_visit_at.lt.${lostCutoff}`)
+    }
   }
 
   const { data, count, error } = await query

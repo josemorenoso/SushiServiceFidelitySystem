@@ -1,7 +1,9 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { Settings, DollarSign, Save, Loader2, CheckCircle, Crown, CalendarHeart, Mail, RefreshCw, MessageCircle, Gift, UserPlus } from 'lucide-react'
+import { Settings, DollarSign, Save, Loader2, CheckCircle, Crown, CalendarHeart, Mail, RefreshCw, MessageCircle, Gift, UserPlus, X, Plus } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 
 interface TwilioTemplate {
   sid: string
@@ -58,8 +60,7 @@ function TemplateSelector({ label, icon, hint, value, onChange, templates }: Tem
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="input-premium w-full rounded-xl py-2.5 px-3 text-sm"
-        style={{ border: '1px solid rgba(226,190,192,0.35)', background: 'rgba(255,255,255,0.8)', color: '#1a1c1d' }}
+        className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm transition-colors outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/50"
       >
         <option value="">— Sin plantilla (NO se enviará mensaje) —</option>
         {templates.map((t) => (
@@ -250,14 +251,13 @@ export default function SettingsPage() {
         <div className="flex items-center gap-3">
           <div className="relative flex-1">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium" style={{ color: '#9ca3af' }}>$</span>
-            <input
+            <Input
               type="number"
               value={avgTicket}
               onChange={(e) => setAvgTicket(e.target.value)}
               disabled={loading}
               placeholder="35000"
-              className="input-premium w-full pl-7 pr-4 py-2.5 rounded-xl text-sm font-medium"
-              style={{ border: '1px solid rgba(226,190,192,0.35)', background: 'rgba(255,255,255,0.8)', color: '#1a1c1d' }}
+              className="pl-7"
             />
           </div>
           <SaveButton saving={ticketSaving} saved={ticketSaved} onClick={handleSaveTicket} disabled={ticketSaving || loading} />
@@ -284,29 +284,26 @@ export default function SettingsPage() {
           {benefits.map((b, i) => (
             <div key={i} className="flex items-center gap-2">
               <span className="text-sm" style={{ color: '#FFD700' }}>★</span>
-              <input
-                type="text"
+              <Input
                 value={b}
                 onChange={(e) => updateBenefit(i, e.target.value)}
                 placeholder="Ej: 15% descuento permanente"
-                className="input-premium flex-1 rounded-xl py-2 px-3 text-sm"
-                style={{ border: '1px solid rgba(226,190,192,0.35)', background: 'rgba(255,255,255,0.8)', color: '#1a1c1d' }}
+                className="flex-1"
               />
               {benefits.length > 1 && (
-                <button onClick={() => removeBenefit(i)} className="text-xs px-2 py-1 rounded-lg hover:bg-red-50" style={{ color: '#ef4444' }}>✕</button>
+                <Button variant="ghost" size="sm" onClick={() => removeBenefit(i)} className="text-red-500 hover:text-red-700 hover:bg-red-50 px-2">
+                  <X className="h-3.5 w-3.5" />
+                </Button>
               )}
             </div>
           ))}
         </div>
 
         <div className="flex items-center gap-3 mt-4">
-          <button
-            onClick={addBenefit}
-            className="text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors hover:bg-gray-50"
-            style={{ color: '#6b7280', borderColor: 'rgba(226,190,192,0.35)' }}
-          >
-            + Agregar beneficio
-          </button>
+          <Button variant="outline" size="sm" onClick={addBenefit} className="gap-1.5">
+            <Plus className="h-3.5 w-3.5" />
+            Agregar beneficio
+          </Button>
           <SaveButton saving={benefitsSaving} saved={benefitsSaved} onClick={handleSaveBenefits} disabled={benefitsSaving} />
         </div>
       </div>
@@ -425,8 +422,7 @@ export default function SettingsPage() {
               <select
                 value={reactivationRewardId}
                 onChange={(e) => setReactivationRewardId(e.target.value)}
-                className="input-premium w-full rounded-xl py-2.5 px-3 text-sm"
-                style={{ border: '1px solid rgba(226,190,192,0.35)', background: 'rgba(255,255,255,0.8)', color: '#1a1c1d' }}
+                className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm transition-colors outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/50"
               >
                 <option value="">— Sin recompensa fija (usa plantilla SIN regalo) —</option>
                 {rewards.map((r) => (

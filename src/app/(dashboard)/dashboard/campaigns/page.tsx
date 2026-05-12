@@ -21,10 +21,11 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
-import { Megaphone, Cake, UserX, Send, Zap, Clock, CheckCircle, SlidersHorizontal } from 'lucide-react'
+import { Megaphone, Cake, UserX, Send, Zap, Clock, CheckCircle } from 'lucide-react'
 import { ManualCampaigns } from '@/components/dashboard/ManualCampaigns'
 import { TwilioWallet } from '@/components/dashboard/TwilioWallet'
 import { SegmentRadar } from '@/components/dashboard/SegmentRadar'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 
 interface Campaign {
   id: string
@@ -119,6 +120,15 @@ export default function CampaignsPage() {
 
       <SegmentRadar />
 
+      <Tabs defaultValue="automaticas">
+        <TabsList className="w-full">
+          <TabsTrigger value="automaticas" className="flex-1">Automáticas</TabsTrigger>
+          <TabsTrigger value="manuales" className="flex-1">Manuales</TabsTrigger>
+          <TabsTrigger value="historial" className="flex-1">Historial</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="automaticas" className="space-y-4 pt-4">
+
       <div className="grid gap-4 md:grid-cols-2">
         {autoCampaigns.map((ac) => {
           const recent = recentByType(ac.type)
@@ -175,16 +185,15 @@ export default function CampaignsPage() {
         })}
       </div>
 
-      <TwilioWallet />
+          <TwilioWallet />
 
-      <div className="space-y-3">
-        <h2 className="text-lg font-semibold flex items-center gap-2">
-          <SlidersHorizontal className="h-5 w-5" />
-          Campañas Manuales
-        </h2>
-        <ManualCampaigns />
-      </div>
+        </TabsContent>
 
+        <TabsContent value="manuales" className="pt-4">
+          <ManualCampaigns />
+        </TabsContent>
+
+        <TabsContent value="historial" className="pt-4">
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Historial de Campañas</CardTitle>
@@ -240,6 +249,9 @@ export default function CampaignsPage() {
           )}
         </CardContent>
       </Card>
+        </TabsContent>
+
+      </Tabs>
 
       <Dialog open={!!manualDialog} onOpenChange={() => { setManualDialog(null); setSent(null) }}>
         <DialogContent>

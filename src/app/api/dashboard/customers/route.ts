@@ -15,8 +15,11 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') ?? '1')
     const limit = parseInt(searchParams.get('limit') ?? '20')
     const search = searchParams.get('search') ?? undefined
+    const source = searchParams.get('source') ?? undefined
+    const tier = searchParams.get('tier') ?? undefined
+    const status = searchParams.get('status') ?? undefined
 
-    const result = await getCustomers({ page, limit, search })
+    const result = await getCustomers({ page, limit, search, source, tier, status })
     return NextResponse.json(result)
   } catch (error) {
     console.error('[Dashboard] Error clientes:', error)

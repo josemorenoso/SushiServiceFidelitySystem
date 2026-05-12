@@ -28,6 +28,9 @@ export default function CustomersPage() {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
   const [importing, setImporting] = useState(false)
+  const [sourceFilter, setSourceFilter] = useState('all')
+  const [tierFilter, setTierFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState('all')
   const limit = 15
 
   const handleExportCSV = async () => {
@@ -139,6 +142,9 @@ export default function CustomersPage() {
         limit: String(limit),
       })
       if (search) params.set('search', search)
+      if (sourceFilter !== 'all') params.set('source', sourceFilter)
+      if (tierFilter !== 'all') params.set('tier', tierFilter)
+      if (statusFilter !== 'all') params.set('status', statusFilter)
 
       const res = await fetch(`/api/dashboard/customers?${params}`)
       const data = await res.json()
@@ -149,11 +155,15 @@ export default function CustomersPage() {
     } finally {
       setLoading(false)
     }
-  }, [page, search])
+  }, [page, search, sourceFilter, tierFilter, statusFilter])
 
   useEffect(() => {
     fetchCustomers()
   }, [fetchCustomers])
+
+  useEffect(() => {
+    setPage(1)
+  }, [sourceFilter, tierFilter, statusFilter])
 
   const totalPages = Math.ceil(total / limit)
 
@@ -196,6 +206,37 @@ export default function CustomersPage() {
         </div>
         <Button type="submit" variant="secondary">Buscar</Button>
       </form>
+
+      {/* Filtros */}
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Canal</span>
+          {[{ v: 'all', l: 'Todos' }, { v: 'qr', l: 'QR' }, { v: 'delivery', l: 'Domicilio' }, { v: 'both', l: 'Ambos' }].map(f => (
+            <button key={f.v} onClick={() => setSourceFilter(f.v)}
+              className={`px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors ${
+                sourceFilter === f.v ? 'bg-foreground text-background border-foreground' : 'border-border bg-background hover:bg-muted'
+              }`}>{f.l}</button>
+          ))}
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Nivel</span>
+          {[{ v: 'all', l: 'Todos' }, { v: 'plata', l: '🥈 Plata' }, { v: 'oro', l: '🥇 Oro' }, { v: 'platino', l: '⚜️ Platino' }, { v: 'black', l: '👑 Black' }].map(f => (
+            <button key={f.v} onClick={() => setTierFilter(f.v)}
+              className={`px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors ${
+                tierFilter === f.v ? 'bg-foreground text-background border-foreground' : 'border-border bg-background hover:bg-muted'
+              }`}>{f.l}</button>
+          ))}
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Estado</span>
+          {[{ v: 'all', l: 'Todos' }, { v: 'active', l: 'Activos' }, { v: 'inactive', l: 'Recuperación' }, { v: 'lost', l: 'Perdidos' }].map(f => (
+            <button key={f.v} onClick={() => setStatusFilter(f.v)}
+              className={`px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors ${
+                statusFilter === f.v ? 'bg-foreground text-background border-foreground' : 'border-border bg-background hover:bg-muted'
+              }`}>{f.l}</button>
+          ))}
+        </div>
+      </div>
 
       <Card>
         <CardHeader className="pb-3">

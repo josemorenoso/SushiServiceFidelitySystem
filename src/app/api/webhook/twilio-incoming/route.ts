@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { validateTwilioSignature } from '@/lib/validators/twilio'
+import { createClient } from '@supabase/supabase-js'
 
 const BRAND_NAME = process.env.NEXT_PUBLIC_BRAND_NAME ?? 'el restaurante'
 const RESTAURANT_LINK =
@@ -49,6 +50,21 @@ function twimlResponse(message: string): NextResponse {
   })
 }
 
+function getServiceClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) throw new Error('Missing Supabase env vars')
+  return createClient(url, key)
+}
+
+function normalizePhone(from: string): string {
+  return from
+    .replace(/^whatsapp:\+?/i, '')
+    .replace(/[^0-9]/g, '')
+    .replace(/^57/, '')
+    .slice(-10)
+}
+
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const url = req.url
   const signature = req.headers.get('x-twilio-signature') ?? ''
@@ -70,6 +86,46 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   const from = params['From'] ?? ''
+  const phone = normalizePhone(from)
+
+  // Si el remitente es un mesero autorizado, redirigir a n8n para procesar el pedido
+  if (phone.length === 10) {
+    try {
+      const db = getServiceClient()
+      const { data: authorized } = await db
+        .from('authorized_numbers')
+        .select('id')
+        .eq('phone', phone)
+        .eq('is_active', true)
+        .maybeSingle()
+
+      if (authorized) {
+        const n8nUrl = process.env.N8N_DOMICILIOS_WEBHOOK_URL
+        if (!n8nUrl) {
+          console.error('[twilio-incoming] N8N_DOMICILIOS_WEBHOOK_URL no configurado')
+          return twimlResponse('❌ Error de configuración en el sistema. Avisa al administrador.')
+        }
+
+        console.log(`[twilio-incoming] mesero autorizado ${phone} → forwarding a n8n`)
+
+        const n8nRes = await fetch(n8nUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: rawBody,
+        })
+
+        const n8nText = await n8nRes.text()
+        return new NextResponse(n8nText, {
+          status: 200,
+          headers: { 'Content-Type': 'text/xml' },
+        })
+      }
+    } catch (err) {
+      console.error('[twilio-incoming] Error forwarding a n8n:', err)
+      return twimlResponse('❌ Error procesando el pedido. Intenta de nuevo en un momento.')
+    }
+  }
+
   const intent = detectIntent(body)
   const message = buildMessage(intent)
 

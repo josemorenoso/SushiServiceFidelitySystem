@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
         title: title.trim(),
         message_template: template,
         is_active: true,
-        is_black: blackFlag,
+        ...(blackFlag ? { is_black: true } : {}),
       })
       .select()
       .single()

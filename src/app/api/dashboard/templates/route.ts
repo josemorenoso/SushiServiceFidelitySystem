@@ -163,6 +163,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Nombre y cuerpo son requeridos' }, { status: 400 })
     }
 
+    // WhatsApp template name: lowercase letters, numbers, underscores only (Meta policy)
+    const whatsappName = name
+      .toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remove accents
+      .replace(/[^a-z0-9_]/g, '_')                      // replace invalid chars with _
+      .replace(/_+/g, '_')                               // collapse multiple underscores
+      .replace(/^_|_$/g, '')                             // trim leading/trailing underscores
+      .slice(0, 512)
+
     // Build variables map: {{1}}, {{2}}, etc.
     const varMatches = messageBody.match(/\{\{\d+\}\}/g) || []
     const uniqueVars = [...new Set(varMatches)] as string[]
@@ -199,18 +208,26 @@ export async function POST(request: NextRequest) {
 
     const created = await res.json()
 
-    // Auto-submit for approval
+    // Auto-submit for WhatsApp approval
+    // name must be snake_case (lowercase + underscores) — Meta rejects anything else
     try {
-      await fetch(`${TWILIO_CONTENT_API}/${created.sid}/ApprovalRequests/whatsapp`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          name: name,
-          category: category || 'MARKETING',
-        }),
-      })
-    } catch {
-      // Approval request is best-effort
+      const approvalRes = await fetch(
+        `${TWILIO_CONTENT_API}/${created.sid}/ApprovalRequests/whatsapp`,
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            name: whatsappName,
+            category: category || 'MARKETING',
+          }),
+        }
+      )
+      if (!approvalRes.ok) {
+        const approvalErr = await approvalRes.json().catch(() => approvalRes.text())
+        console.error('[Templates] ApprovalRequest failed:', approvalRes.status, approvalErr)
+      }
+    } catch (err) {
+      console.error('[Templates] ApprovalRequest exception:', err)
     }
 
     return NextResponse.json({

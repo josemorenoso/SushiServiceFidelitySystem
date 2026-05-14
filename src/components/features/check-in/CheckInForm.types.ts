@@ -13,12 +13,19 @@ export interface LookupResult {
   }
 }
 
+export interface RoadmapItem {
+  milestone: number
+  title: string
+  is_black?: boolean
+}
+
 export interface RegisterResult {
   message: 'welcome'
   customer: {
     name: string
     total_visits: number
   }
+  roadmap?: RoadmapItem[]
 }
 
 export interface CheckInResult {
@@ -30,12 +37,14 @@ export interface CheckInResult {
   reward: {
     title: string
     message: string
+    is_black?: boolean
   } | null
   nextReward?: {
     milestone: number
     title: string
     hint: string
   } | null
+  roadmap?: RoadmapItem[]
 }
 
 export type CheckInStep = 'phone' | 'register' | 'loading'

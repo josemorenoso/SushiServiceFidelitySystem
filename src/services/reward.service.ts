@@ -81,6 +81,49 @@ export function buildRewardHint(currentVisits: number, nextReward: { milestone: 
 /**
  * Fetch a single reward by id (para reactivación con regalo fijo o campañas manuales).
  */
+export async function getUpcomingRewards(currentVisits: number, limit: number = 4): Promise<{ milestone: number; title: string; is_black: boolean }[]> {
+  const supabase = getServiceClient()
+  const { data, error } = await supabase
+    .from('rewards')
+    .select('visit_milestone, title, is_black')
+    .eq('is_active', true)
+    .not('visit_milestone', 'is', null)
+    .gt('visit_milestone', currentVisits)
+    .order('visit_milestone', { ascending: true })
+    .limit(limit)
+
+  if (error) {
+    console.error('[Rewards] Error fetching upcoming:', error)
+    return []
+  }
+
+  return (data ?? []).map((r) => ({
+    milestone: r.visit_milestone as number,
+    title: r.title,
+    is_black: r.is_black ?? false,
+  }))
+}
+
+export async function buildRewardsRoadmap(currentVisits: number): Promise<string> {
+  const upcoming = await getUpcomingRewards(currentVisits, 5)
+
+  if (upcoming.length === 0) return '\uD83C\uDF1F \u00a1Sigue acumulando visitas para m\u00e1s premios!'
+
+  const [next, ...rest] = upcoming
+  const nextIcon = next.is_black ? '\uD83D\uDC51 BLACK' : '\uD83C\uDFAF Siguiente'
+  let roadmap = `${nextIcon} premio: Visita #${next.milestone} \u2192 ${next.title}`
+
+  if (rest.length > 0) {
+    roadmap += '\n\uD83D\uDCCB Despu\u00e9s:'
+    for (const r of rest) {
+      const icon = r.is_black ? '  \uD83D\uDC51' : ' '
+      roadmap += `\n${icon} #${r.milestone} \u2192 ${r.title}`
+    }
+  }
+
+  return roadmap
+}
+
 export async function getRewardById(id: string): Promise<Reward | null> {
   const supabase = getServiceClient()
   const { data, error } = await supabase

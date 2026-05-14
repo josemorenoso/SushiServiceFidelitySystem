@@ -5,6 +5,26 @@
 
 ---
 
+## [0.33.0] — 2026-05-12 — Nivel BLACK: tier máximo configurable en programa de fidelidad
+
+### Added
+- `supabase/migrations/00011_rewards_black_tier.sql` — Columna `is_black` (boolean, default false) en tabla `rewards`. Marca el nivel BLACK (tier máximo del programa).
+- `src/types/database.types.ts` — Campo `is_black: boolean` en interfaz `Reward`.
+- `src/components/features/check-in/CheckInForm.types.ts` — `is_black?: boolean` en `RoadmapItem` y en el campo `reward` de `CheckInResult`.
+- `src/components/features/check-in/CheckInSuccess.types.ts` — `is_black?: boolean` en `RoadmapItem` y en `reward` de `CheckInSuccessProps`.
+- `src/services/reward.service.ts` — `getUpcomingRewards` ahora devuelve `is_black`. `buildRewardsRoadmap` muestra `👑 BLACK` con corona cuando el reward es nivel BLACK, tanto si es el siguiente como si aparece en la lista de después.
+- `src/app/api/dashboard/rewards/route.ts` — POST acepta `is_black: true`; valida que no exista ya una recompensa BLACK activa (409 si hay conflicto). PATCH acepta `is_black`.
+- `src/app/api/check-in/route.ts` — La respuesta del check-in incluye `is_black` en el objeto reward para que el frontend muestre la celebración correcta.
+- `src/app/(dashboard)/dashboard/rewards/page.tsx` — Tabla muestra badge dorado `👑 BLACK` en la fila del nivel black; diálogo de creación incluye toggle "Nivel BLACK" con descripción.
+- `src/components/features/check-in/CheckInSuccess.tsx` — Pantalla especial dark/gold para cuando el cliente alcanza el nivel BLACK. En el roadmap, el ítem BLACK muestra corona y estilo diferenciado.
+
+### Changed
+- `src/app/api/cron/birthday/route.ts` — Ahora incluye `roadmap` como `{{2}}` en las variables de la plantilla de cumpleaños.
+- `src/app/api/cron/reactivation/route.ts` — `no_reward` mode: añade `roadmap` como `{{2}}`. `with_reward` mode: corregido gap de variable secuencial; ahora `{{2}}`=premio, `{{3}}`=roadmap (antes enviaba `{{1}}` y `{{3}}` sin `{{2}}`, que Meta rechaza).
+- `docs/PLANTILLAS.md` — Documento nuevo con las 8 plantillas, tabla de variables, reglas Meta, flujo completo y checklist.
+
+---
+
 ## [0.32.0] — 2026-05-12 — Radar fix, templates con samples, ciudad en delivery, números autorizados
 
 ### Fixed

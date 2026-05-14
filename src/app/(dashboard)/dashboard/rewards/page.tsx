@@ -32,6 +32,7 @@ import {
   Loader2,
   Sparkles,
   AlertTriangle,
+  Crown,
 } from 'lucide-react'
 import type { Reward } from '@/types/database.types'
 
@@ -43,6 +44,7 @@ export default function RewardsPage() {
   const [newTitle, setNewTitle] = useState('')
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
+  const [newIsBlack, setNewIsBlack] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
 
@@ -72,7 +74,7 @@ export default function RewardsPage() {
       const res = await fetch('/api/dashboard/rewards', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ visit_milestone: milestone, title: newTitle.trim() }),
+        body: JSON.stringify({ visit_milestone: milestone, title: newTitle.trim(), is_black: newIsBlack }),
       })
       if (!res.ok) {
         const err = await res.json()
@@ -81,6 +83,7 @@ export default function RewardsPage() {
       }
       setNewMilestone('')
       setNewTitle('')
+      setNewIsBlack(false)
       setCreateOpen(false)
       fetchRewards()
     } catch {
@@ -164,13 +167,27 @@ export default function RewardsPage() {
                   .slice()
                   .sort((a, b) => (a.visit_milestone ?? Infinity) - (b.visit_milestone ?? Infinity))
                   .map((r) => (
-                  <TableRow key={r.id}>
+                  <TableRow key={r.id} className={r.is_black ? 'bg-amber-50/60 dark:bg-amber-950/20' : ''}>
                     <TableCell className="text-center">
-                      <Badge variant="default" className="text-lg px-3 py-1">
-                        {r.visit_milestone ?? '—'}
-                      </Badge>
+                      {r.is_black ? (
+                        <Badge className="text-lg px-3 py-1 bg-amber-500 hover:bg-amber-500 text-white gap-1">
+                          <Crown className="h-3.5 w-3.5" />
+                          {r.visit_milestone ?? '—'}
+                        </Badge>
+                      ) : (
+                        <Badge variant="default" className="text-lg px-3 py-1">
+                          {r.visit_milestone ?? '—'}
+                        </Badge>
+                      )}
                     </TableCell>
-                    <TableCell className="font-medium">{r.title}</TableCell>
+                    <TableCell className="font-medium">
+                      <span>{r.title}</span>
+                      {r.is_black && (
+                        <Badge className="ml-2 bg-amber-500 hover:bg-amber-500 text-white text-[10px] gap-0.5">
+                          <Crown className="h-2.5 w-2.5" /> BLACK
+                        </Badge>
+                      )}
+                    </TableCell>
                     <TableCell className="text-center">
                       <Badge variant={r.is_active ? 'default' : 'secondary'}>
                         {r.is_active ? 'Activa' : 'Inactiva'}
@@ -227,7 +244,7 @@ export default function RewardsPage() {
                 <Input
                   type="number"
                   min={1}
-                  placeholder="Ej: 5"
+                  placeholder="Ej: 12"
                   value={newMilestone}
                   onChange={(e) => setNewMilestone(e.target.value)}
                   className="text-center text-lg font-bold"
@@ -242,6 +259,33 @@ export default function RewardsPage() {
                   onChange={(e) => setNewTitle(e.target.value)}
                 />
               </div>
+            </div>
+
+            <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+              <div className="space-y-0.5">
+                <Label className="text-sm font-semibold flex items-center gap-1.5">
+                  <Crown className="h-4 w-4 text-amber-500" />
+                  Nivel BLACK
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Premio máximo. Solo puede existir uno activo. Marca el techo del programa de fidelidad.
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={newIsBlack}
+                onClick={() => setNewIsBlack(!newIsBlack)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                  newIsBlack ? 'bg-amber-500' : 'bg-gray-200'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    newIsBlack ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
             </div>
 
             {createError && (

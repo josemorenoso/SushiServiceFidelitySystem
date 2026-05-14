@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { validatePhone } from '@/lib/validators/phone'
 import { findCustomerByPhone, createCustomer, incrementVisit } from '@/services/customer.service'
 import { createVisit, getRecentVisit } from '@/services/visit.service'
-import { checkRewardForVisit, getNextReward, getRewardTitle, getRemainingForReward } from '@/services/reward.service'
+import { checkRewardForVisit, getNextReward, getRewardTitle, getRemainingForReward, buildRewardsRoadmap, getUpcomingRewards } from '@/services/reward.service'
 import { sendTemplateMessage } from '@/services/whatsapp.service'
 import { getMultipleSettings } from '@/services/settings.service'
 import { syncGoogleContact } from '@/services/google-contacts-sync.service'
@@ -139,11 +139,12 @@ export async function POST(request: NextRequest) {
 
       // WhatsApp de bienvenida — DEBE usar await para que Vercel no mate el proceso
       const settings = await getMultipleSettings(['welcome_template_sid'])
+      const roadmap = await buildRewardsRoadmap(customer.total_visits)
       await sendCheckinTemplate(
         settings.welcome_template_sid,
         'welcome',
         cleaned,
-        { '1': customer.name }
+        { '1': customer.name, '2': roadmap }
       )
 
       // Google Contacts sync (best-effort pero awaited para Vercel)
@@ -161,10 +162,12 @@ export async function POST(request: NextRequest) {
         console.error('[CheckIn] Error sync Google Contacts:', err)
       }
 
+      const welcomeRoadmap = await getUpcomingRewards(customer.total_visits)
       return NextResponse.json(
         {
           message: 'welcome',
           customer: { name: customer.name, total_visits: customer.total_visits },
+          roadmap: welcomeRoadmap,
         },
         { status: 201 }
       )
@@ -204,8 +207,10 @@ export async function POST(request: NextRequest) {
         'reward_template_sid',
       ])
 
-      // Evaluar recompensa
+      // Evaluar recompensa y roadmap
       const reward = await checkRewardForVisit(updated.total_visits)
+      const roadmap = await buildRewardsRoadmap(updated.total_visits)
+      const upcomingRewards = await getUpcomingRewards(updated.total_visits)
 
       // Google Contacts sync (best-effort pero awaited para Vercel)
       try {
@@ -228,11 +233,9 @@ export async function POST(request: NextRequest) {
             settings.reward_template_sid,
             'reward',
             cleaned,
-            { '1': updated.name, '2': String(updated.total_visits), '3': reward.title }
+            { '1': updated.name, '2': String(updated.total_visits), '3': reward.title, '4': roadmap }
           )
         } else {
-          // Fallback: si no hay reward_template_sid, usa cualquier welcome_back disponible
-          // pasando reward.title en {{3}}. La plantilla decidirá cómo mostrarlo.
           const fallbackSid = settings.welcome_back_far_template_sid
             ?? settings.welcome_back_near_template_sid
             ?? settings.welcome_back_template_sid
@@ -240,14 +243,15 @@ export async function POST(request: NextRequest) {
             fallbackSid,
             'welcome_back (fallback por falta de template reward)',
             cleaned,
-            { '1': updated.name, '2': String(updated.total_visits), '3': reward.title }
+            { '1': updated.name, '2': String(updated.total_visits), '3': reward.title, '4': roadmap }
           )
         }
 
         return NextResponse.json({
           message: 'welcome_back',
           customer: { name: updated.name, total_visits: updated.total_visits },
-          reward: { title: reward.title, message: reward.message_template },
+          reward: { title: reward.title, message: reward.message_template, is_black: reward.is_black },
+          roadmap: upcomingRewards,
         })
       }
 
@@ -266,7 +270,7 @@ export async function POST(request: NextRequest) {
         targetSid,
         isNear ? 'welcome_back_near' : 'welcome_back_far',
         cleaned,
-        { '1': updated.name, '2': String(updated.total_visits), '3': rewardTitle }
+        { '1': updated.name, '2': String(updated.total_visits), '3': rewardTitle, '4': roadmap }
       )
 
       return NextResponse.json({
@@ -274,6 +278,7 @@ export async function POST(request: NextRequest) {
         customer: { name: updated.name, total_visits: updated.total_visits },
         reward: null,
         nextReward: nextReward ? { ...nextReward, remaining } : null,
+        roadmap: upcomingRewards,
       })
     }
 

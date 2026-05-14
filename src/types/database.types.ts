@@ -32,6 +32,7 @@ export interface Reward {
   title: string
   message_template: string
   is_active: boolean
+  is_black: boolean
   created_at: string
 }
 

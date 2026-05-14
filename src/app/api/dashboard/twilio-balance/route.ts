@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
-const TWILIO_MSG_COST_USD = 0.0058
+// Meta Fee: $0.0125/msg + Twilio Fee: $0.005/msg = $0.0175/msg total
+const TWILIO_MSG_COST_USD = 0.0175
 const USD_TO_COP = 4200
 
 export const dynamic = 'force-dynamic'

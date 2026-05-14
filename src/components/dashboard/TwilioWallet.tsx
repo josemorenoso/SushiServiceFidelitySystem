@@ -108,7 +108,10 @@ export function TwilioWallet() {
 }
 
 export function CampaignCostEstimate({ recipientCount }: { recipientCount: number }) {
-  const costPerMsg = 0.0058
+  // Meta Fee: $0.0125/msg + Twilio Fee: $0.005/msg = $0.0175/msg total
+  const META_FEE = 0.0125
+  const TWILIO_FEE = 0.005
+  const costPerMsg = META_FEE + TWILIO_FEE
   const usdToCop = 4200
   const totalUsd = recipientCount * costPerMsg
   const totalCop = Math.round(totalUsd * usdToCop)
@@ -116,12 +119,17 @@ export function CampaignCostEstimate({ recipientCount }: { recipientCount: numbe
   if (recipientCount <= 0) return null
 
   return (
-    <div className="flex items-center gap-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-1.5 text-xs text-amber-800">
-      <Calculator className="h-3.5 w-3.5 shrink-0" />
-      <span>
-        Costo estimado: <strong>${totalUsd.toFixed(4)} USD</strong> (~${totalCop.toLocaleString()} COP)
-        para {recipientCount} mensajes
-      </span>
+    <div className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800 space-y-0.5">
+      <div className="flex items-center gap-2">
+        <Calculator className="h-3.5 w-3.5 shrink-0" />
+        <span>
+          Costo estimado: <strong>${totalUsd.toFixed(4)} USD</strong> (~${totalCop.toLocaleString()} COP)
+          &nbsp;&mdash;&nbsp;{recipientCount} mensajes
+        </span>
+      </div>
+      <p className="text-[10px] text-amber-600 pl-5">
+        Meta ${META_FEE}/msg + Twilio ${TWILIO_FEE}/msg = ${costPerMsg}/msg total
+      </p>
     </div>
   )
 }

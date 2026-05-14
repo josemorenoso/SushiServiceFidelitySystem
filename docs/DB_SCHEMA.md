@@ -181,6 +181,7 @@ CREATE POLICY "admin_update_customers" ON customers
 | `title` | `text` | NO | - | Nombre de la recompensa |
 | `message_template` | `text` | NO | - | Texto de referencia (display en dashboard). El cuerpo real lo define la plantilla Twilio. |
 | `is_active` | `boolean` | NO | `true` | Si la recompensa está activa |
+| `is_black` | `boolean` | NO | `false` | TRUE = esta recompensa marca el nivel BLACK (tier máximo, solo uno activo por instancia) |
 | `created_at` | `timestamptz` | NO | `now()` | Fecha de creación |
 
 **Índices:**
@@ -304,6 +305,7 @@ CREATE POLICY "admin_insert_settings" ON admin_settings
 | 8 | `00008_accepts_marketing.sql` | 2026-04-15 | Campo accepts_marketing en customers + backfill | Pendiente |
 | 9 | `00009_table_number.sql` | 2026-04-15 | Campo table_number en visits + índice | Pendiente |
 | 10 | `00010_rewards_optional_milestone.sql` | 2026-05-07 | `rewards.visit_milestone` nullable + índice único parcial | Pendiente |
+| 11 | `00011_rewards_black_tier.sql` | 2026-05-12 | `rewards.is_black` boolean para nivel BLACK | Pendiente |
 
 ---
 

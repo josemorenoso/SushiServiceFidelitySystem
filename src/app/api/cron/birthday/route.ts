@@ -10,6 +10,7 @@ import {
 } from '@/services/campaign.service'
 import { sendTemplateMessage } from '@/services/whatsapp.service'
 import { getSettingValue } from '@/services/settings.service'
+import { buildRewardsRoadmap } from '@/services/reward.service'
 
 async function handleCron() {
   try {
@@ -46,7 +47,8 @@ async function handleCron() {
       if (alreadySent) continue
 
       try {
-        const result = await sendTemplateMessage(customer.phone, templateSid, { '1': customer.name })
+        const roadmap = await buildRewardsRoadmap(customer.total_visits)
+        const result = await sendTemplateMessage(customer.phone, templateSid, { '1': customer.name, '2': roadmap })
 
         await recordCampaignMessage({
           campaignId: campaign.id,

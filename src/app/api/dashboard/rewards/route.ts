@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { visit_milestone, title, message_template } = body
+    const { visit_milestone, title, message_template, is_black } = body
 
     if (!title || typeof title !== 'string' || title.trim().length === 0) {
       return NextResponse.json(
@@ -77,6 +77,26 @@ export async function POST(request: NextRequest) {
     // este campo se conserva como referencia / display en el dashboard.
     const template = (typeof message_template === 'string' && message_template.trim()) || title.trim()
 
+    const blackFlag = is_black === true
+
+    // Si se marca como BLACK, verificar que no exista ya una recompensa black activa
+    if (blackFlag) {
+      const { data: existingBlack } = await db
+        .from('rewards')
+        .select('id, visit_milestone')
+        .eq('is_black', true)
+        .eq('is_active', true)
+        .limit(1)
+        .single()
+
+      if (existingBlack) {
+        return NextResponse.json(
+          { error: `Ya existe una recompensa BLACK (visita #${existingBlack.visit_milestone ?? '—'}). Desactívala primero.` },
+          { status: 409 }
+        )
+      }
+    }
+
     const { data: reward, error } = await db
       .from('rewards')
       .insert({
@@ -84,6 +104,7 @@ export async function POST(request: NextRequest) {
         title: title.trim(),
         message_template: template,
         is_active: true,
+        ...(blackFlag ? { is_black: true } : {}),
       })
       .select()
       .single()
@@ -133,6 +154,8 @@ export async function PATCH(request: NextRequest) {
     const updates: Record<string, unknown> = {}
 
     if (typeof is_active === 'boolean') updates.is_active = is_active
+
+    if (typeof body.is_black === 'boolean') updates.is_black = body.is_black
 
     if (typeof title === 'string') {
       const trimmed = title.trim()

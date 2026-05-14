@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { validatePhone } from '@/lib/validators/phone'
 import { findCustomerByPhone, createCustomer, incrementVisit, updateCustomerCityIfNull } from '@/services/customer.service'
 import { createVisit } from '@/services/visit.service'
-import { checkRewardForVisit, getNextReward, getRewardTitle, getRemainingForReward } from '@/services/reward.service'
+import { checkRewardForVisit, getNextReward, getRewardTitle, getRemainingForReward, buildRewardsRoadmap } from '@/services/reward.service'
 import { sendTemplateMessage } from '@/services/whatsapp.service'
 import { getMultipleSettings } from '@/services/settings.service'
 import { syncGoogleContact } from '@/services/google-contacts-sync.service'
@@ -120,13 +120,16 @@ export async function POST(request: NextRequest) {
     ])
     const reward = await checkRewardForVisit(customer.total_visits)
 
+    const roadmap = await buildRewardsRoadmap(customer.total_visits)
+
     if (isNew) {
-      await sendDeliveryTemplate(settings.welcome_template_sid, 'welcome', cleaned, { '1': customer.name })
+      await sendDeliveryTemplate(settings.welcome_template_sid, 'welcome', cleaned, { '1': customer.name, '2': roadmap })
     } else if (reward) {
       await sendDeliveryTemplate(settings.reward_template_sid, 'reward', cleaned, {
         '1': customer.name,
         '2': String(customer.total_visits),
         '3': reward.title,
+        '4': roadmap,
       })
     } else {
       const nextReward = await getNextReward(customer.total_visits)
@@ -140,6 +143,7 @@ export async function POST(request: NextRequest) {
         '1': customer.name,
         '2': String(customer.total_visits),
         '3': rewardTitle,
+        '4': roadmap,
       })
     }
 

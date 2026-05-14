@@ -4,13 +4,13 @@ import { useState } from 'react'
 import { CheckInForm, CheckInSuccess } from '@/components/features/check-in'
 import { Toaster, toast } from 'sonner'
 import { UtensilsCrossed } from 'lucide-react'
-import type { CheckInResult, RegisterResult } from '@/components/features/check-in/CheckInForm.types'
+import type { CheckInResult, RegisterResult, RoadmapItem } from '@/components/features/check-in/CheckInForm.types'
 import { BRAND_NAME } from '@/lib/branding'
 
 type PageState =
   | { view: 'form' }
-  | { view: 'success'; type: 'welcome'; customerName: string; totalVisits: number }
-  | { view: 'success'; type: 'welcome_back'; customerName: string; totalVisits: number; reward: CheckInResult['reward']; nextRewardHint?: string | null }
+  | { view: 'success'; type: 'welcome'; customerName: string; totalVisits: number; roadmap?: RoadmapItem[] }
+  | { view: 'success'; type: 'welcome_back'; customerName: string; totalVisits: number; reward: CheckInResult['reward']; nextRewardHint?: string | null; roadmap?: RoadmapItem[] }
   | { view: 'success'; type: 'duplicate'; customerName: string; totalVisits: number }
 
 export default function CheckInPage() {
@@ -22,6 +22,7 @@ export default function CheckInPage() {
       type: 'welcome',
       customerName: result.customer.name,
       totalVisits: result.customer.total_visits,
+      roadmap: result.roadmap,
     })
   }
 
@@ -33,6 +34,7 @@ export default function CheckInPage() {
       totalVisits: result.customer.total_visits,
       reward: result.reward,
       nextRewardHint: result.nextReward?.hint ?? null,
+      roadmap: result.roadmap,
     })
   }
 
@@ -100,6 +102,7 @@ export default function CheckInPage() {
             totalVisits={state.totalVisits}
             reward={state.type === 'welcome_back' ? state.reward : null}
             nextRewardHint={state.type === 'welcome_back' ? state.nextRewardHint : null}
+            roadmap={state.type !== 'duplicate' ? state.roadmap : undefined}
             onReset={handleReset}
           />
         )}

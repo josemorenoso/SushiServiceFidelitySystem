@@ -10,7 +10,7 @@ import {
 } from '@/services/campaign.service'
 import { sendTemplateMessage } from '@/services/whatsapp.service'
 import { getMultipleSettings } from '@/services/settings.service'
-import { getRewardById, getNextReward, getRewardTitle } from '@/services/reward.service'
+import { getRewardById, getNextReward, getRewardTitle, buildRewardsRoadmap } from '@/services/reward.service'
 
 async function handleCron() {
   try {
@@ -84,14 +84,15 @@ async function handleCron() {
 
       try {
         // Variables según el modo:
-        //   with_reward: {{1}}=name, {{3}}=fixedRewardTitle (plantilla 6b)
-        //   no_reward:   {{1}}=name (plantilla 6a)
+        //   with_reward: {{1}}=name, {{2}}=fixedRewardTitle, {{3}}=roadmap
+        //   no_reward:   {{1}}=name, {{2}}=roadmap
         //   legacy:      {{1}}=name, {{2}}=visits, {{3}}=rewardTitle (compat)
+        const roadmap = await buildRewardsRoadmap(customer.total_visits)
         let variables: Record<string, string>
         if (mode === 'with_reward') {
-          variables = { '1': customer.name, '3': fixedRewardTitle ?? 'más beneficios' }
+          variables = { '1': customer.name, '2': fixedRewardTitle ?? 'más beneficios', '3': roadmap }
         } else if (mode === 'no_reward') {
-          variables = { '1': customer.name }
+          variables = { '1': customer.name, '2': roadmap }
         } else {
           // legacy: replica el comportamiento previo con título del próximo premio del cliente
           const next = await getNextReward(customer.total_visits)

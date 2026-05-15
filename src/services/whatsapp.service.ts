@@ -51,14 +51,20 @@ export async function sendTemplateMessage(
   const twilio = (await import('twilio')).default
   const client = twilio(config.accountSid, config.authToken)
 
+  // Twilio 21656: rejects contentVariables values that contain newline characters.
+  // Sanitize all values: replace \n with ' · ' to keep roadmap readable in one line.
+  const sanitize = (v: string) => v.replace(/\n/g, ' · ').replace(/\r/g, '').trim()
+  const sanitized: Record<string, string> = {}
+  Object.keys(variables).forEach((k) => { sanitized[k] = sanitize(variables[k]) })
+
   // Sort keys numerically: ['1','2','3','4'] etc.
-  const sortedKeys = Object.keys(variables).sort((a, b) => Number(a) - Number(b))
+  const sortedKeys = Object.keys(sanitized).sort((a, b) => Number(a) - Number(b))
 
   // Progressive retry: if Twilio returns 21665 (contentVariables count mismatch vs template definition),
   // reduce variable count by 1 and retry until we find the right count.
   for (let maxVars = sortedKeys.length; maxVars >= 1; maxVars--) {
     const subset: Record<string, string> = {}
-    sortedKeys.slice(0, maxVars).forEach((k) => { subset[k] = variables[k] })
+    sortedKeys.slice(0, maxVars).forEach((k) => { subset[k] = sanitized[k] })
 
     try {
       const message = await client.messages.create({
@@ -75,12 +81,10 @@ export async function sendTemplateMessage(
       return { sid: message.sid, status: message.status }
     } catch (error: unknown) {
       const errMsg = error instanceof Error ? error.message : String(error)
-      const isVarMismatch =
-        errMsg.includes('21665') ||
-        errMsg.toLowerCase().includes('contentvariables') ||
-        errMsg.toLowerCase().includes('variable')
-      if (isVarMismatch && maxVars > 1) {
-        console.warn(`[WhatsApp] Variable mismatch con ${maxVars} vars, reintentando con ${maxVars - 1}…`)
+      // Only retry on 21665 (variable COUNT mismatch) — NOT on 21656 (invalid format)
+      const isCountMismatch = errMsg.includes('21665')
+      if (isCountMismatch && maxVars > 1) {
+        console.warn(`[WhatsApp] Variable count mismatch (${maxVars} vars), reintentando con ${maxVars - 1}…`)
         continue
       }
       console.error(`[WhatsApp] Error enviando template ${contentSid}:`, error)

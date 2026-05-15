@@ -61,7 +61,7 @@ export default function TemplatesPage() {
   const [showNew, setShowNew] = useState(false)
   const [newName, setNewName] = useState('')
   const [newBody, setNewBody] = useState('')
-  const [newCategory, setNewCategory] = useState('MARKETING')
+  const [newCategory, setNewCategory] = useState('UTILITY')
   const [creating, setCreating] = useState(false)
   const [createResult, setCreateResult] = useState<string | null>(null)
   const [showWarning, setShowWarning] = useState(false)
@@ -330,9 +330,19 @@ export default function TemplatesPage() {
                 onChange={(e) => setNewCategory(e.target.value)}
                 className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
               >
-                <option value="MARKETING">Marketing</option>
-                <option value="UTILITY">Utilidad</option>
+                <option value="UTILITY">UTILITY — Visitas, confirmaciones, premios ✅ Recomendado</option>
+                <option value="MARKETING">MARKETING — Promos, cumpleaños, reactivación ⚠️ Requiere opt-out</option>
               </select>
+              {newCategory === 'UTILITY' && (
+                <p className="text-[10px] text-green-700 bg-green-50 border border-green-200 rounded px-2 py-1">
+                  ✅ UTILITY es la categoría correcta para check-in, confirmación de visita y recompensas. Meta la aprueba como Business Initiated sin botón de opt-out.
+                </p>
+              )}
+              {newCategory === 'MARKETING' && (
+                <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                  ⚠️ MARKETING Business Initiated requiere botón de opt-out desde 2024. Sin él, Meta rechaza la plantilla. Úsala solo para campañas manuales donde el cliente ya interactuó contigo.
+                </p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Cuerpo del mensaje</Label>
@@ -349,6 +359,9 @@ export default function TemplatesPage() {
               <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-3 space-y-2">
                 <p className="text-xs font-semibold text-blue-800">Valores de ejemplo para variables</p>
                 <p className="text-[10px] text-blue-600">Meta requiere un valor de ejemplo para cada variable. Sin esto, la plantilla no será aprobada para mensajes directos de WhatsApp.</p>
+                <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 mt-1">
+                  ⚠️ No uses saltos de línea (\n) en los valores de muestra — Meta los rechaza. Si tienes un roadmap con múltiples líneas, pon un ejemplo de una sola línea corta.
+                </p>
                 {detectedVars.map((v) => (
                   <div key={v} className="flex items-center gap-2">
                     <span className="text-xs font-mono text-blue-700 w-10 shrink-0">{`{{${v}}}`}</span>

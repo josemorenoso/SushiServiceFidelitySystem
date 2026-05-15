@@ -104,3 +104,12 @@ export async function updateCustomerCityIfNull(customerId: string, city: string)
     .eq('id', customerId)
     .is('city', null)
 }
+
+export async function updateCustomerBirthdayIfNull(customerId: string, birthday: string): Promise<void> {
+  const supabase = getServiceClient()
+  await supabase
+    .from('customers')
+    .update({ birthday })
+    .eq('id', customerId)
+    .is('birthday', null)
+}

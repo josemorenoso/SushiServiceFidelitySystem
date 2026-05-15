@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { validatePhone } from '@/lib/validators/phone'
-import { findCustomerByPhone, createCustomer, incrementVisit, updateCustomerCityIfNull } from '@/services/customer.service'
+import { findCustomerByPhone, createCustomer, incrementVisit, updateCustomerCityIfNull, updateCustomerBirthdayIfNull } from '@/services/customer.service'
 import { createVisit } from '@/services/visit.service'
 import { checkRewardForVisit, getNextReward, getRewardTitle, getRemainingForReward, buildRewardsRoadmap } from '@/services/reward.service'
 import { sendTemplateMessage } from '@/services/whatsapp.service'
@@ -16,6 +16,18 @@ interface DeliveryRequestBody {
   monto_total?: number | null
   raw_message?: string | null
   ciudad?: string | null
+  birthday?: string | null
+}
+
+function parseBirthday(raw: string | null | undefined): string | null {
+  if (!raw) return null
+  const parts = raw.trim().split('/')
+  if (parts.length !== 3) return null
+  const [day, month, year] = parts.map(p => parseInt(p, 10))
+  if (!day || !month || !year) return null
+  if (day < 1 || day > 31 || month < 1 || month > 12) return null
+  if (year < 1900 || year > new Date().getFullYear()) return null
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 }
 
 async function sendDeliveryTemplate(
@@ -61,7 +73,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = (await request.json()) as DeliveryRequestBody
-    const { nombre_cliente, celular, direccion, metodo_pago, monto_total, raw_message, ciudad } = body
+    const { nombre_cliente, celular, direccion, metodo_pago, monto_total, raw_message, ciudad, birthday } = body
 
     if (!celular) {
       return NextResponse.json(
@@ -84,11 +96,13 @@ export async function POST(request: NextRequest) {
     let isNew = false
     let action: 'created' | 'updated' = 'updated'
 
+    const parsedBirthday = parseBirthday(birthday)
+
     if (!customer) {
       customer = await createCustomer({
         phone: cleaned,
         name: customerName,
-        birthday: null,
+        birthday: parsedBirthday,
         city: ciudad ?? null,
         source: 'delivery',
       })
@@ -98,6 +112,9 @@ export async function POST(request: NextRequest) {
       customer = await incrementVisit(customer.id, customer.total_visits, 'delivery')
       if (ciudad && !customer.city) {
         await updateCustomerCityIfNull(customer.id, ciudad)
+      }
+      if (parsedBirthday && !customer.birthday) {
+        await updateCustomerBirthdayIfNull(customer.id, parsedBirthday)
       }
     }
 

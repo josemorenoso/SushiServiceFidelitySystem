@@ -209,22 +209,29 @@ export async function POST(request: NextRequest) {
     const created = await res.json()
 
     // Auto-submit for WhatsApp approval
-    // name must be snake_case (lowercase + underscores) — Meta rejects anything else
+    // ApprovalRequests/whatsapp requires application/x-www-form-urlencoded (NOT JSON)
+    // name must be snake_case — Meta rejects anything else
     try {
+      const approvalParams = new URLSearchParams({
+        name: whatsappName,
+        category: category || 'UTILITY',
+      })
       const approvalRes = await fetch(
         `${TWILIO_CONTENT_API}/${created.sid}/ApprovalRequests/whatsapp`,
         {
           method: 'POST',
-          headers,
-          body: JSON.stringify({
-            name: whatsappName,
-            category: category || 'MARKETING',
-          }),
+          headers: {
+            Authorization: headers.Authorization,
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: approvalParams.toString(),
         }
       )
       if (!approvalRes.ok) {
         const approvalErr = await approvalRes.json().catch(() => approvalRes.text())
         console.error('[Templates] ApprovalRequest failed:', approvalRes.status, approvalErr)
+      } else {
+        console.log('[Templates] ApprovalRequest submitted OK for', created.sid)
       }
     } catch (err) {
       console.error('[Templates] ApprovalRequest exception:', err)

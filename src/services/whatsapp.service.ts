@@ -48,21 +48,44 @@ export async function sendTemplateMessage(
     return null
   }
 
-  try {
-    const twilio = (await import('twilio')).default
-    const client = twilio(config.accountSid, config.authToken)
+  const twilio = (await import('twilio')).default
+  const client = twilio(config.accountSid, config.authToken)
 
-    const message = await client.messages.create({
-      from: config.whatsappNumber,
-      to: formatPhoneForWhatsApp(phone),
-      contentSid,
-      contentVariables: JSON.stringify(variables),
-    })
+  // Sort keys numerically: ['1','2','3','4'] etc.
+  const sortedKeys = Object.keys(variables).sort((a, b) => Number(a) - Number(b))
 
-    console.log(`[WhatsApp] Template enviado: ${message.sid} (contentSid=${contentSid})`)
-    return { sid: message.sid, status: message.status }
-  } catch (error) {
-    console.error(`[WhatsApp] Error enviando template ${contentSid}:`, error)
-    return null
+  // Progressive retry: if Twilio returns 21665 (contentVariables count mismatch vs template definition),
+  // reduce variable count by 1 and retry until we find the right count.
+  for (let maxVars = sortedKeys.length; maxVars >= 1; maxVars--) {
+    const subset: Record<string, string> = {}
+    sortedKeys.slice(0, maxVars).forEach((k) => { subset[k] = variables[k] })
+
+    try {
+      const message = await client.messages.create({
+        from: config.whatsappNumber,
+        to: formatPhoneForWhatsApp(phone),
+        contentSid,
+        contentVariables: JSON.stringify(subset),
+      })
+      if (maxVars < sortedKeys.length) {
+        console.warn(`[WhatsApp] Enviado con ${maxVars}/${sortedKeys.length} vars (mismatch corregido): ${message.sid}`)
+      } else {
+        console.log(`[WhatsApp] Template enviado: ${message.sid} (contentSid=${contentSid})`)
+      }
+      return { sid: message.sid, status: message.status }
+    } catch (error: unknown) {
+      const errMsg = error instanceof Error ? error.message : String(error)
+      const isVarMismatch =
+        errMsg.includes('21665') ||
+        errMsg.toLowerCase().includes('contentvariables') ||
+        errMsg.toLowerCase().includes('variable')
+      if (isVarMismatch && maxVars > 1) {
+        console.warn(`[WhatsApp] Variable mismatch con ${maxVars} vars, reintentando con ${maxVars - 1}…`)
+        continue
+      }
+      console.error(`[WhatsApp] Error enviando template ${contentSid}:`, error)
+      return null
+    }
   }
+  return null
 }

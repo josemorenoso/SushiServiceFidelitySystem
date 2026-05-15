@@ -4,7 +4,9 @@ import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { validatePhone } from '@/lib/validators/phone'
 import { findCustomerByPhone, incrementVisit } from '@/services/customer.service'
 import { createVisit } from '@/services/visit.service'
-import { checkRewardForVisit } from '@/services/reward.service'
+import { checkRewardForVisit, getNextReward, getRewardTitle, getRemainingForReward, buildRewardsRoadmap } from '@/services/reward.service'
+import { getMultipleSettings } from '@/services/settings.service'
+import { sendTemplateMessage } from '@/services/whatsapp.service'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -50,7 +52,39 @@ export async function POST(request: NextRequest) {
       notes: `Override admin: ${reason || 'visita adicional autorizada'}`,
     })
 
-    const reward = await checkRewardForVisit(updated.total_visits)
+    const [reward, settings, roadmap] = await Promise.all([
+      checkRewardForVisit(updated.total_visits),
+      getMultipleSettings(['reward_template_sid', 'welcome_back_far_template_sid', 'welcome_back_near_template_sid', 'welcome_back_template_sid']),
+      buildRewardsRoadmap(updated.total_visits),
+    ])
+
+    // Send WhatsApp best-effort (same logic as QR check-in)
+    try {
+      if (reward && settings.reward_template_sid) {
+        await sendTemplateMessage(
+          cleaned,
+          settings.reward_template_sid,
+          { '1': updated.name, '2': String(updated.total_visits), '3': reward.title, '4': roadmap },
+        )
+      } else if (!reward) {
+        const nextReward = await getNextReward(updated.total_visits)
+        const remaining = getRemainingForReward(updated.total_visits, nextReward)
+        const rewardTitle = getRewardTitle(nextReward)
+        const isNear = remaining === 1
+        const sid = isNear
+          ? (settings.welcome_back_near_template_sid ?? settings.welcome_back_template_sid)
+          : (settings.welcome_back_far_template_sid ?? settings.welcome_back_template_sid)
+        if (sid) {
+          await sendTemplateMessage(
+            cleaned,
+            sid,
+            { '1': updated.name, '2': String(updated.total_visits), '3': rewardTitle, '4': roadmap },
+          )
+        }
+      }
+    } catch (waErr) {
+      console.error('[CheckIn Override] WhatsApp send error:', waErr)
+    }
 
     return NextResponse.json({
       ok: true,

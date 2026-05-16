@@ -19,20 +19,23 @@ export async function findBirthdayCustomers(): Promise<Customer[]> {
   const today = new Date()
   const month = String(today.getMonth() + 1).padStart(2, '0')
   const day = String(today.getDate()).padStart(2, '0')
-  const pattern = `%-${month}-${day}`
 
   const { data, error } = await supabase
     .from('customers')
     .select('*')
     .not('birthday', 'is', null)
-    .like('birthday', pattern)
     .eq('accepts_marketing', true)
 
   if (error) {
     throw new Error(`Error buscando cumpleañeros: ${error.message}`)
   }
 
-  return data ?? []
+  // birthday is stored as date (YYYY-MM-DD); filter by month and day in JS
+  return (data ?? []).filter(c => {
+    if (!c.birthday) return false
+    const parts = String(c.birthday).split('-')
+    return parts[1] === month && parts[2] === day
+  })
 }
 
 /**

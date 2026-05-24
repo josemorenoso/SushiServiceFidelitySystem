@@ -64,7 +64,12 @@
 | `src/lib/supabase/*` | `docs/02-architecture.md` + `docs/03-security.md` |
 | `src/lib/twilio/*` | `docs/02-architecture.md` + `docs/CONFIGURACIONES_TWILIO_SISTEMA.md` |
 | `src/services/*` | `docs/features/[feature].md` correspondiente |
-| `src/constants/rewards.ts` | `docs/features/campaigns.md` |
+| `src/constants/rewards.ts` | `docs/features/campaigns.md` + `docs/features/calendar.md` |
 | `supabase/migrations/*.sql` | `docs/DB_SCHEMA.md` |
 | `src/app/api/**` | `docs/API_DOCS.md` + `docs/features/[feature].md` |
 | `scripts/twilio-setup.mjs` | `docs/CONFIGURACIONES_TWILIO_SISTEMA.md` |
+| `src/app/(dashboard)/dashboard/calendar/*` | `docs/features/calendar.md` |
+| `src/components/dashboard/Calendar/*` | `docs/features/calendar.md` |
+| `src/app/api/dashboard/calendar/*` | `docs/features/calendar.md` + `docs/API_DOCS.md` |
+| `src/services/calendar.service.ts` | `docs/features/calendar.md` + `docs/DB_SCHEMA.md` |
+| `src/app/api/cron/calendar-dispatch/*` | `docs/features/calendar.md` |

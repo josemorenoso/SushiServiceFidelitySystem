@@ -5,6 +5,70 @@
 
 ---
 
+## [0.34.1] — 2026-05-24 — Fix: tipo canónico RestaurantEvent para evitar error de build en Vercel
+
+### Fixed
+- `src/app/(dashboard)/dashboard/calendar/page.tsx` — Eliminada interfaz local `RestaurantEvent`; ahora importa el tipo canónico desde `@/types/database.types`. Resuelve error TypeScript de parámetros incompatibles al pasar el evento a `EventDetailDrawer`.
+- `src/components/dashboard/Calendar/CalendarMonthView.tsx` — Mismo fix: eliminada interfaz local, importa `RestaurantEvent` desde `@/types/database.types`.
+- `src/components/dashboard/Calendar/EventDetailDrawer.tsx` — Eliminada interfaz local + `TYPE_COLORS`/`STATUS_LABELS` locales. Importa `RestaurantEvent`, `EventType`, `EventStatus` desde `@/types/database.types`.
+
+### Archivos afectados
+- `src/app/(dashboard)/dashboard/calendar/page.tsx`
+- `src/components/dashboard/Calendar/CalendarMonthView.tsx`
+- `src/components/dashboard/Calendar/EventDetailDrawer.tsx`
+
+### Request original
+> Build de Vercel fallaba: "Type 'RestaurantEvent' is missing the following properties" — tres archivos definían su propia interfaz local, TypeScript las trataba como tipos nominalmente distintos.
+
+---
+
+## [0.34.0] — 2026-05-24 — Calendario operativo de eventos (data layer + UI)
+
+### Added
+
+**Base de datos:**
+- `supabase/migrations/00012_calendar_events_and_media.sql` — Tabla `restaurant_events` (id, title, description, event_date, event_time, event_type, send_mode, scheduled_send_at, filters, media_url, media_type, content_sid, campaign_id, status, blackout_days, created_at, updated_at). Índices sobre date, status, scheduled_send_at. RLS activado. Columnas nuevas en `campaigns`: `source`, `media_url`, `media_type`. Bucket público `event-media` en Supabase Storage.
+
+**Constantes:**
+- `src/constants/rewards.ts` — `MONTHLY_MARKETING_CAP = 3`, `MONTHLY_CAP_SOURCES`, `DEFAULT_PRE_EVENT_BLACKOUT_DAYS = 5`.
+
+**Tipos:**
+- `src/types/database.types.ts` — Tipos `CampaignSource`, `EventType`, `EventSendMode`, `EventStatus`, `EventMediaType`, interfaz `RestaurantEvent`. Extendida interfaz `Campaign` con `source`, `media_url`, `media_type`. Extendida `Database` con `restaurant_events`.
+
+**Servicios:**
+- `src/services/calendar.service.ts` — CRUD de eventos: `createEvent`, `listEvents`, `getEvent`, `updateEvent`, `cancelEvent`. Helpers: `findCustomersForEvent`, `findDueAutoEvents`. Sin lógica de envío (path de plantillas con media pausa pendiente aprobación Meta).
+- `src/services/campaign.service.ts` — Nuevas funciones: `getCustomersAtMonthlyCap`, `filterByMonthlyCap`, `getActiveBlackouts`.
+
+**Endpoints (API):**
+- `src/app/api/dashboard/calendar/events/route.ts` — `GET ?from=&to=` (listar rango), `POST` (crear evento).
+- `src/app/api/dashboard/calendar/events/[id]/route.ts` — `GET` (detalle), `PATCH` (actualizar título/descripción), `DELETE` (cancelar).
+- `src/app/api/dashboard/calendar/media-upload/route.ts` — `POST` (upload a bucket `event-media`, valida MIME + tamaño), `DELETE` (borrar asset del bucket).
+
+**Frontend:**
+- `src/app/(dashboard)/dashboard/calendar/page.tsx` — Página principal del calendario: navegación de mes, barra de stats (total/planeados/programados/enviados), integra `CalendarMonthView`, `EventCreateDialog`, `EventDetailDrawer`.
+- `src/components/dashboard/Calendar/CalendarMonthView.tsx` — Grid mensual lunes-first, pills coloreados por tipo de evento, indicadores de blackout, highlight del día actual, leyenda.
+- `src/components/dashboard/Calendar/EventCreateDialog.tsx` — Formulario completo: título, descripción, fecha+hora, tipo de evento, modo de envío (remind/auto), fecha de auto-envío, MediaUploader, filtros de audiencia (ciudad, visitas min/max), días de blackout.
+- `src/components/dashboard/Calendar/EventDetailDrawer.tsx` — Sheet lateral: preview de media, metadata del evento, edición inline (título/descripción), cancelación suave.
+- `src/components/dashboard/Calendar/MediaUploader.tsx` — Drag-drop, validación MIME (JPG/PNG/MP4) y tamaño (5MB/16MB), preview, integración con `/api/dashboard/calendar/media-upload`.
+- `src/components/layout/DashboardSidebar.tsx` — Nuevo ítem "Calendario" (con icono `CalendarDays`) entre Campañas y Código QR.
+
+**Documentación:**
+- `docs/features/calendar.md` — Feature doc completo: scope, decisiones de diseño, estado actual (qué funciona, qué está pausado pendiente Meta).
+- `docs/DB_SCHEMA.md` — Nuevas secciones: tabla `restaurant_events`, columnas nuevas de `campaigns`, bucket `event-media`, migración 00012.
+- `docs/API_DOCS.md` — 7 nuevos endpoints del calendario documentados.
+
+### Changed
+- `docs/features/gamificacion-y-qr-fisico.md` — Agregado al repo (doc de investigación sobre gamificación y QR físico).
+
+### Notes
+- El path de auto-envío (plantillas `twilio/media` + cron `calendar-dispatch`) está deliberadamente excluido de este release. Depende de aprobación de Meta para plantillas con media (24-72h). Ver `docs/features/calendar.md` sección "Pendiente".
+- Monthly marketing cap (3 msg/mes/cliente) y pre-event blackout están implementados en servicios pero no aplicados todavía en los endpoints de campañas manuales — se conectarán en el siguiente sprint.
+
+### Request original
+> "Desarrolla el calendario, no toques nada de las plantillas. Construye el front end y sube solo a esa repo que te pasé."
+
+---
+
 ## [0.33.0] — 2026-05-12 — Nivel BLACK: tier máximo configurable en programa de fidelidad
 
 ### Added

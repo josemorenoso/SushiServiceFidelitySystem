@@ -11,6 +11,11 @@ import {
 } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import type {
+  RestaurantEvent,
+  EventType,
+  EventStatus,
+} from '@/types/database.types'
 import {
   Calendar,
   Clock,
@@ -25,26 +30,6 @@ import {
   X,
 } from 'lucide-react'
 
-interface RestaurantEvent {
-  id: string
-  title: string
-  description: string | null
-  event_date: string
-  event_time: string | null
-  event_type: 'promo' | 'festival' | 'activacion' | 'aniversario' | 'otro'
-  send_mode: 'auto' | 'remind'
-  scheduled_send_at: string | null
-  filters: Record<string, unknown>
-  media_url: string | null
-  media_type: 'image' | 'video' | null
-  content_sid: string | null
-  campaign_id: string | null
-  status: 'planned' | 'scheduled' | 'sent' | 'cancelled' | 'failed'
-  blackout_days: number
-  created_at: string
-  updated_at: string
-}
-
 interface EventDetailDrawerProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -52,7 +37,7 @@ interface EventDetailDrawerProps {
   onUpdated?: () => void
 }
 
-const TYPE_COLORS: Record<RestaurantEvent['event_type'], string> = {
+const TYPE_COLORS: Record<EventType, string> = {
   festival: 'bg-purple-100 text-purple-800 border-purple-200',
   promo: 'bg-pink-100 text-pink-800 border-pink-200',
   activacion: 'bg-amber-100 text-amber-800 border-amber-200',
@@ -60,7 +45,7 @@ const TYPE_COLORS: Record<RestaurantEvent['event_type'], string> = {
   otro: 'bg-slate-100 text-slate-800 border-slate-200',
 }
 
-const STATUS_LABELS: Record<RestaurantEvent['status'], string> = {
+const STATUS_LABELS: Record<EventStatus, string> = {
   planned: 'Planeado',
   scheduled: 'Programado',
   sent: 'Enviado',
@@ -68,7 +53,7 @@ const STATUS_LABELS: Record<RestaurantEvent['status'], string> = {
   failed: 'Falló',
 }
 
-const STATUS_VARIANT: Record<RestaurantEvent['status'], 'default' | 'secondary' | 'destructive' | 'outline'> = {
+const STATUS_VARIANT: Record<EventStatus, 'default' | 'secondary' | 'destructive' | 'outline'> = {
   planned: 'outline',
   scheduled: 'secondary',
   sent: 'default',

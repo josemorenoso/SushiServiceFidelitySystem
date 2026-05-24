@@ -8,26 +8,7 @@ import { CalendarDays, ChevronLeft, ChevronRight, Plus, Info } from 'lucide-reac
 import { CalendarMonthView } from '@/components/dashboard/Calendar/CalendarMonthView'
 import { EventCreateDialog } from '@/components/dashboard/Calendar/EventCreateDialog'
 import { EventDetailDrawer } from '@/components/dashboard/Calendar/EventDetailDrawer'
-
-interface RestaurantEvent {
-  id: string
-  title: string
-  description: string | null
-  event_date: string
-  event_time: string | null
-  event_type: 'promo' | 'festival' | 'activacion' | 'aniversario' | 'otro'
-  send_mode: 'auto' | 'remind'
-  scheduled_send_at: string | null
-  filters: Record<string, unknown>
-  media_url: string | null
-  media_type: 'image' | 'video' | null
-  content_sid: string | null
-  campaign_id: string | null
-  status: 'planned' | 'scheduled' | 'sent' | 'cancelled' | 'failed'
-  blackout_days: number
-  created_at: string
-  updated_at: string
-}
+import type { RestaurantEvent } from '@/types/database.types'
 
 const MONTH_NAMES = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',

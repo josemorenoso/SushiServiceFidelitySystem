@@ -1,16 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
-
-interface RestaurantEvent {
-  id: string
-  title: string
-  event_date: string
-  event_type: 'promo' | 'festival' | 'activacion' | 'aniversario' | 'otro'
-  status: 'planned' | 'scheduled' | 'sent' | 'cancelled' | 'failed'
-  blackout_days: number
-  send_mode: 'auto' | 'remind'
-}
+import type { RestaurantEvent } from '@/types/database.types'
 
 interface CalendarMonthViewProps {
   year: number

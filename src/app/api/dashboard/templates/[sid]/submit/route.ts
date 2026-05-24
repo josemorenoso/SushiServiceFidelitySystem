@@ -45,13 +45,16 @@ export async function POST(
       .replace(/^_|_$/g, '')
       .slice(0, 512)
 
-    const approvalParams = new URLSearchParams({ name: whatsappName, category })
+    // /ApprovalRequests/whatsapp expects application/json (not form-encoded)
     const approvalRes = await fetch(
       `${TWILIO_CONTENT_API}/${sid}/ApprovalRequests/whatsapp`,
       {
         method: 'POST',
-        headers: { Authorization: auth },
-        body: approvalParams,
+        headers: {
+          Authorization: auth,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name: whatsappName, category }),
       }
     )
 

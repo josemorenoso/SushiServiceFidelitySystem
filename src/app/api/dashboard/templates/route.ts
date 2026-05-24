@@ -209,24 +209,24 @@ export async function POST(request: NextRequest) {
     const created = await res.json()
 
     // Auto-submit for WhatsApp approval.
-    // Pass URLSearchParams object directly to fetch body (not .toString()) —
-    // this lets the runtime set Content-Type + encoding correctly.
-    // Manually setting Content-Type: application/x-www-form-urlencoded alongside
-    // a string body causes Twilio to reject with "does not support this payload format".
+    // The /ApprovalRequests/whatsapp endpoint expects application/json, NOT form-encoded.
+    // Sending form-encoded returns: "does not support this payload format".
     let approvalSubmitted = false
     let approvalError: string | null = null
 
     try {
-      const approvalParams = new URLSearchParams({
-        name: whatsappName,
-        category: category || 'UTILITY',
-      })
       const approvalRes = await fetch(
         `${TWILIO_CONTENT_API}/${created.sid}/ApprovalRequests/whatsapp`,
         {
           method: 'POST',
-          headers: { Authorization: headers.Authorization },
-          body: approvalParams,
+          headers: {
+            Authorization: headers.Authorization,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: whatsappName,
+            category: category || 'UTILITY',
+          }),
         }
       )
       if (!approvalRes.ok) {

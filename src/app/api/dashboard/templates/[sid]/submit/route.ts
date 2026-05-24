@@ -50,11 +50,8 @@ export async function POST(
       `${TWILIO_CONTENT_API}/${sid}/ApprovalRequests/whatsapp`,
       {
         method: 'POST',
-        headers: {
-          Authorization: auth,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: approvalParams.toString(),
+        headers: { Authorization: auth },
+        body: approvalParams,
       }
     )
 

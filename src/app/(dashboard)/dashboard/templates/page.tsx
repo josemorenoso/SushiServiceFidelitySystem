@@ -21,6 +21,7 @@ import {
   ChevronDown,
   ShieldAlert,
   Lightbulb,
+  Send,
 } from 'lucide-react'
 
 interface TwilioTemplate {
@@ -36,21 +37,24 @@ interface TwilioTemplate {
 }
 
 const STATUS_MAP: Record<string, { label: string; icon: typeof CheckCircle; color: string }> = {
-  approved: { label: 'Aprobada', icon: CheckCircle, color: 'text-green-600 bg-green-50 border-green-200' },
-  pending: { label: 'Pendiente', icon: Clock, color: 'text-amber-600 bg-amber-50 border-amber-200' },
-  rejected: { label: 'Rechazada', icon: XCircle, color: 'text-red-600 bg-red-50 border-red-200' },
-  unsubmitted: { label: 'Sin enviar', icon: FileText, color: 'text-gray-600 bg-gray-50 border-gray-200' },
-  draft: { label: 'Borrador', icon: FileText, color: 'text-gray-600 bg-gray-50 border-gray-200' },
-  received: { label: 'En revisión', icon: Clock, color: 'text-blue-600 bg-blue-50 border-blue-200' },
+  approved:    { label: 'Aprobada',         icon: CheckCircle, color: 'text-green-600 bg-green-50 border-green-200' },
+  pending:     { label: 'Pendiente Meta',   icon: Clock,       color: 'text-amber-600 bg-amber-50 border-amber-200' },
+  received:    { label: 'En revisión Meta', icon: Clock,       color: 'text-blue-600 bg-blue-50 border-blue-200' },
+  rejected:    { label: 'Rechazada',        icon: XCircle,     color: 'text-red-600 bg-red-50 border-red-200' },
+  unsubmitted: { label: 'Sin enviar a Meta',icon: AlertTriangle,color: 'text-orange-600 bg-orange-50 border-orange-200' },
+  draft:       { label: 'Sin enviar a Meta',icon: AlertTriangle,color: 'text-orange-600 bg-orange-50 border-orange-200' },
 }
 
 const CATEGORY_MAP: Record<string, { label: string; color: string }> = {
-  MARKETING: { label: 'Marketing', color: 'bg-blue-100 text-blue-700' },
-  UTILITY: { label: 'Utilidad', color: 'bg-green-100 text-green-700' },
+  MARKETING:  { label: 'Marketing', color: 'bg-blue-100 text-blue-700' },
+  UTILITY:    { label: 'Utilidad',  color: 'bg-green-100 text-green-700' },
   AUTHENTICATION: { label: 'Auth', color: 'bg-purple-100 text-purple-700' },
-  marketing: { label: 'Marketing', color: 'bg-blue-100 text-blue-700' },
-  utility: { label: 'Utilidad', color: 'bg-green-100 text-green-700' },
+  marketing:  { label: 'Marketing', color: 'bg-blue-100 text-blue-700' },
+  utility:    { label: 'Utilidad',  color: 'bg-green-100 text-green-700' },
 }
+
+// These statuses need a "Send to Meta" button
+const NEEDS_SUBMIT = new Set(['draft', 'unsubmitted', ''])
 
 export default function TemplatesPage() {
   const [twilioTemplates, setTwilioTemplates] = useState<TwilioTemplate[]>([])
@@ -63,10 +67,12 @@ export default function TemplatesPage() {
   const [newBody, setNewBody] = useState('')
   const [newCategory, setNewCategory] = useState('UTILITY')
   const [creating, setCreating] = useState(false)
-  const [createResult, setCreateResult] = useState<string | null>(null)
+  const [createResult, setCreateResult] = useState<{ ok: boolean; msg: string; approvalError?: string } | null>(null)
   const [showWarning, setShowWarning] = useState(false)
   const [showTips, setShowTips] = useState(false)
   const [sampleVars, setSampleVars] = useState<Record<string, string>>({})
+  // Per-template submit state: sid → 'idle' | 'loading' | 'ok' | error string
+  const [submitState, setSubmitState] = useState<Record<string, string>>({})
 
   const fetchTemplates = useCallback(async () => {
     setSyncing(true)
@@ -130,19 +136,52 @@ export default function TemplatesPage() {
       })
       const data = await res.json()
       if (data.success) {
-        setCreateResult('Plantilla creada y enviada para aprobación de WhatsApp')
+        if (data.approval_submitted) {
+          setCreateResult({ ok: true, msg: 'Plantilla creada y enviada a Meta para aprobación. En 24-72h aparecerá Aprobada.' })
+        } else {
+          setCreateResult({
+            ok: false,
+            msg: 'Plantilla creada en Twilio, pero el envío a Meta falló.',
+            approvalError: data.approval_error || 'Error desconocido — usa el botón "Enviar a Meta" en la lista.',
+          })
+        }
         setNewName('')
         setNewBody('')
         setSampleVars({})
         setShowNew(false)
         fetchTemplates()
       } else {
-        setCreateResult(`Error: ${data.error}`)
+        setCreateResult({ ok: false, msg: `Error: ${data.error}` })
       }
     } catch {
-      setCreateResult('Error de conexión')
+      setCreateResult({ ok: false, msg: 'Error de conexión' })
     } finally {
       setCreating(false)
+    }
+  }
+
+  const handleSubmitToMeta = async (t: TwilioTemplate) => {
+    setSubmitState((s) => ({ ...s, [t.sid]: 'loading' }))
+    try {
+      const res = await fetch(`/api/dashboard/templates/${t.sid}/submit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ category: t.category || 'UTILITY' }),
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        setSubmitState((s) => ({ ...s, [t.sid]: 'ok' }))
+        // Optimistically update the status in the list
+        setTwilioTemplates((prev) =>
+          prev.map((tmpl) =>
+            tmpl.sid === t.sid ? { ...tmpl, status: data.status || 'received' } : tmpl
+          )
+        )
+      } else {
+        setSubmitState((s) => ({ ...s, [t.sid]: data.error || 'Error enviando' }))
+      }
+    } catch {
+      setSubmitState((s) => ({ ...s, [t.sid]: 'Error de conexión' }))
     }
   }
 
@@ -170,11 +209,20 @@ export default function TemplatesPage() {
       )}
 
       {createResult && (
-        <div className={`rounded-lg p-3 text-sm flex items-center gap-2 ${
-          createResult.startsWith('Error') ? 'bg-red-50 border border-red-200 text-red-800' : 'bg-green-50 border border-green-200 text-green-800'
+        <div className={`rounded-lg p-3 text-sm flex flex-col gap-1 ${
+          createResult.ok
+            ? 'bg-green-50 border border-green-200 text-green-800'
+            : 'bg-red-50 border border-red-200 text-red-800'
         }`}>
-          {createResult.startsWith('Error') ? <XCircle className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
-          {createResult}
+          <div className="flex items-center gap-2">
+            {createResult.ok ? <CheckCircle className="h-4 w-4 shrink-0" /> : <XCircle className="h-4 w-4 shrink-0" />}
+            {createResult.msg}
+          </div>
+          {createResult.approvalError && (
+            <p className="text-xs ml-6 opacity-80">
+              Detalle: {createResult.approvalError}
+            </p>
+          )}
         </div>
       )}
 
@@ -192,9 +240,13 @@ export default function TemplatesPage() {
           </h2>
           <div className="grid gap-3">
             {twilioTemplates.map((t) => {
-              const statusInfo = STATUS_MAP[t.status] || STATUS_MAP[t.status?.toLowerCase()] || STATUS_MAP.draft
+              const statusKey = (t.status || 'draft').toLowerCase()
+              const statusInfo = STATUS_MAP[statusKey] || STATUS_MAP.draft
               const catInfo = CATEGORY_MAP[t.category] || CATEGORY_MAP.MARKETING
               const StatusIcon = statusInfo.icon
+              const needsSubmit = NEEDS_SUBMIT.has(statusKey)
+              const submitSt = submitState[t.sid]
+
               return (
                 <Card key={t.sid}>
                   <CardContent className="py-4">
@@ -213,6 +265,37 @@ export default function TemplatesPage() {
                           <span className="text-[10px] text-muted-foreground font-mono">{t.sid}</span>
                         </div>
                         <p className="text-xs text-muted-foreground line-clamp-2">{t.body}</p>
+
+                        {/* Per-template submit button for drafts */}
+                        {needsSubmit && (
+                          <div className="flex items-center gap-2 pt-0.5">
+                            {submitSt === 'ok' ? (
+                              <span className="text-xs text-green-700 flex items-center gap-1">
+                                <CheckCircle className="h-3.5 w-3.5" />
+                                Enviada a Meta — espera 24-72h
+                              </span>
+                            ) : (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 text-xs gap-1.5 border-orange-300 text-orange-700 hover:bg-orange-50"
+                                  onClick={() => handleSubmitToMeta(t)}
+                                  disabled={submitSt === 'loading'}
+                                >
+                                  {submitSt === 'loading'
+                                    ? <Loader2 className="h-3 w-3 animate-spin" />
+                                    : <Send className="h-3 w-3" />
+                                  }
+                                  {submitSt === 'loading' ? 'Enviando…' : 'Enviar a Meta'}
+                                </Button>
+                                {submitSt && submitSt !== 'loading' && submitSt !== 'ok' && (
+                                  <span className="text-[10px] text-red-600">{submitSt}</span>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        )}
                       </div>
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handlePreview(t.body)}>
                         <Eye className="h-3.5 w-3.5" />

@@ -211,6 +211,9 @@ export async function POST(request: NextRequest) {
     // Auto-submit for WhatsApp approval
     // ApprovalRequests/whatsapp requires application/x-www-form-urlencoded (NOT JSON)
     // name must be snake_case — Meta rejects anything else
+    let approvalSubmitted = false
+    let approvalError: string | null = null
+
     try {
       const approvalParams = new URLSearchParams({
         name: whatsappName,
@@ -228,21 +231,32 @@ export async function POST(request: NextRequest) {
         }
       )
       if (!approvalRes.ok) {
-        const approvalErr = await approvalRes.json().catch(() => approvalRes.text())
-        console.error('[Templates] ApprovalRequest failed:', approvalRes.status, approvalErr)
+        let errMsg = `HTTP ${approvalRes.status}`
+        try {
+          const errData = await approvalRes.json()
+          errMsg = errData.message || errData.error_message || JSON.stringify(errData)
+        } catch {
+          errMsg = await approvalRes.text().catch(() => errMsg)
+        }
+        console.error('[Templates] ApprovalRequest failed:', approvalRes.status, errMsg)
+        approvalError = errMsg
       } else {
+        approvalSubmitted = true
         console.log('[Templates] ApprovalRequest submitted OK for', created.sid)
       }
     } catch (err) {
       console.error('[Templates] ApprovalRequest exception:', err)
+      approvalError = err instanceof Error ? err.message : 'Error desconocido'
     }
 
     return NextResponse.json({
       success: true,
+      approval_submitted: approvalSubmitted,
+      approval_error: approvalError,
       template: {
         sid: created.sid,
         name: created.friendly_name,
-        status: 'pending',
+        status: approvalSubmitted ? 'received' : 'unsubmitted',
       },
     })
   } catch (error) {

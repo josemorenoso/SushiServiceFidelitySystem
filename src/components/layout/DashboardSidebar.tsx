@@ -13,6 +13,7 @@ import {
   FileText,
   Settings,
   ShieldCheck,
+  CalendarDays,
 } from 'lucide-react'
 import { BRAND_NAME } from '@/lib/branding'
 
@@ -21,6 +22,7 @@ const navItems = [
   { href: '/dashboard/customers', label: 'Clientes', icon: Users },
   { href: '/dashboard/rewards', label: 'Recompensas', icon: Gift },
   { href: '/dashboard/campaigns', label: 'Campañas', icon: Megaphone },
+  { href: '/dashboard/calendar', label: 'Calendario', icon: CalendarDays },
   { href: '/dashboard/qr', label: 'Código QR', icon: QrCode },
   { href: '/dashboard/templates', label: 'Plantillas', icon: FileText },
   { href: '/dashboard/authorized-numbers', label: 'Meseros', icon: ShieldCheck },

@@ -1,7 +1,7 @@
 # Esquema de Base de Datos
 
 **Base de datos:** Supabase (PostgreSQL)
-**Última actualización:** 2026-05-07
+**Última actualización:** 2026-05-23
 
 ---
 
@@ -95,6 +95,7 @@ erDiagram
 | 5 | [campaign_messages](#campaign_messages) | Mensajes enviados por campaña | SI | Admin: lectura |
 | 6 | [authorized_numbers](#authorized_numbers) | Números de meseros autorizados | SI | Admin: CRUD completo |
 | 7 | [admin_settings](#admin_settings) | Configuración del admin (key-value) | SI | Admin: SELECT, INSERT, UPDATE |
+| 8 | [restaurant_events](#restaurant_events) | Calendario operativo de eventos/promos con media | SI | Admin: CRUD completo |
 
 ---
 
@@ -208,6 +209,15 @@ CREATE POLICY "admin_update_customers" ON customers
 | `scheduled_at` | `timestamptz` | SI | `NULL` | Fecha programada |
 | `executed_at` | `timestamptz` | SI | `NULL` | Fecha de ejecución real |
 | `created_at` | `timestamptz` | NO | `now()` | Fecha de creación |
+| `source` | `text` | NO | `'manual'` | Origen real: 'manual', 'calendar', 'reactivation', 'birthday'. Usado por `filterByMonthlyCap` (cuenta manual+calendar+reactivation; NO cuenta birthday). |
+| `media_url` | `text` | SI | `NULL` | URL pública del media adjunto (Supabase Storage bucket `event-media`) si la campaña usa plantilla `twilio/media`. |
+| `media_type` | `text` | SI | `NULL` | 'image' o 'video'. NULL para campañas de solo texto. |
+
+**Índices nuevos (00012):**
+
+| Nombre | Columnas | Tipo |
+|--------|----------|------|
+| `idx_campaigns_source_created` | `(source, created_at)` | BTREE |
 
 ---
 
@@ -275,6 +285,8 @@ CREATE POLICY "admin_update_customers" ON customers
 | key | value | Descripción |
 |-----|-------|-------------|
 | `avg_ticket` | `35000` | Ticket promedio en COP para cálculo de ROI |
+| `event_template_image_sid` | _(vacío inicial)_ | Twilio Content SID de plantilla `twilio/media` con imagen para invitaciones de calendario |
+| `event_template_video_sid` | _(vacío inicial)_ | Twilio Content SID de plantilla `twilio/media` con video para invitaciones de calendario |
 
 **Políticas RLS:**
 
@@ -288,6 +300,88 @@ CREATE POLICY "admin_update_settings" ON admin_settings
 CREATE POLICY "admin_insert_settings" ON admin_settings
   FOR INSERT WITH CHECK (auth.role() = 'authenticated');
 ```
+
+---
+
+### restaurant_events
+
+> Calendario operativo de eventos/promos del restaurante. Soporta media (imagen/video) y modo de envío híbrido: `auto` (cron dispara) o `remind` (solo aviso visual al admin).
+
+| Columna | Tipo | Nullable | Default | Descripción |
+|---------|------|----------|---------|-------------|
+| `id` | `uuid` | NO | `gen_random_uuid()` | PK |
+| `title` | `text` | NO | - | Nombre del evento (ej: "Festival del Sushi") |
+| `description` | `text` | SI | `NULL` | Descripción/CTA libre del evento |
+| `event_date` | `date` | NO | - | Día del evento real |
+| `event_time` | `time` | SI | `NULL` | Hora opcional del evento |
+| `event_type` | `text` | NO | - | 'promo' \| 'festival' \| 'activacion' \| 'aniversario' \| 'otro' |
+| `send_mode` | `text` | NO | `'remind'` | 'auto' = cron envía; 'remind' = solo recordatorio para el admin |
+| `scheduled_send_at` | `timestamptz` | SI | `NULL` | Cuándo se envía (solo si `send_mode='auto'`). Debe ser ≤ `event_date`. |
+| `filters` | `jsonb` | NO | `'{}'` | Filtros de audiencia (mismo shape que `campaigns.filters`) |
+| `media_url` | `text` | SI | `NULL` | URL pública del bucket `event-media` |
+| `media_type` | `text` | SI | `NULL` | 'image' o 'video' |
+| `content_sid` | `text` | SI | `NULL` | Twilio Content SID resuelto desde `admin_settings` según `media_type` |
+| `campaign_id` | `uuid` | SI | `NULL` | FK a `campaigns(id)`. Se llena cuando el evento se ejecuta. |
+| `status` | `text` | NO | `'planned'` | 'planned' \| 'scheduled' \| 'sent' \| 'cancelled' \| 'failed' |
+| `blackout_days` | `integer` | NO | `5` | Días antes del evento donde campañas manuales se bloquean (0-30) |
+| `created_at` | `timestamptz` | NO | `now()` | Creación |
+| `updated_at` | `timestamptz` | NO | `now()` | Última actualización |
+
+**Foreign Keys:**
+
+| Columna | Referencia | On Delete |
+|---------|------------|-----------|
+| `campaign_id` | `campaigns(id)` | SET NULL |
+
+**Índices:**
+
+| Nombre | Columnas | Tipo |
+|--------|----------|------|
+| `restaurant_events_pkey` | `id` | PRIMARY KEY |
+| `idx_restaurant_events_date` | `event_date` | BTREE |
+| `idx_restaurant_events_status` | `status` | BTREE |
+| `idx_restaurant_events_scheduled` | `scheduled_send_at` (parcial: WHERE not null + status='scheduled') | BTREE |
+
+**Triggers:**
+
+| Nombre | Evento | Función |
+|--------|--------|---------|
+| `trg_restaurant_events_updated_at` | BEFORE UPDATE | `update_restaurant_events_updated_at()` |
+
+**Políticas RLS:**
+
+```sql
+-- Admin: CRUD completo
+CREATE POLICY "admin_all_restaurant_events" ON restaurant_events
+  FOR ALL USING (auth.role() = 'authenticated');
+
+-- Service role: SELECT/INSERT/UPDATE (para crons y endpoints internos)
+CREATE POLICY "service_select_restaurant_events" ON restaurant_events FOR SELECT USING (true);
+CREATE POLICY "service_insert_restaurant_events" ON restaurant_events FOR INSERT WITH CHECK (true);
+CREATE POLICY "service_update_restaurant_events" ON restaurant_events FOR UPDATE USING (true);
+```
+
+---
+
+## Storage Buckets
+
+### event-media
+
+> Bucket público de Supabase Storage para imágenes y videos de eventos del calendario.
+
+- **Público:** SI (lectura anónima requerida para que Twilio/Meta puedan descargar el asset al enviar el WhatsApp)
+- **Escritura:** Solo `authenticated`
+- **Estructura recomendada de path:** `event-media/{event_id_or_temp}/{filename}`
+- **Límites por tipo:** imagen ≤ 5MB (JPG/PNG); video ≤ 16MB (MP4) — validados a nivel de endpoint, no de Storage
+
+**Políticas:**
+
+| Nombre | Acción | Regla |
+|--------|--------|-------|
+| `event_media_public_read` | SELECT | `bucket_id='event-media'` (anónimo) |
+| `event_media_admin_write` | INSERT | `bucket_id='event-media' AND auth.role()='authenticated'` |
+| `event_media_admin_update` | UPDATE | `bucket_id='event-media' AND auth.role()='authenticated'` |
+| `event_media_admin_delete` | DELETE | `bucket_id='event-media' AND auth.role()='authenticated'` |
 
 ---
 
@@ -306,6 +400,7 @@ CREATE POLICY "admin_insert_settings" ON admin_settings
 | 9 | `00009_table_number.sql` | 2026-04-15 | Campo table_number en visits + índice | Pendiente |
 | 10 | `00010_rewards_optional_milestone.sql` | 2026-05-07 | `rewards.visit_milestone` nullable + índice único parcial | Pendiente |
 | 11 | `00011_rewards_black_tier.sql` | 2026-05-12 | `rewards.is_black` boolean para nivel BLACK | Pendiente |
+| 12 | `00012_calendar_events_and_media.sql` | 2026-05-23 | Tabla `restaurant_events`, columnas `source/media_url/media_type` en `campaigns`, bucket `event-media` + RLS de Storage | Pendiente |
 
 ---
 
@@ -337,3 +432,4 @@ $$ LANGUAGE plpgsql;
 | campaign_messages | Admin | Service | Service | NO |
 | authorized_numbers | Admin | Admin | Admin | Admin |
 | admin_settings | Admin | Admin | Admin | NO |
+| restaurant_events | Admin + Service | Admin + Service | Admin + Service | Admin |

@@ -57,13 +57,15 @@ Si el cliente ya completó todos los milestones: `🌟 ¡Sigue acumulando visita
 ```
 ¡Hola {{1}}! 🎉🍣
 
-Bienvenid@ a la familia de *[Restaurante]*, nos alegra tenerte aquí
+Bienvenid@ a la familia de *Restaurante*, nos alegra tenerte aquí
 
-Cada visita te acerca a premios reales 👇
+Atent@, en cada visita tendrás un premio o te acercarás a uno 👇
 
 {{2}}
 
-_— El equipo de [Restaurante]_
+Esperamos verte de regreso pronto ☺️
+
+_— El equipo de (Restaurante)_
 ```
 
 **Samples para aprobación:**

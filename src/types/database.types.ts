@@ -36,6 +36,8 @@ export interface Reward {
   created_at: string
 }
 
+export type CampaignSource = 'manual' | 'calendar' | 'reactivation' | 'birthday'
+
 export interface Campaign {
   id: string
   name: string
@@ -47,6 +49,9 @@ export interface Campaign {
   scheduled_at: string | null
   executed_at: string | null
   created_at: string
+  source: CampaignSource
+  media_url: string | null
+  media_type: 'image' | 'video' | null
 }
 
 export interface CampaignMessage {
@@ -65,6 +70,31 @@ export interface AuthorizedNumber {
   name: string
   is_active: boolean
   created_at: string
+}
+
+export type EventType = 'promo' | 'festival' | 'activacion' | 'aniversario' | 'otro'
+export type EventSendMode = 'auto' | 'remind'
+export type EventStatus = 'planned' | 'scheduled' | 'sent' | 'cancelled' | 'failed'
+export type EventMediaType = 'image' | 'video'
+
+export interface RestaurantEvent {
+  id: string
+  title: string
+  description: string | null
+  event_date: string                   // YYYY-MM-DD
+  event_time: string | null            // HH:MM:SS
+  event_type: EventType
+  send_mode: EventSendMode
+  scheduled_send_at: string | null     // ISO timestamp
+  filters: Record<string, unknown>
+  media_url: string | null
+  media_type: EventMediaType | null
+  content_sid: string | null
+  campaign_id: string | null
+  status: EventStatus
+  blackout_days: number
+  created_at: string
+  updated_at: string
 }
 
 export interface Database {
@@ -103,12 +133,28 @@ export interface Database {
       }
       campaigns: {
         Row: Campaign
-        Insert: Omit<Campaign, 'id' | 'created_at' | 'total_sent'> & {
+        Insert: Omit<Campaign, 'id' | 'created_at' | 'total_sent' | 'source' | 'media_url' | 'media_type'> & {
           id?: string
           created_at?: string
           total_sent?: number
+          source?: CampaignSource
+          media_url?: string | null
+          media_type?: 'image' | 'video' | null
         }
         Update: Partial<Omit<Campaign, 'id' | 'created_at'>>
+      }
+      restaurant_events: {
+        Row: RestaurantEvent
+        Insert: Omit<RestaurantEvent, 'id' | 'created_at' | 'updated_at' | 'status' | 'send_mode' | 'blackout_days' | 'filters'> & {
+          id?: string
+          created_at?: string
+          updated_at?: string
+          status?: EventStatus
+          send_mode?: EventSendMode
+          blackout_days?: number
+          filters?: Record<string, unknown>
+        }
+        Update: Partial<Omit<RestaurantEvent, 'id' | 'created_at'>>
       }
       campaign_messages: {
         Row: CampaignMessage

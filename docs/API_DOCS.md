@@ -2,7 +2,7 @@
 
 **Base URL:** `/api`
 **Autenticación:** Bearer Token (JWT) — Supabase Auth
-**Última actualización:** 2026-05-07
+**Última actualización:** 2026-05-23
 
 ---
 
@@ -46,6 +46,13 @@ Webhooks validan origen por número autorizado o `CRON_SECRET`.
 | POST | /api/dashboard/rewards | Crear recompensa (visit_milestone opcional) | Admin JWT |
 | DELETE | /api/dashboard/rewards?id=X | Eliminar recompensa | Admin JWT |
 | PATCH | /api/dashboard/rewards | Actualizar `is_active`, `title` y/o `visit_milestone` | Admin JWT |
+| GET | /api/dashboard/calendar/events | Listar eventos en rango `?from=&to=` | Admin JWT |
+| POST | /api/dashboard/calendar/events | Crear evento del calendario | Admin JWT |
+| GET | /api/dashboard/calendar/events/:id | Detalle de un evento | Admin JWT |
+| PATCH | /api/dashboard/calendar/events/:id | Actualizar evento | Admin JWT |
+| DELETE | /api/dashboard/calendar/events/:id | Cancelar evento (soft-delete) | Admin JWT |
+| POST | /api/dashboard/calendar/media-upload | Subir imagen/video a `event-media` | Admin JWT |
+| DELETE | /api/dashboard/calendar/media-upload?path=X | Borrar asset del bucket | Admin JWT |
 
 ---
 
@@ -413,6 +420,156 @@ Actualiza una configuración por clave.
 ```
 
 **Response 400:** `{ "error": "key y value son requeridos" }`
+
+---
+
+## Calendar — Eventos del calendario operativo
+
+> Capa de datos del calendario. Los eventos se crean y persisten con o sin media (imagen/video).
+> **El path de envío (disparo del WhatsApp) no está implementado en esta iteración** — está pausado hasta que las plantillas Twilio tipo `twilio/media` estén aprobadas por Meta. Hoy los eventos solo se almacenan y se listan; cuando se cablee el envío, los eventos con `send_mode='auto'` y `status='scheduled'` se dispararán vía cron.
+
+### Listar eventos del rango
+
+**`GET /api/dashboard/calendar/events?from=YYYY-MM-DD&to=YYYY-MM-DD`** — Admin JWT
+
+Devuelve los eventos cuyo `event_date` cae en el rango (inclusive en ambos extremos), ordenados ascendentemente.
+
+**Response 200:**
+```json
+{
+  "events": [
+    {
+      "id": "uuid",
+      "title": "Festival del Sushi",
+      "description": "Promo 2x1 todo el día",
+      "event_date": "2026-05-26",
+      "event_time": "19:00:00",
+      "event_type": "festival",
+      "send_mode": "remind",
+      "scheduled_send_at": null,
+      "filters": { "city": "Envigado" },
+      "media_url": "https://...supabase.co/storage/v1/object/public/event-media/...",
+      "media_type": "image",
+      "content_sid": null,
+      "campaign_id": null,
+      "status": "planned",
+      "blackout_days": 5,
+      "created_at": "...",
+      "updated_at": "..."
+    }
+  ]
+}
+```
+
+**Response 400:** `{ "error": "Parámetros `from` y `to` (YYYY-MM-DD) requeridos" }`
+
+---
+
+### Crear evento
+
+**`POST /api/dashboard/calendar/events`** — Admin JWT
+
+**Request body:**
+```json
+{
+  "title": "Festival del Sushi",
+  "description": "Promo 2x1 todo el día — ¡te esperamos!",
+  "event_date": "2026-05-26",
+  "event_time": "19:00:00",
+  "event_type": "festival",
+  "send_mode": "remind",
+  "scheduled_send_at": null,
+  "filters": { "city": "Envigado", "minVisits": 2 },
+  "media_url": "https://...supabase.co/storage/v1/object/public/event-media/...",
+  "media_type": "image",
+  "blackout_days": 5
+}
+```
+
+**Campos obligatorios:** `title`, `event_date`, `event_type`.
+
+**Reglas:**
+- `event_type` ∈ `'promo' | 'festival' | 'activacion' | 'aniversario' | 'otro'`
+- `send_mode` ∈ `'auto' | 'remind'` (default `'remind'`)
+- Si `send_mode='auto'`, `scheduled_send_at` es obligatorio y debe ser ≤ `event_date`
+- `media_type` ∈ `'image' | 'video' | null`. Obligatorio si `media_url` está presente.
+- `blackout_days` ∈ `[0, 30]`, default 5
+- Si `send_mode='auto'` + `scheduled_send_at`, el evento se crea con `status='scheduled'`; si no, con `status='planned'`
+
+**Response 201:** `{ "event": { ... } }`
+
+---
+
+### Detalle de un evento
+
+**`GET /api/dashboard/calendar/events/:id`** — Admin JWT
+
+**Response 200:** `{ "event": { ... } }`
+**Response 404:** `{ "error": "Evento no encontrado" }`
+
+---
+
+### Actualizar evento
+
+**`PATCH /api/dashboard/calendar/events/:id`** — Admin JWT
+
+**Request body:** cualquier subconjunto de los campos de creación + `status` (`'planned' | 'scheduled' | 'sent' | 'cancelled' | 'failed'`).
+
+Si se actualiza `scheduled_send_at` (o `send_mode='auto'` + `scheduled_send_at`), el `status` se alinea a `'scheduled'` automáticamente.
+
+**Response 200:** `{ "event": { ... } }`
+
+---
+
+### Cancelar evento (soft-delete)
+
+**`DELETE /api/dashboard/calendar/events/:id`** — Admin JWT
+
+Marca el evento con `status='cancelled'`. No borra físicamente para mantener trazabilidad.
+
+**Response 200:** `{ "event": { ..., "status": "cancelled" } }`
+
+---
+
+### Subir media (imagen/video) al bucket `event-media`
+
+**`POST /api/dashboard/calendar/media-upload`** — Admin JWT
+
+**Content-Type:** `multipart/form-data`
+
+**Form fields:**
+- `file` (obligatorio) — el archivo
+- `event_id` (opcional) — si el evento ya existe, el path queda como `{event_id}/...`. Si no, va a `_temp/{uuid}/...`
+
+**Restricciones:**
+- Imagen: `image/jpeg` o `image/png`, máximo 5 MB
+- Video: `video/mp4`, máximo 16 MB
+- Cualquier otro MIME → 415
+
+**Response 201:**
+```json
+{
+  "url": "https://...supabase.co/storage/v1/object/public/event-media/_temp/.../1685..._flyer.jpg",
+  "media_type": "image",
+  "path": "_temp/abc-uuid/1685..._flyer.jpg",
+  "bytes": 234567
+}
+```
+
+El admin luego debe usar `url` y `media_type` al llamar a `POST/PATCH /api/dashboard/calendar/events`.
+
+**Response 413:** archivo excede el límite por tipo.
+**Response 415:** MIME no soportado.
+
+---
+
+### Borrar asset del bucket
+
+**`DELETE /api/dashboard/calendar/media-upload?path=...`** — Admin JWT
+
+Útil para limpiar uploads descartados antes de asociarlos a un evento.
+
+**Response 200:** `{ "ok": true }`
 
 ---
 

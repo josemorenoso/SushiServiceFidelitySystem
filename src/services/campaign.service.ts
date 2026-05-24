@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
-import type { Customer, Campaign, CampaignMessage } from '@/types/database.types'
-import { REACTIVATION_DAYS, FREQUENCY_CAP_DAYS } from '@/constants/rewards'
+import type { Customer, Campaign, CampaignMessage, RestaurantEvent } from '@/types/database.types'
+import { REACTIVATION_DAYS, FREQUENCY_CAP_DAYS, MONTHLY_CAP_SOURCES, MONTHLY_MARKETING_CAP } from '@/constants/rewards'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -198,4 +198,110 @@ export async function finalizeCampaign(
   if (error) {
     console.error(`Error finalizando campaña: ${error.message}`)
   }
+}
+
+// ═══════════════════════════════════════════════════════════
+// CAP MENSUAL DE MARKETING (3 mensajes/mes/cliente)
+// ═══════════════════════════════════════════════════════════
+// Cuenta solo campaigns.source IN ('manual','calendar','reactivation').
+// Cumpleaños queda fuera (prioridad absoluta) y utility tampoco entra.
+
+function getMonthBoundaries(refDate: Date = new Date()) {
+  const start = new Date(refDate.getFullYear(), refDate.getMonth(), 1, 0, 0, 0, 0)
+  const nextMonth = new Date(refDate.getFullYear(), refDate.getMonth() + 1, 1, 0, 0, 0, 0)
+  return { startISO: start.toISOString(), nextMonthISO: nextMonth.toISOString() }
+}
+
+/**
+ * Returns a Set of customer IDs that have ALREADY reached the monthly marketing cap
+ * within the current month. Use it to exclude them from new sends.
+ */
+export async function getCustomersAtMonthlyCap(
+  customerIds: string[],
+  cap: number = MONTHLY_MARKETING_CAP
+): Promise<Set<string>> {
+  if (customerIds.length === 0) return new Set()
+  const supabase = getServiceClient()
+  const { startISO, nextMonthISO } = getMonthBoundaries()
+
+  // Join campaign_messages -> campaigns to count only relevant sources within the month.
+  // Note: we count "sent" messages by sent_at timestamp (which falls inside the month window).
+  const { data, error } = await supabase
+    .from('campaign_messages')
+    .select('customer_id, campaigns!inner(source)')
+    .in('customer_id', customerIds)
+    .eq('status', 'sent')
+    .gte('sent_at', startISO)
+    .lt('sent_at', nextMonthISO)
+    .in('campaigns.source', MONTHLY_CAP_SOURCES as unknown as string[])
+
+  if (error) {
+    console.error(`[MonthlyCap] Error consultando campaign_messages: ${error.message}`)
+    return new Set()
+  }
+
+  const counts: Record<string, number> = {}
+  for (const row of (data ?? []) as { customer_id: string }[]) {
+    counts[row.customer_id] = (counts[row.customer_id] ?? 0) + 1
+  }
+
+  const atCap = new Set<string>()
+  for (const [id, n] of Object.entries(counts)) {
+    if (n >= cap) atCap.add(id)
+  }
+  return atCap
+}
+
+/**
+ * Filters a list of customer IDs, returning only those who still have room
+ * under the monthly marketing cap.
+ */
+export async function filterByMonthlyCap<T extends { id: string }>(
+  customers: T[],
+  cap: number = MONTHLY_MARKETING_CAP
+): Promise<{ eligible: T[]; excluded: T[] }> {
+  if (customers.length === 0) return { eligible: [], excluded: [] }
+  const atCap = await getCustomersAtMonthlyCap(customers.map((c) => c.id), cap)
+  const eligible: T[] = []
+  const excluded: T[] = []
+  for (const c of customers) {
+    if (atCap.has(c.id)) excluded.push(c)
+    else eligible.push(c)
+  }
+  return { eligible, excluded }
+}
+
+// ═══════════════════════════════════════════════════════════
+// BLACKOUT PRE-EVENTO DEL CALENDARIO
+// ═══════════════════════════════════════════════════════════
+// Si hay un evento del calendario en X días (X <= blackout_days), las campañas
+// manuales NO asociadas a ese evento excluyen clientes para reservarles cupo.
+
+/**
+ * Returns active blackouts: events whose blackout window contains `refDate`.
+ * Blackout window: [event_date - blackout_days, event_date).
+ */
+export async function getActiveBlackouts(refDate: Date = new Date()): Promise<RestaurantEvent[]> {
+  const supabase = getServiceClient()
+  const today = refDate.toISOString().split('T')[0]
+
+  // Pull only future-or-today events that haven't been sent/cancelled
+  const { data, error } = await supabase
+    .from('restaurant_events')
+    .select('*')
+    .gte('event_date', today)
+    .in('status', ['planned', 'scheduled'])
+
+  if (error) {
+    console.error(`[Blackout] Error consultando eventos: ${error.message}`)
+    return []
+  }
+
+  // Filter in JS: keep only events whose blackout window includes refDate
+  const refTime = refDate.getTime()
+  return (data ?? []).filter((ev: RestaurantEvent) => {
+    const eventDate = new Date(`${ev.event_date}T00:00:00Z`)
+    const blackoutStart = new Date(eventDate.getTime() - ev.blackout_days * 24 * 60 * 60 * 1000)
+    return refTime >= blackoutStart.getTime() && refTime < eventDate.getTime()
+  })
 }

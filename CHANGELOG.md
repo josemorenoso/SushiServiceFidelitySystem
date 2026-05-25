@@ -5,6 +5,85 @@
 
 ---
 
+## [1.0.1] — 2026-05-25 — Algoritmo inteligente de puntos + Plantillas dopamínicas v1.0
+
+### Changed
+
+**Algoritmo de puntos inteligente (`points.service.ts`):**
+- `generateSmartVisitPoints()` reemplaza al random simple. Visita 1: 60-90 pts (alto, crea ilusión de 2 visitas). Visita 2: sistema limita para dejar 5-30 pts corto del umbral. Visita 3: garantiza cruzar → PREMIO.
+- `awardVisitPoints()` ahora consulta tiers para encontrar el próximo umbral y usa el algoritmo inteligente.
+- Nuevas constantes: `DEFAULT_POINTS_SHORTFALL_MIN=5`, `DEFAULT_POINTS_SHORTFALL_MAX=30`, `MINIMUM_VISIBLE_POINTS=15`.
+- Rango default actualizado: `DEFAULT_POINTS_PER_VISIT_MIN=60`, `DEFAULT_POINTS_PER_VISIT_MAX=90`.
+
+**Plantillas WhatsApp (`docs/PLANTILLAS.md`):**
+- Reescritura completa de PLANTILLAS.md para sistema de puntos. 13 plantillas (11 texto + 2 media).
+- Tono dopamínico: cálido, cercano, enérgico. Eliminado lenguaje genérico ("estás a un paso 👊").
+- Todas las plantillas ahora incluyen puntos actuales, progreso, y anticipación de mystery box.
+- Plantilla "cerca": "¡Casi lo lograste! La próxima visita tenés tu bebida o si querés probar suerte, la Mystery Box 🎲"
+- Plantilla "lejos": muestra roadmap completo de tiers con emojis.
+- Reactivación en 2 niveles: suave (21d) y agresiva (25d+) ambas con puntos.
+
+**Migración seeds:**
+- `00013_points_mystery_box.sql` — Seeds actualizados: `points_per_visit_min=60`, `points_per_visit_max=90`.
+
+**Feature doc:**
+- `docs/features/points-mystery-box.md` — Sección 2.2 reescrita con matemáticas del algoritmo inteligente y ejemplo paso a paso.
+
+### Archivos afectados
+- `src/services/points.service.ts`
+- `src/constants/rewards.ts`
+- `docs/PLANTILLAS.md` *(reescritura completa)*
+- `docs/features/points-mystery-box.md`
+- `supabase/migrations/00013_points_mystery_box.sql`
+- `CHANGELOG.md`
+
+---
+
+## [1.0.0] — 2026-05-25 — Sistema de Puntos + Mystery Box (reestructuración mayor)
+
+### Added
+
+**Base de datos (migración 00013):**
+- `supabase/migrations/00013_points_mystery_box.sql` — Nuevas tablas: `reward_tiers` (progresión acumulativa por puntos), `point_transactions` (historial de puntos), `mystery_box_results` (resultados de cajas), `mystery_box_global_caps` (límites globales de premios altos). Nuevas columnas en `customers`: `total_points`, `current_tier`, `mystery_box_low_streak`, `last_points_awarded_at`. Columnas legacy-compat en `rewards`: `point_threshold`, `tier_id`. Seeds: 4 tiers default (Bronce/Plata/Oro/BLACK), admin_settings de puntos, global cap de platos fuertes.
+
+**Servicios:**
+- `src/services/points.service.ts` — Generación de puntos aleatorios con distribución triangular, `awardVisitPoints()`, `awardWelcomeBonus()`, `awardPoints()`, `getPointsConfig()`, `getPointHistory()`.
+- `src/services/mystery-box.service.ts` — Resolución de Mystery Box con probabilidades ponderadas, Pity Timer (Golden Box), global caps con redistribución automática, near-miss effect, `resolveMysteryBox()`, `isPityTimerActive()`, `selectPrize()`, `applyGoldenBox()`.
+- `src/services/reward-tiers.service.ts` — CRUD de tiers, evaluación de umbrales (`evaluateNewTier()`), roadmap de tiers (`buildTiersRoadmap()`), `getNextTier()`, `getCurrentTier()`.
+
+**Endpoints:**
+- `src/app/api/mystery-box/resolve/route.ts` — POST: resuelve mystery box o safe reward, envía plantilla WhatsApp, registra resultado.
+
+**Tipos:**
+- `src/types/database.types.ts` — Nuevos tipos: `PointTransaction`, `PointTransactionSource`, `RewardTier`, `MysteryPrize`, `MysteryBoxResult`, `MysteryBoxChoice`, `MysteryBoxGlobalCap`, `GlobalCapPeriod`.
+
+**Constantes:**
+- `src/constants/rewards.ts` — `REACTIVATION_AGGRESSIVE_DAYS=25`, `DEFAULT_POINTS_PER_VISIT_MIN/MAX`, `DEFAULT_WELCOME_BONUS_POINTS`, `DEFAULT_EVENT_BONUS_POINTS`, `DEFAULT_PITY_TIMER_THRESHOLD`, `POINT_SOURCES`.
+
+**Documentación:**
+- `docs/features/points-mystery-box.md` — Documento de diseño completo: modelo de puntos, reward tiers, mystery box, pity timer, global caps, flujo del cliente, plantillas, plan de implementación.
+
+### Changed
+- `src/app/api/check-in/route.ts` — Integrado sistema de puntos: otorga puntos aleatorios por visita, evalúa tier progression, responde con `tier_unlocked` o `points_earned`, mantiene fallback legacy a plantillas de visitas.
+- `src/app/api/cron/reactivation/route.ts` — Dos niveles de reactivación: suave (21d) con plantilla original + agresivo (25d+) con puntos y tier info.
+
+### Archivos afectados
+- `supabase/migrations/00013_points_mystery_box.sql` *(nuevo)*
+- `src/services/points.service.ts` *(nuevo)*
+- `src/services/mystery-box.service.ts` *(nuevo)*
+- `src/services/reward-tiers.service.ts` *(nuevo)*
+- `src/app/api/mystery-box/resolve/route.ts` *(nuevo)*
+- `src/types/database.types.ts`
+- `src/constants/rewards.ts`
+- `src/app/api/check-in/route.ts`
+- `src/app/api/cron/reactivation/route.ts`
+- `docs/features/points-mystery-box.md` *(nuevo)*
+
+### Request original
+> Reestructuración del sistema de fidelización: migrar de milestones lineales por visita a sistema de puntos aleatorios acumulativos con Mystery Box (ruleta de probabilidades), Pity Timer (Golden Box tras racha de premios bajos), global caps para premios de alto valor, reward tiers progresivos (Bronce→Plata→Oro→BLACK), reactivación en dos niveles (21d suave + 25d agresivo), tono dopamínico Meta-compliant.
+
+---
+
 ## [0.35.0] — 2026-05-24 — Plantillas WhatsApp con media + auto-compresión + cron calendar-dispatch
 
 ### Added

@@ -9,6 +9,10 @@ export interface Customer {
   source_channels: 'qr' | 'delivery' | 'both'
   last_campaign_at: string | null
   accepts_marketing: boolean
+  total_points: number
+  current_tier: string | null
+  mystery_box_low_streak: number
+  last_points_awarded_at: string | null
   created_at: string
   updated_at: string
 }
@@ -97,12 +101,79 @@ export interface RestaurantEvent {
   updated_at: string
 }
 
+// ═══════════════════════════════════════════════════════════════
+// Points + Mystery Box System (v1.0.0)
+// ═══════════════════════════════════════════════════════════════
+
+export type PointTransactionSource =
+  | 'visit_qr'
+  | 'visit_delivery'
+  | 'event_bonus'
+  | 'campaign_bonus'
+  | 'welcome_bonus'
+  | 'admin_adjustment'
+
+export interface PointTransaction {
+  id: string
+  customer_id: string
+  points: number
+  source: PointTransactionSource
+  reference_id: string | null
+  balance_after: number
+  created_at: string
+}
+
+export interface MysteryPrize {
+  title: string
+  probability: number
+  emoji: string
+}
+
+export interface RewardTier {
+  id: string
+  tier_name: string
+  point_threshold: number
+  safe_reward_title: string
+  mystery_box_enabled: boolean
+  mystery_prizes: MysteryPrize[]
+  is_black: boolean
+  sort_order: number
+  is_active: boolean
+  created_at: string
+}
+
+export type MysteryBoxChoice = 'safe' | 'mystery'
+
+export interface MysteryBoxResult {
+  id: string
+  customer_id: string
+  tier_id: string
+  choice: MysteryBoxChoice
+  prize_title: string
+  prize_tier_index: number
+  was_golden: boolean
+  created_at: string
+}
+
+export type GlobalCapPeriod = 'week' | 'month' | 'total'
+
+export interface MysteryBoxGlobalCap {
+  id: string
+  tier_id: string
+  prize_title: string
+  max_per_period: number
+  period: GlobalCapPeriod
+  current_count: number
+  period_start: string
+  created_at: string
+}
+
 export interface Database {
   public: {
     Tables: {
       customers: {
         Row: Customer
-        Insert: Omit<Customer, 'id' | 'created_at' | 'updated_at' | 'total_visits' | 'last_visit_at' | 'source_channels' | 'last_campaign_at'> & {
+        Insert: Omit<Customer, 'id' | 'created_at' | 'updated_at' | 'total_visits' | 'last_visit_at' | 'source_channels' | 'last_campaign_at' | 'total_points' | 'current_tier' | 'mystery_box_low_streak' | 'last_points_awarded_at'> & {
           id?: string
           created_at?: string
           updated_at?: string
@@ -111,6 +182,10 @@ export interface Database {
           source_channels?: 'qr' | 'delivery' | 'both'
           last_campaign_at?: string | null
           accepts_marketing?: boolean
+          total_points?: number
+          current_tier?: string | null
+          mystery_box_low_streak?: number
+          last_points_awarded_at?: string | null
         }
         Update: Partial<Omit<Customer, 'id' | 'created_at'>>
       }

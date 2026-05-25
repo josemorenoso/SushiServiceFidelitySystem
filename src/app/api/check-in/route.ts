@@ -7,6 +7,8 @@ import { sendTemplateMessage } from '@/services/whatsapp.service'
 import { getMultipleSettings } from '@/services/settings.service'
 import { syncGoogleContact } from '@/services/google-contacts-sync.service'
 import { rateLimit, getClientIp } from '@/lib/rate-limit'
+import { awardVisitPoints, awardWelcomeBonus } from '@/services/points.service'
+import { evaluateNewTier, getNextTier, buildTiersRoadmap, updateCustomerTier, getAllTiers } from '@/services/reward-tiers.service'
 
 // Rate limits por IP
 const LOOKUP_MAX = 30         // 30 lookups/min por IP (bajo para evitar enumeración)
@@ -131,20 +133,29 @@ export async function POST(request: NextRequest) {
       })
 
       // Visita (best-effort — no debe bloquear el registro)
+      let visitRecord
       try {
-        await createVisit({ customerId: customer.id, source: 'qr', tableNumber: body.table_number ?? null })
+        visitRecord = await createVisit({ customerId: customer.id, source: 'qr', tableNumber: body.table_number ?? null })
       } catch (visitErr) {
         console.error('[CheckIn] Error creando visita (registro continuará):', visitErr)
       }
 
+      // Puntos de bienvenida (Endowed Progress Effect)
+      let welcomePoints = { pointsAwarded: 0, newBalance: 0 }
+      try {
+        welcomePoints = await awardWelcomeBonus(customer.id)
+      } catch (err) {
+        console.error('[CheckIn] Error otorgando puntos de bienvenida:', err)
+      }
+
       // WhatsApp de bienvenida — DEBE usar await para que Vercel no mate el proceso
       const settings = await getMultipleSettings(['welcome_template_sid'])
-      const roadmap = await buildRewardsRoadmap(customer.total_visits)
+      const tiersRoadmap = await buildTiersRoadmap(welcomePoints.newBalance)
       await sendCheckinTemplate(
         settings.welcome_template_sid,
         'welcome',
         cleaned,
-        { '1': customer.name, '2': roadmap }
+        { '1': customer.name, '2': String(welcomePoints.newBalance), '3': tiersRoadmap }
       )
 
       // Google Contacts sync (best-effort pero awaited para Vercel)
@@ -163,11 +174,18 @@ export async function POST(request: NextRequest) {
       }
 
       const welcomeRoadmap = await getUpcomingRewards(customer.total_visits)
+      const allTiers = await getAllTiers()
       return NextResponse.json(
         {
           message: 'welcome',
-          customer: { name: customer.name, total_visits: customer.total_visits },
+          customer: {
+            name: customer.name,
+            total_visits: customer.total_visits,
+            total_points: welcomePoints.newBalance,
+          },
+          points_awarded: welcomePoints.pointsAwarded,
           roadmap: welcomeRoadmap,
+          tiers: allTiers,
         },
         { status: 201 }
       )
@@ -197,7 +215,22 @@ export async function POST(request: NextRequest) {
       }
 
       const updated = await incrementVisit(customer.id, customer.total_visits, 'qr')
-      await createVisit({ customerId: customer.id, source: 'qr', tableNumber: body.table_number ?? null })
+      const visit = await createVisit({ customerId: customer.id, source: 'qr', tableNumber: body.table_number ?? null })
+
+      // Otorgar puntos aleatorios por la visita
+      const previousPoints = customer.total_points
+      let pointsResult = { pointsAwarded: 0, newBalance: previousPoints }
+      try {
+        pointsResult = await awardVisitPoints(customer.id, visit.id, 'qr')
+      } catch (err) {
+        console.error('[CheckIn] Error otorgando puntos:', err)
+      }
+
+      // Evaluar si cruzó un nuevo tier
+      const newTier = await evaluateNewTier(previousPoints, pointsResult.newBalance)
+      if (newTier) {
+        await updateCustomerTier(customer.id, newTier.tier_name)
+      }
 
       // Fetch settings para plantillas
       const settings = await getMultipleSettings([
@@ -205,12 +238,17 @@ export async function POST(request: NextRequest) {
         'welcome_back_near_template_sid',      // remaining === 1
         'welcome_back_far_template_sid',       // remaining >= 2
         'reward_template_sid',
+        'points_earned_far_template_sid',      // puntos sumados (lejos)
+        'points_earned_near_template_sid',     // puntos sumados (cerca)
+        'tier_unlocked_template_sid',          // tier desbloqueado
       ])
 
-      // Evaluar recompensa y roadmap
+      // Evaluar recompensa legacy y roadmap
       const reward = await checkRewardForVisit(updated.total_visits)
       const roadmap = await buildRewardsRoadmap(updated.total_visits)
       const upcomingRewards = await getUpcomingRewards(updated.total_visits)
+      const tiersRoadmapText = await buildTiersRoadmap(pointsResult.newBalance)
+      const nextTierInfo = await getNextTier(pointsResult.newBalance)
 
       // Google Contacts sync (best-effort pero awaited para Vercel)
       try {
@@ -225,60 +263,128 @@ export async function POST(request: NextRequest) {
         console.error('[CheckIn] Error sync Google Contacts:', err)
       }
 
-      if (reward) {
-        // Envía plantilla de recompensa. Si no está configurada, fallback a welcome_back
-        const rewardTemplateConfigured = !!settings.reward_template_sid
-        if (rewardTemplateConfigured) {
+      // ─── NUEVO SISTEMA DE PUNTOS ───
+      // Si el cliente desbloqueó un tier → responder con opciones de reward/mystery box
+      if (newTier) {
+        // Enviar plantilla de tier desbloqueado (si existe)
+        if (settings.tier_unlocked_template_sid) {
           await sendCheckinTemplate(
-            settings.reward_template_sid,
-            'reward',
+            settings.tier_unlocked_template_sid,
+            'tier_unlocked',
             cleaned,
-            { '1': updated.name, '2': String(updated.total_visits), '3': reward.title, '4': roadmap }
-          )
-        } else {
-          const fallbackSid = settings.welcome_back_far_template_sid
-            ?? settings.welcome_back_near_template_sid
-            ?? settings.welcome_back_template_sid
-          await sendCheckinTemplate(
-            fallbackSid,
-            'welcome_back (fallback por falta de template reward)',
-            cleaned,
-            { '1': updated.name, '2': String(updated.total_visits), '3': reward.title, '4': roadmap }
+            { '1': updated.name, '2': newTier.tier_name, '3': newTier.safe_reward_title, '4': tiersRoadmapText }
           )
         }
 
         return NextResponse.json({
-          message: 'welcome_back',
-          customer: { name: updated.name, total_visits: updated.total_visits },
-          reward: { title: reward.title, message: reward.message_template, is_black: reward.is_black },
+          message: 'tier_unlocked',
+          customer: {
+            name: updated.name,
+            total_visits: updated.total_visits,
+            total_points: pointsResult.newBalance,
+          },
+          points_awarded: pointsResult.pointsAwarded,
+          tier_unlocked: {
+            id: newTier.id,
+            name: newTier.tier_name,
+            safe_reward: newTier.safe_reward_title,
+            mystery_box_enabled: newTier.mystery_box_enabled,
+            mystery_prizes: newTier.mystery_prizes,
+            is_black: newTier.is_black,
+          },
+          next_tier: nextTierInfo ? {
+            name: nextTierInfo.tier.tier_name,
+            points_remaining: nextTierInfo.pointsRemaining,
+            threshold: nextTierInfo.tier.point_threshold,
+          } : null,
           roadmap: upcomingRewards,
+          tiers_roadmap: tiersRoadmapText,
         })
       }
 
-      // Fetch next reward y decidir near (faltan 1) vs far (faltan ≥2)
-      const nextReward = await getNextReward(updated.total_visits)
-      const remaining = getRemainingForReward(updated.total_visits, nextReward)
-      const rewardTitle = getRewardTitle(nextReward)
+      // ─── SIN TIER NUEVO: puntos sumados, evaluar cercanía ───
+      const isNearTier = nextTierInfo && nextTierInfo.pointsRemaining <= 30
 
-      // Selección de plantilla: near/far si están configuradas, fallback al legacy welcome_back
-      const isNear = remaining === 1
-      const targetSid = isNear
-        ? (settings.welcome_back_near_template_sid ?? settings.welcome_back_template_sid)
-        : (settings.welcome_back_far_template_sid ?? settings.welcome_back_template_sid)
+      if (isNearTier && settings.points_earned_near_template_sid) {
+        await sendCheckinTemplate(
+          settings.points_earned_near_template_sid,
+          'points_earned_near',
+          cleaned,
+          {
+            '1': updated.name,
+            '2': String(pointsResult.pointsAwarded),
+            '3': String(pointsResult.newBalance),
+            '4': nextTierInfo!.tier.safe_reward_title,
+          }
+        )
+      } else if (settings.points_earned_far_template_sid) {
+        await sendCheckinTemplate(
+          settings.points_earned_far_template_sid,
+          'points_earned_far',
+          cleaned,
+          {
+            '1': updated.name,
+            '2': String(pointsResult.pointsAwarded),
+            '3': String(pointsResult.newBalance),
+            '4': tiersRoadmapText,
+          }
+        )
+      } else {
+        // ─── LEGACY FALLBACK: usar plantillas de visitas si no hay de puntos ───
+        if (reward) {
+          const rewardTemplateConfigured = !!settings.reward_template_sid
+          if (rewardTemplateConfigured) {
+            await sendCheckinTemplate(
+              settings.reward_template_sid,
+              'reward',
+              cleaned,
+              { '1': updated.name, '2': String(updated.total_visits), '3': reward.title, '4': roadmap }
+            )
+          } else {
+            const fallbackSid = settings.welcome_back_far_template_sid
+              ?? settings.welcome_back_near_template_sid
+              ?? settings.welcome_back_template_sid
+            await sendCheckinTemplate(
+              fallbackSid,
+              'welcome_back (fallback por falta de template reward)',
+              cleaned,
+              { '1': updated.name, '2': String(updated.total_visits), '3': reward.title, '4': roadmap }
+            )
+          }
+        } else {
+          const nextReward = await getNextReward(updated.total_visits)
+          const remaining = getRemainingForReward(updated.total_visits, nextReward)
+          const rewardTitle = getRewardTitle(nextReward)
+          const isNear = remaining === 1
+          const targetSid = isNear
+            ? (settings.welcome_back_near_template_sid ?? settings.welcome_back_template_sid)
+            : (settings.welcome_back_far_template_sid ?? settings.welcome_back_template_sid)
 
-      await sendCheckinTemplate(
-        targetSid,
-        isNear ? 'welcome_back_near' : 'welcome_back_far',
-        cleaned,
-        { '1': updated.name, '2': String(updated.total_visits), '3': rewardTitle, '4': roadmap }
-      )
+          await sendCheckinTemplate(
+            targetSid,
+            isNear ? 'welcome_back_near' : 'welcome_back_far',
+            cleaned,
+            { '1': updated.name, '2': String(updated.total_visits), '3': rewardTitle, '4': roadmap }
+          )
+        }
+      }
 
       return NextResponse.json({
-        message: 'welcome_back',
-        customer: { name: updated.name, total_visits: updated.total_visits },
-        reward: null,
-        nextReward: nextReward ? { ...nextReward, remaining } : null,
+        message: newTier ? 'tier_unlocked' : 'points_earned',
+        customer: {
+          name: updated.name,
+          total_visits: updated.total_visits,
+          total_points: pointsResult.newBalance,
+        },
+        points_awarded: pointsResult.pointsAwarded,
+        reward: reward ? { title: reward.title, message: reward.message_template, is_black: reward.is_black } : null,
+        next_tier: nextTierInfo ? {
+          name: nextTierInfo.tier.tier_name,
+          points_remaining: nextTierInfo.pointsRemaining,
+          threshold: nextTierInfo.tier.point_threshold,
+        } : null,
         roadmap: upcomingRewards,
+        tiers_roadmap: tiersRoadmapText,
       })
     }
 

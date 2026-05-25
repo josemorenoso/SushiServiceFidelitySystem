@@ -1,8 +1,9 @@
-# Configuración de Plantillas WhatsApp — Sushi Service
+# Plantillas WhatsApp — Sistema de Puntos + Mystery Box
 
 > Documento de referencia para crear y configurar plantillas en Twilio Content API.
 > Aplica a cualquier instancia del sistema (clone-por-restaurante).
 > Reemplaza `[Restaurante]` por el nombre del negocio en cada caso.
+> **Versión:** v1.0.0 — Sistema de Puntos + Mystery Box
 
 ---
 
@@ -10,60 +11,52 @@
 
 | Tipo Twilio | Uso | Cómo se crea | Assigned en |
 |---|---|---|---|
-| `twilio/text` | Comunicaciones operativas (bienvenida, premios, cumpleaños, reactivación, campañas) | Dashboard → Plantillas → formulario | `admin_settings` vía Dashboard → Ajustes |
+| `twilio/text` | Comunicaciones operativas (bienvenida, puntos, premios, mystery box, cumpleaños, reactivación, campañas) | Dashboard → Plantillas → formulario | `admin_settings` vía Dashboard → Ajustes |
 | `twilio/media` | Invitaciones a eventos del calendario con imagen o video | `scripts/twilio-create-media-templates.mjs` (una sola vez) | `admin_settings` directo en Supabase: `event_template_image_sid` / `event_template_video_sid` |
-
-Las plantillas `twilio/media` **no aparecen** en el formulario de creación de Dashboard → Plantillas porque su estructura es fija y se crea mediante el script de setup. El calendario las usa internamente — el admin solo sube el archivo al crear el evento.
 
 ---
 
-## Tabla de Variables por Plantilla
+## Tabla de Variables por Plantilla (v1.0.0 — Puntos)
 
 Esta tabla es la verdad única del sistema. El backend envía exactamente estas variables para cada slot.
 
 | Slot en Settings | `{{1}}` | `{{2}}` | `{{3}}` | `{{4}}` |
 |---|---|---|---|---|
-| **Bienvenida** | Nombre | Roadmap | — | — |
-| **Ganó premio** | Nombre | # Visita | Premio ganado | Roadmap |
-| **Cerca de premio** (falta 1) | Nombre | # Visita | Próximo premio | Roadmap |
-| **Lejos de premio** (faltan 2+) | Nombre | # Visita | Próximo premio | Roadmap |
-| **Cumpleaños** | Nombre | Roadmap | — | — |
-| **Reactivación sin regalo** | Nombre | Roadmap | — | — |
-| **Reactivación con regalo** | Nombre | Premio fijo | Roadmap | — |
-| **Campañas manuales** | Nombre | # Visita | Próximo premio | — |
+| **Bienvenida** | Nombre | Puntos iniciales | Roadmap tiers | — |
+| **Puntos sumados (lejos)** | Nombre | Pts ganados hoy | Pts totales | Roadmap tiers |
+| **Puntos sumados (cerca)** | Nombre | Pts ganados hoy | Pts totales | Premio próximo |
+| **Tier desbloqueado** | Nombre | Nombre tier | Premio safe | Roadmap tiers |
+| **Mystery Box resultado** | Nombre | Nombre tier | Premio ganado | Roadmap tiers |
+| **Golden Box resultado** | Nombre | Premio ganado | Roadmap tiers | — |
+| **Cumpleaños** | Nombre | Pts actuales | — | — |
+| **Reactivación suave (21d)** | Nombre | Pts actuales | Premio próximo | — |
+| **Reactivación agresiva (25d)** | Nombre | Pts actuales | Lo que pierde | — |
+| **Campaña manual** | Nombre | Pts actuales | Premio próximo | — |
 
-Las plantillas de media tienen 6 variables. Las columnas `{{5}}` y `{{6}}` solo aplican a estas dos:
+Las plantillas de media (eventos) mantienen 6 variables — sin cambios respecto a v0.35.
 
-| Key en admin_settings | `{{1}}` | `{{2}}` | `{{3}}` | `{{4}}` | `{{5}}` | `{{6}}` |
-|---|---|---|---|---|---|---|
-| **event_template_image_sid** | Nombre | Restaurante | Título evento | Fecha del evento | Descripción / CTA | URL imagen (JPG/PNG) |
-| **event_template_video_sid** | Nombre | Restaurante | Título evento | Fecha del evento | Descripción / CTA | URL video (MP4) |
+### Qué es el Roadmap de Tiers
 
-> **Por qué `{{6}}` es la URL del archivo:** Meta aprueba la *estructura* de la plantilla (`HEADER: media` + `BODY: texto con variables`), no el archivo en sí. Al momento de enviar, el backend pasa la URL de la imagen/video como `{{6}}` en `contentVariables`. Esto significa que una sola plantilla aprobada sirve para todos los festivales y promos futuros — solo cambia la imagen.
-
-### Qué es el Roadmap
-
-El roadmap es un bloque de texto generado automáticamente por el backend según las visitas del cliente:
+Bloque de texto generado automáticamente por `buildTiersRoadmap()`:
 
 ```
-🎯 Siguiente premio: Visita #7 → Postre del chef
-📋 Después:
-  #10 → 15% en tu cuenta
-  #15 → Plato principal gratis
-  #20 → Cena para 2
+🥉 Bronce (150 pts) → Bebida gratis — te faltan 22 pts 🔥
+🥈 Plata (350 pts) → Postre gratis
+🥇 Oro (600 pts) → Plato fuerte gratis
+🖤 BLACK (1000 pts) → Experiencia Chef
 ```
 
-Si el cliente ya completó todos los milestones: `🌟 ¡Sigue acumulando visitas para más premios!`
+Si ya alcanzó un tier: `🥉 Bronce (150 pts) → Bebida gratis ✅`
 
 ---
 
 ## Reglas de Meta (WhatsApp)
 
 - Variables deben ser **secuenciales**: si usas `{{3}}` debes tener `{{1}}` y `{{2}}`.
-- Sin `{{3}}` solo puedes usar `{{1}}` y `{{2}}`.
 - Máximo **1024 caracteres** por variable.
 - Sin URLs acortadas, sin urgencia falsa, sin mayúsculas excesivas.
 - Tiempo de aprobación: **24 a 72 horas**.
+- **Tono:** Cálido, cercano, enérgico. NUNCA usar lenguaje de pérdida exagerada o promesas irreales.
 
 ---
 
@@ -71,369 +64,398 @@ Si el cliente ya completó todos los milestones: `🌟 ¡Sigue acumulando visita
 
 **Slot:** `welcome_template_sid`
 **Categoría Twilio:** `UTILITY`
-**Variables:** `{{1}}`=Nombre · `{{2}}`=Roadmap
+**Variables:** `{{1}}`=Nombre · `{{2}}`=Puntos iniciales · `{{3}}`=Roadmap tiers
 **Cuándo se envía:** Primer registro del cliente (QR o domicilio)
 
 ```
 ¡Hola {{1}}! 🎉🍣
 
-Bienvenid@ a la familia de *Restaurante*, nos alegra tenerte aquí
+Bienvenid@ a *[Restaurante]*, ya sos parte del club
 
-Atent@, en cada visita tendrás un premio o te acercarás a uno 👇
+En cada visita sumás puntos y desbloqueás premios reales — arrancás con *{{2}} puntos* �
 
-{{2}}
-
-Esperamos verte de regreso pronto ☺️
-
-_— El equipo de (Restaurante)_
-```
-
-**Samples para aprobación:**
-- `{{1}}` → `María`
-- `{{2}}` → `🎯 Siguiente premio: Visita #3 → Bebida gratis\n📋 Después:\n  #5 → 10% descuento\n  #7 → Postre del chef`
-
----
-
-## Plantilla 2 — Ganó Premio
-
-**Slot:** `reward_template_sid`
-**Categoría Twilio:** `MARKETING`
-**Variables:** `{{1}}`=Nombre · `{{2}}`=# Visita · `{{3}}`=Premio ganado · `{{4}}`=Roadmap
-**Cuándo se envía:** La visita del cliente coincide exactamente con un milestone de recompensa
-
-```
-¡Hola {{1}}! ♥️🍣
-
-Hoy es tu visita numero *{{2}}*, nos alegra que hayas vuelto
-
-Tienes disponible *{{3}}*, muestrale *este mensaje* al mesero para redimir hoy tu recompensa 🎁
-
-{{4}}
-
-_— El equipo de [Restaurante]_
-```
-
-**Samples para aprobación:**
-- `{{1}}` → `Camila`
-- `{{2}}` → `5`
-- `{{3}}` → `Bebida gratis`
-- `{{4}}` → `🎯 Siguiente premio: Visita #7 → Postre del chef\n📋 Después:\n  #10 → 15% en tu cuenta`
-
----
-
-## Plantilla 3 — Cerca de Premio (falta 1 visita)
-
-**Slot:** `welcome_back_near_template_sid`
-**Categoría Twilio:** `MARKETING`
-**Variables:** `{{1}}`=Nombre · `{{2}}`=# Visita · `{{3}}`=Próximo premio · `{{4}}`=Roadmap
-**Cuándo se envía:** Al cliente le falta exactamente 1 visita para ganar su próximo premio
-
-```
-¡Hola {{1}}! 🔥🍣
-
-Hoy es tu visita numero *{{2}}*, nos alegra que hayas vuelto
-
-Estás a *una sola visita* de ganar *{{3}}* — la próxima es tuya 👊
-
-{{4}}
-
-_— El equipo de [Restaurante]_
-```
-
-**Samples para aprobación:**
-- `{{1}}` → `Juan`
-- `{{2}}` → `6`
-- `{{3}}` → `Postre del chef`
-- `{{4}}` → `🎯 Siguiente premio: Visita #7 → Postre del chef\n📋 Después:\n  #10 → 15% en tu cuenta`
-
----
-
-## Plantilla 4 — Lejos de Premio (faltan 2+ visitas)
-
-**Slot:** `welcome_back_far_template_sid`
-**Categoría Twilio:** `MARKETING`
-**Variables:** `{{1}}`=Nombre · `{{2}}`=# Visita · `{{3}}`=Próximo premio · `{{4}}`=Roadmap
-**Cuándo se envía:** Al cliente le faltan 2 o más visitas para su próximo premio
-
-```
-¡Hola {{1}}! 👋🍣
-
-Hoy es tu visita numero *{{2}}*, nos alegra que hayas vuelto
-
-Tu próximo premio: *{{3}}* — cada visita cuenta 🎯
-
-{{4}}
-
-_— El equipo de [Restaurante]_
-```
-
-**Samples para aprobación:**
-- `{{1}}` → `Luis`
-- `{{2}}` → `3`
-- `{{3}}` → `Bebida gratis`
-- `{{4}}` → `🎯 Siguiente premio: Visita #5 → Bebida gratis\n📋 Después:\n  #7 → Postre del chef\n  #10 → 15% en tu cuenta`
-
----
-
-## Plantilla 5 — Cumpleaños
-
-**Slot:** `birthday_template_sid`
-**Categoría Twilio:** `MARKETING`
-**Variables:** `{{1}}`=Nombre · `{{2}}`=Roadmap
-**Cuándo se envía:** Cron diario a las 9am — detecta clientes con cumpleaños hoy
-
-```
-¡Hola {{1}}! 🎂🎉
-
-Hoy es tu día y en *[Restaurante]* queremos celebrarlo contigo
-
-Visítanos esta semana y pide tu *sorpresa de cumpleaños* en caja 🎁
-
-{{2}}
-
-_— El equipo de [Restaurante]_
-```
-
-**Samples para aprobación:**
-- `{{1}}` → `Ana`
-- `{{2}}` → `🎯 Siguiente premio: Visita #10 → 15% en tu cuenta\n📋 Después:\n  #15 → Plato principal gratis`
-
----
-
-## Plantilla 6A — Reactivación sin Regalo
-
-**Slot:** `reactivation_no_reward_template_sid`
-**Categoría Twilio:** `MARKETING`
-**Variables:** `{{1}}`=Nombre · `{{2}}`=Roadmap
-**Cuándo se envía:** Cron automático día 21 sin visitar — usa el roadmap como gancho sin costo
-**Estrategia:** El roadmap genera FOMO de los premios acumulados. Costo $0 para el restaurante.
-
-```
-¡Hola {{1}}! 👋🍣
-
-Hace un tiempo que no te vemos y te extrañamos
-
-Tus premios siguen aquí esperándote 👇
-
-{{2}}
-
-Pásate cuando quieras, siempre hay algo nuevo en el menú
-
-_— El equipo de [Restaurante]_
-```
-
-**Samples para aprobación:**
-- `{{1}}` → `Carlos`
-- `{{2}}` → `🎯 Siguiente premio: Visita #7 → Postre del chef\n📋 Después:\n  #10 → 15% en tu cuenta\n  #15 → Plato principal gratis`
-
----
-
-## Plantilla 6B — Reactivación con Regalo
-
-**Slot:** `reactivation_with_reward_template_sid`
-**Categoría Twilio:** `MARKETING`
-**Variables:** `{{1}}`=Nombre · `{{2}}`=Premio fijo · `{{3}}`=Roadmap
-**Cuándo se envía:** Cron día 21, modo activado en Settings con un premio específico seleccionado
-**Estrategia:** Para usar solo si la conversión del 6A es baja. El premio fijo tiene un costo real.
-
-```
-¡Hola {{1}}! 👋🍣
-
-Hace un tiempo que no te vemos y queremos darte un motivo para volver
-
-Te tenemos un *{{2}}* esperándote, menciónalo en tu próxima visita para reclamarlo 🎁
+Así funciona �👇
 
 {{3}}
 
-_— El equipo de [Restaurante]_
+Cuando llegues a *150 puntos* elegís entre tu *Bebida gratis* o probar suerte con la *Mystery Box* 🎲
+
+¡Te esperamos!
+
+_— [Restaurante]_
 ```
 
-**Samples para aprobación:**
-- `{{1}}` → `Sofía`
-- `{{2}}` → `Postre de bienvenida`
-- `{{3}}` → `🎯 Siguiente premio: Visita #5 → Bebida gratis\n📋 Después:\n  #7 → Postre del chef`
+**Samples:**
+- `{{1}}` → `María`
+- `{{2}}` → `0`
+- `{{3}}` → `🥉 Bronce (150 pts) → Bebida gratis — te faltan 150 pts 🔥 · 🥈 Plata (350 pts) → Postre gratis · 🥇 Oro (600 pts) → Plato fuerte · 🖤 BLACK (1000 pts) → Experiencia Chef`
 
 ---
 
-## Plantilla 7 — Campaña: Presencial → Domicilio
+## Plantilla 2 — Puntos Sumados (lejos del premio)
+
+**Slot:** `points_earned_far_template_sid`
+**Categoría Twilio:** `MARKETING`
+**Variables:** `{{1}}`=Nombre · `{{2}}`=Pts ganados · `{{3}}`=Pts totales · `{{4}}`=Roadmap tiers
+**Cuándo se envía:** Check-in + le faltan más de 30 pts para el próximo tier
+
+```
+¡{{1}}, sumaste *+{{2}} puntos* hoy! 🔥🍣
+
+Tu saldo: *{{3}} puntos*
+
+Seguí visitándonos y mirá lo que te espera 👇
+
+{{4}}
+
+Cuando llegues a tu próximo nivel elegís entre tu *premio seguro* o la *Mystery Box* 🎲
+
+_— [Restaurante]_
+```
+
+**Samples:**
+- `{{1}}` → `Juan`
+- `{{2}}` → `78`
+- `{{3}}` → `78`
+- `{{4}}` → `🥉 Bronce (150 pts) → Bebida gratis — te faltan 72 pts 🔥 · 🥈 Plata (350 pts) → Postre gratis`
+
+---
+
+## Plantilla 3 — Puntos Sumados (cerca — casi lo lograste)
+
+**Slot:** `points_earned_near_template_sid`
+**Categoría Twilio:** `MARKETING`
+**Variables:** `{{1}}`=Nombre · `{{2}}`=Pts ganados · `{{3}}`=Pts totales · `{{4}}`=Premio próximo
+**Cuándo se envía:** Check-in + le faltan 30 pts o menos para el próximo tier
+
+```
+¡{{1}}, casi lo lograste! Sumaste *+{{2}} puntos* 🔥🍣
+
+Tu saldo: *{{3}} puntos*
+
+La próxima visita tenés tu *{{4}}* o si querés probar suerte, la *Mystery Box* con premios todavía mejores 🎲
+
+¡Volvé pronto que ya casi es tuyo!
+
+_— [Restaurante]_
+```
+
+**Samples:**
+- `{{1}}` → `Camila`
+- `{{2}}` → `47`
+- `{{3}}` → `128`
+- `{{4}}` → `Bebida gratis`
+
+---
+
+## Plantilla 4 — Tier Desbloqueado (safe reward)
+
+**Slot:** `reward_safe_template_sid`
+**Categoría Twilio:** `MARKETING`
+**Variables:** `{{1}}`=Nombre · `{{2}}`=Nombre tier · `{{3}}`=Premio ganado · `{{4}}`=Roadmap
+**Cuándo se envía:** Cliente alcanza tier y elige premio seguro en la web
+
+```
+¡{{1}}, desbloqueaste *{{2}}*! 🏆🍣
+
+Elegiste ir a la segura y te ganaste: *{{3}}*
+
+Mostrále *este mensaje* al mesero para reclamar tu premio 🎁
+
+{{4}}
+
+¡Seguí sumando para tu próximo nivel!
+
+_— [Restaurante]_
+```
+
+**Samples:**
+- `{{1}}` → `Luis`
+- `{{2}}` → `Bronce`
+- `{{3}}` → `Bebida gratis`
+- `{{4}}` → `🥉 Bronce (150 pts) → Bebida gratis ✅ · 🥈 Plata (350 pts) → Postre gratis — te faltan 185 pts 🔥`
+
+---
+
+## Plantilla 5 — Mystery Box Resultado
+
+**Slot:** `mystery_box_result_template_sid`
+**Categoría Twilio:** `MARKETING`
+**Variables:** `{{1}}`=Nombre · `{{2}}`=Nombre tier · `{{3}}`=Premio mystery · `{{4}}`=Roadmap
+**Cuándo se envía:** Cliente abre Mystery Box y recibe su premio
+
+```
+¡{{1}}, abriste la *Mystery Box* de *{{2}}*! 🎲🍣
+
+Tu premio: *{{3}}*
+
+Mostrále *este mensaje* al mesero para reclamar �
+
+{{4}}
+
+¡Seguí sumando puntos, cada visita cuenta!
+
+_— [Restaurante]_
+```
+
+**Samples:**
+- `{{1}}` → `Ana`
+- `{{2}}` → `Bronce`
+- `{{3}}` → `Postre del chef`
+- `{{4}}` → `🥉 Bronce (150 pts) → Bebida gratis ✅ · 🥈 Plata (350 pts) → Postre gratis — te faltan 180 pts 🔥`
+
+---
+
+## Plantilla 6 — Golden Box Resultado
+
+**Slot:** `golden_box_result_template_sid`
+**Categoría Twilio:** `MARKETING`
+**Variables:** `{{1}}`=Nombre · `{{2}}`=Premio golden · `{{3}}`=Roadmap
+**Cuándo se envía:** Pity Timer activado — Mystery Box sin el premio más bajo
+
+```
+¡{{1}}, hoy tenías la *Golden Box* activada! ✨🎲
+
+Tu premio: *{{2}}*
+
+Mostrále *este mensaje* al mesero para reclamar 🎁
+
+{{3}}
+
+La suerte está de tu lado, seguí sumando 🍀
+
+_— [Restaurante]_
+```
+
+**Samples:**
+- `{{1}}` → `Pedro`
+- `{{2}}` → `Postre del chef`
+- `{{3}}` → `🥉 Bronce (150 pts) → Bebida gratis ✅ · 🥈 Plata (350 pts) → Postre gratis — te faltan 175 pts 🔥`
+
+---
+
+## Plantilla 7 — Cumpleaños
+
+**Slot:** `birthday_template_sid`
+**Categoría Twilio:** `MARKETING`
+**Variables:** `{{1}}`=Nombre · `{{2}}`=Pts actuales
+**Cuándo se envía:** Cron diario a las 8am — detecta clientes con cumpleaños hoy
+
+```
+¡Feliz cumpleaños {{1}}! 🎂🎉
+
+Hoy es tu día y en *[Restaurante]* queremos celebrarlo con vos
+
+Vení esta semana, mencioná tu cumple y llevate tu *sorpresa* 🎁
+
+Tus puntos: *{{2}}* — cada visita suma 🔥
+
+_— [Restaurante]_
+```
+
+**Samples:**
+- `{{1}}` → `Sofía`
+- `{{2}}` → `95`
+
+---
+
+## Plantilla 8 — Reactivación Suave (21 días)
+
+**Slot:** `reactivation_no_reward_template_sid`
+**Categoría Twilio:** `MARKETING`
+**Variables:** `{{1}}`=Nombre · `{{2}}`=Pts actuales · `{{3}}`=Premio próximo
+**Cuándo se envía:** Cron automático día 21 sin visitar
+**Estrategia:** Puntos como gancho + anticipación del premio
+
+```
+¡{{1}}, hace rato no te vemos! 👋🍣
+
+Tenés *{{2}} puntos* acumulados y estás camino a desbloquear *{{3}}*
+
+Cada visita te acerca más — volvé y seguí sumando 🔥
+
+Te esperamos con novedades en el menú
+
+_— [Restaurante]_
+```
+
+**Samples:**
+- `{{1}}` → `Carlos`
+- `{{2}}` → `95`
+- `{{3}}` → `Bebida gratis o Mystery Box`
+
+---
+
+## Plantilla 9 — Reactivación Agresiva (25+ días)
+
+**Slot:** `reactivation_aggressive_template_sid`
+**Categoría Twilio:** `MARKETING`
+**Variables:** `{{1}}`=Nombre · `{{2}}`=Pts actuales · `{{3}}`=Premio próximo
+**Cuándo se envía:** Cron automático día 25+ sin visitar
+**Estrategia:** Más directa, enfatiza lo que tiene acumulado y lo cerca que está
+
+```
+{{1}}, tus *{{2}} puntos* llevan tiempo sin moverse 👀🍣
+
+Estás cerca de ganarte *{{3}}* — sería una lástima dejarlo ahí
+
+Volvé esta semana y seguí sumando, tu progreso no se pierde 💪
+
+_— [Restaurante]_
+```
+
+**Samples:**
+- `{{1}}` → `Daniela`
+- `{{2}}` → `128`
+- `{{3}}` → `Bebida gratis o Mystery Box`
+
+---
+
+## Plantilla 10 — Campaña: Presencial → Domicilio
 
 **Uso:** Campaña manual desde Dashboard > Campañas
 **Categoría Twilio:** `MARKETING`
-**Variables:** `{{1}}`=Nombre · `{{2}}`=# Visita · `{{3}}`=Próximo premio
-**Objetivo:** Convertir clientes que solo vienen al local a pedir también domicilio
+**Variables:** `{{1}}`=Nombre · `{{2}}`=Pts actuales · `{{3}}`=Premio próximo
 
 ```
 ¡Hola {{1}}! 🛵🍣
 
 ¿Sabías que también llevamos *[Restaurante]* hasta tu puerta?
 
-Pide tus favoritos sin salir de casa — escríbenos por WhatsApp y te lo llevamos 🏠
+Pedí tus favoritos sin salir de casa y los domicilios *también suman puntos* 🔥
 
-Las visitas de domicilio *también cuentan* para tus premios — estás en la visita *{{2}}* y vas por *{{3}}*
+Tenés *{{2}} puntos* y vas camino a *{{3}}*
 
-_— El equipo de [Restaurante]_
+_— [Restaurante]_
 ```
 
-**Samples para aprobación:**
-- `{{1}}` → `Daniela`
-- `{{2}}` → `4`
-- `{{3}}` → `Bebida gratis`
+**Samples:**
+- `{{1}}` → `Felipe`
+- `{{2}}` → `78`
+- `{{3}}` → `Bebida gratis o Mystery Box`
 
 ---
 
-## Plantilla 8 — Campaña: Domicilio → Presencial
+## Plantilla 11 — Campaña: Domicilio → Presencial
 
 **Uso:** Campaña manual desde Dashboard > Campañas
 **Categoría Twilio:** `MARKETING`
-**Variables:** `{{1}}`=Nombre · `{{2}}`=# Visita · `{{3}}`=Próximo premio
-**Objetivo:** Llevar clientes de domicilio a comer en el restaurante
+**Variables:** `{{1}}`=Nombre · `{{2}}`=Pts actuales · `{{3}}`=Premio próximo
 
 ```
-¡Hola {{1}}! ♥️🍣
+¡{{1}}, la experiencia en *[Restaurante]* es otro nivel! ♥️🍣
 
-Nos encanta llevarte el sushi a casa, pero la experiencia en *[Restaurante]* es otro nivel
+Nos encanta llevarte la comida a casa, pero en el restaurante es diferente
 
-Te invitamos a visitarnos — llevas la visita *{{2}}* y tu próximo premio es *{{3}}* 🎯
+Tenés *{{2}} puntos* — vení, sumá más y desbloqueá *{{3}}* 🔥
 
-¡Te esperamos para conocernos en persona!
-
-_— El equipo de [Restaurante]_
+_— [Restaurante]_
 ```
 
-**Samples para aprobación:**
-- `{{1}}` → `Pedro`
-- `{{2}}` → `3`
-- `{{3}}` → `Bebida gratis`
+**Samples:**
+- `{{1}}` → `Laura`
+- `{{2}}` → `95`
+- `{{3}}` → `Bebida gratis o Mystery Box`
 
 ---
 
-## Plantilla 9 — Evento con Imagen (Calendar Auto-dispatch)
+## Plantilla 12 — Evento con Imagen (Calendar)
 
 **Key en admin_settings:** `event_template_image_sid`
 **Tipo Twilio:** `twilio/media`
 **Categoría Meta:** `MARKETING`
-**Variables:** `{{1}}`=Nombre · `{{2}}`=Restaurante · `{{3}}`=Título evento · `{{4}}`=Fecha · `{{5}}`=CTA · `{{6}}`=URL imagen (dinámica)
-**Cuándo se envía:** Cron cada 15 min detecta eventos con `send_mode='auto'` + `scheduled_send_at <= now()` → `executeAutoEvent()` pasa la URL de la imagen subida al bucket como `{{6}}`
+**Variables:** `{{1}}`=Nombre · `{{2}}`=Restaurante · `{{3}}`=Título evento · `{{4}}`=Fecha · `{{5}}`=CTA · `{{6}}`=URL imagen
+**Sin cambios respecto a v0.35.**
 
-**Body (fijo — Meta aprueba esto):**
 ```
 ¡Hola {{1}}! 🎉 *{{2}}* te invita a *{{3}}* — {{4}}.
 
 {{5}}
 ```
-
-**HEADER:** imagen JPG/PNG (el URL varía por evento, Meta aprueba el slot, no el archivo)
-
-**Samples para aprobación:**
-- `{{1}}` → `María`
-- `{{2}}` → `[Restaurante]`
-- `{{3}}` → `Festival Gastronómico`
-- `{{4}}` → `sábado 14 de junio`
-- `{{5}}` → `¡Te esperamos con tu familia! 🍽️`
-- `{{6}}` → `https://upload.wikimedia.org/wikipedia/commons/thumb/3/3f/JPEG_example_flower.jpg/800px-JPEG_example_flower.jpg`
-
-> El sample de `{{6}}` es solo para aprobación — cualquier imagen pública válida funciona. En producción se usa la URL del bucket `event-media` de Supabase Storage.
 
 ---
 
-## Plantilla 10 — Evento con Video (Calendar Auto-dispatch)
+## Plantilla 13 — Evento con Video (Calendar)
 
 **Key en admin_settings:** `event_template_video_sid`
 **Tipo Twilio:** `twilio/media`
-**Categoría Meta:** `MARKETING`
-**Variables:** `{{1}}`=Nombre · `{{2}}`=Restaurante · `{{3}}`=Título evento · `{{4}}`=Fecha · `{{5}}`=CTA · `{{6}}`=URL video (dinámica)
-**Cuándo se envía:** Igual que la 9 pero para eventos con `media_type='video'`
-
-**Body (idéntico al 9):**
-```
-¡Hola {{1}}! 🎉 *{{2}}* te invita a *{{3}}* — {{4}}.
-
-{{5}}
-```
-
-**HEADER:** video MP4
-
-**Samples para aprobación:**
-- `{{1}}` → `María`
-- `{{2}}` → `[Restaurante]`
-- `{{3}}` → `Festival Gastronómico`
-- `{{4}}` → `sábado 14 de junio`
-- `{{5}}` → `¡Te esperamos con tu familia! 🍽️`
-- `{{6}}` → `https://www.w3schools.com/html/mov_bbb.mp4`
+**Idéntico al 12 pero con HEADER video MP4.**
 
 ---
 
 ## Cómo el Sistema Elige la Plantilla Correcta
 
-Para clientes frecuentes, el backend evalúa automáticamente:
-
 ```
-¿La visita de hoy coincide con un milestone?
-├── SÍ → Plantilla 2 (Ganó Premio)
-└── NO → ¿Cuántas visitas faltan para el siguiente?
-           ├── Falta 1 → Plantilla 3 (Cerca)
-           └── Faltan 2+ → Plantilla 4 (Lejos)
-```
+CLIENTE NUEVO → Escanea QR
+└── Plantilla 1 (Bienvenida con puntos + roadmap)
 
-Para el calendario (cron cada 15 min):
+CLIENTE FRECUENTE → Escanea QR → Recibe puntos aleatorios
+├── ¿Desbloqueó un tier?
+│   ├── SÍ → Web muestra choice (safe vs mystery box)
+│   │   ├── Eligió SAFE → Plantilla 4 (Tier desbloqueado)
+│   │   ├── Eligió MYSTERY → Plantilla 5 (Mystery Box resultado)
+│   │   └── Golden Box activa → Plantilla 6 (Golden Box resultado)
+│   └── NO → ¿Cuántos puntos faltan para el próximo tier?
+│       ├── Faltan ≤30 pts → Plantilla 3 (Cerca — "casi lo lograste")
+│       └── Faltan >30 pts → Plantilla 2 (Lejos — "seguí sumando")
 
-```
-¿Hay eventos con send_mode='auto' y scheduled_send_at <= ahora?
-└── SÍ → executeAutoEvent(eventId)
-          ├── event.media_type = 'image' → Plantilla 9 (event_template_image_sid)
-          ├── event.media_type = 'video' → Plantilla 10 (event_template_video_sid)
-          └── event.media_type = null    → Plantilla 9 como fallback (texto sin media útil)
-```
+AUTOMATIZACIONES
+├── Cumpleaños (cron 8am)     → Plantilla 7
+├── Día 21 sin visitar        → Plantilla 8 (Reactivación suave)
+├── Día 25+ sin visitar       → Plantilla 9 (Reactivación agresiva)
+└── Evento programado (*/15m) → Plantilla 12 o 13 (Calendar)
 
-No hay configuración manual por visita — el sistema decide en tiempo real.
+CAMPAÑAS MANUALES
+├── Presencial → Domicilio → Plantilla 10
+└── Domicilio → Presencial → Plantilla 11
+```
 
 ---
 
-## Flujo Completo del Cliente
+## Configuración en Dashboard > Ajustes (v1.0.0)
 
-```
-CLIENTE NUEVO
-└── Escanea QR o pide domicilio → Plantilla 1 (Bienvenida)
+| Key en admin_settings | Tipo de mensaje | Variables |
+|---|---|---|
+| `welcome_template_sid` | Bienvenida (registro) | {{1}}=nombre, {{2}}=pts iniciales, {{3}}=roadmap |
+| `points_earned_far_template_sid` | Puntos sumados (lejos) | {{1}}=nombre, {{2}}=pts ganados, {{3}}=pts total, {{4}}=roadmap |
+| `points_earned_near_template_sid` | Puntos sumados (cerca) | {{1}}=nombre, {{2}}=pts ganados, {{3}}=pts total, {{4}}=premio |
+| `reward_safe_template_sid` | Tier desbloqueado (safe) | {{1}}=nombre, {{2}}=tier, {{3}}=premio, {{4}}=roadmap |
+| `mystery_box_result_template_sid` | Mystery Box resultado | {{1}}=nombre, {{2}}=tier, {{3}}=premio, {{4}}=roadmap |
+| `golden_box_result_template_sid` | Golden Box resultado | {{1}}=nombre, {{2}}=premio, {{3}}=roadmap |
+| `birthday_template_sid` | Cumpleaños | {{1}}=nombre, {{2}}=pts actuales |
+| `reactivation_no_reward_template_sid` | Reactivación suave (21d) | {{1}}=nombre, {{2}}=pts actuales, {{3}}=premio |
+| `reactivation_aggressive_template_sid` | Reactivación agresiva (25d) | {{1}}=nombre, {{2}}=pts actuales, {{3}}=premio |
 
-CLIENTE FRECUENTE (cada visita)
-├── Ganó premio    → Plantilla 2 — "muestra este mensaje"
-├── Falta 1 visita → Plantilla 3 — "la próxima es tuya"
-└── Faltan 2+      → Plantilla 4 — "cada visita cuenta"
+### Slots legacy (mantener si la instancia aún no migró a puntos)
 
-AUTOMATIZACIONES (sin acción del cliente)
-├── Cumpleaños (cron 8am)      → Plantilla 5
-├── Día 21 sin visitar         → Plantilla 6A (o 6B si está configurada)
-├── Día 25+ sin visitar        → Campaña manual agresiva (Campañas > Manuales)
-└── Evento programado (*/15m)  → Plantilla 9 (imagen) o 10 (video) — Calendar
-
-CAMPAÑAS MANUALES (solo twilio/text)
-├── Presencial → Domicilio → Plantilla 7
-└── Domicilio → Presencial → Plantilla 8
-```
+| Key | Uso |
+|---|---|
+| `reward_template_sid` | Ganaste premio por visita (legacy) |
+| `welcome_back_near_template_sid` | Cerca de premio por visita (legacy) |
+| `welcome_back_far_template_sid` | Lejos de premio por visita (legacy) |
+| `welcome_back_template_sid` | Fallback universal (legacy) |
+| `reactivation_with_reward_template_sid` | Reactivación con regalo fijo (legacy) |
+| `reactivation_reward_id` | UUID del reward fijo (legacy) |
+| `reactivation_template_sid` | Reactivación legacy única |
 
 ---
 
 ## Checklist para Implementar en un Restaurante Nuevo
 
-**Plantillas de texto (1-8) — Dashboard:**
-- [ ] Crear las 8 plantillas en Twilio Content API con sus samples (Dashboard → Plantillas o `twilio-setup.mjs`)
+**Plantillas de texto (1-11) — Dashboard:**
+- [ ] Crear las 11 plantillas en Twilio Content API con sus samples
 - [ ] Esperar aprobación de Meta (24-72h)
 - [ ] En Dashboard → Ajustes, asignar cada plantilla a su slot correspondiente
-- [ ] Configurar recompensas en Dashboard → Recompensas (milestones)
-- [ ] Verificar envío con un check-in de prueba
-- [ ] Si la plantilla 6A tiene conversión < 10%, activar 6B con un regalo pequeño
+- [ ] Configurar reward tiers en Dashboard → Recompensas (puntos + mystery box prizes)
+- [ ] Verificar envío con un check-in de prueba (debe mostrar puntos ganados)
+- [ ] Verificar que al llegar a 150 pts muestra opción safe/mystery box
 
-**Plantillas de media (9-10) — Script de setup:**
-- [ ] Ejecutar `node scripts/twilio-create-media-templates.mjs` con las credenciales del cliente
-- [ ] Esperar aprobación de Meta (24-72h — independiente de las otras)
-- [ ] Agregar los SIDs resultantes en Supabase `admin_settings`:
-  - `event_template_image_sid` = SID de `evento_imagen_<brand>`
-  - `event_template_video_sid` = SID de `evento_video_<brand>`
-- [ ] Crear un evento de prueba en Dashboard → Calendario con `send_mode='auto'` y `scheduled_send_at` en 15 minutos
-- [ ] Verificar que llega el mensaje con imagen al número de prueba
-
-> **Nota:** Las plantillas 9 y 10 no se configuran en Dashboard → Ajustes porque no son slots del flujo QR/domicilio. Se configuran directamente en la tabla `admin_settings` de Supabase.
+**Plantillas de media (12-13) — Script de setup:**
+- [ ] Ejecutar `node scripts/twilio-create-media-templates.mjs`
+- [ ] Esperar aprobación de Meta (24-72h)
+- [ ] Agregar SIDs en `admin_settings`: `event_template_image_sid`, `event_template_video_sid`
+- [ ] Verificar con evento de prueba
 
 ---
 
-*Última actualización: v0.35.0 — 2026-05-24*
+*Última actualización: v1.0.0 — 2026-05-25*

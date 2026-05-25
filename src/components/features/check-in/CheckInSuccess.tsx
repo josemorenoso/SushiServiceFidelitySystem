@@ -1,36 +1,86 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { CheckCircle, Crown, Gift, PartyPopper, RotateCcw, Star } from 'lucide-react'
 import { GoogleReviewPopup } from './GoogleReviewPopup'
+import { PointsDisplay } from './PointsDisplay'
+import { RewardChoice } from './RewardChoice'
+import { MysteryBoxResult } from './MysteryBoxResult'
 import type { CheckInSuccessProps } from './CheckInSuccess.types'
+
+interface MysteryBoxResponse {
+  ok: boolean
+  result: {
+    choice: 'safe' | 'mystery'
+    prize_title: string
+    prize_emoji: string
+    prize_index: number
+    was_golden: boolean
+    near_miss: string | null
+    all_prizes: { title: string; probability: number; emoji: string }[]
+    effective_prizes: { title: string; probability: number; emoji: string }[]
+  }
+}
 
 export function CheckInSuccess({
   type,
   customerName,
   totalVisits,
+  totalPoints,
+  pointsAwarded,
   reward,
   nextRewardHint,
   roadmap,
+  tierUnlocked,
+  nextTier,
+  customerPhone,
   onReset,
 }: CheckInSuccessProps) {
   const [showReview, setShowReview] = useState(false)
+  const [choicePhase, setChoicePhase] = useState<'choosing' | 'resolving' | 'result'>('choosing')
+  const [mysteryResult, setMysteryResult] = useState<MysteryBoxResponse['result'] | null>(null)
+  const [choiceLoading, setChoiceLoading] = useState(false)
 
   useEffect(() => {
     if (type !== 'duplicate') {
-      const timer = setTimeout(() => setShowReview(true), 2500)
+      const timer = setTimeout(() => setShowReview(true), 4000)
       return () => clearTimeout(timer)
     }
   }, [type])
 
+  const handleRewardChoice = useCallback(async (choice: 'safe' | 'mystery') => {
+    if (!tierUnlocked || !customerPhone) return
+    setChoiceLoading(true)
+    try {
+      const res = await fetch('/api/mystery-box/resolve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: customerPhone,
+          tier_id: tierUnlocked.id,
+          choice,
+        }),
+      })
+      const data = (await res.json()) as MysteryBoxResponse
+      if (data.ok) {
+        setMysteryResult(data.result)
+        setChoicePhase('result')
+      }
+    } catch (err) {
+      console.error('[CheckInSuccess] Error resolving mystery box:', err)
+    } finally {
+      setChoiceLoading(false)
+    }
+  }, [tierUnlocked, customerPhone])
+
   const isWelcome = type === 'welcome'
   const isDuplicate = type === 'duplicate'
+  const isPointsBased = type === 'points_earned' || type === 'tier_unlocked'
 
   return (
     <div className="animate-fade-in-up w-full max-w-md mx-auto space-y-4">
       {/* Card principal */}
       <div className="premium-card p-7 text-center">
-        {/* Ícono de estado */}
         <div className="flex justify-center mb-5">
           <div
             className="flex h-16 w-16 items-center justify-center rounded-full"
@@ -51,31 +101,29 @@ export function CheckInSuccess({
           </div>
         </div>
 
-        {/* Título */}
         <h2
           className="font-playfair text-2xl font-bold"
           style={{ color: "#1a1c1d", letterSpacing: "-0.02em" }}
         >
           {isWelcome
-            ? `¡Bienvenido/a, ${customerName}!`
+            ? `¡Bienvenid@, ${customerName}!`
             : isDuplicate
               ? `¡Hola, ${customerName}!`
-              : `¡Hola de nuevo, ${customerName}!`}
+              : `¡${customerName}, volviste!`}
         </h2>
 
         <p className="mt-2 text-sm" style={{ color: "#9ca3af" }}>
           {isWelcome
-            ? 'Te has registrado exitosamente en nuestro programa de fidelidad.'
+            ? 'Ya sos parte del club. En cada visita sumás puntos y desbloqueás premios.'
             : isDuplicate
-              ? 'Ya registraste tu visita hoy. ¡Gracias por venir!'
-              : `Esta es tu visita #${totalVisits}. ¡Gracias por volver!`}
+              ? 'Ya registraste tu visita hoy. ¡Nos vemos pronto!'
+              : `Visita #${totalVisits} registrada`}
         </p>
 
-        {/* Contador de visitas */}
         <div className="mt-5 flex items-center justify-center gap-2">
           <Star className="h-4 w-4" strokeWidth={1.5} style={{ color: "#E63946" }} />
           <span className="text-sm font-semibold" style={{ color: "#6b7280" }}>
-            Visitas totales:
+            Visitas:
           </span>
           <span
             className="font-playfair text-xl font-bold"
@@ -85,6 +133,77 @@ export function CheckInSuccess({
           </span>
         </div>
       </div>
+
+      {/* Puntos ganados — solo si hay sistema de puntos activo */}
+      {isPointsBased && pointsAwarded != null && pointsAwarded > 0 && totalPoints != null && choicePhase === 'choosing' && !tierUnlocked && (
+        <PointsDisplay
+          pointsAwarded={pointsAwarded}
+          totalPoints={totalPoints}
+          nextTierName={nextTier?.name}
+          nextTierThreshold={nextTier?.threshold}
+          pointsRemaining={nextTier?.points_remaining}
+        />
+      )}
+
+      {/* Tier desbloqueado — elegir premio */}
+      {type === 'tier_unlocked' && tierUnlocked && choicePhase === 'choosing' && (
+        <>
+          {pointsAwarded != null && pointsAwarded > 0 && totalPoints != null && (
+            <PointsDisplay
+              pointsAwarded={pointsAwarded}
+              totalPoints={totalPoints}
+            />
+          )}
+          <RewardChoice
+            tierName={tierUnlocked.name}
+            safeReward={tierUnlocked.safe_reward}
+            mysteryBoxEnabled={tierUnlocked.mystery_box_enabled}
+            mysteryPrizes={tierUnlocked.mystery_prizes}
+            isBlack={tierUnlocked.is_black}
+            onChoice={handleRewardChoice}
+            loading={choiceLoading}
+          />
+        </>
+      )}
+
+      {/* Mystery Box resultado */}
+      {choicePhase === 'result' && mysteryResult && (
+        mysteryResult.choice === 'mystery' ? (
+          <MysteryBoxResult
+            prizeTitle={mysteryResult.prize_title}
+            prizeEmoji={mysteryResult.prize_emoji}
+            wasGolden={mysteryResult.was_golden}
+            nearMiss={mysteryResult.near_miss}
+            allPrizes={mysteryResult.all_prizes}
+          />
+        ) : (
+          <div
+            className="premium-card p-6 text-center animate-fade-in-up"
+            style={{ border: '1px solid rgba(5,150,105,0.25)' }}
+          >
+            <div className="flex justify-center mb-3">
+              <div
+                className="flex h-12 w-12 items-center justify-center rounded-full"
+                style={{
+                  background: 'linear-gradient(135deg, #34d399 0%, #059669 100%)',
+                  boxShadow: '0 6px 18px rgba(5,150,105,0.3)',
+                }}
+              >
+                <Gift className="h-5 w-5 text-white" strokeWidth={1.25} />
+              </div>
+            </div>
+            <h3
+              className="font-playfair text-xl font-bold"
+              style={{ color: '#065f46', letterSpacing: '-0.02em' }}
+            >
+              {mysteryResult.prize_title}
+            </h3>
+            <p className="mt-1.5 text-sm" style={{ color: '#059669' }}>
+              Mostrále este mensaje al mesero para reclamar tu premio 🎁
+            </p>
+          </div>
+        )
+      )}
 
       {/* Card de recompensa BLACK */}
       {reward?.is_black && (

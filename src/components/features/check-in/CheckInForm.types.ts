@@ -19,21 +19,49 @@ export interface RoadmapItem {
   is_black?: boolean
 }
 
+export interface MysteryPrizeInfo {
+  title: string
+  probability: number
+  emoji: string
+}
+
+export interface TierUnlockedInfo {
+  id: string
+  name: string
+  safe_reward: string
+  mystery_box_enabled: boolean
+  mystery_prizes: MysteryPrizeInfo[]
+  is_black: boolean
+}
+
+export interface NextTierInfo {
+  name: string
+  points_remaining: number
+  threshold: number
+}
+
 export interface RegisterResult {
   message: 'welcome'
   customer: {
     name: string
     total_visits: number
+    total_points?: number
   }
+  points_awarded?: number
   roadmap?: RoadmapItem[]
+  tiers?: unknown[]
 }
 
 export interface CheckInResult {
-  message: 'welcome_back'
+  message: 'welcome_back' | 'tier_unlocked' | 'points_earned'
   customer: {
     name: string
     total_visits: number
+    total_points?: number
   }
+  points_awarded?: number
+  tier_unlocked?: TierUnlockedInfo | null
+  next_tier?: NextTierInfo | null
   reward: {
     title: string
     message: string
@@ -45,6 +73,7 @@ export interface CheckInResult {
     hint: string
   } | null
   roadmap?: RoadmapItem[]
+  tiers_roadmap?: string
 }
 
 export type CheckInStep = 'phone' | 'register' | 'loading'

@@ -11,6 +11,8 @@ import {
 import { sendTemplateMessage } from '@/services/whatsapp.service'
 import { getMultipleSettings } from '@/services/settings.service'
 import { getRewardById, getNextReward, getRewardTitle, buildRewardsRoadmap } from '@/services/reward.service'
+import { REACTIVATION_AGGRESSIVE_DAYS } from '@/constants/rewards'
+import { getNextTier, buildTiersRoadmap } from '@/services/reward-tiers.service'
 
 async function handleCron() {
   try {
@@ -23,6 +25,7 @@ async function handleCron() {
       'reactivation_no_reward_template_sid',
       'reactivation_reward_id',
       'reactivation_template_sid', // legacy
+      'reactivation_aggressive_template_sid', // 25d+ agresiva con puntos
     ])
 
     const withRewardSid = settings.reactivation_with_reward_template_sid
@@ -70,15 +73,32 @@ async function handleCron() {
         sent: 0,
         failed: 0,
         total_inactive_customers: 0,
+        aggressive_sent: 0,
       })
     }
+
+    // Separar clientes en dos grupos: suave (21d) y agresivo (25d+)
+    const aggressiveCutoff = new Date(
+      Date.now() - REACTIVATION_AGGRESSIVE_DAYS * 24 * 60 * 60 * 1000
+    ).toISOString()
+    const softCustomers = customers.filter(
+      (c) => c.last_visit_at && c.last_visit_at >= aggressiveCutoff
+    )
+    const aggressiveCustomers = customers.filter(
+      (c) => c.last_visit_at && c.last_visit_at < aggressiveCutoff
+    )
+
+    // Plantilla agresiva (25d+)
+    const aggressiveSid = settings.reactivation_aggressive_template_sid
 
     const campaign = await getOrCreateTodayCampaign('reactivation', `template:${templateSid}|mode:${mode}`)
     let sent = 0
     let failed = 0
+    let aggressiveSent = 0
     const sentCustomerIds: string[] = []
 
-    for (const customer of customers) {
+    // ─── PASS 1: Clientes suaves (21d) ───
+    for (const customer of softCustomers) {
       const alreadySent = await hasRecentCampaignMessage(customer.id, 'reactivation', 30)
       if (alreadySent) continue
 
@@ -130,6 +150,52 @@ async function handleCron() {
       }
     }
 
+    // ─── PASS 2: Clientes agresivos (25d+) ───
+    if (aggressiveSid && aggressiveCustomers.length > 0) {
+      for (const customer of aggressiveCustomers) {
+        const alreadySent = await hasRecentCampaignMessage(customer.id, 'reactivation', 30)
+        if (alreadySent) continue
+
+        try {
+          const tiersRoadmap = await buildTiersRoadmap(customer.total_points)
+          const nextTier = await getNextTier(customer.total_points)
+          const nextTierName = nextTier ? nextTier.tier.safe_reward_title : 'premios exclusivos'
+
+          const aggressiveVars: Record<string, string> = {
+            '1': customer.name,
+            '2': String(customer.total_points),
+            '3': nextTierName,
+          }
+
+          const result = await sendTemplateMessage(customer.phone, aggressiveSid, aggressiveVars)
+
+          await recordCampaignMessage({
+            campaignId: campaign.id,
+            customerId: customer.id,
+            status: result ? 'sent' : 'failed',
+            twilioSid: result?.sid ?? null,
+            errorMessage: result ? null : 'Twilio no configurado o error de envío',
+          })
+
+          if (result) {
+            aggressiveSent++
+            sent++
+            sentCustomerIds.push(customer.id)
+          } else {
+            failed++
+          }
+        } catch (error) {
+          failed++
+          await recordCampaignMessage({
+            campaignId: campaign.id,
+            customerId: customer.id,
+            status: 'failed',
+            errorMessage: error instanceof Error ? error.message : 'Error desconocido',
+          })
+        }
+      }
+    }
+
     await updateCustomerLastCampaignAt(sentCustomerIds)
     await finalizeCampaign(campaign.id, sent)
 
@@ -138,6 +204,7 @@ async function handleCron() {
       campaign_id: campaign.id,
       sent,
       failed,
+      aggressive_sent: aggressiveSent,
       total_inactive_customers: customers.length,
     })
   } catch (error) {

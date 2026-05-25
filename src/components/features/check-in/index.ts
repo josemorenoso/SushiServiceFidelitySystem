@@ -1,2 +1,5 @@
 export { CheckInForm } from './CheckInForm'
 export { CheckInSuccess } from './CheckInSuccess'
+export { PointsDisplay } from './PointsDisplay'
+export { RewardChoice } from './RewardChoice'
+export { MysteryBoxResult } from './MysteryBoxResult'

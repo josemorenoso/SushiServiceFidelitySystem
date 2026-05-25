@@ -617,6 +617,7 @@ EVENTOS (interrumpen el ciclo)
 - [ ] Actualizar cron de cumpleaños con puntos
 
 ### Fase 4: Dashboard + Polish (CUARTO)
+- [x] Fix v1.0.2: API resistente a fallos, teléfono correcto, puntos en welcome, feedback mystery box
 - [ ] Sección de configuración de puntos en Dashboard > Ajustes
 - [ ] Métricas de mystery box en Dashboard > Analytics
 - [ ] Migración de datos existentes (visit_milestone → reward_tiers)
@@ -631,9 +632,9 @@ EVENTOS (interrumpen el ciclo)
 - `src/services/mystery-box.service.ts`
 - `src/services/reward-tiers.service.ts`
 - `src/app/api/mystery-box/resolve/route.ts`
-- `src/components/features/check-in/PointsRoulette.tsx`
+- `src/components/features/check-in/PointsDisplay.tsx`
 - `src/components/features/check-in/RewardChoice.tsx`
-- `src/components/features/check-in/MysteryBoxAnimation.tsx`
+- `src/components/features/check-in/MysteryBoxResult.tsx`
 
 ### Modificados
 - `src/types/database.types.ts` — nuevas interfaces
@@ -641,13 +642,17 @@ EVENTOS (interrumpen el ciclo)
 - `src/services/reward.service.ts` — adaptar a tiers (mantener compat)
 - `src/services/customer.service.ts` — añadir lógica de puntos
 - `src/services/visit.service.ts` — registrar point_transaction al crear visita
-- `src/app/api/check-in/route.ts` — flujo de puntos + tier evaluation
+- `src/app/api/check-in/route.ts` — flujo de puntos + tier evaluation + try/catch en servicios de tiers
 - `src/app/api/cron/reactivation/route.ts` — dos niveles con puntos
 - `src/services/whatsapp.service.ts` — sin cambios (ya es genérico)
+- `src/components/features/check-in/CheckInForm.tsx` — pasa phone en callbacks
+- `src/components/features/check-in/CheckInForm.types.ts` — callbacks reciben phone
+- `src/components/features/check-in/CheckInSuccess.tsx` — isPointsBased incluye 'welcome', toast.error en mystery box
+- `src/app/(public)/check-in/page.tsx` — elimina lastPhone/document.querySelector
 - `docs/DB_SCHEMA.md` — nuevas tablas
 - `docs/PLANTILLAS.md` — nuevo mapeo completo
 - `docs/features/flujo-plantillas-recompensas-campanas.md` — actualizar
-- `CHANGELOG.md` — entrada v1.0.0
+- `CHANGELOG.md` — entradas v1.0.0, v1.0.1, v1.0.2
 
 ---
 

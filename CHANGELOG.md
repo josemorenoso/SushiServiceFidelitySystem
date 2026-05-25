@@ -5,6 +5,48 @@
 
 ---
 
+## [1.0.2] — 2026-05-25 — Fix: flujo check-in + gamificación (integración y robustez)
+
+### Fixed
+
+**API de check-in resistente a fallos (`src/app/api/check-in/route.ts`):**
+- `buildTiersRoadmap()`, `getAllTiers()`, `evaluateNewTier()`, `getNextTier()`, `getUpcomingRewards()`, `buildRewardsRoadmap()` ahora envueltos en `try/catch`.
+- Si el sistema de puntos/tiers falla (tablas no existen, migración 00013 no ejecutada), el registro y check-in básico siguen funcionando en vez de devolver 500.
+
+**Teléfono pasa correctamente al componente de éxito:**
+- `CheckInForm` ahora pasa `phone` explícitamente en todos los callbacks (`onLookupResult`, `onRegisterSuccess`, `onCheckInSuccess`).
+- Eliminado `lastPhone` y anti-patrón `document.querySelector('input[type="tel"]')` de `page.tsx`.
+- `CheckInSuccess` recibe `customerPhone` correctamente → los botones de safe/mystery en `RewardChoice` ahora funcionan.
+
+**Puntos visibles para clientes nuevos (`CheckInSuccess.tsx`):**
+- `isPointsBased` ahora incluye `'welcome'`.
+- Los clientes que se registran por primera vez ven sus puntos de bienvenida + barra de progreso hacia el primer tier.
+
+**Feedback de errores en Mystery Box (`CheckInSuccess.tsx`):**
+- `toast.error()` cuando: no hay teléfono, API responde `ok: false`, o error de red.
+- Antes el botón simplemente no hacía nada sin feedback visual.
+
+**Duplicados correctamente manejados:**
+- Status 429 de la API ahora se mapea a `message: 'duplicate'` en vez de `'welcome_back'`.
+- `page.tsx` maneja el tipo `'duplicate'` mostrando "Ya registraste tu visita hoy".
+
+**Tipos TypeScript:**
+- `CheckInResult.message` ahora incluye `'duplicate'`.
+- `MysteryBoxResponse` ahora incluye `message?: string`.
+- Variables `welcomeRoadmap`, `allTiers`, `upcomingRewards` correctamente tipadas en `route.ts`.
+
+### Archivos afectados
+- `src/app/api/check-in/route.ts`
+- `src/components/features/check-in/CheckInForm.types.ts`
+- `src/components/features/check-in/CheckInForm.tsx`
+- `src/app/(public)/check-in/page.tsx`
+- `src/components/features/check-in/CheckInSuccess.tsx`
+
+### Request original
+> Mira estoy trancado en un problema, analiza mi repo y ve mi codigo original... al entrar en el nuevo desarrollo antes pasabamos de la pagina en la que recopilamos los datos (nombre, celular, ciudad etc) pero no tiraba ruleta ni nada, parecia un desarrollo vacio... ahora ni siquiera pasa de la tabla donde pide los datos.
+
+---
+
 ## [1.0.1] — 2026-05-25 — Algoritmo inteligente de puntos + Plantillas dopamínicas v1.0
 
 ### Changed

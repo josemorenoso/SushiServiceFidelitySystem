@@ -1590,4 +1590,30 @@ El Método AInnovate convierte a la IA en un **verdadero par de programación** 
 
 ---
 
-*Método AInnovate v2.0 — Creado por AInnovate Academy para desarrollo escalable con IA.*
+# Registro de Aplicación al Proyecto
+
+Esta sección documenta los cambios recientes aplicados a este proyecto siguiendo el Método AInnovate.
+
+## [2026-05-25] Fix: Flujo check-in + gamificación (v1.0.2)
+
+### Resumen
+Corrección de integración del sistema de puntos + Mystery Box. El flujo de check-in se rompía porque la API devolvía 500 cuando las tablas de tiers no estaban listas, el teléfono no llegaba correctamente al componente de éxito, y los clientes nuevos no veían sus puntos de bienvenida.
+
+### Archivos modificados
+- `src/app/api/check-in/route.ts` — try/catch en servicios de tiers/puntos para evitar 500
+- `src/components/features/check-in/CheckInForm.types.ts` — callbacks reciben `phone: string`
+- `src/components/features/check-in/CheckInForm.tsx` — pasa `phone` en callbacks, 429 → `'duplicate'`
+- `src/app/(public)/check-in/page.tsx` — elimina `lastPhone` y `document.querySelector`
+- `src/components/features/check-in/CheckInSuccess.tsx` — `isPointsBased` incluye `'welcome'`, `toast.error` en errores
+
+### Documentación actualizada
+- [x] `CHANGELOG.md` — entrada v1.0.2
+- [x] `docs/features/points-mystery-box.md` — checklist de implementación actualizado
+- [x] `docs/` organizada — obsoletos movidos a `docs/archive/`
+
+### Lección aprendida
+Cuando se integra un sistema nuevo (puntos/tiers) con uno existente (check-in), TODAS las llamadas al nuevo sistema deben tener `try/catch` para que un fallo del nuevo NO rompa el viejo. Los callbacks entre componentes padre-hijo deben pasar datos explícitamente, nunca leer del DOM.
+
+---
+
+*Método AInnovate v2.1 — Creado por AInnovate Academy para desarrollo escalable con IA.*

@@ -7,10 +7,6 @@
     {
       "path": "/api/cron/reactivation",
       "schedule": "0 10 * * *"
-    },
-    {
-      "path": "/api/cron/calendar-dispatch",
-      "schedule": "*/15 * * * *"
     }
   ]
 }

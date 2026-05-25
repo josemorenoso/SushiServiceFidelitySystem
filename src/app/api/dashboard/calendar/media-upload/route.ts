@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
+import sharp from 'sharp'
 
 const BUCKET_ID = 'event-media'
 
-// Límites por tipo (validados aquí, no en Storage)
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024     // 5 MB
-const MAX_VIDEO_BYTES = 16 * 1024 * 1024    // 16 MB
+// Límites ANTES de comprimir (la compresión siempre queda bajo 5MB)
+const MAX_IMAGE_INPUT_BYTES = 30 * 1024 * 1024   // 30 MB input max (sharp comprimirá)
+const MAX_VIDEO_BYTES = 16 * 1024 * 1024          // 16 MB (WhatsApp limit, sin compresión server-side)
 
 const ALLOWED_IMAGE_MIMES = new Set(['image/jpeg', 'image/png'])
 const ALLOWED_VIDEO_MIMES = new Set(['video/mp4'])
@@ -71,13 +72,10 @@ export async function POST(request: NextRequest) {
     // Determinar tipo
     const mime = file.type
     let mediaType: 'image' | 'video'
-    let maxBytes: number
     if (ALLOWED_IMAGE_MIMES.has(mime)) {
       mediaType = 'image'
-      maxBytes = MAX_IMAGE_BYTES
     } else if (ALLOWED_VIDEO_MIMES.has(mime)) {
       mediaType = 'video'
-      maxBytes = MAX_VIDEO_BYTES
     } else {
       return NextResponse.json(
         {
@@ -87,29 +85,55 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (file.size > maxBytes) {
+    if (mediaType === 'video' && file.size > MAX_VIDEO_BYTES) {
       return NextResponse.json(
         {
-          error: `Archivo excede el límite (${(maxBytes / 1024 / 1024).toFixed(0)} MB para ${mediaType}). Tamaño recibido: ${(file.size / 1024 / 1024).toFixed(2)} MB`,
+          error: `Video excede el límite de ${(MAX_VIDEO_BYTES / 1024 / 1024).toFixed(0)} MB. Tamaño recibido: ${(file.size / 1024 / 1024).toFixed(2)} MB. Por favor comprime el video antes de subir.`,
         },
         { status: 413 }
       )
     }
 
-    // Construir path final
-    const folder = eventId ?? `_temp/${crypto.randomUUID()}`
-    const safeName = sanitizeFilename(file.name || `upload${extensionFor(mime)}`)
-    const path = `${folder}/${Date.now()}_${safeName}`
+    if (mediaType === 'image' && file.size > MAX_IMAGE_INPUT_BYTES) {
+      return NextResponse.json(
+        { error: `Imagen excede el límite de ${(MAX_IMAGE_INPUT_BYTES / 1024 / 1024).toFixed(0)} MB de entrada.` },
+        { status: 413 }
+      )
+    }
 
-    // Convertir a buffer para Supabase Storage
     const arrayBuffer = await file.arrayBuffer()
-    const buffer = new Uint8Array(arrayBuffer)
+
+    // Auto-compresión de imágenes: resize a max 1920px, JPEG 80%
+    // Siempre se almacena como JPEG para consistencia con WhatsApp
+    let uploadBuffer: Uint8Array
+    let uploadMime: string
+    let uploadExt: string
+
+    if (mediaType === 'image') {
+      const compressed = await sharp(Buffer.from(arrayBuffer))
+        .resize(1920, 1920, { fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality: 80, progressive: true })
+        .toBuffer()
+      uploadBuffer = new Uint8Array(compressed)
+      uploadMime = 'image/jpeg'
+      uploadExt = '.jpg'
+    } else {
+      uploadBuffer = new Uint8Array(arrayBuffer)
+      uploadMime = mime
+      uploadExt = '.mp4'
+    }
+
+    // Construir path final (extensión forzada según tipo efectivo)
+    const folder = eventId ?? `_temp/${crypto.randomUUID()}`
+    const baseNameRaw = (file.name || `upload${uploadExt}`).replace(/\.[^.]+$/, '')
+    const safeName = sanitizeFilename(baseNameRaw) + uploadExt
+    const path = `${folder}/${Date.now()}_${safeName}`
 
     const db = getServiceClient()
     const { error: uploadError } = await db.storage
       .from(BUCKET_ID)
-      .upload(path, buffer, {
-        contentType: mime,
+      .upload(path, uploadBuffer, {
+        contentType: uploadMime,
         upsert: false,
         cacheControl: '3600',
       })
@@ -128,7 +152,9 @@ export async function POST(request: NextRequest) {
       url: publicData.publicUrl,
       media_type: mediaType,
       path,
-      bytes: file.size,
+      bytes: uploadBuffer.byteLength,
+      original_bytes: file.size,
+      compressed: mediaType === 'image' && uploadBuffer.byteLength < file.size,
     }, { status: 201 })
   } catch (error) {
     console.error('[Media Upload]', error)
@@ -152,8 +178,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
     }
 
-    const { searchParams } = new URL(request.url)
-    const path = searchParams.get('path')
+    const path = request.nextUrl.searchParams.get('path')
     if (!path) {
       return NextResponse.json({ error: '`path` requerido' }, { status: 400 })
     }

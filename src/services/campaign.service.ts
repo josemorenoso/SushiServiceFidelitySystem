@@ -305,3 +305,39 @@ export async function getActiveBlackouts(refDate: Date = new Date()): Promise<Re
     return refTime >= blackoutStart.getTime() && refTime < eventDate.getTime()
   })
 }
+
+// ═══════════════════════════════════════════════════════════
+// CAMPAÑA DE CALENDARIO (auto-dispatch desde evento)
+// ═══════════════════════════════════════════════════════════
+
+/**
+ * Creates a campaign row for a calendar event auto-dispatch.
+ * Uses source='calendar' so it counts toward the monthly marketing cap.
+ */
+export async function createCalendarCampaign(params: {
+  name: string
+  templateSid: string
+  mediaUrl?: string | null
+  mediaType?: 'image' | 'video' | null
+  filters?: Record<string, unknown>
+}): Promise<Campaign> {
+  const supabase = getServiceClient()
+  const { data, error } = await supabase
+    .from('campaigns')
+    .insert({
+      name: params.name,
+      type: 'manual',
+      source: 'calendar',
+      status: 'running',
+      message_template: `template:${params.templateSid}`,
+      filters: params.filters ?? {},
+      media_url: params.mediaUrl ?? null,
+      media_type: params.mediaType ?? null,
+      executed_at: new Date().toISOString(),
+    })
+    .select()
+    .single()
+
+  if (error) throw new Error(`Error creando campaña de calendario: ${error.message}`)
+  return data as Campaign
+}

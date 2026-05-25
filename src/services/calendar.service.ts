@@ -1,19 +1,14 @@
 /**
  * Calendar Service — Eventos operativos del restaurante
  *
- * Capa de datos del calendario: CRUD de eventos + helpers de filtrado de audiencia.
+ * CRUD de eventos + filtrado de audiencia + dispatch de auto-envío.
  *
- * NOTA DE ALCANCE: El path de envío (resolución de content_sid, llamada a
- * sendTemplateMessage, creación de campaigns) NO está cableado aún. Quedará
- * pendiente hasta que las plantillas Twilio tipo `twilio/media` estén
- * aprobadas por Meta y se conecten desde un módulo separado.
- *
- * Estados de evento soportados hoy:
- *   - 'planned'    → creado pero sin programar
- *   - 'scheduled'  → marcado con scheduled_send_at (cron lo recogerá luego)
- *   - 'cancelled'  → soft-deleted por admin
- *   - 'sent'       → reservado para cuando el path de envío exista
- *   - 'failed'     → reservado para cuando el path de envío exista
+ * Estados de evento:
+ *   - 'planned'    → creado, sin send_mode=auto o sin scheduled_send_at
+ *   - 'scheduled'  → send_mode=auto + scheduled_send_at definido (cron lo dispara)
+ *   - 'sent'       → enviado exitosamente por executeAutoEvent
+ *   - 'failed'     → ejecutado pero falló (se puede inspeccionar + reintentar)
+ *   - 'cancelled'  → cancelado por admin
  */
 
 import { createClient } from '@supabase/supabase-js'
@@ -25,6 +20,15 @@ import type {
   EventMediaType,
   Customer,
 } from '@/types/database.types'
+import { getMultipleSettings } from '@/services/settings.service'
+import {
+  createCalendarCampaign,
+  recordCampaignMessage,
+  finalizeCampaign,
+  updateCustomerLastCampaignAt,
+  filterByMonthlyCap,
+} from '@/services/campaign.service'
+import { sendTemplateMessage } from '@/services/whatsapp.service'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -244,4 +248,130 @@ export async function findDueAutoEvents(refDate: Date = new Date()): Promise<Res
 
   if (error) throw new Error(`Error buscando eventos due: ${error.message}`)
   return (data ?? []) as RestaurantEvent[]
+}
+
+// ═══════════════════════════════════════════════════════════
+// DISPATCH DE AUTO-ENVÍO
+// ═══════════════════════════════════════════════════════════
+
+function formatEventDate(dateStr: string): string {
+  const [year, month, day] = dateStr.split('-').map(Number)
+  const date = new Date(year, month - 1, day)
+  return date.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })
+}
+
+export interface ExecuteAutoEventResult {
+  sent: number
+  failed: number
+  excluded_monthly_cap: number
+  campaign_id: string | null
+}
+
+/**
+ * Executes a scheduled auto-event: resolves template, filters audience,
+ * sends messages, records campaign, and marks event as sent/failed.
+ *
+ * Idempotent: marks event as 'sent' before sending to prevent double-dispatch.
+ * If the send phase fails, status is rolled back to 'failed'.
+ *
+ * Requires admin_settings keys: event_template_image_sid | event_template_video_sid
+ */
+export async function executeAutoEvent(eventId: string): Promise<ExecuteAutoEventResult> {
+  const supabase = getServiceClient()
+
+  const event = await getEvent(eventId)
+  if (!event) throw new Error(`Evento ${eventId} no encontrado`)
+  if (event.status !== 'scheduled') {
+    throw new Error(`Evento ${eventId} no está en estado scheduled (actual: ${event.status})`)
+  }
+
+  // Idempotency: claim the event before doing any work
+  const { error: claimError } = await supabase
+    .from('restaurant_events')
+    .update({ status: 'sent' })
+    .eq('id', eventId)
+    .eq('status', 'scheduled') // guard against race condition
+  if (claimError) throw new Error(`No se pudo reclamar evento ${eventId}: ${claimError.message}`)
+
+  try {
+    // Resolve template SID from admin_settings
+    const settings = await getMultipleSettings([
+      'event_template_image_sid',
+      'event_template_video_sid',
+    ])
+    const templateSid = event.media_type === 'video'
+      ? (settings.event_template_video_sid ?? null)
+      : (settings.event_template_image_sid ?? null)
+
+    if (!templateSid) {
+      throw new Error(
+        `No hay plantilla configurada para media_type='${event.media_type ?? 'image'}'. ` +
+        'Agrega event_template_image_sid / event_template_video_sid en Dashboard → Ajustes.'
+      )
+    }
+
+    // Build audience
+    const candidates = await findCustomersForEvent(event.filters as EventFilters)
+    const { eligible, excluded } = await filterByMonthlyCap(candidates)
+
+    // Create campaign record
+    const campaign = await createCalendarCampaign({
+      name: `calendar_${eventId}_${new Date().toISOString().split('T')[0]}`,
+      templateSid,
+      mediaUrl: event.media_url,
+      mediaType: event.media_type,
+      filters: event.filters as Record<string, unknown>,
+    })
+
+    const brandName = process.env.NEXT_PUBLIC_BRAND_NAME ?? 'El Restaurante'
+    const eventDate = formatEventDate(event.event_date)
+    const cta = event.description?.trim() || '¡Te esperamos!'
+    const mediaUrl = event.media_url ?? ''
+
+    let sent = 0
+    let failed = 0
+    const sentCustomerIds: string[] = []
+
+    for (const customer of eligible) {
+      const variables: Record<string, string> = {
+        '1': customer.name,
+        '2': brandName,
+        '3': event.title,
+        '4': eventDate,
+        '5': cta,
+        '6': mediaUrl,
+      }
+
+      const result = await sendTemplateMessage(customer.phone, templateSid, variables)
+      await recordCampaignMessage({
+        campaignId: campaign.id,
+        customerId: customer.id,
+        status: result ? 'sent' : 'failed',
+        twilioSid: result?.sid ?? null,
+        errorMessage: result ? null : 'Twilio error o número no configurado',
+      })
+
+      if (result) {
+        sent++
+        sentCustomerIds.push(customer.id)
+      } else {
+        failed++
+      }
+    }
+
+    await finalizeCampaign(campaign.id, sent)
+    await updateCustomerLastCampaignAt(sentCustomerIds)
+
+    // Link campaign to event
+    await supabase
+      .from('restaurant_events')
+      .update({ campaign_id: campaign.id })
+      .eq('id', eventId)
+
+    return { sent, failed, excluded_monthly_cap: excluded.length, campaign_id: campaign.id }
+  } catch (err) {
+    // Roll back to 'failed' so admin can inspect and retry
+    await supabase.from('restaurant_events').update({ status: 'failed' }).eq('id', eventId)
+    throw err
+  }
 }

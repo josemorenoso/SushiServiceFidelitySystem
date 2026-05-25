@@ -5,6 +5,41 @@
 
 ---
 
+## [0.35.0] — 2026-05-24 — Plantillas WhatsApp con media + auto-compresión + cron calendar-dispatch
+
+### Added
+
+**Auto-compresión de imágenes (`sharp`):**
+- `src/app/api/dashboard/calendar/media-upload/route.ts` — Imágenes subidas al bucket se comprimen automáticamente con `sharp`: resize a max 1920×1920px (sin ampliar), output JPEG 80%, progressive. El dueño puede subir hasta 30 MB de entrada; el sistema garantiza que el resultado quede bien bajo el límite de 5 MB de WhatsApp. Videos: se mantiene la validación de 16 MB directa con mensaje de error descriptivo. Respuesta ahora incluye `bytes` (comprimido), `original_bytes`, `compressed` (boolean).
+- `package.json` — `sharp ^0.34.5` como dependencia de producción (ya estaba en el lockfile).
+
+**Plantillas de media Twilio (`twilio/media`):**
+- `scripts/twilio-create-media-templates.mjs` — Script de setup que crea dos plantillas tipo `twilio/media` en Twilio Content API: `evento_imagen_<brand>` (imagen JPG/PNG) y `evento_video_<brand>` (MP4). Variables: `{{1}}`=nombre cliente, `{{2}}`=restaurante, `{{3}}`=título evento, `{{4}}`=fecha, `{{5}}`=CTA, `{{6}}`=URL del media (dinámica al enviar). Auto-envía para aprobación Meta con categoría MARKETING. Imprime los SIDs para agregar en `admin_settings`.
+
+**Path de envío de eventos del calendario:**
+- `src/services/campaign.service.ts` — Nueva función `createCalendarCampaign({ name, templateSid, mediaUrl, mediaType, filters })`: crea campaign con `type='manual'` y `source='calendar'` para que cuente en el cap mensual de marketing.
+- `src/services/calendar.service.ts` — Nueva función `executeAutoEvent(eventId)`: idempotente (marca el evento como `sent` antes de enviar para evitar doble despacho), resuelve template SID desde `admin_settings` (`event_template_image_sid` / `event_template_video_sid`), aplica `filterByMonthlyCap`, crea campaign record, envía template con variables `{{1}}-{{6}}`, registra mensajes, finaliza campaign, actualiza `last_campaign_at`. Si falla, rollback a `status='failed'`. Devuelve `{ sent, failed, excluded_monthly_cap, campaign_id }`.
+
+**Cron de despacho automático:**
+- `src/app/api/cron/calendar-dispatch/route.ts` — GET/POST protegido con `CRON_SECRET`. Busca eventos `send_mode='auto'` + `status='scheduled'` + `scheduled_send_at <= now()` vía `findDueAutoEvents()`. Llama a `executeAutoEvent()` por cada uno. Idempotente: cada evento ya se auto-marca como `sent` en la primera ejecución. Responde con totales agregados.
+- `vercel.json` — Cron `*/15 * * * *` en `/api/cron/calendar-dispatch` (cada 15 minutos, latencia máxima de 15 min desde el `scheduled_send_at` configurado).
+
+### Changed
+- `src/services/calendar.service.ts` — Actualizado el jsdoc de alcance (ya no es stub) + imports de `settings.service`, `campaign.service`, `whatsapp.service`.
+
+### Archivos afectados
+- `src/app/api/dashboard/calendar/media-upload/route.ts`
+- `src/services/campaign.service.ts`
+- `src/services/calendar.service.ts`
+- `src/app/api/cron/calendar-dispatch/route.ts` *(nuevo)*
+- `scripts/twilio-create-media-templates.mjs` *(nuevo)*
+- `vercel.json`
+
+### Request original
+> Variables de plantilla sin conflicto (cada plantilla tiene su propio scope `{{1}}-{{N}}`). Auto-compresión de imágenes para dueños que no saben cuánto pesa un archivo. Plantillas de festival/promo independientes de las de recompensa. Cron de dispatch de eventos programados.
+
+---
+
 ## [0.34.1] — 2026-05-24 — Fix: tipo canónico RestaurantEvent para evitar error de build en Vercel
 
 ### Fixed

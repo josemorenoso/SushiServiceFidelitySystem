@@ -218,12 +218,13 @@ export async function POST(request: NextRequest) {
       const visit = await createVisit({ customerId: customer.id, source: 'qr', tableNumber: body.table_number ?? null })
 
       // Otorgar puntos aleatorios por la visita
-      const previousPoints = customer.total_points
+      const previousPoints = customer.total_points ?? 0
       let pointsResult = { pointsAwarded: 0, newBalance: previousPoints }
       try {
         pointsResult = await awardVisitPoints(customer.id, visit.id, 'qr')
+        console.log(`[CheckIn] Puntos otorgados: +${pointsResult.pointsAwarded} → balance=${pointsResult.newBalance} (prev=${previousPoints})`)
       } catch (err) {
-        console.error('[CheckIn] Error otorgando puntos:', err)
+        console.error('[CheckIn] ERROR otorgando puntos (se usa fallback 0):', err)
       }
 
       // Evaluar si cruzó un nuevo tier

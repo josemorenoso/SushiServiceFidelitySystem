@@ -134,10 +134,10 @@ export function CheckInSuccess({
         </div>
       </div>
 
-      {/* Puntos ganados — solo si hay sistema de puntos activo */}
-      {isPointsBased && pointsAwarded != null && pointsAwarded > 0 && totalPoints != null && choicePhase === 'choosing' && !tierUnlocked && (
+      {/* Puntos ganados — siempre visible cuando el sistema de puntos está activo */}
+      {isPointsBased && totalPoints != null && choicePhase === 'choosing' && !tierUnlocked && (
         <PointsDisplay
-          pointsAwarded={pointsAwarded}
+          pointsAwarded={pointsAwarded ?? 0}
           totalPoints={totalPoints}
           nextTierName={nextTier?.name}
           nextTierThreshold={nextTier?.threshold}
@@ -205,8 +205,8 @@ export function CheckInSuccess({
         )
       )}
 
-      {/* Card de recompensa BLACK */}
-      {reward?.is_black && (
+      {/* Card de recompensa BLACK — solo legacy (no se muestra con sistema de puntos) */}
+      {!isPointsBased && reward?.is_black && (
         <div
           className="premium-card p-6 text-center overflow-hidden relative"
           style={{
@@ -255,8 +255,8 @@ export function CheckInSuccess({
         </div>
       )}
 
-      {/* Card de recompensa normal */}
-      {reward && !reward.is_black && (
+      {/* Card de recompensa normal — solo legacy (no se muestra con sistema de puntos) */}
+      {!isPointsBased && reward && !reward.is_black && (
         <div
           className="premium-card p-6 text-center"
           style={{ border: "1px solid rgba(251, 191, 36, 0.25) !important" }}

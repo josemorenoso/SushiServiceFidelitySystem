@@ -87,16 +87,20 @@ CREATE TRIGGER trg_restaurant_events_updated_at
 -- ─── RLS ───
 ALTER TABLE restaurant_events ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "admin_all_restaurant_events" ON restaurant_events;
 CREATE POLICY "admin_all_restaurant_events" ON restaurant_events
   FOR ALL USING (auth.role() = 'authenticated');
 
 -- Service role (crons + endpoints internos) — mismo patrón que campaigns
+DROP POLICY IF EXISTS "service_select_restaurant_events" ON restaurant_events;
 CREATE POLICY "service_select_restaurant_events" ON restaurant_events
   FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "service_insert_restaurant_events" ON restaurant_events;
 CREATE POLICY "service_insert_restaurant_events" ON restaurant_events
   FOR INSERT WITH CHECK (true);
 
+DROP POLICY IF EXISTS "service_update_restaurant_events" ON restaurant_events;
 CREATE POLICY "service_update_restaurant_events" ON restaurant_events
   FOR UPDATE USING (true);
 

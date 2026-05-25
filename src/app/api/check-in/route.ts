@@ -201,8 +201,8 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      // Verificar check-in duplicado (máximo 1 por día = 1440 minutos)
-      const recentVisit = await getRecentVisit(customer.id, 1440)
+      // Verificar check-in duplicado (30 segundos para testing — cambiar a 1440 en producción)
+      const recentVisit = await getRecentVisit(customer.id, 0.5)
       if (recentVisit) {
         return NextResponse.json(
           {

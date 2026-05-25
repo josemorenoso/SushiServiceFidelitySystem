@@ -15,9 +15,8 @@ type PageState =
 
 export default function CheckInPage() {
   const [state, setState] = useState<PageState>({ view: 'form' })
-  const [lastPhone, setLastPhone] = useState<string>('')
 
-  const handleRegisterSuccess = (result: RegisterResult) => {
+  const handleRegisterSuccess = (result: RegisterResult, phone: string) => {
     setState({
       view: 'success',
       type: 'welcome',
@@ -26,13 +25,14 @@ export default function CheckInPage() {
       totalPoints: result.customer.total_points ?? 0,
       pointsAwarded: result.points_awarded ?? 0,
       roadmap: result.roadmap,
-      phone: lastPhone,
+      phone,
     })
   }
 
-  const handleCheckInSuccess = (result: CheckInResult) => {
+  const handleCheckInSuccess = (result: CheckInResult, phone: string) => {
     const resultType = result.message === 'tier_unlocked' ? 'tier_unlocked'
       : result.message === 'points_earned' ? 'points_earned'
+      : result.message === 'duplicate' ? 'duplicate'
       : 'welcome_back'
 
     setState({
@@ -47,7 +47,7 @@ export default function CheckInPage() {
       roadmap: result.roadmap,
       tierUnlocked: result.tier_unlocked ?? null,
       nextTier: result.next_tier ?? null,
-      phone: lastPhone,
+      phone,
     })
   }
 
@@ -98,18 +98,9 @@ export default function CheckInPage() {
       <div className="relative z-10 w-full max-w-md">
         {state.view === 'form' && (
           <CheckInForm
-            onLookupResult={(result) => {
-              if (result.found && result.customer) {
-                setLastPhone((document.querySelector('input[type="tel"]') as HTMLInputElement)?.value ?? '')
-              }
-            }}
-            onRegisterSuccess={(result) => {
-              setLastPhone((document.querySelector('input[type="tel"]') as HTMLInputElement)?.value ?? '')
-              handleRegisterSuccess(result)
-            }}
-            onCheckInSuccess={(result) => {
-              handleCheckInSuccess(result)
-            }}
+            onLookupResult={() => {}}
+            onRegisterSuccess={handleRegisterSuccess}
+            onCheckInSuccess={handleCheckInSuccess}
             onError={handleError}
           />
         )}

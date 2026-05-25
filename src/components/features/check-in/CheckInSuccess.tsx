@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { toast } from 'sonner'
 import { CheckCircle, Crown, Gift, PartyPopper, RotateCcw, Star } from 'lucide-react'
 import { GoogleReviewPopup } from './GoogleReviewPopup'
 import { PointsDisplay } from './PointsDisplay'
@@ -10,6 +11,7 @@ import type { CheckInSuccessProps } from './CheckInSuccess.types'
 
 interface MysteryBoxResponse {
   ok: boolean
+  message?: string
   result: {
     choice: 'safe' | 'mystery'
     prize_title: string
@@ -49,7 +51,10 @@ export function CheckInSuccess({
   }, [type])
 
   const handleRewardChoice = useCallback(async (choice: 'safe' | 'mystery') => {
-    if (!tierUnlocked || !customerPhone) return
+    if (!tierUnlocked || !customerPhone) {
+      toast.error('No se pudo identificar el teléfono. Intenta de nuevo.')
+      return
+    }
     setChoiceLoading(true)
     try {
       const res = await fetch('/api/mystery-box/resolve', {
@@ -65,9 +70,12 @@ export function CheckInSuccess({
       if (data.ok) {
         setMysteryResult(data.result)
         setChoicePhase('result')
+      } else {
+        toast.error(data.message ?? 'Error reclamando el premio. Intenta de nuevo.')
       }
     } catch (err) {
       console.error('[CheckInSuccess] Error resolving mystery box:', err)
+      toast.error('Error de conexión. Intenta de nuevo.')
     } finally {
       setChoiceLoading(false)
     }
@@ -75,7 +83,7 @@ export function CheckInSuccess({
 
   const isWelcome = type === 'welcome'
   const isDuplicate = type === 'duplicate'
-  const isPointsBased = type === 'points_earned' || type === 'tier_unlocked'
+  const isPointsBased = type === 'welcome' || type === 'points_earned' || type === 'tier_unlocked'
 
   return (
     <div className="animate-fade-in-up w-full max-w-md mx-auto space-y-4">

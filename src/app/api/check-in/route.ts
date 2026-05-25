@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import type { RoadmapItem } from '@/components/features/check-in/CheckInForm.types'
 import { validatePhone } from '@/lib/validators/phone'
 import { findCustomerByPhone, createCustomer, incrementVisit } from '@/services/customer.service'
 import { createVisit, getRecentVisit } from '@/services/visit.service'
@@ -150,7 +151,12 @@ export async function POST(request: NextRequest) {
 
       // WhatsApp de bienvenida — DEBE usar await para que Vercel no mate el proceso
       const settings = await getMultipleSettings(['welcome_template_sid'])
-      const tiersRoadmap = await buildTiersRoadmap(welcomePoints.newBalance)
+      let tiersRoadmap = '🌟 ¡Seguí sumando puntos para desbloquear premios!'
+      try {
+        tiersRoadmap = await buildTiersRoadmap(welcomePoints.newBalance)
+      } catch (err) {
+        console.error('[CheckIn] Error generando tiers roadmap:', err)
+      }
       await sendCheckinTemplate(
         settings.welcome_template_sid,
         'welcome',
@@ -173,8 +179,20 @@ export async function POST(request: NextRequest) {
         console.error('[CheckIn] Error sync Google Contacts:', err)
       }
 
-      const welcomeRoadmap = await getUpcomingRewards(customer.total_visits)
-      const allTiers = await getAllTiers()
+      let welcomeRoadmap: RoadmapItem[] = []
+      try {
+        welcomeRoadmap = await getUpcomingRewards(customer.total_visits)
+      } catch (err) {
+        console.error('[CheckIn] Error obteniendo upcoming rewards:', err)
+      }
+
+      let allTiers: unknown[] = []
+      try {
+        allTiers = await getAllTiers()
+      } catch (err) {
+        console.error('[CheckIn] Error obteniendo tiers:', err)
+      }
+
       return NextResponse.json(
         {
           message: 'welcome',
@@ -228,9 +246,16 @@ export async function POST(request: NextRequest) {
       }
 
       // Evaluar si cruzó un nuevo tier
-      const newTier = await evaluateNewTier(previousPoints, pointsResult.newBalance)
-      if (newTier) {
-        await updateCustomerTier(customer.id, newTier.tier_name)
+      let newTier = null
+      let nextTierInfo = null
+      try {
+        newTier = await evaluateNewTier(previousPoints, pointsResult.newBalance)
+        if (newTier) {
+          await updateCustomerTier(customer.id, newTier.tier_name)
+        }
+        nextTierInfo = await getNextTier(pointsResult.newBalance)
+      } catch (err) {
+        console.error('[CheckIn] ERROR evaluando tiers (se continúa sin tiers):', err)
       }
 
       // Fetch settings para plantillas
@@ -246,10 +271,24 @@ export async function POST(request: NextRequest) {
 
       // Evaluar recompensa legacy y roadmap
       const reward = await checkRewardForVisit(updated.total_visits)
-      const roadmap = await buildRewardsRoadmap(updated.total_visits)
-      const upcomingRewards = await getUpcomingRewards(updated.total_visits)
-      const tiersRoadmapText = await buildTiersRoadmap(pointsResult.newBalance)
-      const nextTierInfo = await getNextTier(pointsResult.newBalance)
+      let roadmap = '🌟 ¡Sigue acumulando visitas para más premios!'
+      try {
+        roadmap = await buildRewardsRoadmap(updated.total_visits)
+      } catch (err) {
+        console.error('[CheckIn] Error generando rewards roadmap:', err)
+      }
+      let upcomingRewards: RoadmapItem[] = []
+      try {
+        upcomingRewards = await getUpcomingRewards(updated.total_visits)
+      } catch (err) {
+        console.error('[CheckIn] Error obteniendo upcoming rewards:', err)
+      }
+      let tiersRoadmapText = '🌟 ¡Seguí sumando puntos para desbloquear premios!'
+      try {
+        tiersRoadmapText = await buildTiersRoadmap(pointsResult.newBalance)
+      } catch (err) {
+        console.error('[CheckIn] Error generando tiers roadmap:', err)
+      }
 
       // Google Contacts sync (best-effort pero awaited para Vercel)
       try {

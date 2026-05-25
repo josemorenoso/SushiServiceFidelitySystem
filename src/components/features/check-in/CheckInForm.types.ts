@@ -1,7 +1,7 @@
 export interface CheckInFormProps {
-  onLookupResult: (result: LookupResult) => void
-  onRegisterSuccess: (result: RegisterResult) => void
-  onCheckInSuccess: (result: CheckInResult) => void
+  onLookupResult: (result: LookupResult, phone: string) => void
+  onRegisterSuccess: (result: RegisterResult, phone: string) => void
+  onCheckInSuccess: (result: CheckInResult, phone: string) => void
   onError: (message: string) => void
 }
 
@@ -53,7 +53,7 @@ export interface RegisterResult {
 }
 
 export interface CheckInResult {
-  message: 'welcome_back' | 'tier_unlocked' | 'points_earned'
+  message: 'welcome_back' | 'tier_unlocked' | 'points_earned' | 'duplicate'
   customer: {
     name: string
     total_visits: number

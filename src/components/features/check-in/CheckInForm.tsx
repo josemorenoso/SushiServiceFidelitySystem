@@ -106,7 +106,7 @@ export function CheckInForm({
       }
 
       if (data.found && data.customer) {
-        onLookupResult(data)
+        onLookupResult(data, phone)
         const checkInRes = await fetch('/api/check-in', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -117,10 +117,10 @@ export function CheckInForm({
 
         if (checkInRes.status === 429) {
           onCheckInSuccess({
-            message: 'welcome_back',
+            message: 'duplicate',
             customer: checkInData.customer,
             reward: null,
-          })
+          }, phone)
           return
         }
 
@@ -129,7 +129,7 @@ export function CheckInForm({
           return
         }
 
-        onCheckInSuccess(checkInData)
+        onCheckInSuccess(checkInData, phone)
       } else {
         setStep('register')
       }
@@ -167,7 +167,7 @@ export function CheckInForm({
         return
       }
 
-      onRegisterSuccess(data)
+      onRegisterSuccess(data, phone)
     } catch {
       onError('Error de conexión. Intenta de nuevo.')
     } finally {

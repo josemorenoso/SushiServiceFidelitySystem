@@ -3,7 +3,8 @@
 > Documento de referencia para crear y configurar plantillas en Twilio Content API.
 > Aplica a cualquier instancia del sistema (clone-por-restaurante).
 > Reemplaza `[Restaurante]` por el nombre del negocio en cada caso.
-> **Versión:** v1.0.0 — Sistema de Puntos + Mystery Box
+> **Versión:** v1.0.2 — Sistema de Puntos + Mystery Box
+> **Última actualización:** 2026-05-25 — Variables corregidas, opt-out agregado, reactivación agresiva con {{4}}
 
 ---
 
@@ -46,7 +47,7 @@
 
 ---
 
-## Tabla de Variables por Plantilla (v1.0.1 — Puntos)
+## Tabla de Variables por Plantilla (v1.0.2 — Puntos)
 
 Esta tabla es la verdad única del sistema. El backend envía exactamente estas variables para cada slot.
 
@@ -60,7 +61,7 @@ Esta tabla es la verdad única del sistema. El backend envía exactamente estas 
 | **Golden Box resultado** | Nombre | Premio ganado | Roadmap tiers | — |
 | **Cumpleaños** | Nombre | Pts actuales | — | — |
 | **Reactivación suave (21d)** | Nombre | Pts actuales | Premio próximo | — |
-| **Reactivación agresiva (25d)** | Nombre | Pts actuales | Premio próximo | **Recompensa especial** (opcional) |
+| **Reactivación agresiva (25d)** | Nombre | Pts actuales | Premio próximo | **Recompensa especial** (si configura admin) |
 | **Campaña manual** | Nombre | Pts actuales | Premio próximo | — |
 
 Las plantillas de media (eventos) mantienen 6 variables — sin cambios respecto a v0.35.
@@ -104,15 +105,11 @@ Bienvenid@ a *[Restaurante]*, nos alegra que seas parte de nuestro club
 
 En cada visita sumas puntos y recibes premios reales — Hoy recibiste *{{2}} puntos* 🎉
 
-Sólo te faltan *{{2}}* puntos para tu proxima recompensa!!, vuelve pronto y acercate más a tu premio
-
-Así funciona 👇
+Así funciona tu camino de recompensas 👇
 
 {{3}}
 
-Cuando llegues a *150 puntos* elige entre tu *Bebida gratis* o probar suerte con la *Mystery Box* 🎲
-
-¡Te esperamos!
+¡Te esperamos pronto!
 
 _— [Restaurante]_
 ```
@@ -132,9 +129,9 @@ _— [Restaurante]_
 **Cuándo se envía:** Check-in + le faltan más de 30 pts para el próximo tier
 
 ```
-¡{{1}}, Gracias por tu visita, esperamos que hayas disfrutado tu experiencia! 
+¡{{1}}, gracias por tu visita! Esperamos que hayas disfrutado tu experiencia 🍣
 
-Sumaste *+{{2}} puntos* hoy! 🔥🍣
+Sumaste *+{{2}} puntos* hoy 🔥
 
 Tu saldo: *{{3}} puntos*
 
@@ -145,6 +142,8 @@ Sigue visitándonos y descubre lo que te espera 👇
 Cuando llegues a tu próximo nivel podrás elegir entre tu *premio seguro* o la *Mystery Box* 🎲
 
 _— [Restaurante]_
+
+_Responde SALIR para no recibir más mensajes._
 ```
 
 **Samples:**
@@ -163,17 +162,19 @@ _— [Restaurante]_
 **Cuándo se envía:** Check-in + le faltan 30 pts o menos para el próximo tier
 
 ```
-¡{{1}}, Gracias por tu visita, esperamos que hayas disfrutado tu experiencia! 
+¡{{1}}, gracias por tu visita! Esperamos que hayas disfrutado tu experiencia 🍣
 
-Casi lo lograste! Sumaste *+{{2}} puntos* 🔥🍣
+¡Casi lo lograste! Sumaste *+{{2}} puntos* 🔥
 
-Tu saldo: *{{3}} puntos* 
+Tu saldo: *{{3}} puntos*
 
 La próxima visita reclama tu *{{4}}* o si quieres probar suerte, selecciona la *Mystery Box* con premios todavía mejores 🎲
 
 ¡Vuelve pronto que ya casi es tuyo!
 
 _— [Restaurante]_
+
+_Responde SALIR para no recibir más mensajes._
 ```
 
 **Samples:**
@@ -192,7 +193,7 @@ _— [Restaurante]_
 **Cuándo se envía:** Cliente alcanza tier y elige premio seguro en la web
 
 ```
-¡{{1}}, Gracias por volver, alcanzaste el nivel *{{2}}*! 🏆🍣
+¡{{1}}, gracias por volver! Alcanzaste el nivel *{{2}}* 🏆🍣
 
 Elegiste ir a la segura y te ganaste: *{{3}}*
 
@@ -200,9 +201,11 @@ Muestra *este mensaje* al mesero para reclamar tu premio 🎁
 
 {{4}}
 
-Sigue sumando puntos para tu próximo nivel!
+Sigue sumando puntos para tu próximo nivel.
 
 _— [Restaurante]_
+
+_Responde SALIR para no recibir más mensajes._
 ```
 
 **Samples:**
@@ -221,7 +224,7 @@ _— [Restaurante]_
 **Cuándo se envía:** Cliente abre Mystery Box y recibe su premio
 
 ```
-¡{{1}}, Gracias por volver, abriste la *Mystery Box* de *{{2}}*! 🎲🍣
+¡{{1}}, gracias por volver! Abriste la *Mystery Box* de *{{2}}* 🎲🍣
 
 Tu premio: *{{3}}*
 
@@ -232,6 +235,8 @@ Muestra *este mensaje* al mesero para reclamar tu premio 🎁
 ¡Sigue sumando puntos, cada visita te acerca a una nueva recompensa!
 
 _— [Restaurante]_
+
+_Responde SALIR para no recibir más mensajes._
 ```
 
 **Samples:**
@@ -250,9 +255,9 @@ _— [Restaurante]_
 **Cuándo se envía:** Pity Timer activado — Mystery Box sin el premio más bajo
 
 ```
-¡{{1}}, gracias por volver, esperamos hayas disfrutado tu experiencia!! 
+¡{{1}}, gracias por volver! Esperamos hayas disfrutado tu experiencia 🍣
 
-hoy tenías la *Golden Box* activada! ✨🎲
+Hoy tenías la *Golden Box* activada ✨🎲
 
 Tu premio: *{{2}}*
 
@@ -260,9 +265,11 @@ Muestra *este mensaje* al mesero para reclamar tu premio 🎁
 
 {{3}}
 
-La suerte está de tu lado, sigue sumando puntos y desbloquea nuevas recompensas! 🍀
+La suerte está de tu lado, sigue sumando puntos y desbloquea nuevas recompensas 🍀
 
 _— [Restaurante]_
+
+_Responde SALIR para no recibir más mensajes._
 ```
 
 **Samples:**
@@ -282,13 +289,15 @@ _— [Restaurante]_
 ```
 ¡Feliz cumpleaños {{1}}! 🎂🎉
 
-Pronto vas a cumplir años y en *[Restaurante]* queremos celebrarlo contigo
+En *[Restaurante]* queremos celebrarlo contigo 🎁
 
-Ven esta semana, menciona tu cumple y llevate una *sorpresa* 🎁
+Ven esta semana, menciona tu cumple y llévate una *sorpresa especial*
 
 Tus puntos: *{{2}}* — cada visita te acerca más a una nueva recompensa 🔥
 
 _— [Restaurante]_
+
+_Responde SALIR para no recibir más mensajes._
 ```
 
 **Samples:**
@@ -306,14 +315,15 @@ _— [Restaurante]_
 **Estrategia:** Puntos como gancho + anticipación del premio
 
 ```
-¡{{1}}, Te extrañamos, hace rato que no te vemos! 👋🍣
+¡{{1}}, te extrañamos! Hace rato que no te vemos 👋🍣
 
-Tienes *{{2}} puntos* acumulados y estás camino a desbloquear *{{3}}*!!!
+Tienes *{{2}} puntos* acumulados y estás camino a desbloquear *{{3}}* 🔥
 
-Cada visita te acerca más — vuelve y alcanza más rápido ese premio especial! 🔥
-
+Cada visita te acerca más — vuelve y alcanza más rápido ese premio especial 💪
 
 _— [Restaurante]_
+
+_Responde SALIR para no recibir más mensajes._
 ```
 
 **Samples:**
@@ -336,9 +346,13 @@ _— [Restaurante]_
 
 Estás cerca de ganarte *{{3}}* — sería una lástima dejarlo ahí
 
+{{#if {{4}}}}*Vuelve esta semana y te regalamos: {{4}}* 🎁{{/if}}
+
 Vuelve esta semana y sigue sumando, nosotros mantenemos tu progreso 💪
 
 _— [Restaurante]_
+
+_Responde SALIR para no recibir más mensajes._
 ```
 
 **Samples:**
@@ -364,6 +378,8 @@ Pide tus favoritos sin salir de casa y los domicilios *también suman puntos* �
 Tienes *{{2}} puntos* y vas camino a *{{3}}*
 
 _— [Restaurante]_
+
+_Responde SALIR para no recibir más mensajes._
 ```
 
 **Samples:**
@@ -382,11 +398,13 @@ _— [Restaurante]_
 ```
 ¡{{1}}, la experiencia en *[Restaurante]* es otro nivel! ♥️🍣
 
-Nos encanta llevarte la comida a casa, pero en el restaurante es uan experiencia completamente diferente!! ✨
+Nos encanta llevarte la comida a casa, pero en el restaurante es una experiencia completamente diferente ✨
 
 Tienes *{{2}} puntos* — ven, suma puntos y desbloquea *{{3}}* 🔥
 
 _— [Restaurante]_
+
+_Responde SALIR para no recibir más mensajes._
 ```
 
 **Samples:**
@@ -408,7 +426,8 @@ _— [Restaurante]_
 ¡Hola {{1}}! 🎉 *{{2}}* te invita a *{{3}}* — {{4}}.
 
 {{5}}
-```
+
+_Responde SALIR para no recibir más mensajes._
 
 ---
 
@@ -461,7 +480,7 @@ CAMPAÑAS MANUALES
 | `golden_box_result_template_sid` | Golden Box resultado | {{1}}=nombre, {{2}}=premio, {{3}}=roadmap |
 | `birthday_template_sid` | Cumpleaños | {{1}}=nombre, {{2}}=pts actuales |
 | `reactivation_no_reward_template_sid` | Reactivación suave (21d) | {{1}}=nombre, {{2}}=pts actuales, {{3}}=premio |
-| `reactivation_aggressive_template_sid` | Reactivación agresiva (25d) | {{1}}=nombre, {{2}}=pts actuales, {{3}}=premio |
+| `reactivation_aggressive_template_sid` | Reactivación agresiva (25d) | {{1}}=nombre, {{2}}=pts actuales, {{3}}=premio, {{4}}=recompensa especial (opcional) |
 
 ### Slots legacy (mantener si la instancia aún no migró a puntos)
 
@@ -495,4 +514,4 @@ CAMPAÑAS MANUALES
 
 ---
 
-*Última actualización: v1.0.0 — 2026-05-25*
+*Última actualización: v1.0.2 — 2026-05-25*

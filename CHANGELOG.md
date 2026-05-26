@@ -5,6 +5,54 @@
 
 ---
 
+## [1.0.3] — 2026-05-25 — Dashboard: Tiers CRUD + Configuración de Puntos + Mystery Box
+
+### Added
+
+**API REST de Reward Tiers (`src/app/api/dashboard/reward-tiers/route.ts`):**
+- Nuevo endpoint GET/POST/PATCH/DELETE para CRUD completo de `reward_tiers`.
+- GET lista todos los tiers (incluidos inactivos) ordenados por `sort_order`.
+- POST valida umbral único, probabilidades suman 100%, BLACK único activo.
+- PATCH actualiza cualquier campo con validación individual.
+- DELETE soft-delete (desactiva) si hay clientes, hard-delete si no hay y se pide explícitamente.
+
+**Dashboard de Tiers (`src/app/(dashboard)/dashboard/rewards/page.tsx`):**
+- Reescritura completa de la página legacy de milestones por visita.
+- Tabla de tiers con columnas: Emoji, Umbral (pts), Premio Seguro, Mystery Box ON/OFF, Estado, Acciones (editar/toggle/eliminar).
+- Dialog de creación/edición con: nombre del tier, umbral de puntos, premio seguro, toggle BLACK, toggle Mystery Box.
+- Si Mystery Box ON: tabla dinámica de premios con emoji, título y probabilidad %. Validación en tiempo real de que las probabilidades sumen 100%.
+- Eliminación con advertencia de soft-delete si hay clientes asociados.
+
+**Configuración de Puntos en Settings (`src/app/(dashboard)/dashboard/settings/page.tsx`):**
+- Nueva sección "Sistema de Puntos" con feature flag toggle.
+- Campos configurables: puntos por visita (min/max), puntos de bienvenida (min/max), shortfall (min/max), pity timer threshold.
+- Todos los valores se guardan en `admin_settings` y se leen por los servicios de backend.
+
+### Changed
+
+**Welcome bonus aleatorio (`src/services/points.service.ts`):**
+- `getPointsConfig()` ahora lee `welcome_bonus_points_min` y `welcome_bonus_points_max` (antes era un solo `welcome_bonus_points`).
+- `awardWelcomeBonus()` genera puntos aleatorios en el rango `[min, max]` (antes era valor fijo).
+
+**Constantes (`src/constants/rewards.ts`):**
+- `DEFAULT_WELCOME_BONUS_POINTS` cambiado de `0` a `75` (mínimo del rango de bienvenida).
+- Nuevo `DEFAULT_WELCOME_BONUS_POINTS_MAX = 90`.
+
+### Archivos afectados
+- `src/app/api/dashboard/reward-tiers/route.ts` *(nuevo)*
+- `src/app/(dashboard)/dashboard/rewards/page.tsx` *(reescrito)*
+- `src/app/(dashboard)/dashboard/settings/page.tsx`
+- `src/constants/rewards.ts`
+- `src/services/points.service.ts`
+- `docs/features/points-mystery-box.md`
+- `docs/DB_SCHEMA.md`
+- `CHANGELOG.md`
+
+### Request original
+> Dashboard de Tiers + Configuración de Puntos + Mystery Box. Transformar `/dashboard/rewards` de milestones legacy a CRUD completo de tiers con Mystery Box. Agregar sección de puntos en settings. Welcome bonus aleatorio 75-90.
+
+---
+
 ## [1.0.2] — 2026-05-25 — Fix: flujo check-in + gamificación (integración y robustez)
 
 ### Fixed

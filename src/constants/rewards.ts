@@ -51,8 +51,11 @@ export const DEFAULT_POINTS_SHORTFALL_MAX = 30
 /** Mínimo de puntos que una visita puede dar (para no verse sospechoso). */
 export const MINIMUM_VISIBLE_POINTS = 15
 
-/** Puntos de bienvenida al registrarse (Endowed Progress Effect). */
-export const DEFAULT_WELCOME_BONUS_POINTS = 0
+/** Puntos de bienvenida al registrarse — mínimo del rango (Endowed Progress Effect). */
+export const DEFAULT_WELCOME_BONUS_POINTS = 75
+
+/** Puntos de bienvenida al registrarse — máximo del rango. */
+export const DEFAULT_WELCOME_BONUS_POINTS_MAX = 90
 
 /** Puntos bonus por asistir a un evento del calendario. */
 export const DEFAULT_EVENT_BONUS_POINTS = 25

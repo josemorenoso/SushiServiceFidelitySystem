@@ -4,6 +4,7 @@ import {
   DEFAULT_POINTS_PER_VISIT_MIN,
   DEFAULT_POINTS_PER_VISIT_MAX,
   DEFAULT_WELCOME_BONUS_POINTS,
+  DEFAULT_WELCOME_BONUS_POINTS_MAX,
   DEFAULT_POINTS_SHORTFALL_MIN,
   DEFAULT_POINTS_SHORTFALL_MAX,
   MINIMUM_VISIBLE_POINTS,
@@ -88,20 +89,23 @@ export function generateVisitPoints(min: number, max: number): number {
 export async function getPointsConfig(): Promise<{
   min: number
   max: number
-  welcomeBonus: number
+  welcomeBonusMin: number
+  welcomeBonusMax: number
   eventBonus: number
 }> {
   const settings = await getMultipleSettings([
     'points_per_visit_min',
     'points_per_visit_max',
-    'welcome_bonus_points',
+    'welcome_bonus_points_min',
+    'welcome_bonus_points_max',
     'event_bonus_points',
   ])
 
   return {
     min: parseInt(settings.points_per_visit_min ?? String(DEFAULT_POINTS_PER_VISIT_MIN), 10),
     max: parseInt(settings.points_per_visit_max ?? String(DEFAULT_POINTS_PER_VISIT_MAX), 10),
-    welcomeBonus: parseInt(settings.welcome_bonus_points ?? String(DEFAULT_WELCOME_BONUS_POINTS), 10),
+    welcomeBonusMin: parseInt(settings.welcome_bonus_points_min ?? String(DEFAULT_WELCOME_BONUS_POINTS), 10),
+    welcomeBonusMax: parseInt(settings.welcome_bonus_points_max ?? String(DEFAULT_WELCOME_BONUS_POINTS_MAX), 10),
     eventBonus: parseInt(settings.event_bonus_points ?? '25', 10),
   }
 }
@@ -204,13 +208,21 @@ export async function awardVisitPoints(
  */
 export async function awardWelcomeBonus(customerId: string): Promise<{ pointsAwarded: number; newBalance: number }> {
   const config = await getPointsConfig()
-  if (config.welcomeBonus <= 0) {
+  if (config.welcomeBonusMax <= 0) {
+    return { pointsAwarded: 0, newBalance: 0 }
+  }
+
+  const bonusMin = Math.max(config.welcomeBonusMin, 0)
+  const bonusMax = Math.max(config.welcomeBonusMax, bonusMin)
+  const bonus = bonusMin + Math.floor(Math.random() * (bonusMax - bonusMin + 1))
+
+  if (bonus <= 0) {
     return { pointsAwarded: 0, newBalance: 0 }
   }
 
   return awardPoints({
     customerId,
-    points: config.welcomeBonus,
+    points: bonus,
     source: 'welcome_bonus',
   })
 }

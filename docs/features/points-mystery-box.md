@@ -1,6 +1,6 @@
 # Sistema de Puntos + Mystery Box — Diseño Completo
 
-> **Estado:** Diseño aprobado — pendiente implementación
+> **Estado:** ✅ Implementado — Backend v1.0.0-v1.0.2, Dashboard v1.0.3
 > **Fecha:** 2026-05-25
 > **Versión objetivo:** v1.0.0 (reestructuración mayor)
 > **Origen:** Análisis de falencias del sistema lineal de visitas + Investigation.md
@@ -618,13 +618,63 @@ EVENTOS (interrumpen el ciclo)
 
 ### Fase 4: Dashboard + Polish (CUARTO)
 - [x] Fix v1.0.2: API resistente a fallos, teléfono correcto, puntos en welcome, feedback mystery box
-- [ ] Sección de configuración de puntos en Dashboard > Ajustes
+- [x] v1.0.3: Dashboard CRUD de tiers + Mystery Box en `/dashboard/rewards`
+- [x] v1.0.3: Sección "Sistema de Puntos" en `/dashboard/settings`
+- [x] v1.0.3: API REST `/api/dashboard/reward-tiers` (GET/POST/PATCH/DELETE)
+- [x] v1.0.3: Welcome bonus aleatorio (rango configurable min/max)
 - [ ] Métricas de mystery box en Dashboard > Analytics
 - [ ] Migración de datos existentes (visit_milestone → reward_tiers)
 
 ---
 
-## 12. Archivos que se modifican/crean
+## 12. Dashboard de Administración (v1.0.3)
+
+### 12.1 `/dashboard/rewards` — CRUD de Tiers + Mystery Box
+
+Reemplaza completamente la tabla legacy de milestones por visita. Muestra:
+
+| Tier | Umbral (pts) | Premio seguro | Mystery Box | Estado | Acciones |
+|------|-------------|---------------|-------------|--------|----------|
+| 🥉 Bronce | 150 | Bebida gratis | ✅ ON | Activo | Editar / Toggle / Eliminar |
+| 🥈 Plata | 350 | Postre gratis | ✅ ON | Activo | Editar / Toggle / Eliminar |
+| 🥇 Oro | 600 | Plato fuerte | ✅ ON | Activo | Editar / Toggle / Eliminar |
+| 🖤 BLACK | 1000 | Experiencia Chef | ❌ OFF | Activo | Editar / Toggle / Eliminar |
+
+**Formulario de creación/edición de tier:**
+- Nombre del tier (texto)
+- Umbral de puntos (número)
+- Premio seguro (texto libre)
+- Toggle: ¿Nivel BLACK? (desactiva Mystery Box)
+- Toggle: ¿Mystery Box habilitada?
+- Si Mystery Box ON: tabla de premios con emoji, título y probabilidad %
+- Validación frontend: probabilidades deben sumar 100%
+
+**Eliminación:** Soft delete (is_active=false) si hay clientes con ese tier. Hard delete solo si no hay clientes y se pide explícitamente.
+
+### 12.2 `/dashboard/settings` — Configuración de Puntos (nueva sección)
+
+Sección "Sistema de Puntos" con feature flag toggle y los siguientes campos:
+
+| Campo | Default | Descripción |
+|-------|---------|-------------|
+| Puntos por visita: Min / Max | 60 / 90 | Rango aleatorio por check-in |
+| Puntos de bienvenida: Min / Max | 75 / 90 | Aleatorio al registrarse (Endowed Progress) |
+| Shortfall: Min / Max | 5 / 30 | Cuánto queda corto en 2da visita |
+| Pity Timer threshold | 2 | Racha para Golden Box |
+| Feature flag: Sistema activo | true | Toggle on/off |
+
+### 12.3 API REST: `/api/dashboard/reward-tiers`
+
+| Método | Acción | Notas |
+|--------|--------|-------|
+| GET | Lista TODOS los tiers (incluye inactivos) | Ordenados por sort_order |
+| POST | Crea nuevo tier | Valida umbral único, probabilidades 100%, BLACK único |
+| PATCH | Actualiza tier existente | Requiere id en body |
+| DELETE | Soft-delete (desactiva) | Hard-delete solo si no hay clientes y ?hard=true |
+
+---
+
+## 13. Archivos que se modifican/crean
 
 ### Nuevos
 - `supabase/migrations/00013_points_mystery_box.sql`
@@ -632,6 +682,7 @@ EVENTOS (interrumpen el ciclo)
 - `src/services/mystery-box.service.ts`
 - `src/services/reward-tiers.service.ts`
 - `src/app/api/mystery-box/resolve/route.ts`
+- `src/app/api/dashboard/reward-tiers/route.ts` *(v1.0.3)*
 - `src/components/features/check-in/PointsDisplay.tsx`
 - `src/components/features/check-in/RewardChoice.tsx`
 - `src/components/features/check-in/MysteryBoxResult.tsx`
@@ -656,4 +707,4 @@ EVENTOS (interrumpen el ciclo)
 
 ---
 
-*Última actualización: 2026-05-25*
+*Última actualización: 2026-05-25 (v1.0.3: dashboard tiers + settings)*

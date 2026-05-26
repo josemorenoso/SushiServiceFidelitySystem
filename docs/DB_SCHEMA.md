@@ -1,7 +1,7 @@
 # Esquema de Base de Datos
 
 **Base de datos:** Supabase (PostgreSQL)
-**Última actualización:** 2026-05-23
+**Última actualización:** 2026-05-25
 
 ---
 
@@ -287,6 +287,14 @@ CREATE POLICY "admin_update_customers" ON customers
 | `avg_ticket` | `35000` | Ticket promedio en COP para cálculo de ROI |
 | `event_template_image_sid` | _(vacío inicial)_ | Twilio Content SID de plantilla `twilio/media` con imagen para invitaciones de calendario |
 | `event_template_video_sid` | _(vacío inicial)_ | Twilio Content SID de plantilla `twilio/media` con video para invitaciones de calendario |
+| `points_per_visit_min` | `60` | Mínimo de puntos aleatorios por visita |
+| `points_per_visit_max` | `90` | Máximo de puntos aleatorios por visita |
+| `welcome_bonus_points_min` | `75` | Mínimo de puntos de bienvenida al registrarse |
+| `welcome_bonus_points_max` | `90` | Máximo de puntos de bienvenida al registrarse |
+| `shortfall_min` | `5` | Mínimo de puntos corto en 2da visita |
+| `shortfall_max` | `30` | Máximo de puntos corto en 2da visita |
+| `pity_timer_threshold` | `2` | Racha de premios bajos antes de Golden Box |
+| `points_system_enabled` | `true` | Feature flag: sistema de puntos activo |
 
 **Políticas RLS:**
 

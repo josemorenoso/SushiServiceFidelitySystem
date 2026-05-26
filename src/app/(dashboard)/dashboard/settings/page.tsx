@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { Settings, DollarSign, Save, Loader2, CheckCircle, Crown, CalendarHeart, Mail, RefreshCw, MessageCircle, Gift, UserPlus, X, Plus } from 'lucide-react'
+import { Settings, DollarSign, Save, Loader2, CheckCircle, Crown, CalendarHeart, Mail, RefreshCw, MessageCircle, Gift, UserPlus, X, Plus, Zap } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 
@@ -114,6 +114,18 @@ export default function SettingsPage() {
   const [templatesSaving, setTemplatesSaving] = useState(false)
   const [templatesSaved, setTemplatesSaved] = useState(false)
 
+  // Points system config
+  const [pointsMin, setPointsMin] = useState('60')
+  const [pointsMax, setPointsMax] = useState('90')
+  const [welcomeMin, setWelcomeMin] = useState('75')
+  const [welcomeMax, setWelcomeMax] = useState('90')
+  const [shortfallMin, setShortfallMin] = useState('5')
+  const [shortfallMax, setShortfallMax] = useState('30')
+  const [pityThreshold, setPityThreshold] = useState('2')
+  const [pointsEnabled, setPointsEnabled] = useState(true)
+  const [pointsSaving, setPointsSaving] = useState(false)
+  const [pointsSaved, setPointsSaved] = useState(false)
+
   const saveSetting = useCallback(async (key: string, value: string) => {
     const res = await fetch('/api/dashboard/settings', {
       method: 'PUT',
@@ -156,6 +168,16 @@ export default function SettingsPage() {
 
         const allRewards: RewardOption[] = Array.isArray(rewardsData) ? rewardsData : []
         setRewards(allRewards.filter((r) => r.is_active))
+
+        // Points system config
+        if (settingsData.points_per_visit_min) setPointsMin(settingsData.points_per_visit_min)
+        if (settingsData.points_per_visit_max) setPointsMax(settingsData.points_per_visit_max)
+        if (settingsData.welcome_bonus_points_min) setWelcomeMin(settingsData.welcome_bonus_points_min)
+        if (settingsData.welcome_bonus_points_max) setWelcomeMax(settingsData.welcome_bonus_points_max)
+        if (settingsData.shortfall_min) setShortfallMin(settingsData.shortfall_min)
+        if (settingsData.shortfall_max) setShortfallMax(settingsData.shortfall_max)
+        if (settingsData.pity_timer_threshold) setPityThreshold(settingsData.pity_timer_threshold)
+        if (settingsData.points_system_enabled !== undefined) setPointsEnabled(settingsData.points_system_enabled === 'true')
       })
       .catch(() => {})
       .finally(() => {
@@ -209,6 +231,27 @@ export default function SettingsPage() {
       setTimeout(() => setTemplatesSaved(false), 3000)
     } catch { /* silent */ } finally {
       setTemplatesSaving(false)
+    }
+  }
+
+  const handleSavePoints = async () => {
+    setPointsSaving(true)
+    setPointsSaved(false)
+    try {
+      await Promise.all([
+        saveSetting('points_per_visit_min', pointsMin),
+        saveSetting('points_per_visit_max', pointsMax),
+        saveSetting('welcome_bonus_points_min', welcomeMin),
+        saveSetting('welcome_bonus_points_max', welcomeMax),
+        saveSetting('shortfall_min', shortfallMin),
+        saveSetting('shortfall_max', shortfallMax),
+        saveSetting('pity_timer_threshold', pityThreshold),
+        saveSetting('points_system_enabled', String(pointsEnabled)),
+      ])
+      setPointsSaved(true)
+      setTimeout(() => setPointsSaved(false), 3000)
+    } catch { /* silent */ } finally {
+      setPointsSaving(false)
     }
   }
 
@@ -305,6 +348,103 @@ export default function SettingsPage() {
             Agregar beneficio
           </Button>
           <SaveButton saving={benefitsSaving} saved={benefitsSaved} onClick={handleSaveBenefits} disabled={benefitsSaving} />
+        </div>
+      </div>
+
+      {/* ─── SISTEMA DE PUNTOS ─── */}
+      <div className="dashboard-card p-6 max-w-2xl" style={{ border: '1px solid rgba(168, 85, 247, 0.15)' }}>
+        <div className="flex items-center gap-3 mb-6">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ background: 'rgba(168, 85, 247, 0.15)' }}>
+            <Zap className="h-5 w-5" strokeWidth={1.5} style={{ color: '#a855f7' }} />
+          </div>
+          <div className="flex-1">
+            <h2 className="text-base font-bold" style={{ color: '#1a1c1d' }}>Sistema de Puntos</h2>
+            <p className="text-xs" style={{ color: '#9ca3af' }}>Configura los rangos de puntos por visita, bienvenida y shortfall.</p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={pointsEnabled}
+            onClick={() => setPointsEnabled(!pointsEnabled)}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+              pointsEnabled ? 'bg-purple-500' : 'bg-gray-200'
+            }`}
+          >
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                pointsEnabled ? 'translate-x-6' : 'translate-x-1'
+              }`}
+            />
+          </button>
+        </div>
+
+        <div className="space-y-5">
+          {/* Puntos por visita */}
+          <div>
+            <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: '#6b7280' }}>
+              Puntos por visita (check-in)
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-[11px]" style={{ color: '#9ca3af' }}>Minimo</label>
+                <Input type="number" min={1} value={pointsMin} onChange={(e) => setPointsMin(e.target.value)} disabled={loading} />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[11px]" style={{ color: '#9ca3af' }}>Maximo</label>
+                <Input type="number" min={1} value={pointsMax} onChange={(e) => setPointsMax(e.target.value)} disabled={loading} />
+              </div>
+            </div>
+            <p className="text-[10px] mt-1" style={{ color: '#b0b0b0' }}>Rango aleatorio de puntos que el cliente recibe en cada visita. Default: 60-90.</p>
+          </div>
+
+          {/* Puntos de bienvenida */}
+          <div>
+            <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: '#6b7280' }}>
+              Puntos de bienvenida (registro)
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-[11px]" style={{ color: '#9ca3af' }}>Minimo</label>
+                <Input type="number" min={0} value={welcomeMin} onChange={(e) => setWelcomeMin(e.target.value)} disabled={loading} />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[11px]" style={{ color: '#9ca3af' }}>Maximo</label>
+                <Input type="number" min={0} value={welcomeMax} onChange={(e) => setWelcomeMax(e.target.value)} disabled={loading} />
+              </div>
+            </div>
+            <p className="text-[10px] mt-1" style={{ color: '#b0b0b0' }}>Monto alto de bienvenida que crea ilusion de que en 2 visitas llegan al primer tier. Default: 75-90.</p>
+          </div>
+
+          {/* Shortfall */}
+          <div>
+            <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: '#6b7280' }}>
+              Shortfall (2da visita)
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-[11px]" style={{ color: '#9ca3af' }}>Min pts corto</label>
+                <Input type="number" min={1} value={shortfallMin} onChange={(e) => setShortfallMin(e.target.value)} disabled={loading} />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[11px]" style={{ color: '#9ca3af' }}>Max pts corto</label>
+                <Input type="number" min={1} value={shortfallMax} onChange={(e) => setShortfallMax(e.target.value)} disabled={loading} />
+              </div>
+            </div>
+            <p className="text-[10px] mt-1" style={{ color: '#b0b0b0' }}>Cuantos puntos queda corto el cliente tras la 2da visita. Obliga una 3ra visita. Default: 5-30.</p>
+          </div>
+
+          {/* Pity Timer */}
+          <div>
+            <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: '#6b7280' }}>
+              Pity Timer (Golden Box)
+            </label>
+            <div className="max-w-[200px]">
+              <Input type="number" min={1} value={pityThreshold} onChange={(e) => setPityThreshold(e.target.value)} disabled={loading} />
+            </div>
+            <p className="text-[10px] mt-1" style={{ color: '#b0b0b0' }}>Racha de premios bajos consecutivos antes de activar la Golden Box. Default: 2.</p>
+          </div>
+
+          <SaveButton saving={pointsSaving} saved={pointsSaved} onClick={handleSavePoints} disabled={pointsSaving || loading} />
         </div>
       </div>
 

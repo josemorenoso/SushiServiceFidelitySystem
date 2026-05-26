@@ -40,6 +40,15 @@ export interface CheckInSuccessProps {
   roadmap?: RoadmapItem[]
   tierUnlocked?: TierUnlockedDisplay | null
   nextTier?: NextTierDisplay | null
+  tiers?: TierItem[]
   customerPhone?: string
   onReset: () => void
+}
+
+export interface TierItem {
+  tier_name: string
+  point_threshold: number
+  safe_reward_title: string
+  mystery_box_enabled: boolean
+  is_black: boolean
 }

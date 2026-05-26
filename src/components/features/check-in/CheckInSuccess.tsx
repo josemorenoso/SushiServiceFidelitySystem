@@ -7,6 +7,7 @@ import { GoogleReviewPopup } from './GoogleReviewPopup'
 import { PointsDisplay } from './PointsDisplay'
 import { RewardChoice } from './RewardChoice'
 import { MysteryBoxResult } from './MysteryBoxResult'
+import { TiersRoadmap } from './TiersRoadmap'
 import type { CheckInSuccessProps } from './CheckInSuccess.types'
 
 interface MysteryBoxResponse {
@@ -35,6 +36,7 @@ export function CheckInSuccess({
   roadmap,
   tierUnlocked,
   nextTier,
+  tiers,
   customerPhone,
   onReset,
 }: CheckInSuccessProps) {
@@ -151,6 +153,11 @@ export function CheckInSuccess({
           nextTierThreshold={nextTier?.threshold}
           pointsRemaining={nextTier?.points_remaining}
         />
+      )}
+
+      {/* Roadmap visual de tiers */}
+      {isPointsBased && tiers && tiers.length > 0 && choicePhase === 'choosing' && (
+        <TiersRoadmap tiers={tiers} totalPoints={totalPoints ?? 0} />
       )}
 
       {/* Tier desbloqueado — elegir premio */}

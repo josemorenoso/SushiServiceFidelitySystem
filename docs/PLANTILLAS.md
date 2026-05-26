@@ -16,7 +16,37 @@
 
 ---
 
-## Tabla de Variables por Plantilla (v1.0.0 — Puntos)
+## ⚠️ Requisito de Opt-Out (Obligatorio para Meta)
+
+**TODAS las plantillas categoría MARKETING** deben incluir un mecanismo de opt-out para cumplir con las políticas de Meta (2024).
+
+### Opciones de implementación:
+
+1. **Botón de opt-out nativo de Twilio** (recomendado): Al crear la plantilla en Twilio Content API, agregar un botón "Stop" o "Salir" que envíe el keyword `STOP`.
+2. **Texto disimulado al final del mensaje**: Agregar al final de cada plantilla MARKETING:
+   > *"Responde SALIR para no recibir más mensajes."*
+   
+   Formato: texto pequeño, gris, al final del mensaje, sin llamar la atención.
+
+### Plantillas que requieren opt-out:
+
+| Plantilla | Categoría Twilio | Opt-out requerido |
+|---|---|---|
+| Puntos sumados (lejos) | MARKETING | ✅ Sí |
+| Puntos sumados (cerca) | MARKETING | ✅ Sí |
+| Tier desbloqueado | MARKETING | ✅ Sí |
+| Mystery Box resultado | MARKETING | ✅ Sí |
+| Golden Box resultado | MARKETING | ✅ Sí |
+| Cumpleaños | MARKETING | ✅ Sí |
+| Reactivación suave (21d) | MARKETING | ✅ Sí |
+| Reactivación agresiva (25d) | MARKETING | ✅ Sí |
+| Campaña manual | MARKETING | ✅ Sí |
+| Evento imagen/video | MARKETING | ✅ Sí |
+| Bienvenida | UTILITY | ❌ No aplica |
+
+---
+
+## Tabla de Variables por Plantilla (v1.0.1 — Puntos)
 
 Esta tabla es la verdad única del sistema. El backend envía exactamente estas variables para cada slot.
 
@@ -30,7 +60,7 @@ Esta tabla es la verdad única del sistema. El backend envía exactamente estas 
 | **Golden Box resultado** | Nombre | Premio ganado | Roadmap tiers | — |
 | **Cumpleaños** | Nombre | Pts actuales | — | — |
 | **Reactivación suave (21d)** | Nombre | Pts actuales | Premio próximo | — |
-| **Reactivación agresiva (25d)** | Nombre | Pts actuales | Lo que pierde | — |
+| **Reactivación agresiva (25d)** | Nombre | Pts actuales | Premio próximo | **Recompensa especial** (opcional) |
 | **Campaña manual** | Nombre | Pts actuales | Premio próximo | — |
 
 Las plantillas de media (eventos) mantienen 6 variables — sin cambios respecto a v0.35.
@@ -70,15 +100,17 @@ Si ya alcanzó un tier: `🥉 Bronce (150 pts) → Bebida gratis ✅`
 ```
 ¡Hola {{1}}! 🎉🍣
 
-Bienvenid@ a *[Restaurante]*, ya sos parte del club
+Bienvenid@ a *[Restaurante]*, nos alegra que seas parte de nuestro club
 
-En cada visita sumás puntos y desbloqueás premios reales — arrancás con *{{2}} puntos* �
+En cada visita sumas puntos y recibes premios reales — Hoy recibiste *{{2}} puntos* 🎉
 
-Así funciona �👇
+Sólo te faltan *{{2}}* puntos para tu proxima recompensa!!, vuelve pronto y acercate más a tu premio
+
+Así funciona 👇
 
 {{3}}
 
-Cuando llegues a *150 puntos* elegís entre tu *Bebida gratis* o probar suerte con la *Mystery Box* 🎲
+Cuando llegues a *150 puntos* elige entre tu *Bebida gratis* o probar suerte con la *Mystery Box* 🎲
 
 ¡Te esperamos!
 
@@ -88,7 +120,7 @@ _— [Restaurante]_
 **Samples:**
 - `{{1}}` → `María`
 - `{{2}}` → `0`
-- `{{3}}` → `🥉 Bronce (150 pts) → Bebida gratis — te faltan 150 pts 🔥 · 🥈 Plata (350 pts) → Postre gratis · 🥇 Oro (600 pts) → Plato fuerte · 🖤 BLACK (1000 pts) → Experiencia Chef`
+- `{{3}}` → `🥉 Bronce (150 pts) → Bebida gratis o Mistery Box ❓ — te faltan 150 pts 🔥 · 🥈 Plata (350 pts) → Postre gratis · 🥇 Oro (600 pts) → Plato fuerte · 🖤 BLACK (1000 pts) → Experiencia Chef`
 
 ---
 
@@ -100,15 +132,17 @@ _— [Restaurante]_
 **Cuándo se envía:** Check-in + le faltan más de 30 pts para el próximo tier
 
 ```
-¡{{1}}, sumaste *+{{2}} puntos* hoy! 🔥🍣
+¡{{1}}, Gracias por tu visita, esperamos que hayas disfrutado tu experiencia! 
+
+Sumaste *+{{2}} puntos* hoy! 🔥🍣
 
 Tu saldo: *{{3}} puntos*
 
-Seguí visitándonos y mirá lo que te espera 👇
+Sigue visitándonos y descubre lo que te espera 👇
 
 {{4}}
 
-Cuando llegues a tu próximo nivel elegís entre tu *premio seguro* o la *Mystery Box* 🎲
+Cuando llegues a tu próximo nivel podrás elegir entre tu *premio seguro* o la *Mystery Box* 🎲
 
 _— [Restaurante]_
 ```
@@ -129,13 +163,15 @@ _— [Restaurante]_
 **Cuándo se envía:** Check-in + le faltan 30 pts o menos para el próximo tier
 
 ```
-¡{{1}}, casi lo lograste! Sumaste *+{{2}} puntos* 🔥🍣
+¡{{1}}, Gracias por tu visita, esperamos que hayas disfrutado tu experiencia! 
 
-Tu saldo: *{{3}} puntos*
+Casi lo lograste! Sumaste *+{{2}} puntos* 🔥🍣
 
-La próxima visita tenés tu *{{4}}* o si querés probar suerte, la *Mystery Box* con premios todavía mejores 🎲
+Tu saldo: *{{3}} puntos* 
 
-¡Volvé pronto que ya casi es tuyo!
+La próxima visita reclama tu *{{4}}* o si quieres probar suerte, selecciona la *Mystery Box* con premios todavía mejores 🎲
+
+¡Vuelve pronto que ya casi es tuyo!
 
 _— [Restaurante]_
 ```
@@ -156,15 +192,15 @@ _— [Restaurante]_
 **Cuándo se envía:** Cliente alcanza tier y elige premio seguro en la web
 
 ```
-¡{{1}}, desbloqueaste *{{2}}*! 🏆🍣
+¡{{1}}, Gracias por volver, alcanzaste el nivel *{{2}}*! 🏆🍣
 
 Elegiste ir a la segura y te ganaste: *{{3}}*
 
-Mostrále *este mensaje* al mesero para reclamar tu premio 🎁
+Muestra *este mensaje* al mesero para reclamar tu premio 🎁
 
 {{4}}
 
-¡Seguí sumando para tu próximo nivel!
+Sigue sumando puntos para tu próximo nivel!
 
 _— [Restaurante]_
 ```
@@ -185,15 +221,15 @@ _— [Restaurante]_
 **Cuándo se envía:** Cliente abre Mystery Box y recibe su premio
 
 ```
-¡{{1}}, abriste la *Mystery Box* de *{{2}}*! 🎲🍣
+¡{{1}}, Gracias por volver, abriste la *Mystery Box* de *{{2}}*! 🎲🍣
 
 Tu premio: *{{3}}*
 
-Mostrále *este mensaje* al mesero para reclamar �
+Muestra *este mensaje* al mesero para reclamar tu premio 🎁
 
 {{4}}
 
-¡Seguí sumando puntos, cada visita cuenta!
+¡Sigue sumando puntos, cada visita te acerca a una nueva recompensa!
 
 _— [Restaurante]_
 ```
@@ -214,15 +250,17 @@ _— [Restaurante]_
 **Cuándo se envía:** Pity Timer activado — Mystery Box sin el premio más bajo
 
 ```
-¡{{1}}, hoy tenías la *Golden Box* activada! ✨🎲
+¡{{1}}, gracias por volver, esperamos hayas disfrutado tu experiencia!! 
+
+hoy tenías la *Golden Box* activada! ✨🎲
 
 Tu premio: *{{2}}*
 
-Mostrále *este mensaje* al mesero para reclamar 🎁
+Muestra *este mensaje* al mesero para reclamar tu premio 🎁
 
 {{3}}
 
-La suerte está de tu lado, seguí sumando 🍀
+La suerte está de tu lado, sigue sumando puntos y desbloquea nuevas recompensas! 🍀
 
 _— [Restaurante]_
 ```
@@ -244,11 +282,11 @@ _— [Restaurante]_
 ```
 ¡Feliz cumpleaños {{1}}! 🎂🎉
 
-Hoy es tu día y en *[Restaurante]* queremos celebrarlo con vos
+Pronto vas a cumplir años y en *[Restaurante]* queremos celebrarlo contigo
 
-Vení esta semana, mencioná tu cumple y llevate tu *sorpresa* 🎁
+Ven esta semana, menciona tu cumple y llevate una *sorpresa* 🎁
 
-Tus puntos: *{{2}}* — cada visita suma 🔥
+Tus puntos: *{{2}}* — cada visita te acerca más a una nueva recompensa 🔥
 
 _— [Restaurante]_
 ```
@@ -268,13 +306,12 @@ _— [Restaurante]_
 **Estrategia:** Puntos como gancho + anticipación del premio
 
 ```
-¡{{1}}, hace rato no te vemos! 👋🍣
+¡{{1}}, Te extrañamos, hace rato que no te vemos! 👋🍣
 
-Tenés *{{2}} puntos* acumulados y estás camino a desbloquear *{{3}}*
+Tienes *{{2}} puntos* acumulados y estás camino a desbloquear *{{3}}*!!!
 
-Cada visita te acerca más — volvé y seguí sumando 🔥
+Cada visita te acerca más — vuelve y alcanza más rápido ese premio especial! 🔥
 
-Te esperamos con novedades en el menú
 
 _— [Restaurante]_
 ```
@@ -299,7 +336,7 @@ _— [Restaurante]_
 
 Estás cerca de ganarte *{{3}}* — sería una lástima dejarlo ahí
 
-Volvé esta semana y seguí sumando, tu progreso no se pierde 💪
+Vuelve esta semana y sigue sumando, nosotros mantenemos tu progreso 💪
 
 _— [Restaurante]_
 ```
@@ -322,9 +359,9 @@ _— [Restaurante]_
 
 ¿Sabías que también llevamos *[Restaurante]* hasta tu puerta?
 
-Pedí tus favoritos sin salir de casa y los domicilios *también suman puntos* 🔥
+Pide tus favoritos sin salir de casa y los domicilios *también suman puntos* 🔥
 
-Tenés *{{2}} puntos* y vas camino a *{{3}}*
+Tienes *{{2}} puntos* y vas camino a *{{3}}*
 
 _— [Restaurante]_
 ```
@@ -345,9 +382,9 @@ _— [Restaurante]_
 ```
 ¡{{1}}, la experiencia en *[Restaurante]* es otro nivel! ♥️🍣
 
-Nos encanta llevarte la comida a casa, pero en el restaurante es diferente
+Nos encanta llevarte la comida a casa, pero en el restaurante es uan experiencia completamente diferente!! ✨
 
-Tenés *{{2}} puntos* — vení, sumá más y desbloqueá *{{3}}* 🔥
+Tienes *{{2}} puntos* — ven, suma puntos y desbloquea *{{3}}* 🔥
 
 _— [Restaurante]_
 ```

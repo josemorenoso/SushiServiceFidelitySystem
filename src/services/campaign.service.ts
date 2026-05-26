@@ -131,6 +131,7 @@ export async function getOrCreateTodayCampaign(
     .insert({
       name,
       type,
+      source: type,
       status: 'running',
       message_template: messageTemplate,
       executed_at: today.toISOString(),

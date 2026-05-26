@@ -74,6 +74,15 @@ export interface CheckInResult {
   } | null
   roadmap?: RoadmapItem[]
   tiers_roadmap?: string
+  tiers?: TierItem[]
+}
+
+export interface TierItem {
+  tier_name: string
+  point_threshold: number
+  safe_reward_title: string
+  mystery_box_enabled: boolean
+  is_black: boolean
 }
 
 export type CheckInStep = 'phone' | 'register' | 'loading'

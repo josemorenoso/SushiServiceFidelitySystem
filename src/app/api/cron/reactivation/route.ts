@@ -11,6 +11,7 @@ import {
 import { sendTemplateMessage } from '@/services/whatsapp.service'
 import { getMultipleSettings } from '@/services/settings.service'
 import { getRewardById, getNextReward, getRewardTitle, buildRewardsRoadmap } from '@/services/reward.service'
+import { filterByMonthlyCap } from '@/services/campaign.service'
 import { REACTIVATION_AGGRESSIVE_DAYS } from '@/constants/rewards'
 import { getNextTier, buildTiersRoadmap } from '@/services/reward-tiers.service'
 
@@ -32,6 +33,14 @@ async function handleCron() {
     const noRewardSid = settings.reactivation_no_reward_template_sid
     const legacySid = settings.reactivation_template_sid
     const rewardId = settings.reactivation_reward_id
+
+    // Settings de recompensa agresiva
+    const aggressiveRewardId = settings.reactivation_aggressive_reward_id
+    let aggressiveRewardTitle: string | null = null
+    if (aggressiveRewardId) {
+      const aggressiveReward = await getRewardById(aggressiveRewardId)
+      if (aggressiveReward) aggressiveRewardTitle = aggressiveReward.title
+    }
 
     // Decidir qué modo usar
     let mode: 'with_reward' | 'no_reward' | 'legacy' | null = null
@@ -97,22 +106,30 @@ async function handleCron() {
     let aggressiveSent = 0
     const sentCustomerIds: string[] = []
 
+    // Aplicar cap mensual a clientes suaves
+    const { eligible: softEligible, excluded: softExcludedCap } = await filterByMonthlyCap(softCustomers)
+
     // ─── PASS 1: Clientes suaves (21d) ───
-    for (const customer of softCustomers) {
+    for (const customer of softEligible) {
       const alreadySent = await hasRecentCampaignMessage(customer.id, 'reactivation', 30)
       if (alreadySent) continue
 
       try {
         // Variables según el modo:
         //   with_reward: {{1}}=name, {{2}}=fixedRewardTitle, {{3}}=roadmap
-        //   no_reward:   {{1}}=name, {{2}}=roadmap
+        //   no_reward:   {{1}}=name, {{2}}=puntos actuales, {{3}}=premio próximo
         //   legacy:      {{1}}=name, {{2}}=visits, {{3}}=rewardTitle (compat)
-        const roadmap = await buildRewardsRoadmap(customer.total_visits)
+        const tiersRoadmap = await buildTiersRoadmap(customer.total_points ?? 0)
+        const nextTier = await getNextTier(customer.total_points ?? 0)
         let variables: Record<string, string>
         if (mode === 'with_reward') {
-          variables = { '1': customer.name, '2': fixedRewardTitle ?? 'más beneficios', '3': roadmap }
+          variables = { '1': customer.name, '2': fixedRewardTitle ?? 'más beneficios', '3': tiersRoadmap }
         } else if (mode === 'no_reward') {
-          variables = { '1': customer.name, '2': roadmap }
+          variables = {
+            '1': customer.name,
+            '2': String(customer.total_points ?? 0),
+            '3': nextTier ? nextTier.tier.safe_reward_title : 'más beneficios',
+          }
         } else {
           // legacy: replica el comportamiento previo con título del próximo premio del cliente
           const next = await getNextReward(customer.total_visits)
@@ -150,21 +167,28 @@ async function handleCron() {
       }
     }
 
+    // Aplicar cap mensual a clientes agresivos
+    const { eligible: aggressiveEligible, excluded: aggressiveExcludedCap } = await filterByMonthlyCap(aggressiveCustomers)
+
     // ─── PASS 2: Clientes agresivos (25d+) ───
-    if (aggressiveSid && aggressiveCustomers.length > 0) {
-      for (const customer of aggressiveCustomers) {
+    if (aggressiveSid && aggressiveEligible.length > 0) {
+      for (const customer of aggressiveEligible) {
         const alreadySent = await hasRecentCampaignMessage(customer.id, 'reactivation', 30)
         if (alreadySent) continue
 
         try {
-          const tiersRoadmap = await buildTiersRoadmap(customer.total_points)
-          const nextTier = await getNextTier(customer.total_points)
+          const tiersRoadmap = await buildTiersRoadmap(customer.total_points ?? 0)
+          const nextTier = await getNextTier(customer.total_points ?? 0)
           const nextTierName = nextTier ? nextTier.tier.safe_reward_title : 'premios exclusivos'
 
           const aggressiveVars: Record<string, string> = {
             '1': customer.name,
-            '2': String(customer.total_points),
+            '2': String(customer.total_points ?? 0),
             '3': nextTierName,
+          }
+          // Si hay recompensa especial configurada para agresiva, añadir como {{4}}
+          if (aggressiveRewardTitle) {
+            aggressiveVars['4'] = aggressiveRewardTitle
           }
 
           const result = await sendTemplateMessage(customer.phone, aggressiveSid, aggressiveVars)

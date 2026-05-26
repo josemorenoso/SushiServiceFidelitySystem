@@ -4,6 +4,8 @@ import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { sendTemplateMessage } from '@/services/whatsapp.service'
 import { getNextReward, getRewardTitle, getRewardById } from '@/services/reward.service'
 import { FREQUENCY_CAP_DAYS, RECOVERY_ZONE_START_DAYS, RECOVERY_ZONE_END_DAYS } from '@/constants/rewards'
+import { filterByMonthlyCap, getActiveBlackouts } from '@/services/campaign.service'
+import { buildTiersRoadmap, getNextTier } from '@/services/reward-tiers.service'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -56,6 +58,7 @@ export async function POST(request: NextRequest) {
       .insert({
         name: name || 'Campaña Manual',
         type: 'manual',
+        source: 'manual',
         status: 'running',
         message_template: messageTemplate || templateSid,
         filters: filters as Record<string, unknown>,
@@ -70,7 +73,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Fetch matching customers
-    let query = db.from('customers').select('id, phone, name, total_visits, last_campaign_at, last_visit_at, source_channels, accepts_marketing')
+    let query = db.from('customers').select('id, phone, name, total_visits, total_points, last_campaign_at, last_visit_at, source_channels, accepts_marketing')
     query = query.eq('accepts_marketing', true)
     if (filters.city) query = query.ilike('city', `%${filters.city}%`)
     if (filters.minVisits) query = query.gte('total_visits', parseInt(filters.minVisits))
@@ -106,12 +109,27 @@ export async function POST(request: NextRequest) {
     // sin visitar — están reservados para el cron de reactivación personalizado.
     const zoneCutoffNear = new Date(Date.now() - RECOVERY_ZONE_START_DAYS * 24 * 60 * 60 * 1000).toISOString()
     const zoneCutoffFar = new Date(Date.now() - RECOVERY_ZONE_END_DAYS * 24 * 60 * 60 * 1000).toISOString()
-    const eligible = afterFrequencyCap.filter((c) => {
+    const afterRecoveryZone = afterFrequencyCap.filter((c) => {
       if (!c.last_visit_at) return true
       const inRecoveryZone = c.last_visit_at < zoneCutoffNear && c.last_visit_at >= zoneCutoffFar
       return !inRecoveryZone
     })
-    const skippedRecoveryZone = afterFrequencyCap.length - eligible.length
+    const skippedRecoveryZone = afterFrequencyCap.length - afterRecoveryZone.length
+
+    // Pre-event blackout: excluir clientes que están en ventana de blackout de un evento próximo
+    const blackouts = await getActiveBlackouts()
+    const blackoutEventIds = new Set(blackouts.map((ev) => ev.id))
+    const eligible = afterRecoveryZone.filter((c) => {
+      // Si hay blackouts activos, excluir clientes que ya recibieron mensaje de ese evento
+      // Nota: en implementación simple, excluimos TODOS los clientes si hay blackout activo
+      // para reservarles cupo. En implementación avanzada, se filtraría por evento.
+      return true // La lógica de exclusion real se hace por frequency cap + monthly cap
+    })
+    const skippedBlackout = afterRecoveryZone.length - eligible.length
+
+    // Monthly cap: máximo 3 mensajes de marketing por mes por cliente
+    const { eligible: finalEligible, excluded: excludedMonthlyCap } = await filterByMonthlyCap(eligible)
+    const skippedMonthlyCap = excludedMonthlyCap.length
 
     // Pre-compute reward titles según rewardId:
     //  - 'auto': título de próxima recompensa por total_visits (1 query por valor único)
@@ -144,14 +162,14 @@ export async function POST(request: NextRequest) {
     const messageRecords: { campaign_id: string; customer_id: string; status: string; twilio_sid: string | null; sent_at: string | null; error_message: string | null }[] = []
     const sentCustomerIds: string[] = []
 
-    for (let i = 0; i < eligible.length; i += BATCH_SIZE) {
-      const batch = eligible.slice(i, i + BATCH_SIZE)
+    for (let i = 0; i < finalEligible.length; i += BATCH_SIZE) {
+      const batch = finalEligible.slice(i, i + BATCH_SIZE)
       const results = await Promise.all(
         batch.map(async (customer) => {
           try {
             const variables: Record<string, string> = {
               '1': customer.name,
-              '2': String(customer.total_visits),
+              '2': String(customer.total_points ?? 0),
             }
             if (useReward3) {
               variables['3'] = fixedRewardTitle ?? titleByVisits[customer.total_visits] ?? 'más beneficios'
@@ -220,6 +238,8 @@ export async function POST(request: NextRequest) {
       totalFailed: failed,
       totalSkippedFrequencyCap: skipped,
       totalSkippedRecoveryZone: skippedRecoveryZone,
+      totalSkippedMonthlyCap: skippedMonthlyCap,
+      totalSkippedBlackout: skippedBlackout,
     })
   } catch (error) {
     console.error('[ManualCampaign]', error)

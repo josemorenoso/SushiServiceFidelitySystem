@@ -409,6 +409,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      const allTiersForResponse = await getAllTiers()
       return NextResponse.json({
         message: newTier ? 'tier_unlocked' : 'points_earned',
         customer: {
@@ -425,6 +426,7 @@ export async function POST(request: NextRequest) {
         } : null,
         roadmap: upcomingRewards,
         tiers_roadmap: tiersRoadmapText,
+        tiers: allTiersForResponse,
       })
     }
 

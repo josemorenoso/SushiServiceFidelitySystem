@@ -5,6 +5,49 @@
 
 ---
 
+## [1.0.4] — 2026-05-25 — Fix plantillas WhatsApp + Customer Journey + Roadmap visual de tiers
+
+### Fixed
+
+**Variables de plantillas WhatsApp corregidas:**
+- `src/app/api/cron/birthday/route.ts`: `{{2}}` ahora envía `buildTiersRoadmap(customer.total_points)` (puntos actuales) en vez de `buildRewardsRoadmap(customer.total_visits)` (visitas legacy).
+- `src/app/api/cron/reactivation/route.ts` (suave): `{{2}}` ahora envía puntos actuales, `{{3}}` envía premio próximo del tier. Antes solo enviaba 2 variables con roadmap de visitas.
+- `src/app/api/cron/reactivation/route.ts` (agresiva): Ahora envía `{{4}}` con recompensa especial configurada (`reactivation_aggressive_reward_id`). Nuevo setting disponible.
+- `src/app/api/dashboard/campaigns/manual/route.ts`: `{{2}}` ahora envía `customer.total_points` en vez de `customer.total_visits`.
+- `src/app/api/webhook/delivery/route.ts`: Plantilla de bienvenida ahora envía 3 variables (nombre, puntos, roadmap tiers) igual que el check-in QR.
+
+**Customer Journey — Cap mensual y frequency cap:**
+- `src/app/api/dashboard/campaigns/manual/route.ts`: Agregado `filterByMonthlyCap()` → campañas manuales ahora respetan el límite de 3 mensajes/marketing por mes por cliente. Reporta `totalSkippedMonthlyCap`.
+- `src/app/api/cron/reactivation/route.ts`: Agregado `filterByMonthlyCap()` tanto para clientes suaves (21d) como agresivos (25d+). Reactivaciones ahora cuentan para el cap mensual.
+- `src/services/campaign.service.ts`: `getOrCreateTodayCampaign()` ahora establece `source: type` (birthday/reactivation) en vez de dejar el default 'manual'. Esto corrige el conteo del monthly cap.
+- `src/app/api/dashboard/campaigns/manual/route.ts`: Agregado `getActiveBlackouts()` para pre-event blackout. Campañas manuales ahora reportan `totalSkippedBlackout`.
+
+**UI Check-in — Roadmap visual de tiers:**
+- `src/components/features/check-in/TiersRoadmap.tsx` — **NUEVO** componente visual que muestra todos los tiers con: emoji, nombre, umbral de puntos, premio seguro, indicador Mystery Box, estado visual (✅ alcanzado / 🔥 próximo / 🔒 bloqueado).
+- `src/app/api/check-in/route.ts`: Ahora devuelve `tiers: allTiers` en la respuesta de check-in.
+- `src/components/features/check-in/CheckInSuccess.tsx`: Integrado `<TiersRoadmap>` debajo de `<PointsDisplay>`. El cliente ve su camino completo de recompensas.
+
+**Documentación:**
+- `docs/PLANTILLAS.md`: Agregada sección "Requisito de Opt-Out (Obligatorio para Meta)" con tabla de todas las plantillas que requieren opt-out y opciones de implementación.
+- Variables de reactivación agresiva actualizadas: ahora incluye `{{4}}` para recompensa especial.
+
+### Archivos afectados
+- `src/app/api/cron/birthday/route.ts`
+- `src/app/api/cron/reactivation/route.ts`
+- `src/app/api/dashboard/campaigns/manual/route.ts`
+- `src/app/api/webhook/delivery/route.ts`
+- `src/app/api/check-in/route.ts`
+- `src/services/campaign.service.ts`
+- `src/components/features/check-in/TiersRoadmap.tsx` *(nuevo)*
+- `src/components/features/check-in/CheckInSuccess.tsx`
+- `src/components/features/check-in/CheckInSuccess.types.ts`
+- `src/components/features/check-in/CheckInForm.types.ts`
+- `src/components/features/check-in/index.ts`
+- `src/app/(public)/check-in/page.tsx`
+- `docs/PLANTILLAS.md`
+
+---
+
 ## [1.0.3] — 2026-05-25 — Dashboard: Tiers CRUD + Configuración de Puntos + Mystery Box
 
 ### Added

@@ -4,13 +4,13 @@ import { useState } from 'react'
 import { CheckInForm, CheckInSuccess } from '@/components/features/check-in'
 import { Toaster, toast } from 'sonner'
 import { UtensilsCrossed } from 'lucide-react'
-import type { CheckInResult, RegisterResult, RoadmapItem, TierUnlockedInfo, NextTierInfo } from '@/components/features/check-in/CheckInForm.types'
+import type { CheckInResult, RegisterResult, RoadmapItem, TierUnlockedInfo, NextTierInfo, TierItem } from '@/components/features/check-in/CheckInForm.types'
 import { BRAND_NAME } from '@/lib/branding'
 
 type PageState =
   | { view: 'form'; phone?: string }
-  | { view: 'success'; type: 'welcome'; customerName: string; totalVisits: number; totalPoints?: number; pointsAwarded?: number; roadmap?: RoadmapItem[]; phone?: string }
-  | { view: 'success'; type: 'welcome_back' | 'points_earned' | 'tier_unlocked'; customerName: string; totalVisits: number; totalPoints?: number; pointsAwarded?: number; reward: CheckInResult['reward']; nextRewardHint?: string | null; roadmap?: RoadmapItem[]; tierUnlocked?: TierUnlockedInfo | null; nextTier?: NextTierInfo | null; phone?: string }
+  | { view: 'success'; type: 'welcome'; customerName: string; totalVisits: number; totalPoints?: number; pointsAwarded?: number; roadmap?: RoadmapItem[]; tiers?: TierItem[]; phone?: string }
+  | { view: 'success'; type: 'welcome_back' | 'points_earned' | 'tier_unlocked'; customerName: string; totalVisits: number; totalPoints?: number; pointsAwarded?: number; reward: CheckInResult['reward']; nextRewardHint?: string | null; roadmap?: RoadmapItem[]; tierUnlocked?: TierUnlockedInfo | null; nextTier?: NextTierInfo | null; tiers?: TierItem[]; phone?: string }
   | { view: 'success'; type: 'duplicate'; customerName: string; totalVisits: number }
 
 export default function CheckInPage() {
@@ -25,6 +25,7 @@ export default function CheckInPage() {
       totalPoints: result.customer.total_points ?? 0,
       pointsAwarded: result.points_awarded ?? 0,
       roadmap: result.roadmap,
+      tiers: (result as unknown as CheckInResult).tiers,
       phone,
     })
   }
@@ -47,6 +48,7 @@ export default function CheckInPage() {
       roadmap: result.roadmap,
       tierUnlocked: result.tier_unlocked ?? null,
       nextTier: result.next_tier ?? null,
+      tiers: result.tiers,
       phone,
     })
   }
@@ -117,6 +119,7 @@ export default function CheckInPage() {
             roadmap={state.type !== 'duplicate' ? (state as { roadmap?: RoadmapItem[] }).roadmap : undefined}
             tierUnlocked={state.type === 'tier_unlocked' ? (state as { tierUnlocked?: TierUnlockedInfo | null }).tierUnlocked : undefined}
             nextTier={state.type === 'points_earned' || state.type === 'tier_unlocked' ? (state as { nextTier?: NextTierInfo | null }).nextTier : undefined}
+            tiers={state.type !== 'duplicate' ? (state as { tiers?: TierItem[] }).tiers : undefined}
             customerPhone={state.type !== 'duplicate' ? (state as { phone?: string }).phone : undefined}
             onReset={handleReset}
           />

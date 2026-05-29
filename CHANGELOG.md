@@ -5,6 +5,38 @@
 
 ---
 
+## [1.0.6] — 2026-05-28 — Script bulk para crear plantillas Twilio de texto
+
+### Added
+
+**Script — Creación masiva de plantillas de texto:**
+- `scripts/twilio-create-text-templates.mjs` — **NUEVO**: Crea las 11 plantillas `twilio/text` de golpe en Twilio Content API. Lee `NEXT_PUBLIC_BRAND_NAME` del env, reemplaza `[Restaurante]` automáticamente, crea cada plantilla con sus samples correctos, y envía cada una a aprobación de Meta con su categoría (UTILITY/MARKETING). Al finalizar imprime un mapeo `settings_key → SID` listo para copiar a `admin_settings`.
+
+**Documentación:**
+- `docs/PLANTILLAS.md`: Checklist actualizado — las plantillas de texto (1-11) ahora se crean vía script bulk, no manualmente por Dashboard.
+
+---
+
+## [1.0.5-2] — 2026-05-28 — GPS opcional + Toggle modo estricto en Dashboard
+
+### Changed
+
+**Frontend — GPS ya no bloquea el check-in:**
+- `src/components/features/check-in/CheckInForm.tsx`: Si el GPS falla o el usuario lo niega, el check-in continúa sin `lat`/`lon` en vez de bloquearse. El mensaje de error cambia a advertencia suave (amarillo): "No pudimos verificar tu ubicación. Puedes continuar de todos modos." El botón "Continuar" ya no se deshabilita por falta de GPS.
+
+**Backend — Validación GPS condicional:**
+- `src/app/api/check-in/route.ts`: Consulta el setting `geo_strict_mode` desde `admin_settings`. Solo retorna 403 si `geo_strict_mode === 'true'` Y no hay `lat`/`lon` en el body. Por defecto (modo relajado) el check-in siempre permite continuar, con o sin GPS.
+
+**Dashboard — Toggle modo estricto:**
+- `src/app/(dashboard)/dashboard/settings/page.tsx`: Checkbox "Modo estricto: requerir GPS para hacer check-in" en la sección de Ubicación del Local. Guardado en `admin_settings` key `geo_strict_mode`. Default: desactivado.
+
+### Archivos afectados
+- `src/components/features/check-in/CheckInForm.tsx`
+- `src/app/api/check-in/route.ts`
+- `src/app/(dashboard)/dashboard/settings/page.tsx`
+
+---
+
 ## [1.0.5] — 2026-05-28 — Geolocalización anti QR-scam + Dashboard ubicación
 
 ### Added

@@ -119,7 +119,7 @@ Endpoint unificado con 3 acciones: `lookup`, `register`, `checkin`.
 ```json
 { "phone": "3001234567", "action": "lookup", "lat": 6.244203, "lon": -75.581211 }
 ```
-> `lat` y `lon` son opcionales en `lookup` y `register`, pero **obligatorios** en `checkin`.
+> `lat` y `lon` son opcionales en todas las acciones. Solo se requieren si el admin activa **Modo estricto GPS** (`geo_strict_mode`). Si se envían, el backend valida distancia contra `restaurant_locations`.
 
 **Response 200 (encontrado):**
 ```json
@@ -149,11 +149,17 @@ Endpoint unificado con 3 acciones: `lookup`, `register`, `checkin`.
 ```json
 { "message": "welcome_back", "customer": { "name": "Juan", "total_visits": 5 }, "reward": { "title": "Postre gratis", "message": "..." } }
 ```
+**Response 403 (ubicación requerida — modo estricto):**
+```json
+{ "error": "Ubicación requerida", "message": "El restaurante requiere activar la ubicación para hacer check-in" }
+```
+> Solo ocurre si el admin activó **Modo estricto GPS** (`geo_strict_mode = 'true'`) y el cliente no envió `lat`/`lon`.
+
 **Response 403 (fuera del restaurante):**
 ```json
 { "error": "Fuera del local", "message": "Debes estar dentro del restaurante para hacer check-in (150m de distancia)" }
 ```
-> Ocurre cuando el cliente envía `lat`/`lon` y la distancia calculada (Haversine) supera `radius_meters` de `restaurant_locations`.
+> Ocurre cuando el cliente envía `lat`/`lon`, la distancia calculada (Haversine) supera `radius_meters` de `restaurant_locations`, **independientemente** del modo estricto.
 
 **Response 429 (check-in duplicado < 1h):**
 ```json

@@ -107,6 +107,23 @@ export async function POST(request: NextRequest) {
 
     // ─── VALIDACIÓN DE GEOLOCALIZACIÓN ───
     const { lat, lon } = body
+    const { data: geoStrictRow } = await getServiceClient()
+      .from('admin_settings')
+      .select('value')
+      .eq('key', 'geo_strict_mode')
+      .single()
+    const geoStrictMode = geoStrictRow?.value === 'true'
+
+    if (geoStrictMode && (lat == null || lon == null)) {
+      return NextResponse.json(
+        {
+          error: 'Ubicación requerida',
+          message: 'El restaurante requiere activar la ubicación para hacer check-in',
+        },
+        { status: 403 }
+      )
+    }
+
     if (lat != null && lon != null) {
       const { data: location } = await getServiceClient()
         .from('restaurant_locations')

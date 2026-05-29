@@ -498,8 +498,8 @@ CAMPAÑAS MANUALES
 
 ## Checklist para Implementar en un Restaurante Nuevo
 
-**Plantillas de texto (1-11) — Dashboard:**
-- [ ] Crear las 11 plantillas en Twilio Content API con sus samples
+**Plantillas de texto (1-11) — Script bulk:**
+- [ ] Ejecutar `node scripts/twilio-create-text-templates.mjs` (crea las 11 de golpe)
 - [ ] Esperar aprobación de Meta (24-72h)
 - [ ] En Dashboard → Ajustes, asignar cada plantilla a su slot correspondiente
 - [ ] Configurar reward tiers en Dashboard → Recompensas (puntos + mystery box prizes)
@@ -514,4 +514,4 @@ CAMPAÑAS MANUALES
 
 ---
 
-*Última actualización: v1.0.2 — 2026-05-25*
+*Última actualización: v1.0.3 — 2026-05-28 — Script bulk para plantillas de texto*

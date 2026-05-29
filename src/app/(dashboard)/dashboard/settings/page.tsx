@@ -131,6 +131,7 @@ export default function SettingsPage() {
   const [locationLon, setLocationLon] = useState('')
   const [locationRadius, setLocationRadius] = useState('20')
   const [locationAddress, setLocationAddress] = useState('')
+  const [geoStrictMode, setGeoStrictMode] = useState(false)
   const [locationSaving, setLocationSaving] = useState(false)
   const [locationSaved, setLocationSaved] = useState(false)
 
@@ -187,6 +188,7 @@ export default function SettingsPage() {
         if (settingsData.shortfall_max) setShortfallMax(settingsData.shortfall_max)
         if (settingsData.pity_timer_threshold) setPityThreshold(settingsData.pity_timer_threshold)
         if (settingsData.points_system_enabled !== undefined) setPointsEnabled(settingsData.points_system_enabled === 'true')
+        if (settingsData.geo_strict_mode !== undefined) setGeoStrictMode(settingsData.geo_strict_mode === 'true')
 
         if (locationData) {
           setLocationLat(String(locationData.lat ?? ''))
@@ -275,17 +277,20 @@ export default function SettingsPage() {
     setLocationSaving(true)
     setLocationSaved(false)
     try {
-      const res = await fetch('/api/dashboard/location', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          lat: parseFloat(locationLat),
-          lon: parseFloat(locationLon),
-          radius_meters: parseInt(locationRadius) || 20,
-          address: locationAddress || undefined,
+      const [resLoc] = await Promise.all([
+        fetch('/api/dashboard/location', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            lat: parseFloat(locationLat),
+            lon: parseFloat(locationLon),
+            radius_meters: parseInt(locationRadius) || 20,
+            address: locationAddress || undefined,
+          }),
         }),
-      })
-      if (!res.ok) throw new Error('Error guardando')
+        saveSetting('geo_strict_mode', String(geoStrictMode)),
+      ])
+      if (!resLoc.ok) throw new Error('Error guardando')
       setLocationSaved(true)
       setTimeout(() => setLocationSaved(false), 3000)
     } catch { /* silent */ } finally {
@@ -549,6 +554,22 @@ export default function SettingsPage() {
 
           <p className="text-[10px]" style={{ color: '#b0b0b0' }}>
             Google Maps → clic derecho en tu local → «Qué hay aquí» → copia lat y lon. Radio recomendado: 20-50m.
+          </p>
+
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={geoStrictMode}
+              onChange={(e) => setGeoStrictMode(e.target.checked)}
+              disabled={loading}
+              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            <span className="text-xs font-medium" style={{ color: '#1a1c1d' }}>
+              Modo estricto: requerir GPS para hacer check-in
+            </span>
+          </label>
+          <p className="text-[10px] -mt-2 ml-6" style={{ color: '#b0b0b0' }}>
+            Si está activo, los clientes sin GPS no podrán registrar visitas. Recomendado: desactivado (el mesero valida presencia física).
           </p>
 
           <SaveButton

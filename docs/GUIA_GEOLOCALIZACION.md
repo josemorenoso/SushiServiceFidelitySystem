@@ -1,7 +1,7 @@
 # Guía: Implementación de Geolocalización — Anti QR-Scam
 
-> **Estado:** ✅ COMPLETO (v1.0.5). Frontend, API validation y Dashboard settings implementados.
-> **Objetivo:** Evitar que escaneen el QR fuera del local.
+> **Estado:** ✅ COMPLETO (v1.0.5-2). Frontend, API validation, Dashboard settings + Toggle modo estricto implementados.
+> **Objetivo:** Evitar que escaneen el QR fuera del local. **Nota:** GPS es opcional por defecto. El admin puede activar modo estricto si lo desea.
 
 ---
 
@@ -17,6 +17,11 @@
 - `src/lib/utils/geolocation.ts`:
   - `calculateDistanceMeters(lat1, lon1, lat2, lon2)`
   - `getCurrentPosition(timeoutMs)` — pide GPS al navegador
+
+### 3. Toggle modo estricto GPS
+- Dashboard → Ajustes → Ubicación del Local → checkbox "Modo estricto: requerir GPS para hacer check-in".
+- Guardado en `admin_settings` key `geo_strict_mode`. Default: `false` (desactivado).
+- Si está desactivado: el check-in funciona con o sin GPS. Si está activado: bloquea check-ins sin GPS (403).
 
 ---
 

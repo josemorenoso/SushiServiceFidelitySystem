@@ -113,14 +113,16 @@ export function CheckInForm({
     if (phone.length < 10) return
 
     const coords = userCoords ?? await verifyLocation()
-    if (!coords) return
+    // GPS opcional: si falla, continuamos sin coords (el backend decide si bloquear según geo_strict_mode)
+    const lat = coords?.lat
+    const lon = coords?.lon
 
     setLoading(true)
     try {
       const res = await fetch('/api/check-in', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, action: 'lookup', table_number: tableNumber, lat: coords.lat, lon: coords.lon }),
+        body: JSON.stringify({ phone, action: 'lookup', table_number: tableNumber, lat, lon }),
       })
 
       const data = (await res.json()) as LookupResult & { error?: string; message?: string; customer?: { name: string; total_visits: number } }
@@ -135,7 +137,7 @@ export function CheckInForm({
         const checkInRes = await fetch('/api/check-in', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone, action: 'checkin', table_number: tableNumber, lat: coords.lat, lon: coords.lon }),
+          body: JSON.stringify({ phone, action: 'checkin', table_number: tableNumber, lat, lon }),
         })
 
         const checkInData = await checkInRes.json()
@@ -269,23 +271,23 @@ export function CheckInForm({
           )}
 
           {locationStatus === 'denied' && (
-            <div className="text-center py-3 rounded-xl" style={{ background: 'rgba(239,68,68,0.08)' }}>
+            <div className="text-center py-3 rounded-xl" style={{ background: 'rgba(251,191,36,0.08)' }}>
               <div className="flex items-center justify-center gap-1.5 mb-1">
-                <MapPinOff className="h-4 w-4" strokeWidth={1.5} style={{ color: '#dc2626' }} />
-                <p className="text-sm font-medium" style={{ color: '#dc2626' }}>
-                  {locationError || 'Debes activar la ubicación para hacer check-in'}
+                <MapPinOff className="h-4 w-4" strokeWidth={1.5} style={{ color: '#d97706' }} />
+                <p className="text-sm font-medium" style={{ color: '#d97706' }}>
+                  {locationError || 'No pudimos verificar tu ubicación'}
                 </p>
               </div>
               <p className="text-xs" style={{ color: '#9ca3af' }}>
-                El QR solo funciona dentro del restaurante
+                Puedes continuar de todos modos. El mesero validará tu presencia.
               </p>
               <button
                 type="button"
-                onClick={() => { setLocationStatus('idle'); setLocationError(null) }}
+                onClick={() => { setLocationStatus('idle'); setLocationError(null); setUserCoords(null) }}
                 className="mt-2 text-xs font-medium underline"
                 style={{ color: '#6b7280' }}
               >
-                Reintentar
+                Reintentar ubicación
               </button>
             </div>
           )}

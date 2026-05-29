@@ -53,6 +53,8 @@ Webhooks validan origen por número autorizado o `CRON_SECRET`.
 | DELETE | /api/dashboard/calendar/events/:id | Cancelar evento (soft-delete) | Admin JWT |
 | POST | /api/dashboard/calendar/media-upload | Subir imagen/video a `event-media` | Admin JWT |
 | DELETE | /api/dashboard/calendar/media-upload?path=X | Borrar asset del bucket | Admin JWT |
+| GET | /api/dashboard/location | Obtener ubicación del restaurante | Admin JWT |
+| PUT | /api/dashboard/location | Actualizar ubicación del restaurante | Admin JWT |
 
 ---
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { Settings, DollarSign, Save, Loader2, CheckCircle, Crown, CalendarHeart, Mail, RefreshCw, MessageCircle, Gift, UserPlus, X, Plus, Zap } from 'lucide-react'
+import { Settings, DollarSign, Save, Loader2, CheckCircle, Crown, CalendarHeart, Mail, RefreshCw, MessageCircle, Gift, UserPlus, X, Plus, Zap, MapPin } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 
@@ -126,6 +126,14 @@ export default function SettingsPage() {
   const [pointsSaving, setPointsSaving] = useState(false)
   const [pointsSaved, setPointsSaved] = useState(false)
 
+  // Location config
+  const [locationLat, setLocationLat] = useState('')
+  const [locationLon, setLocationLon] = useState('')
+  const [locationRadius, setLocationRadius] = useState('20')
+  const [locationAddress, setLocationAddress] = useState('')
+  const [locationSaving, setLocationSaving] = useState(false)
+  const [locationSaved, setLocationSaved] = useState(false)
+
   const saveSetting = useCallback(async (key: string, value: string) => {
     const res = await fetch('/api/dashboard/settings', {
       method: 'PUT',
@@ -143,8 +151,9 @@ export default function SettingsPage() {
       fetch('/api/dashboard/settings').then((r) => r.json()),
       fetch('/api/dashboard/templates').then((r) => r.json()),
       fetch('/api/dashboard/rewards').then((r) => r.json()),
+      fetch('/api/dashboard/location').then((r) => r.ok ? r.json() : null).catch(() => null),
     ])
-      .then(([settingsData, templatesData, rewardsData]) => {
+      .then(([settingsData, templatesData, rewardsData, locationData]) => {
         setSettings(settingsData)
         if (settingsData.avg_ticket) setAvgTicket(settingsData.avg_ticket)
         if (settingsData.black_benefits) {
@@ -178,6 +187,13 @@ export default function SettingsPage() {
         if (settingsData.shortfall_max) setShortfallMax(settingsData.shortfall_max)
         if (settingsData.pity_timer_threshold) setPityThreshold(settingsData.pity_timer_threshold)
         if (settingsData.points_system_enabled !== undefined) setPointsEnabled(settingsData.points_system_enabled === 'true')
+
+        if (locationData) {
+          setLocationLat(String(locationData.lat ?? ''))
+          setLocationLon(String(locationData.lon ?? ''))
+          setLocationRadius(String(locationData.radius_meters ?? '20'))
+          setLocationAddress(locationData.address ?? '')
+        }
       })
       .catch(() => {})
       .finally(() => {
@@ -252,6 +268,28 @@ export default function SettingsPage() {
       setTimeout(() => setPointsSaved(false), 3000)
     } catch { /* silent */ } finally {
       setPointsSaving(false)
+    }
+  }
+
+  const handleSaveLocation = async () => {
+    setLocationSaving(true)
+    setLocationSaved(false)
+    try {
+      const res = await fetch('/api/dashboard/location', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lat: parseFloat(locationLat),
+          lon: parseFloat(locationLon),
+          radius_meters: parseInt(locationRadius) || 20,
+          address: locationAddress || undefined,
+        }),
+      })
+      if (!res.ok) throw new Error('Error guardando')
+      setLocationSaved(true)
+      setTimeout(() => setLocationSaved(false), 3000)
+    } catch { /* silent */ } finally {
+      setLocationSaving(false)
     }
   }
 
@@ -445,6 +483,80 @@ export default function SettingsPage() {
           </div>
 
           <SaveButton saving={pointsSaving} saved={pointsSaved} onClick={handleSavePoints} disabled={pointsSaving || loading} />
+        </div>
+      </div>
+
+      {/* ─── UBICACIÓN DEL LOCAL ─── */}
+      <div className="dashboard-card p-6 max-w-2xl" style={{ border: '1px solid rgba(59, 130, 246, 0.15)' }}>
+        <div className="flex items-center gap-3 mb-6">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ background: 'rgba(59, 130, 246, 0.15)' }}>
+            <MapPin className="h-5 w-5" strokeWidth={1.5} style={{ color: '#3b82f6' }} />
+          </div>
+          <div>
+            <h2 className="text-base font-bold" style={{ color: '#1a1c1d' }}>Ubicación del Local</h2>
+            <p className="text-xs" style={{ color: '#9ca3af' }}>Configura la ubicación para validar que los clientes estén físicamente en el restaurante al hacer check-in.</p>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold" style={{ color: '#6b7280' }}>Latitud</label>
+              <Input
+                type="text"
+                value={locationLat}
+                onChange={(e) => setLocationLat(e.target.value)}
+                placeholder="6.244203"
+                disabled={loading}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold" style={{ color: '#6b7280' }}>Longitud</label>
+              <Input
+                type="text"
+                value={locationLon}
+                onChange={(e) => setLocationLon(e.target.value)}
+                placeholder="-75.581211"
+                disabled={loading}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold" style={{ color: '#6b7280' }}>Radio (metros)</label>
+              <Input
+                type="number"
+                min={5}
+                max={500}
+                value={locationRadius}
+                onChange={(e) => setLocationRadius(e.target.value)}
+                placeholder="20"
+                disabled={loading}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold" style={{ color: '#6b7280' }}>Dirección (opcional)</label>
+              <Input
+                type="text"
+                value={locationAddress}
+                onChange={(e) => setLocationAddress(e.target.value)}
+                placeholder="Carrera 43A # 1A Sur-50"
+                disabled={loading}
+              />
+            </div>
+          </div>
+
+          <p className="text-[10px]" style={{ color: '#b0b0b0' }}>
+            Google Maps → clic derecho en tu local → «Qué hay aquí» → copia lat y lon. Radio recomendado: 20-50m.
+          </p>
+
+          <SaveButton
+            saving={locationSaving}
+            saved={locationSaved}
+            onClick={handleSaveLocation}
+            disabled={locationSaving || loading || !locationLat || !locationLon}
+          />
         </div>
       </div>
 

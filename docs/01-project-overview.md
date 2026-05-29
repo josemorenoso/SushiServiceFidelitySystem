@@ -35,6 +35,7 @@ Plataforma integral (Full-Stack) de fidelización, CRM y automatización de mark
 | 8 | Modelo clone-por-cliente | ✅ En producción — Sushi Service desplegado |
 | 9 | Radar de Segmentos + dashboard auto-refresh | ✅ v0.25.0 — SegmentRadar en campañas |
 | 10 | Sistema de Puntos + Mystery Box | ✅ v1.0.0–v1.0.3 — Algoritmo inteligente de 3 visitas, tiers acumulativos, pity timer, global caps. v1.0.3: Dashboard CRUD de tiers + Mystery Box, configuración de puntos en settings, welcome bonus aleatorio |
+| 11 | Geolocalización anti QR-scam | ✅ v1.0.5 — GPS check-in, validación de distancia, Dashboard settings de ubicación |
 
 ## Modelo de Despliegue
 El sistema funciona como **clone-por-cliente**: cada restaurante tiene su propio proyecto Supabase + proyecto Vercel + rama GitHub, todos compartiendo una única cuenta Twilio (Messaging Service centralizado). La configuración por cliente se gestiona vía variables de entorno en Vercel.

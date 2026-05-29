@@ -10,6 +10,15 @@ import { syncGoogleContact } from '@/services/google-contacts-sync.service'
 import { rateLimit, getClientIp } from '@/lib/rate-limit'
 import { awardVisitPoints, awardWelcomeBonus } from '@/services/points.service'
 import { evaluateNewTier, getNextTier, buildTiersRoadmap, updateCustomerTier, getAllTiers } from '@/services/reward-tiers.service'
+import { calculateDistanceMeters } from '@/lib/utils/geolocation'
+import { createClient as createServiceClient } from '@supabase/supabase-js'
+
+function getServiceClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) throw new Error('Missing Supabase env vars')
+  return createServiceClient(url, key)
+}
 
 // Rate limits por IP
 const LOOKUP_MAX = 30         // 30 lookups/min por IP (bajo para evitar enumeración)
@@ -26,6 +35,8 @@ interface CheckInRequestBody {
   city?: string | null
   accepts_marketing?: boolean
   table_number?: number | null
+  lat?: number | null
+  lon?: number | null
 }
 
 /**
@@ -91,6 +102,32 @@ export async function POST(request: NextRequest) {
             headers: { 'Retry-After': String(rl.retryAfterSeconds) },
           }
         )
+      }
+    }
+
+    // ─── VALIDACIÓN DE GEOLOCALIZACIÓN ───
+    const { lat, lon } = body
+    if (lat != null && lon != null) {
+      const { data: location } = await getServiceClient()
+        .from('restaurant_locations')
+        .select('lat, lon, radius_meters')
+        .eq('is_active', true)
+        .single()
+
+      if (location) {
+        const distance = calculateDistanceMeters(
+          lat, lon,
+          Number(location.lat), Number(location.lon)
+        )
+        if (distance > location.radius_meters) {
+          return NextResponse.json(
+            {
+              error: 'Fuera del local',
+              message: `Debes estar dentro del restaurante para hacer check-in (${Math.round(distance)}m de distancia)`,
+            },
+            { status: 403 }
+          )
+        }
       }
     }
 
@@ -234,6 +271,26 @@ export async function POST(request: NextRequest) {
 
       const updated = await incrementVisit(customer.id, customer.total_visits, 'qr')
       const visit = await createVisit({ customerId: customer.id, source: 'qr', tableNumber: body.table_number ?? null })
+
+      // Guardar coordenadas del check-in para analytics
+      if (lat != null && lon != null) {
+        try {
+          const svc = getServiceClient()
+          const { data: loc } = await svc
+            .from('restaurant_locations')
+            .select('lat, lon')
+            .eq('is_active', true)
+            .single()
+          const dist = loc ? Math.round(calculateDistanceMeters(lat, lon, Number(loc.lat), Number(loc.lon))) : null
+          await svc.from('customers').update({
+            checkin_lat: lat,
+            checkin_lon: lon,
+            checkin_distance_meters: dist,
+          }).eq('id', customer.id)
+        } catch (geoErr) {
+          console.error('[CheckIn] Error guardando coords:', geoErr)
+        }
+      }
 
       // Otorgar puntos aleatorios por la visita
       const previousPoints = customer.total_points ?? 0

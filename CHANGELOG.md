@@ -5,6 +5,28 @@
 
 ---
 
+## [1.0.5] — 2026-05-28 — Geolocalización anti QR-scam + Dashboard ubicación
+
+### Added
+
+**Frontend — Geolocalización en CheckInForm:**
+- `src/components/features/check-in/CheckInForm.tsx`: Pide GPS antes de enviar formulario. Estados visuales: requesting (amarillo), verified (verde), denied (rojo con botón reintentar). Envía `lat` y `lon` en el body del POST a `/api/check-in` en lookup, checkin y register.
+
+**Backend — Validación de distancia en check-in:**
+- `src/app/api/check-in/route.ts`: Recibe `lat` y `lon` del body. Consulta `restaurant_locations` para obtener coordenadas del local. Calcula distancia con `calculateDistanceMeters()`. Si `distance > radius_meters` → retorna 403 "Fuera del local". Guarda `checkin_lat`, `checkin_lon`, `checkin_distance_meters` en `customers` tras check-in exitoso.
+
+**API — Endpoint de ubicación del restaurante:**
+- `src/app/api/dashboard/location/route.ts` — **NUEVO**: GET (leer ubicación activa) y PUT (actualizar lat/lon/radius/address) para `restaurant_locations`. Auth requerida.
+
+**Dashboard — Sección de ubicación en Ajustes:**
+- `src/app/(dashboard)/dashboard/settings/page.tsx`: Nueva sección "Ubicación del Local" con inputs para latitud, longitud, radio (metros) y dirección. Carga datos desde `/api/dashboard/location` al iniciar. Guarda con PUT al mismo endpoint.
+
+**Documentación:**
+- `docs/DB_SCHEMA.md`: Tabla `restaurant_locations`, columnas geolocalización en `customers`, migración 00014.
+- `docs/API_DOCS.md`: Endpoints GET/PUT `/api/dashboard/location`.
+
+---
+
 ## [1.0.4] — 2026-05-25 — Fix plantillas WhatsApp + Customer Journey + Roadmap visual de tiers
 
 ### Fixed

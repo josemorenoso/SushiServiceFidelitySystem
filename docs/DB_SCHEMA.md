@@ -1,7 +1,7 @@
 # Esquema de Base de Datos
 
 **Base de datos:** Supabase (PostgreSQL)
-**Última actualización:** 2026-05-25
+**Última actualización:** 2026-05-28
 
 ---
 
@@ -96,6 +96,7 @@ erDiagram
 | 6 | [authorized_numbers](#authorized_numbers) | Números de meseros autorizados | SI | Admin: CRUD completo |
 | 7 | [admin_settings](#admin_settings) | Configuración del admin (key-value) | SI | Admin: SELECT, INSERT, UPDATE |
 | 8 | [restaurant_events](#restaurant_events) | Calendario operativo de eventos/promos con media | SI | Admin: CRUD completo |
+| 9 | [restaurant_locations](#restaurant_locations) | Ubicación del restaurante para validación de geolocalización | SI | Admin: ALL, Service: SELECT |
 
 ---
 
@@ -117,6 +118,9 @@ erDiagram
 | `source_channels` | `text` | NO | `'qr'` | Origen del cliente: 'qr', 'delivery' o 'both' |
 | `last_campaign_at` | `timestamptz` | SI | `NULL` | Fecha de última campaña recibida (frequency cap) |
 | `accepts_marketing` | `boolean` | NO | `true` | Si el cliente acepta comunicaciones de marketing |
+| `checkin_lat` | `numeric(10,8)` | SI | `NULL` | Última latitud de check-in |
+| `checkin_lon` | `numeric(11,8)` | SI | `NULL` | Última longitud de check-in |
+| `checkin_distance_meters` | `integer` | SI | `NULL` | Distancia al local en el último check-in (metros) |
 | `created_at` | `timestamptz` | NO | `now()` | Fecha de creación |
 | `updated_at` | `timestamptz` | NO | `now()` | Última actualización |
 
@@ -126,6 +130,7 @@ erDiagram
 |--------|----------|------|
 | `customers_pkey` | `id` | PRIMARY KEY |
 | `customers_phone_key` | `phone` | UNIQUE |
+| `idx_customers_checkin_location` | `(checkin_lat, checkin_lon)` | BTREE (parcial: WHERE checkin_lat IS NOT NULL) |
 
 **Políticas RLS:**
 
@@ -371,6 +376,39 @@ CREATE POLICY "service_update_restaurant_events" ON restaurant_events FOR UPDATE
 
 ---
 
+### restaurant_locations
+
+> Ubicación del restaurante para validación de geolocalización anti QR-scam.
+
+| Columna | Tipo | Nullable | Default | Descripción |
+|---------|------|----------|---------|-------------|
+| `id` | `uuid` | NO | `gen_random_uuid()` | PK |
+| `name` | `text` | NO | `'Sede principal'` | Nombre de la sede |
+| `address` | `text` | SI | `NULL` | Dirección del local |
+| `lat` | `numeric(10,8)` | NO | - | Latitud |
+| `lon` | `numeric(11,8)` | NO | - | Longitud |
+| `radius_meters` | `integer` | NO | `20` | Radio permitido para check-in (metros) |
+| `is_active` | `boolean` | NO | `true` | Si la ubicación está activa |
+| `created_at` | `timestamptz` | NO | `now()` | Fecha de creación |
+| `updated_at` | `timestamptz` | NO | `now()` | Última actualización |
+
+**Políticas RLS:**
+
+```sql
+CREATE POLICY "admin_all_restaurant_locations" ON restaurant_locations
+  FOR ALL USING (auth.role() = 'authenticated');
+CREATE POLICY "service_select_restaurant_locations" ON restaurant_locations
+  FOR SELECT USING (true);
+```
+
+**Seed data:**
+
+| name | address | lat | lon | radius_meters |
+|------|---------|-----|-----|---------------|
+| Sede principal | Actualizar dirección | 6.244203 | -75.581211 | 20 |
+
+---
+
 ## Storage Buckets
 
 ### event-media
@@ -409,6 +447,7 @@ CREATE POLICY "service_update_restaurant_events" ON restaurant_events FOR UPDATE
 | 10 | `00010_rewards_optional_milestone.sql` | 2026-05-07 | `rewards.visit_milestone` nullable + índice único parcial | Pendiente |
 | 11 | `00011_rewards_black_tier.sql` | 2026-05-12 | `rewards.is_black` boolean para nivel BLACK | Pendiente |
 | 12 | `00012_calendar_events_and_media.sql` | 2026-05-23 | Tabla `restaurant_events`, columnas `source/media_url/media_type` en `campaigns`, bucket `event-media` + RLS de Storage | Pendiente |
+| 14 | `00014_geolocation.sql` | 2026-05-25 | Tabla `restaurant_locations`, columnas `checkin_lat/checkin_lon/checkin_distance_meters` en `customers`, función `calculate_distance()` Haversine | Pendiente |
 
 ---
 
@@ -441,3 +480,4 @@ $$ LANGUAGE plpgsql;
 | authorized_numbers | Admin | Admin | Admin | Admin |
 | admin_settings | Admin | Admin | Admin | NO |
 | restaurant_events | Admin + Service | Admin + Service | Admin + Service | Admin |
+| restaurant_locations | Admin + Service | Admin | Admin | Admin |

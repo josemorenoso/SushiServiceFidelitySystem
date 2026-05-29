@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { Loader2, Phone, User, MapPin, ArrowLeft } from 'lucide-react'
+import { Loader2, Phone, User, MapPin, ArrowLeft, MapPinOff } from 'lucide-react'
+import { getCurrentPosition } from '@/lib/utils/geolocation'
 
 const COLOMBIAN_CITIES = [
   'Medellín','Envigado','Itagüí','Bello','Sabaneta','La Estrella','Caldas','Copacabana','Girardota','Barbosa',
@@ -76,6 +77,27 @@ export function CheckInForm({
   const [loading, setLoading] = useState(false)
   const [tableNumber, setTableNumber] = useState<number | null>(null)
 
+  const [locationStatus, setLocationStatus] = useState<'idle' | 'requesting' | 'verified' | 'denied' | 'error'>('idle')
+  const [locationError, setLocationError] = useState<string | null>(null)
+  const [userCoords, setUserCoords] = useState<{ lat: number; lon: number } | null>(null)
+
+  const verifyLocation = async (): Promise<{ lat: number; lon: number } | null> => {
+    setLocationStatus('requesting')
+    setLocationError(null)
+    try {
+      const pos = await getCurrentPosition(10000)
+      const coords = { lat: pos.coords.latitude, lon: pos.coords.longitude }
+      setUserCoords(coords)
+      setLocationStatus('verified')
+      return coords
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error de ubicación'
+      setLocationError(msg)
+      setLocationStatus('denied')
+      return null
+    }
+  }
+
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
@@ -90,12 +112,15 @@ export function CheckInForm({
     e.preventDefault()
     if (phone.length < 10) return
 
+    const coords = userCoords ?? await verifyLocation()
+    if (!coords) return
+
     setLoading(true)
     try {
       const res = await fetch('/api/check-in', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, action: 'lookup', table_number: tableNumber }),
+        body: JSON.stringify({ phone, action: 'lookup', table_number: tableNumber, lat: coords.lat, lon: coords.lon }),
       })
 
       const data = (await res.json()) as LookupResult & { error?: string; message?: string; customer?: { name: string; total_visits: number } }
@@ -110,7 +135,7 @@ export function CheckInForm({
         const checkInRes = await fetch('/api/check-in', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone, action: 'checkin', table_number: tableNumber }),
+          body: JSON.stringify({ phone, action: 'checkin', table_number: tableNumber, lat: coords.lat, lon: coords.lon }),
         })
 
         const checkInData = await checkInRes.json()
@@ -157,6 +182,8 @@ export function CheckInForm({
           city: city.trim() || null,
           accepts_marketing: acceptsMarketing,
           table_number: tableNumber,
+          lat: userCoords?.lat,
+          lon: userCoords?.lon,
         }),
       })
 
@@ -225,16 +252,59 @@ export function CheckInForm({
             </p>
           </div>
 
+          {locationStatus === 'requesting' && (
+            <div className="text-center py-3 rounded-xl" style={{ background: 'rgba(251,191,36,0.1)' }}>
+              <p className="text-sm font-medium" style={{ color: '#d97706' }}>
+                Verificando tu ubicación...
+              </p>
+            </div>
+          )}
+
+          {locationStatus === 'verified' && (
+            <div className="text-center py-2 rounded-xl" style={{ background: 'rgba(5,150,105,0.08)' }}>
+              <p className="text-xs font-medium" style={{ color: '#059669' }}>
+                Ubicación verificada
+              </p>
+            </div>
+          )}
+
+          {locationStatus === 'denied' && (
+            <div className="text-center py-3 rounded-xl" style={{ background: 'rgba(239,68,68,0.08)' }}>
+              <div className="flex items-center justify-center gap-1.5 mb-1">
+                <MapPinOff className="h-4 w-4" strokeWidth={1.5} style={{ color: '#dc2626' }} />
+                <p className="text-sm font-medium" style={{ color: '#dc2626' }}>
+                  {locationError || 'Debes activar la ubicación para hacer check-in'}
+                </p>
+              </div>
+              <p className="text-xs" style={{ color: '#9ca3af' }}>
+                El QR solo funciona dentro del restaurante
+              </p>
+              <button
+                type="button"
+                onClick={() => { setLocationStatus('idle'); setLocationError(null) }}
+                className="mt-2 text-xs font-medium underline"
+                style={{ color: '#6b7280' }}
+              >
+                Reintentar
+              </button>
+            </div>
+          )}
+
           <button
             type="submit"
             className="btn-premium mt-2 flex h-[52px] w-full items-center justify-center gap-2 rounded-xl text-sm font-semibold"
             style={{ letterSpacing: "-0.01em" }}
-            disabled={phone.length < 10 || loading}
+            disabled={phone.length < 10 || loading || locationStatus === 'requesting'}
           >
             {loading ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.5} />
                 Buscando...
+              </>
+            ) : locationStatus === 'requesting' ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.5} />
+                Verificando ubicación...
               </>
             ) : (
               'Continuar'

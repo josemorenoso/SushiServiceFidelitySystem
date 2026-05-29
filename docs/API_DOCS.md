@@ -2,7 +2,7 @@
 
 **Base URL:** `/api`
 **Autenticación:** Bearer Token (JWT) — Supabase Auth
-**Última actualización:** 2026-05-23
+**Última actualización:** 2026-05-28
 
 ---
 
@@ -117,8 +117,10 @@ Endpoint unificado con 3 acciones: `lookup`, `register`, `checkin`.
 #### Lookup (buscar cliente)
 **Request:**
 ```json
-{ "phone": "3001234567", "action": "lookup" }
+{ "phone": "3001234567", "action": "lookup", "lat": 6.244203, "lon": -75.581211 }
 ```
+> `lat` y `lon` son opcionales en `lookup` y `register`, pero **obligatorios** en `checkin`.
+
 **Response 200 (encontrado):**
 ```json
 { "found": true, "customer": { "name": "Juan", "total_visits": 4 } }
@@ -131,7 +133,7 @@ Endpoint unificado con 3 acciones: `lookup`, `register`, `checkin`.
 #### Register (cliente nuevo)
 **Request:**
 ```json
-{ "phone": "3001234567", "action": "register", "name": "Juan Pérez", "birthday": "1990-05-15", "city": "Bogotá" }
+{ "phone": "3001234567", "action": "register", "name": "Juan Pérez", "birthday": "1990-05-15", "city": "Bogotá", "lat": 6.244203, "lon": -75.581211 }
 ```
 **Response 201:**
 ```json
@@ -141,12 +143,18 @@ Endpoint unificado con 3 acciones: `lookup`, `register`, `checkin`.
 #### Check-in (cliente existente)
 **Request:**
 ```json
-{ "phone": "3001234567", "action": "checkin" }
+{ "phone": "3001234567", "action": "checkin", "lat": 6.244203, "lon": -75.581211 }
 ```
 **Response 200:**
 ```json
 { "message": "welcome_back", "customer": { "name": "Juan", "total_visits": 5 }, "reward": { "title": "Postre gratis", "message": "..." } }
 ```
+**Response 403 (fuera del restaurante):**
+```json
+{ "error": "Fuera del local", "message": "Debes estar dentro del restaurante para hacer check-in (150m de distancia)" }
+```
+> Ocurre cuando el cliente envía `lat`/`lon` y la distancia calculada (Haversine) supera `radius_meters` de `restaurant_locations`.
+
 **Response 429 (check-in duplicado < 1h):**
 ```json
 { "error": "Check-in reciente", "message": "Ya registraste una visita...", "customer": { "name": "Juan", "total_visits": 5 } }

@@ -27,6 +27,20 @@
 
 ---
 
+## [1.0.5-1] — 2026-05-28 — Fix: Migración y helper de geolocalización faltantes
+
+### Fixed
+
+**Archivos de geolocalización reconstruidos:**
+- `supabase/migrations/00014_geolocation.sql` — **RESTAURADO**: Contiene ALTER TABLE `customers` (columnas `checkin_lat`, `checkin_lon`, `checkin_distance_meters`), CREATE TABLE `restaurant_locations`, índice parcial `idx_customers_checkin_location`, RLS policies, trigger `handle_updated_at` y seed data de la sede principal. Este archivo había desaparecido del directorio de migraciones.
+- `src/lib/utils/geolocation.ts` — **CREADO**: Helper con `getCurrentPosition()` (wrapper promisificado de `navigator.geolocation`) y `calculateDistanceMeters()` (fórmula Haversine). El build fallaba porque `check-in/route.ts` y `CheckInForm.tsx` lo importaban pero el archivo no existía.
+
+### Archivos afectados
+- `supabase/migrations/00014_geolocation.sql`
+- `src/lib/utils/geolocation.ts`
+
+---
+
 ## [1.0.4] — 2026-05-25 — Fix plantillas WhatsApp + Customer Journey + Roadmap visual de tiers
 
 ### Fixed

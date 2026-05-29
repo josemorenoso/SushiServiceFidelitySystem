@@ -11,7 +11,7 @@
 - Migración `00014_geolocation.sql` ejecutada:
   - Tabla `restaurant_locations` (lat, lon, radius_meters)
   - Columnas `checkin_lat`, `checkin_lon`, `checkin_distance_meters` en `customers`
-  - Función `calculate_distance()` (Haversine) en PostgreSQL
+  - Helper `calculateDistanceMeters()` (Haversine) en TypeScript (`src/lib/utils/geolocation.ts`)
 
 ### 2. Utilidades frontend
 - `src/lib/utils/geolocation.ts`:
@@ -20,28 +20,29 @@
 
 ---
 
-## 🔴 Qué DEBES hacer tú
+## � Referencia de componentes implementados
 
-### Paso 1: Configurar ubicación del local en Supabase
+### Paso 1: Configurar ubicación del local
 
-Por cada restaurante, ejecuta esto en Supabase SQL Editor:
+**Opción A — Dashboard (recomendado):**
+Ve a `/dashboard/settings` → sección "Ubicación del Local". Edita latitud, longitud, radio y dirección. Guarda con el botón.
+
+**Opción B — SQL directo:**
+Ejecuta en Supabase SQL Editor:
 
 ```sql
--- Actualizar con las coordenadas reales del local
 UPDATE restaurant_locations
 SET 
-  lat = 6.244203,        -- ← REEMPLAZA con latitud real
-  lon = -75.581211,      -- ← REEMPLAZA con longitud real
+  lat = 6.244203,
+  lon = -75.581211,
   address = 'Carrera 43A # 1A Sur-50, Medellín',
-  radius_meters = 20     -- ← Radio permitido (default 20m)
+  radius_meters = 20
 WHERE id = (SELECT id FROM restaurant_locations LIMIT 1);
 ```
 
 **Cómo obtener lat/lon:**
-1. Ve a Google Maps
-2. Busca tu dirección
-3. Clic derecho → "¿Qué hay aquí?" → copia los números (lat, lon)
-4. O usa: https://www.latlong.net
+1. Google Maps → busca la dirección → clic derecho → "¿Qué hay aquí?"
+2. O usa https://www.latlong.net
 
 ---
 
@@ -230,16 +231,14 @@ const loadLocation = async () => {
 // Función saveLocation:
 const saveLocation = async () => {
   setSaving(true)
-  await fetch('/api/dashboard/settings', {
+  await fetch('/api/dashboard/location', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      key: 'restaurant_location',
-      value: JSON.stringify({
-        lat: parseFloat(restaurantLocation.lat),
-        lon: parseFloat(restaurantLocation.lon),
-        radius_meters: parseInt(restaurantLocation.radius) || 20,
-      }),
+      lat: parseFloat(restaurantLocation.lat),
+      lon: parseFloat(restaurantLocation.lon),
+      radius_meters: parseInt(restaurantLocation.radius) || 20,
+      address: restaurantLocation.address,
     }),
   })
   setSaving(false)
@@ -283,20 +282,21 @@ export async function GET() {
 | 1 | Mergear PR en GitHub | GitHub → Pull Requests → Merge |
 | 2 | Ejecutar migración 00013 | Supabase SQL Editor → `supabase/migrations/00013_points_mystery_box.sql` |
 | 3 | Ejecutar migración 00014 | Supabase SQL Editor → `supabase/migrations/00014_geolocation.sql` |
-| 4 | Ejecutar migración 00015 | Supabase SQL Editor → `supabase/migrations/00015_migrate_visits_to_points.sql` |
-| 5 | Configurar ubicación del local | Supabase → `UPDATE restaurant_locations SET lat=..., lon=...` |
-| 6 | Insertar tiers por defecto | Supabase → `INSERT INTO reward_tiers ...` (Bronce/Plata/Oro/BLACK) |
-| 7 | Configurar settings de puntos | Dashboard → Ajustes → Sistema de Puntos |
-| 8 | Configurar plantillas Twilio | Dashboard → Ajustes → asignar SIDs |
-| 9 | Deploy Vercel | `git push` → Vercel auto-deploy |
-| 10 | Probar check-in | Escanear QR desde el local (dentro de 20m) |
+| 4 | Configurar ubicación del local | Dashboard → Ajustes → Ubicación del Local, o SQL directo |
+| 5 | Insertar tiers por defecto | Supabase → `INSERT INTO reward_tiers ...` (Bronce/Plata/Oro/BLACK) |
+| 6 | Configurar settings de puntos | Dashboard → Ajustes → Sistema de Puntos |
+| 7 | Configurar plantillas Twilio | Dashboard → Ajustes → asignar SIDs |
+| 8 | Deploy Vercel | `git push` → Vercel auto-deploy |
+| 9 | Probar check-in | Escanear QR desde el local (dentro de 20m) |
 
 ---
 
-## 📍 Branches enviadas a cada repo
+## 📍 Estado en repos
 
-| Repo | Branch | PR URL |
+Todo el código de geolocalización (v1.0.5) y los fixes de migración (v1.0.5-1) están en `main` de las 3 repos:
+
+| Repo | Branch | Estado |
 |------|--------|--------|
-| SushiServiceFidelitySystem | `feat/points-mystery-box-system` | https://github.com/josemorenoso/SushiServiceFidelitySystem/pull/new/feat/points-mystery-box-system |
-| Sushi-Fun-System | `feat/points-mystery-box-system` | https://github.com/josemorenoso/Sushi-Fun-System/pull/new/feat/points-mystery-box-system |
-| Restaurant_Fidelity_System | `feat/points-mystery-box-system` | Ya en repo principal (origin) |
+| `Restaurant_Fidelity_System` (origin) | `main` | ✅ v1.0.5-1 |
+| `SushiServiceFidelitySystem` (sushi) | `main` | ✅ v1.0.5-1 |
+| `Sushi-Fun-System` (fun) | `main` | ✅ v1.0.5-1 |

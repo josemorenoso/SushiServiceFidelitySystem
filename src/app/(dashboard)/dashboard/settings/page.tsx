@@ -491,93 +491,60 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* ─── UBICACIÓN DEL LOCAL ─── */}
-      <div className="dashboard-card p-6 max-w-2xl" style={{ border: '1px solid rgba(59, 130, 246, 0.15)' }}>
+      {/* ─── UBICACIÓN DEL LOCAL — PRÓXIMAMENTE ─── */}
+      <div className="dashboard-card p-6 max-w-2xl relative" style={{ border: '1px solid rgba(59, 130, 246, 0.15)' }}>
         <div className="flex items-center gap-3 mb-6">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ background: 'rgba(59, 130, 246, 0.15)' }}>
             <MapPin className="h-5 w-5" strokeWidth={1.5} style={{ color: '#3b82f6' }} />
           </div>
           <div>
             <h2 className="text-base font-bold" style={{ color: '#1a1c1d' }}>Ubicación del Local</h2>
-            <p className="text-xs" style={{ color: '#9ca3af' }}>Configura la ubicación para validar que los clientes estén físicamente en el restaurante al hacer check-in.</p>
+            <p className="text-xs" style={{ color: '#9ca3af' }}>Validación GPS para check-in</p>
           </div>
         </div>
 
-        <div className="space-y-4">
+        {/* Overlay Próximamente */}
+        <div
+          className="absolute inset-0 z-10 flex flex-col items-center justify-center rounded-2xl"
+          style={{ background: 'rgba(26, 28, 29, 0.75)', backdropFilter: 'blur(2px)' }}
+        >
+          <span
+            className="px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest"
+            style={{ background: '#374151', color: '#9ca3af' }}
+          >
+            Próximamente
+          </span>
+          <p className="mt-3 text-xs font-medium" style={{ color: '#9ca3af' }}>
+            Validación por GPS desactivada temporalmente
+          </p>
+        </div>
+
+        {/* Contenido standby (oculto bajo overlay) */}
+        <div className="space-y-4 opacity-30 pointer-events-none">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-[11px] font-semibold" style={{ color: '#6b7280' }}>Latitud</label>
-              <Input
-                type="text"
-                value={locationLat}
-                onChange={(e) => setLocationLat(e.target.value)}
-                placeholder="6.244203"
-                disabled={loading}
-              />
+              <Input type="text" value={locationLat} onChange={() => {}} placeholder="6.244203" disabled />
             </div>
             <div className="space-y-1">
               <label className="text-[11px] font-semibold" style={{ color: '#6b7280' }}>Longitud</label>
-              <Input
-                type="text"
-                value={locationLon}
-                onChange={(e) => setLocationLon(e.target.value)}
-                placeholder="-75.581211"
-                disabled={loading}
-              />
+              <Input type="text" value={locationLon} onChange={() => {}} placeholder="-75.581211" disabled />
             </div>
           </div>
-
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-[11px] font-semibold" style={{ color: '#6b7280' }}>Radio (metros)</label>
-              <Input
-                type="number"
-                min={5}
-                max={500}
-                value={locationRadius}
-                onChange={(e) => setLocationRadius(e.target.value)}
-                placeholder="20"
-                disabled={loading}
-              />
+              <Input type="number" min={5} max={500} value={locationRadius} onChange={() => {}} placeholder="20" disabled />
             </div>
             <div className="space-y-1">
               <label className="text-[11px] font-semibold" style={{ color: '#6b7280' }}>Dirección (opcional)</label>
-              <Input
-                type="text"
-                value={locationAddress}
-                onChange={(e) => setLocationAddress(e.target.value)}
-                placeholder="Carrera 43A # 1A Sur-50"
-                disabled={loading}
-              />
+              <Input type="text" value={locationAddress} onChange={() => {}} placeholder="Carrera 43A # 1A Sur-50" disabled />
             </div>
           </div>
-
-          <p className="text-[10px]" style={{ color: '#b0b0b0' }}>
-            Google Maps → clic derecho en tu local → «Qué hay aquí» → copia lat y lon. Radio recomendado: 20-50m.
-          </p>
-
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={geoStrictMode}
-              onChange={(e) => setGeoStrictMode(e.target.checked)}
-              disabled={loading}
-              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-            />
-            <span className="text-xs font-medium" style={{ color: '#1a1c1d' }}>
-              Modo estricto: requerir GPS para hacer check-in
-            </span>
+          <label className="flex items-center gap-2 select-none">
+            <input type="checkbox" checked={geoStrictMode} disabled className="h-4 w-4 rounded border-gray-300" />
+            <span className="text-xs font-medium" style={{ color: '#1a1c1d' }}>Modo estricto: requerir GPS</span>
           </label>
-          <p className="text-[10px] -mt-2 ml-6" style={{ color: '#b0b0b0' }}>
-            Si está activo, los clientes sin GPS no podrán registrar visitas. Recomendado: desactivado (el mesero valida presencia física).
-          </p>
-
-          <SaveButton
-            saving={locationSaving}
-            saved={locationSaved}
-            onClick={handleSaveLocation}
-            disabled={locationSaving || loading || !locationLat || !locationLon}
-          />
         </div>
       </div>
 

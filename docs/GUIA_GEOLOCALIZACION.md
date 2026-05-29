@@ -1,7 +1,7 @@
 # Guía: Implementación de Geolocalización — Anti QR-Scam
 
-> **Estado:** ✅ COMPLETO (v1.0.5-2). Frontend, API validation, Dashboard settings + Toggle modo estricto implementados.
-> **Objetivo:** Evitar que escaneen el QR fuera del local. **Nota:** GPS es opcional por defecto. El admin puede activar modo estricto si lo desea.
+> **Estado:** ⏸️ STANDBY (v1.0.5-3). Desactivada por fricción con usuarios. Todo el código permanece comentado en el repo para reactivación futura.
+> **Objetivo:** Evitar que escaneen el QR fuera del local. **Nota:** Desactivada temporalmente. El anti-QR-scam real será implementado vía **mesero escanea QR del cliente** (`staff-qr-scan.md`).
 
 ---
 

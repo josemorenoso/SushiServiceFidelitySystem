@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { Loader2, Phone, User, MapPin, ArrowLeft, MapPinOff } from 'lucide-react'
-import { getCurrentPosition } from '@/lib/utils/geolocation'
+import { Loader2, Phone, User, MapPin, ArrowLeft } from 'lucide-react'
+// import { getCurrentPosition } from '@/lib/utils/geolocation'  // standby — desactivado v1.0.5-3
 
 const COLOMBIAN_CITIES = [
   'Medellín','Envigado','Itagüí','Bello','Sabaneta','La Estrella','Caldas','Copacabana','Girardota','Barbosa',
@@ -77,26 +77,27 @@ export function CheckInForm({
   const [loading, setLoading] = useState(false)
   const [tableNumber, setTableNumber] = useState<number | null>(null)
 
-  const [locationStatus, setLocationStatus] = useState<'idle' | 'requesting' | 'verified' | 'denied' | 'error'>('idle')
-  const [locationError, setLocationError] = useState<string | null>(null)
-  const [userCoords, setUserCoords] = useState<{ lat: number; lon: number } | null>(null)
+  // ─── Geolocalización standby — desactivado v1.0.5-3 ───
+  // const [locationStatus, setLocationStatus] = useState<'idle' | 'requesting' | 'verified' | 'denied' | 'error'>('idle')
+  // const [locationError, setLocationError] = useState<string | null>(null)
+  // const [userCoords, setUserCoords] = useState<{ lat: number; lon: number } | null>(null)
 
-  const verifyLocation = async (): Promise<{ lat: number; lon: number } | null> => {
-    setLocationStatus('requesting')
-    setLocationError(null)
-    try {
-      const pos = await getCurrentPosition(10000)
-      const coords = { lat: pos.coords.latitude, lon: pos.coords.longitude }
-      setUserCoords(coords)
-      setLocationStatus('verified')
-      return coords
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Error de ubicación'
-      setLocationError(msg)
-      setLocationStatus('denied')
-      return null
-    }
-  }
+  // const verifyLocation = async (): Promise<{ lat: number; lon: number } | null> => {
+  //   setLocationStatus('requesting')
+  //   setLocationError(null)
+  //   try {
+  //     const pos = await getCurrentPosition(10000)
+  //     const coords = { lat: pos.coords.latitude, lon: pos.coords.longitude }
+  //     setUserCoords(coords)
+  //     setLocationStatus('verified')
+  //     return coords
+  //   } catch (err) {
+  //     const msg = err instanceof Error ? err.message : 'Error de ubicación'
+  //     setLocationError(msg)
+  //     setLocationStatus('denied')
+  //     return null
+  //   }
+  // }
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -112,17 +113,12 @@ export function CheckInForm({
     e.preventDefault()
     if (phone.length < 10) return
 
-    const coords = userCoords ?? await verifyLocation()
-    // GPS opcional: si falla, continuamos sin coords (el backend decide si bloquear según geo_strict_mode)
-    const lat = coords?.lat
-    const lon = coords?.lon
-
     setLoading(true)
     try {
       const res = await fetch('/api/check-in', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, action: 'lookup', table_number: tableNumber, lat, lon }),
+        body: JSON.stringify({ phone, action: 'lookup', table_number: tableNumber }),
       })
 
       const data = (await res.json()) as LookupResult & { error?: string; message?: string; customer?: { name: string; total_visits: number } }
@@ -137,7 +133,7 @@ export function CheckInForm({
         const checkInRes = await fetch('/api/check-in', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone, action: 'checkin', table_number: tableNumber, lat, lon }),
+          body: JSON.stringify({ phone, action: 'checkin', table_number: tableNumber }),
         })
 
         const checkInData = await checkInRes.json()
@@ -184,8 +180,7 @@ export function CheckInForm({
           city: city.trim() || null,
           accepts_marketing: acceptsMarketing,
           table_number: tableNumber,
-          lat: userCoords?.lat,
-          lon: userCoords?.lon,
+          // lat/lon standby — desactivado v1.0.5-3
         }),
       })
 
@@ -254,59 +249,16 @@ export function CheckInForm({
             </p>
           </div>
 
-          {locationStatus === 'requesting' && (
-            <div className="text-center py-3 rounded-xl" style={{ background: 'rgba(251,191,36,0.1)' }}>
-              <p className="text-sm font-medium" style={{ color: '#d97706' }}>
-                Verificando tu ubicación...
-              </p>
-            </div>
-          )}
-
-          {locationStatus === 'verified' && (
-            <div className="text-center py-2 rounded-xl" style={{ background: 'rgba(5,150,105,0.08)' }}>
-              <p className="text-xs font-medium" style={{ color: '#059669' }}>
-                Ubicación verificada
-              </p>
-            </div>
-          )}
-
-          {locationStatus === 'denied' && (
-            <div className="text-center py-3 rounded-xl" style={{ background: 'rgba(251,191,36,0.08)' }}>
-              <div className="flex items-center justify-center gap-1.5 mb-1">
-                <MapPinOff className="h-4 w-4" strokeWidth={1.5} style={{ color: '#d97706' }} />
-                <p className="text-sm font-medium" style={{ color: '#d97706' }}>
-                  {locationError || 'No pudimos verificar tu ubicación'}
-                </p>
-              </div>
-              <p className="text-xs" style={{ color: '#9ca3af' }}>
-                Puedes continuar de todos modos. El mesero validará tu presencia.
-              </p>
-              <button
-                type="button"
-                onClick={() => { setLocationStatus('idle'); setLocationError(null); setUserCoords(null) }}
-                className="mt-2 text-xs font-medium underline"
-                style={{ color: '#6b7280' }}
-              >
-                Reintentar ubicación
-              </button>
-            </div>
-          )}
-
           <button
             type="submit"
             className="btn-premium mt-2 flex h-[52px] w-full items-center justify-center gap-2 rounded-xl text-sm font-semibold"
             style={{ letterSpacing: "-0.01em" }}
-            disabled={phone.length < 10 || loading || locationStatus === 'requesting'}
+            disabled={phone.length < 10 || loading}
           >
             {loading ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.5} />
                 Buscando...
-              </>
-            ) : locationStatus === 'requesting' ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.5} />
-                Verificando ubicación...
               </>
             ) : (
               'Continuar'

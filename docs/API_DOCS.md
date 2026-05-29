@@ -3,6 +3,7 @@
 **Base URL:** `/api`
 **Autenticación:** Bearer Token (JWT) — Supabase Auth
 **Última actualización:** 2026-05-28
+> **Nota:** Validación de geolocalización está en **STANDBY** (v1.0.5-3). El backend no valida GPS por defecto. Puede reactivarse descomentando el bloque en `src/app/api/check-in/route.ts`.
 
 ---
 

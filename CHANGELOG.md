@@ -17,6 +17,26 @@
 
 ---
 
+## [1.0.5-3] — 2026-05-28 — Geolocalización desactivada a STANDBY
+
+### Changed
+
+**Frontend — Geolocalización desactivada:**
+- `src/components/features/check-in/CheckInForm.tsx`: El componente ya no pide GPS ni envía `lat`/`lon`. Toda la lógica de `verifyLocation()`, estados de ubicación y bloques visuales están comentados como standby. El check-in fluye normalmente sin fricción.
+
+**Backend — Validación GPS desactivada:**
+- `src/app/api/check-in/route.ts`: Toda la sección de validación de geolocalización (consulta a `geo_strict_mode`, `restaurant_locations`, cálculo de distancia Haversine) está comentada como standby. El bloque que guardaba `checkin_lat`/`lon`/`distance` en `customers` también está comentado.
+
+**Dashboard — Sección en "Próximamente":**
+- `src/app/(dashboard)/dashboard/settings/page.tsx`: La sección "Ubicación del Local" ahora muestra un overlay oscuro con badge "Próximamente" y el texto "Validación por GPS desactivada temporalmente". Los inputs permanecen debajo (opacity 30%, disabled) como standby visual.
+
+### Archivos afectados
+- `src/components/features/check-in/CheckInForm.tsx`
+- `src/app/api/check-in/route.ts`
+- `src/app/(dashboard)/dashboard/settings/page.tsx`
+
+---
+
 ## [1.0.5-2] — 2026-05-28 — GPS opcional + Toggle modo estricto en Dashboard
 
 ### Changed

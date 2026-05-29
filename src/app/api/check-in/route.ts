@@ -105,48 +105,42 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // ─── VALIDACIÓN DE GEOLOCALIZACIÓN ───
-    const { lat, lon } = body
-    const { data: geoStrictRow } = await getServiceClient()
-      .from('admin_settings')
-      .select('value')
-      .eq('key', 'geo_strict_mode')
-      .single()
-    const geoStrictMode = geoStrictRow?.value === 'true'
+    // ─── VALIDACIÓN DE GEOLOCALIZACIÓN — STANDBY (desactivado v1.0.5-3) ───
+    // const { lat, lon } = body
+    // const { data: geoStrictRow } = await getServiceClient()
+    //   .from('admin_settings')
+    //   .select('value')
+    //   .eq('key', 'geo_strict_mode')
+    //   .single()
+    // const geoStrictMode = geoStrictRow?.value === 'true'
 
-    if (geoStrictMode && (lat == null || lon == null)) {
-      return NextResponse.json(
-        {
-          error: 'Ubicación requerida',
-          message: 'El restaurante requiere activar la ubicación para hacer check-in',
-        },
-        { status: 403 }
-      )
-    }
+    // if (geoStrictMode && (lat == null || lon == null)) {
+    //   return NextResponse.json(
+    //     { error: 'Ubicación requerida', message: 'El restaurante requiere activar la ubicación para hacer check-in' },
+    //     { status: 403 }
+    //   )
+    // }
 
-    if (lat != null && lon != null) {
-      const { data: location } = await getServiceClient()
-        .from('restaurant_locations')
-        .select('lat, lon, radius_meters')
-        .eq('is_active', true)
-        .single()
+    // if (lat != null && lon != null) {
+    //   const { data: location } = await getServiceClient()
+    //     .from('restaurant_locations')
+    //     .select('lat, lon, radius_meters')
+    //     .eq('is_active', true)
+    //     .single()
 
-      if (location) {
-        const distance = calculateDistanceMeters(
-          lat, lon,
-          Number(location.lat), Number(location.lon)
-        )
-        if (distance > location.radius_meters) {
-          return NextResponse.json(
-            {
-              error: 'Fuera del local',
-              message: `Debes estar dentro del restaurante para hacer check-in (${Math.round(distance)}m de distancia)`,
-            },
-            { status: 403 }
-          )
-        }
-      }
-    }
+    //   if (location) {
+    //     const distance = calculateDistanceMeters(
+    //       lat, lon,
+    //       Number(location.lat), Number(location.lon)
+    //     )
+    //     if (distance > location.radius_meters) {
+    //       return NextResponse.json(
+    //         { error: 'Fuera del local', message: `Debes estar dentro del restaurante para hacer check-in (${Math.round(distance)}m de distancia)` },
+    //         { status: 403 }
+    //       )
+    //     }
+    //   }
+    // }
 
     // ─── LOOKUP: buscar si el cliente existe ───
     if (action === 'lookup') {
@@ -289,25 +283,25 @@ export async function POST(request: NextRequest) {
       const updated = await incrementVisit(customer.id, customer.total_visits, 'qr')
       const visit = await createVisit({ customerId: customer.id, source: 'qr', tableNumber: body.table_number ?? null })
 
-      // Guardar coordenadas del check-in para analytics
-      if (lat != null && lon != null) {
-        try {
-          const svc = getServiceClient()
-          const { data: loc } = await svc
-            .from('restaurant_locations')
-            .select('lat, lon')
-            .eq('is_active', true)
-            .single()
-          const dist = loc ? Math.round(calculateDistanceMeters(lat, lon, Number(loc.lat), Number(loc.lon))) : null
-          await svc.from('customers').update({
-            checkin_lat: lat,
-            checkin_lon: lon,
-            checkin_distance_meters: dist,
-          }).eq('id', customer.id)
-        } catch (geoErr) {
-          console.error('[CheckIn] Error guardando coords:', geoErr)
-        }
-      }
+      // Guardar coordenadas del check-in — STANDBY (desactivado v1.0.5-3)
+      // if (lat != null && lon != null) {
+      //   try {
+      //     const svc = getServiceClient()
+      //     const { data: loc } = await svc
+      //       .from('restaurant_locations')
+      //       .select('lat, lon')
+      //       .eq('is_active', true)
+      //       .single()
+      //     const dist = loc ? Math.round(calculateDistanceMeters(lat, lon, Number(loc.lat), Number(loc.lon))) : null
+      //     await svc.from('customers').update({
+      //       checkin_lat: lat,
+      //       checkin_lon: lon,
+      //       checkin_distance_meters: dist,
+      //     }).eq('id', customer.id)
+      //   } catch (geoErr) {
+      //     console.error('[CheckIn] Error guardando coords:', geoErr)
+      //   }
+      // }
 
       // Otorgar puntos aleatorios por la visita
       const previousPoints = customer.total_points ?? 0

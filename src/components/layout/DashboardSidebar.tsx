@@ -14,6 +14,7 @@ import {
   Settings,
   ShieldCheck,
   CalendarDays,
+  UserCog,
 } from 'lucide-react'
 import { BRAND_NAME } from '@/lib/branding'
 
@@ -25,7 +26,8 @@ const navItems = [
   { href: '/dashboard/calendar', label: 'Calendario', icon: CalendarDays },
   { href: '/dashboard/qr', label: 'Código QR', icon: QrCode },
   { href: '/dashboard/templates', label: 'Plantillas', icon: FileText },
-  { href: '/dashboard/authorized-numbers', label: 'Meseros', icon: ShieldCheck },
+  { href: '/dashboard/staff', label: 'Meseros QR', icon: UserCog },
+  { href: '/dashboard/authorized-numbers', label: 'Autorizados Domicilio', icon: ShieldCheck },
   { href: '/dashboard/settings', label: 'Ajustes', icon: Settings },
 ]
 

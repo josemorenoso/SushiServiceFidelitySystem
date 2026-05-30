@@ -1,8 +1,8 @@
 # Feature: Verificación Cliente-Mesero con QR Dinámico
 
-> **Estado:** Pendiente (Documentación de diseño)
+> **Estado:** En progreso (backend completo, frontend admin completado, app mesero completada)
 > **Prioridad:** URGENTE
-> **Archivos clave estimados:** `src/components/features/check-in/CheckInForm.tsx`, `src/app/(public)/mesero/page.tsx`, `src/app/api/check-in/route.ts`
+> **Archivos clave:** `src/components/features/check-in/CheckInForm.tsx`, `src/app/(public)/mesero/page.tsx`, `src/app/api/check-in/route.ts`, `src/app/(dashboard)/dashboard/staff/page.tsx`
 > **Dependencias nuevas:** `qrcode.react` (generación QR cliente), `html5-qrcode` (escaneo mesero), `jose` (JWT para auth de meseros)
 
 ---
@@ -732,23 +732,24 @@ CLIENTE (ambos escenarios)
 
 ### Pendiente actualizado (post-auditoría + nuevo requerimiento)
 
-- [ ] Instalar dependencias: `qrcode.react`, `html5-qrcode`, `jose`, `bcryptjs`
-- [ ] Crear migración SQL: tabla `staff_users`, tabla `staff_devices`, columna `visits.registered_by_staff_id`, ampliar `visits.source` enum implícito
-- [ ] Agregar `checkin_mode` y `checkin_first_visit_free` a seeds de `admin_settings`
-- [ ] Crear API `/api/staff/login`, `/api/staff/me`, `/api/staff/stats`
-- [ ] Crear API `/api/staff/device/register` y `/api/staff/device/verify`
-- [ ] Crear API `/api/dashboard/staff` — CRUD de meseros y dispositivos para admin
+- [x] Instalar dependencias: `qrcode.react`, `html5-qrcode`, `jose`, `bcryptjs`
+- [x] Crear migración SQL: tabla `staff_users`, tabla `staff_devices`, columna `visits.registered_by_staff_id`, ampliar `visits.source` enum implícito
+- [x] Agregar `checkin_mode` y `checkin_first_visit_free` a seeds de `admin_settings`
+- [x] Crear API `/api/staff/login`, `/api/staff/me`, `/api/staff/stats`
+- [x] Crear API `/api/staff/device/register` y `/api/staff/device/verify`
+- [x] Crear API `/api/dashboard/staff` — CRUD de meseros y dispositivos para admin
 - [x] Modificar `POST /api/check-in`: aceptar `source: 'staff_scan'`, `registered_by_staff_id`, `device_token`, `token`; validar staff activo O device trust + token firma/exp; rechazar check-in si `source !== 'staff_scan'`
-- [ ] Ampliar `CheckInRequestBody`, `PointTransactionSource`, `awardVisitPoints()`, `incrementVisit()`
-- [ ] Fix `getRecentVisit()` — quitar filtro `.eq('source', 'qr')`
-- [ ] Modificar lookup para retornar `checkin_mode`, `checkin_first_visit_free`, `current_tier`
+- [x] Ampliar `CheckInRequestBody`, `PointTransactionSource`, `awardVisitPoints()`, `incrementVisit()`
+- [x] Fix `getRecentVisit()` — quitar filtro `.eq('source', 'qr')`
+- [x] Modificar lookup para retornar `checkin_mode`, `checkin_first_visit_free`, `current_tier`
 - [x] Modificar `CheckInForm.tsx` para detener auto-check-in y mostrar QR dinámico (token JWT)
-- [ ] Crear rutas `/mesero`, `/mesero/activate`, `/mesero/dashboard`, `/mesero/scan`, `/mesero/confirm`
-- [ ] Crear hook `useStaffAuth.ts` y componentes de staff (incluyendo `StaffDeviceActivation`)
+- [x] Crear rutas `/mesero`, `/mesero/activate`, `/mesero/dashboard`, `/mesero/scan`, `/mesero/confirm`
+- [x] Crear hook `useStaffAuth.ts` y componentes de staff (incluyendo `StaffDeviceActivation`)
+- [x] Crear frontend admin `/dashboard/staff` — CRUD de meseros con PIN, toggle activo, reset PIN, dispositivos de confianza
 - [ ] Agregar RLS para `staff_users` y `staff_devices`
 - [ ] Actualizar `docs/DB_SCHEMA.md`, `docs/API_DOCS.md`, `docs/03-security.md`, `docs/02-architecture.md`
-- [ ] Actualizar `.env.example` con `STAFF_JWT_SECRET` y `STAFF_QR_JWT_SECRET`
-- [ ] Actualizar `CHANGELOG.md`
+- [x] Actualizar `.env.example` con `STAFF_JWT_SECRET` y `STAFF_QR_JWT_SECRET`
+- [x] Actualizar `CHANGELOG.md`
 - [ ] Build + validación E2E
 
 ---

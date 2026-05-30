@@ -5,6 +5,29 @@
 
 ---
 
+## [1.1.2] — 2026-05-30 — Dashboard admin para gestión de meseros QR
+
+### Added
+
+**`src/app/(dashboard)/dashboard/staff/page.tsx` — Frontend CRUD de meseros para admin:**
+- Tabla de meseros con nombre, celular, rol, estado, último login.
+- Crear mesero con nombre, celular, PIN numérico (4-6 dígitos) y rol (mesero / supervisor / admin).
+- Editar mesero: cambiar nombre, rol y restablecer PIN.
+- Activar / desactivar mesero con toggle.
+- Eliminar mesero con confirmación.
+- Tabla de dispositivos de confianza registrados (nombre, activado por, estado, último uso, expiración).
+
+**`src/components/layout/DashboardSidebar.tsx`:**
+- Nuevo item de navegación "Meseros QR" (`/dashboard/staff`) con icono `UserCog`.
+- Item previo "Meseros" renombrado a "Autorizados Domicilio" para diferenciar sistemas.
+
+### Changed
+
+**`src/app/api/dashboard/staff/route.ts`:**
+- Auth unificado de Bearer token a cookie-based (`createClient` de `@/lib/supabase/server`), consistente con todas las demás APIs del dashboard.
+
+---
+
 ## [1.1.1] — 2026-05-30 — Auto-checkin eliminado: solo mesero registra visitas
 
 ### Changed

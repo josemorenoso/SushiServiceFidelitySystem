@@ -5,6 +5,31 @@
 
 ---
 
+## [1.0.8] — 2026-05-30 — Tiers dinámicos: nombres y emojis editables por el admin
+
+### Changed
+
+**Tiers renombrados y umbrales ajustados:**
+- `supabase/migrations/00016_ensure_default_tiers.sql`: Tiers default ahora son **Plata (150 pts) → Oro (300 pts) → Diamante (450 pts) → BLACK (1000 pts)**. Anteriormente eran Bronce/Plata/Oro/BLACK con umbrales 150/350/600/1000.
+
+**Emojis dinámicos por posición, no por nombre:**
+- `src/lib/tier-emojis.ts` — **NUEVO**: Utilidad `getTierEmoji(index, isBlack)` que devuelve emojis según la posición ordenada del tier (`🥉`, `🥈`, `🥇`, `💎`, `👑`, `⭐`, `🎯`). El tier BLACK siempre usa `🖤`.
+- `src/components/features/check-in/TiersRoadmap.tsx`: Reemplazado mapa hardcodeado `tierEmojis['Bronce']` por `getTierEmoji(index, tier.is_black)`. Ahora el admin puede renombrar tiers (ej: "Diamante 1", "Diamante 2") y los emojis siguen correctos.
+- `src/app/(dashboard)/dashboard/rewards/page.tsx`: Mismo cambio — emojis dinámicos en la tabla del dashboard.
+- `src/services/reward-tiers.service.ts`: `buildTiersRoadmap()` usa `getTierEmoji()` en lugar de mapa por nombre.
+
+**¿Por qué esto importa?**
+El dueño ya puede crear, renombrar y eliminar tiers desde el dashboard (`/dashboard/rewards`). Con emojis dinámicos, cualquier nombre funciona visualmente: "Plata", "Oro", "Diamante", "Diamante VIP", "Esmeralda", etc. No hay límite de cantidad de tiers (más allá del sentido comercial).
+
+### Archivos afectados
+- `src/lib/tier-emojis.ts`
+- `src/components/features/check-in/TiersRoadmap.tsx`
+- `src/app/(dashboard)/dashboard/rewards/page.tsx`
+- `src/services/reward-tiers.service.ts`
+- `supabase/migrations/00016_ensure_default_tiers.sql`
+
+---
+
 ## [1.0.7] — 2026-05-30 — HOTFIX: Check-in duplicados, residuos legacy, permisos RLS
 
 ### Fixed

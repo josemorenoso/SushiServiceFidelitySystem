@@ -56,6 +56,15 @@ Webhooks validan origen por número autorizado o `CRON_SECRET`.
 | DELETE | /api/dashboard/calendar/media-upload?path=X | Borrar asset del bucket | Admin JWT |
 | GET | /api/dashboard/location | Obtener ubicación del restaurante | Admin JWT |
 | PUT | /api/dashboard/location | Actualizar ubicación del restaurante | Admin JWT |
+| GET | /api/dashboard/staff | Listar meseros y dispositivos | Admin JWT |
+| POST | /api/dashboard/staff | Crear mesero (admin) | Admin JWT |
+| PATCH | /api/dashboard/staff | Actualizar mesero (toggle, reset PIN) | Admin JWT |
+| DELETE | /api/dashboard/staff | Eliminar mesero | Admin JWT |
+| POST | /api/staff/login | Login mesero (phone + PIN) | NO |
+| GET | /api/staff/me | Validar sesión mesero | Staff JWT / Device |
+| GET | /api/staff/stats | Visitas registradas hoy | Staff JWT / Device |
+| POST | /api/staff/device/register | Activar dispositivo de confianza | Supervisor PIN |
+| POST | /api/staff/device/verify | Verificar device_token | NO |
 
 ---
 
@@ -109,9 +118,9 @@ Webhooks validan origen por número autorizado o `CRON_SECRET`.
 
 ---
 
-### Check-in (QR)
+### Check-in (QR / Staff Scan)
 
-**`POST /api/check-in`** — Sin autenticación (ruta pública)
+**`POST /api/check-in`** — Sin autenticación (ruta pública). **Staff scan** requiere auth de mesero.
 
 Endpoint unificado con 3 acciones: `lookup`, `register`, `checkin`.
 
@@ -120,47 +129,84 @@ Endpoint unificado con 3 acciones: `lookup`, `register`, `checkin`.
 ```json
 { "phone": "3001234567", "action": "lookup", "lat": 6.244203, "lon": -75.581211 }
 ```
-> `lat` y `lon` son opcionales en todas las acciones. Solo se requieren si el admin activa **Modo estricto GPS** (`geo_strict_mode`). Si se envían, el backend valida distancia contra `restaurant_locations`.
+> `lat` y `lon` son opcionales. Solo se requieren si el admin activa **Modo estricto GPS** (`geo_strict_mode`).
 
 **Response 200 (encontrado):**
 ```json
-{ "found": true, "customer": { "name": "Juan", "total_visits": 4 } }
+{
+  "found": true,
+  "checkin_mode": "staff_verified",
+  "checkin_first_visit_free": true,
+  "customer": { "id": "uuid", "name": "Juan", "total_visits": 4, "current_tier": "Plata", "total_points": 240 }
+}
 ```
 **Response 200 (no encontrado):**
 ```json
-{ "found": false }
+{ "found": false, "checkin_mode": "staff_verified", "checkin_first_visit_free": true }
 ```
 
 #### Register (cliente nuevo)
 **Request:**
 ```json
-{ "phone": "3001234567", "action": "register", "name": "Juan Pérez", "birthday": "1990-05-15", "city": "Bogotá", "lat": 6.244203, "lon": -75.581211 }
+{ "phone": "3001234567", "action": "register", "name": "Juan Pérez", "birthday": "1990-05-15", "city": "Bogotá" }
 ```
 **Response 201:**
 ```json
-{ "message": "welcome", "customer": { "name": "Juan Pérez", "total_visits": 1 } }
+{ "message": "welcome", "customer": { "name": "Juan Pérez", "total_visits": 1, "total_points": 75 }, "points_awarded": 75, "tiers": [...] }
 ```
 
+**Response 403 (modo staff_verified + first_visit_free=false):**
+> Ocurre cuando `checkin_mode = 'staff_verified'` y `checkin_first_visit_free = false`. Requiere mesero.
+
 #### Check-in (cliente existente)
-**Request:**
+**Request (auto QR):**
 ```json
-{ "phone": "3001234567", "action": "checkin", "lat": 6.244203, "lon": -75.581211 }
+{ "phone": "3001234567", "action": "checkin" }
 ```
+
+**Request (staff scan con QR token):**
+```json
+{
+  "phone": "3001234567",
+  "action": "checkin",
+  "source": "staff_scan",
+  "token": "eyJhbG...", // JWT del QR dinámico del cliente
+  "table_number": 12,
+  "registered_by_staff_id": "uuid" // o device_token
+}
+```
+
+**Headers staff scan:**
+```
+Authorization: Bearer {staff_jwt}  // OR
+X-Device-Token: {device_fingerprint}
+```
+
 **Response 200:**
 ```json
-{ "message": "welcome_back", "customer": { "name": "Juan", "total_visits": 5 }, "reward": { "title": "Postre gratis", "message": "..." } }
+{
+  "message": "welcome_back",
+  "customer": { "name": "Juan", "total_visits": 5, "total_points": 310 },
+  "points_awarded": 65,
+  "tier_unlocked": { "id": "uuid", "name": "Oro", "safe_reward": "Gaseosa gratis", "mystery_box_enabled": true, "is_black": false },
+  "next_tier": { "name": "BLACK", "points_remaining": 350, "threshold": 1000 }
+}
 ```
+
+**Response 403 (modo staff_verified sin mesero):**
+```json
+{ "error": "Validación requerida", "message": "Este restaurante requiere que un mesero valide tu visita." }
+```
+
+**Response 403 (QR expirado):**
+```json
+{ "error": "QR inválido", "message": "El código QR del cliente ha expirado o es inválido." }
+```
+
 **Response 403 (ubicación requerida — modo estricto):**
 ```json
 { "error": "Ubicación requerida", "message": "El restaurante requiere activar la ubicación para hacer check-in" }
 ```
-> Solo ocurre si el admin activó **Modo estricto GPS** (`geo_strict_mode = 'true'`) y el cliente no envió `lat`/`lon`.
-
-**Response 403 (fuera del restaurante):**
-```json
-{ "error": "Fuera del local", "message": "Debes estar dentro del restaurante para hacer check-in (150m de distancia)" }
-```
-> Ocurre cuando el cliente envía `lat`/`lon`, la distancia calculada (Haversine) supera `radius_meters` de `restaurant_locations`, **independientemente** del modo estricto.
 
 **Response 429 (check-in duplicado < 1h):**
 ```json
@@ -587,6 +633,134 @@ El admin luego debe usar `url` y `media_type` al llamar a `POST/PATCH /api/dashb
 Útil para limpiar uploads descartados antes de asociarlos a un evento.
 
 **Response 200:** `{ "ok": true }`
+
+---
+
+### Staff: Login
+
+**`POST /api/staff/login`** — Sin autenticación
+
+**Request:**
+```json
+{ "phone": "3001234567", "pin": "1234" }
+```
+
+**Response 200:**
+```json
+{
+  "staff": { "id": "uuid", "name": "Carlos", "phone": "3001234567", "role": "waiter", "is_active": true },
+  "token": "eyJhbG..."
+}
+```
+
+**Response 401:** `{ "error": "Credenciales inválidas" }`
+
+---
+
+### Staff: Validar sesión
+
+**`GET /api/staff/me`** — Staff JWT o Device Token
+
+**Headers:**
+```
+Authorization: Bearer {staff_jwt}
+```
+```
+X-Device-Token: {device_fingerprint}
+```
+
+**Response 200:**
+```json
+{
+  "id": "uuid",
+  "name": "Carlos",
+  "phone": "3001234567",
+  "role": "waiter",
+  "is_active": true,
+  "type": "staff"
+}
+```
+
+---
+
+### Staff: Stats
+
+**`GET /api/staff/stats`** — Staff JWT o Device Token
+
+**Response 200:**
+```json
+{ "visits_today": 14 }
+```
+
+---
+
+### Staff: Activar dispositivo de confianza
+
+**`POST /api/staff/device/register`** — Supervisor PIN requerido
+
+**Request:**
+```json
+{
+  "phone": "3001234567",
+  "pin": "1234",
+  "device_fingerprint": "df_a1b2c3d4",
+  "device_name": "Celular del Local"
+}
+```
+
+**Response 200:** `{ "success": true }`
+**Response 403:** `{ "error": "No autorizado", "message": "Solo supervisores o admins pueden registrar dispositivos." }`
+
+---
+
+### Staff: Verificar device token
+
+**`POST /api/staff/device/verify`** — Sin autenticación
+
+**Request:**
+```json
+{ "device_fingerprint": "df_a1b2c3d4" }
+```
+
+**Response 200:** `{ "valid": true }`
+
+---
+
+### Dashboard: Staff CRUD
+
+**`GET /api/dashboard/staff`** — Admin JWT
+
+**Response 200:**
+```json
+{
+  "staff": [
+    { "id": "uuid", "name": "Carlos", "phone": "3001234567", "role": "waiter", "is_active": true, "last_login_at": "2026-05-30T...", "created_at": "..." }
+  ],
+  "devices": [
+    { "id": "uuid", "staff_user_id": "uuid", "device_name": "Celular del Local", "is_trusted": true, "trusted_at": "2026-05-30T...", "expires_at": null, "last_used_at": "..." }
+  ]
+}
+```
+
+**`POST /api/dashboard/staff`** — Admin JWT
+
+**Request:**
+```json
+{ "name": "Ana López", "phone": "3009876543", "pin": "5678", "role": "waiter" }
+```
+
+**Response 201:** `{ "id": "uuid", "name": "Ana López", "phone": "3009876543", "role": "waiter", "is_active": true, "created_at": "..." }`
+
+**`PATCH /api/dashboard/staff`** — Admin JWT
+
+**Request:**
+```json
+{ "id": "uuid", "is_active": false, "pin": "9999", "name": "Ana López 2", "role": "supervisor" }
+```
+
+**`DELETE /api/dashboard/staff?id=uuid`** — Admin JWT
+
+**Response 200:** `{ "success": true }`
 
 ---
 

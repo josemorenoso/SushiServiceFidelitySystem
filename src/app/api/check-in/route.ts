@@ -8,7 +8,7 @@ import { syncGoogleContact } from '@/services/google-contacts-sync.service'
 import { rateLimit, getClientIp } from '@/lib/rate-limit'
 import { awardVisitPoints, awardWelcomeBonus } from '@/services/points.service'
 import { evaluateNewTier, getNextTier, buildTiersRoadmap, updateCustomerTier, getAllTiers } from '@/services/reward-tiers.service'
-import { calculateDistanceMeters } from '@/lib/utils/geolocation'
+import { verifyCustomerQRToken } from '@/lib/utils/qrcode'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 
 function getServiceClient() {
@@ -35,6 +35,10 @@ interface CheckInRequestBody {
   table_number?: number | null
   lat?: number | null
   lon?: number | null
+  source?: 'qr' | 'staff_scan'
+  registered_by_staff_id?: string | null
+  device_token?: string | null
+  token?: string | null
 }
 
 /**
@@ -103,6 +107,27 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // ─── RATE LIMITING por staff (cuando source es staff_scan) ───
+    const { source = 'qr', registered_by_staff_id, device_token } = body
+    if (source === 'staff_scan') {
+      const staffKey = registered_by_staff_id
+        ? `checkin:staff:${registered_by_staff_id}`
+        : `checkin:device:${device_token}`
+      const staffRl = rateLimit(staffKey, 10, MINUTE)
+      if (!staffRl.allowed) {
+        return NextResponse.json(
+          {
+            error: 'Demasiadas solicitudes',
+            message: `Espera ${staffRl.retryAfterSeconds} segundos antes de registrar otra visita.`,
+          },
+          {
+            status: 429,
+            headers: { 'Retry-After': String(staffRl.retryAfterSeconds) },
+          }
+        )
+      }
+    }
+
     // ─── VALIDACIÓN DE GEOLOCALIZACIÓN — STANDBY (desactivado v1.0.5-3) ───
     // const { lat, lon } = body
     // const { data: geoStrictRow } = await getServiceClient()
@@ -143,13 +168,32 @@ export async function POST(request: NextRequest) {
     // ─── LOOKUP: buscar si el cliente existe ───
     if (action === 'lookup') {
       const customer = await findCustomerByPhone(cleaned)
+      const settings = await getMultipleSettings([
+        'checkin_mode',
+        'checkin_first_visit_free',
+      ])
+      const checkinMode = settings.checkin_mode ?? 'auto'
+      const firstVisitFree = settings.checkin_first_visit_free !== 'false'
+
       if (customer) {
         return NextResponse.json({
           found: true,
-          customer: { name: customer.name, total_visits: customer.total_visits },
+          checkin_mode: checkinMode,
+          checkin_first_visit_free: firstVisitFree,
+          customer: {
+            id: customer.id,
+            name: customer.name,
+            total_visits: customer.total_visits,
+            current_tier: customer.current_tier,
+            total_points: customer.total_points,
+          },
         })
       }
-      return NextResponse.json({ found: false })
+      return NextResponse.json({
+        found: false,
+        checkin_mode: checkinMode,
+        checkin_first_visit_free: firstVisitFree,
+      })
     }
 
     // ─── REGISTER: crear cliente nuevo + primera visita ───
@@ -171,6 +215,54 @@ export async function POST(request: NextRequest) {
         )
       }
 
+      // Leer modo de check-in para validar si primera visita requiere mesero
+      const regSettings = await getMultipleSettings([
+        'checkin_mode',
+        'checkin_first_visit_free',
+      ])
+      const checkinMode = regSettings.checkin_mode ?? 'auto'
+      const firstVisitFree = regSettings.checkin_first_visit_free !== 'false'
+
+      // Si modo staff_verified y primera visita NO es libre, requiere auth de mesero
+      let regStaffAuthValid = false
+      let regResolvedStaffId: string | null = null
+      if (checkinMode === 'staff_verified' && !firstVisitFree) {
+        const supabase = getServiceClient()
+        if (registered_by_staff_id) {
+          const { data: staff } = await supabase
+            .from('staff_users')
+            .select('id, is_active')
+            .eq('id', registered_by_staff_id)
+            .single()
+          if (staff && staff.is_active) {
+            regStaffAuthValid = true
+            regResolvedStaffId = staff.id
+          }
+        } else if (device_token) {
+          const { data: device } = await supabase
+            .from('staff_devices')
+            .select('id, is_trusted, expires_at')
+            .eq('device_fingerprint', device_token)
+            .eq('is_trusted', true)
+            .single()
+          if (device) {
+            if (!device.expires_at || new Date(device.expires_at) >= new Date()) {
+              regStaffAuthValid = true
+            }
+          }
+        }
+
+        if (!regStaffAuthValid) {
+          return NextResponse.json(
+            {
+              error: 'Validación requerida',
+              message: 'Este restaurante requiere que un mesero valide la primera visita.',
+            },
+            { status: 403 }
+          )
+        }
+      }
+
       const customer = await createCustomer({
         phone: cleaned,
         name: name.trim(),
@@ -180,9 +272,16 @@ export async function POST(request: NextRequest) {
       })
 
       // Visita (best-effort — no debe bloquear el registro)
+      // Usa source staff_scan si fue validado por mesero, sino qr
+      const regSource: 'qr' | 'staff_scan' = regResolvedStaffId ? 'staff_scan' : 'qr'
       let visitRecord
       try {
-        visitRecord = await createVisit({ customerId: customer.id, source: 'qr', tableNumber: body.table_number ?? null })
+        visitRecord = await createVisit({
+          customerId: customer.id,
+          source: regSource,
+          tableNumber: body.table_number ?? null,
+          registeredByStaffId: regResolvedStaffId,
+        })
       } catch (visitErr) {
         console.error('[CheckIn] Error creando visita (registro continuará):', visitErr)
       }
@@ -218,7 +317,7 @@ export async function POST(request: NextRequest) {
           birthday: customer.birthday ?? null,
           city: customer.city ?? null,
           totalVisits: customer.total_visits,
-          source: 'qr',
+          source: regSource,
           action: 'created',
         })
       } catch (err) {
@@ -249,6 +348,7 @@ export async function POST(request: NextRequest) {
 
     // ─── CHECKIN: cliente existente + registrar visita ───
     if (action === 'checkin') {
+      const { token: qrToken } = body
       const customer = await findCustomerByPhone(cleaned)
       if (!customer) {
         return NextResponse.json(
@@ -257,7 +357,89 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      // Verificar check-in duplicado (mínimo 24h entre check-ins QR)
+      // Leer modo de check-in
+      const settings = await getMultipleSettings([
+        'checkin_mode',
+        'checkin_first_visit_free',
+        'points_earned_far_template_sid',
+        'points_earned_near_template_sid',
+        'tier_unlocked_template_sid',
+      ])
+      const checkinMode = settings.checkin_mode ?? 'auto'
+      const firstVisitFree = settings.checkin_first_visit_free !== 'false'
+      const isExistingCustomer = customer.total_visits >= 1
+
+      // ─── Anti-fraude: modo staff_verified ───
+      if (checkinMode === 'staff_verified' && isExistingCustomer && source !== 'staff_scan') {
+        return NextResponse.json(
+          {
+            error: 'Validación requerida',
+            message: 'Este restaurante requiere que un mesero valide tu visita.',
+          },
+          { status: 403 }
+        )
+      }
+
+      let staffAuthValid = false
+      let resolvedStaffId: string | null = null
+
+      if (source === 'staff_scan') {
+        const supabase = getServiceClient()
+
+        // Validar QR token (firma + expiración)
+        if (qrToken) {
+          try {
+            await verifyCustomerQRToken(qrToken)
+          } catch {
+            return NextResponse.json(
+              { error: 'QR inválido', message: 'El código QR del cliente ha expirado o es inválido.' },
+              { status: 403 }
+            )
+          }
+        }
+
+        // Validar auth del mesero: staff_id O device_token
+        if (registered_by_staff_id) {
+          const { data: staff } = await supabase
+            .from('staff_users')
+            .select('id, is_active')
+            .eq('id', registered_by_staff_id)
+            .single()
+          if (staff && staff.is_active) {
+            staffAuthValid = true
+            resolvedStaffId = staff.id
+          }
+        } else if (device_token) {
+          const { data: device } = await supabase
+            .from('staff_devices')
+            .select('id, is_trusted, expires_at')
+            .eq('device_fingerprint', device_token)
+            .eq('is_trusted', true)
+            .single()
+          if (device) {
+            if (!device.expires_at || new Date(device.expires_at) >= new Date()) {
+              staffAuthValid = true
+              // Actualizar last_used_at del dispositivo
+              await supabase
+                .from('staff_devices')
+                .update({ last_used_at: new Date().toISOString() })
+                .eq('id', device.id)
+            }
+          }
+        }
+
+        if (!staffAuthValid) {
+          return NextResponse.json(
+            {
+              error: 'No autorizado',
+              message: 'Mesero o dispositivo no válido. No se puede registrar la visita.',
+            },
+            { status: 403 }
+          )
+        }
+      }
+
+      // Verificar check-in duplicado (mínimo 24h entre check-ins)
       const recentVisit = await getRecentVisit(customer.id, 1440)
       if (recentVisit) {
         return NextResponse.json(
@@ -270,34 +452,19 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      const updated = await incrementVisit(customer.id, customer.total_visits, 'qr')
-      const visit = await createVisit({ customerId: customer.id, source: 'qr', tableNumber: body.table_number ?? null })
-
-      // Guardar coordenadas del check-in — STANDBY (desactivado v1.0.5-3)
-      // if (lat != null && lon != null) {
-      //   try {
-      //     const svc = getServiceClient()
-      //     const { data: loc } = await svc
-      //       .from('restaurant_locations')
-      //       .select('lat, lon')
-      //       .eq('is_active', true)
-      //       .single()
-      //     const dist = loc ? Math.round(calculateDistanceMeters(lat, lon, Number(loc.lat), Number(loc.lon))) : null
-      //     await svc.from('customers').update({
-      //       checkin_lat: lat,
-      //       checkin_lon: lon,
-      //       checkin_distance_meters: dist,
-      //     }).eq('id', customer.id)
-      //   } catch (geoErr) {
-      //     console.error('[CheckIn] Error guardando coords:', geoErr)
-      //   }
-      // }
+      const updated = await incrementVisit(customer.id, customer.total_visits, source)
+      const visit = await createVisit({
+        customerId: customer.id,
+        source,
+        tableNumber: body.table_number ?? null,
+        registeredByStaffId: resolvedStaffId,
+      })
 
       // Otorgar puntos aleatorios por la visita
       const previousPoints = customer.total_points ?? 0
       let pointsResult = { pointsAwarded: 0, newBalance: previousPoints }
       try {
-        pointsResult = await awardVisitPoints(customer.id, visit.id, 'qr')
+        pointsResult = await awardVisitPoints(customer.id, visit.id, source)
         console.log(`[CheckIn] Puntos otorgados: +${pointsResult.pointsAwarded} → balance=${pointsResult.newBalance} (prev=${previousPoints})`)
       } catch (err) {
         console.error('[CheckIn] ERROR otorgando puntos (se usa fallback 0):', err)
@@ -316,13 +483,6 @@ export async function POST(request: NextRequest) {
         console.error('[CheckIn] ERROR evaluando tiers (se continúa sin tiers):', err)
       }
 
-      // Fetch settings para plantillas
-      const settings = await getMultipleSettings([
-        'points_earned_far_template_sid',      // puntos sumados (lejos)
-        'points_earned_near_template_sid',     // puntos sumados (cerca)
-        'tier_unlocked_template_sid',          // tier desbloqueado
-      ])
-
       let tiersRoadmapText = '🌟 ¡Seguí sumando puntos para desbloquear premios!'
       try {
         tiersRoadmapText = await buildTiersRoadmap(pointsResult.newBalance)
@@ -336,7 +496,7 @@ export async function POST(request: NextRequest) {
           phone: cleaned,
           name: updated.name,
           totalVisits: updated.total_visits,
-          source: 'qr',
+          source,
           action: 'updated',
         })
       } catch (err) {

@@ -173,7 +173,7 @@ export async function awardPoints(params: {
 export async function awardVisitPoints(
   customerId: string,
   visitId: string,
-  source: 'qr' | 'delivery'
+  source: 'qr' | 'delivery' | 'staff_scan'
 ): Promise<{ pointsAwarded: number; newBalance: number }> {
   const supabase = getServiceClient()
   const config = await getPointsConfig()
@@ -193,7 +193,12 @@ export async function awardVisitPoints(
   const nextThreshold = nextTier?.point_threshold ?? 150
 
   const points = generateSmartVisitPoints(currentPoints, nextThreshold, config.min, config.max)
-  const txSource: PointTransactionSource = source === 'qr' ? 'visit_qr' : 'visit_delivery'
+  const txSourceMap: Record<string, PointTransactionSource> = {
+    qr: 'visit_qr',
+    delivery: 'visit_delivery',
+    staff_scan: 'visit_staff',
+  }
+  const txSource: PointTransactionSource = txSourceMap[source] ?? 'visit_qr'
 
   return awardPoints({
     customerId,

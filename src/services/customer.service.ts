@@ -56,7 +56,7 @@ export async function createCustomer(params: {
   return data
 }
 
-export async function incrementVisit(customerId: string, currentVisits: number, source?: 'qr' | 'delivery'): Promise<Customer> {
+export async function incrementVisit(customerId: string, currentVisits: number, source?: 'qr' | 'delivery' | 'staff_scan'): Promise<Customer> {
   const supabase = getServiceClient()
   const newVisits = currentVisits + 1
 

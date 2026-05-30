@@ -1,7 +1,7 @@
 # Esquema de Base de Datos
 
 **Base de datos:** Supabase (PostgreSQL)
-**Última actualización:** 2026-05-28
+**Última actualización:** 2026-05-30
 
 ---
 
@@ -80,6 +80,8 @@ erDiagram
     customers ||--o{ visits : "has many"
     customers ||--o{ campaign_messages : "receives"
     campaigns ||--o{ campaign_messages : "sends"
+    staff_users ||--o{ visits : "registers"
+    staff_users ||--o{ staff_devices : "owns"
 ```
 
 ---
@@ -97,6 +99,8 @@ erDiagram
 | 7 | [admin_settings](#admin_settings) | Configuración del admin (key-value) | SI | Admin: SELECT, INSERT, UPDATE |
 | 8 | [restaurant_events](#restaurant_events) | Calendario operativo de eventos/promos con media | SI | Admin: CRUD completo |
 | 9 | [restaurant_locations](#restaurant_locations) | Ubicación del restaurante para validación de geolocalización | SI | Admin: ALL, Service: SELECT |
+| 10 | [staff_users](#staff_users) | Cuentas de meseros (login con PIN) | SI | Service: ALL (backend maneja auth) |
+| 11 | [staff_devices](#staff_devices) | Dispositivos de confianza registrados por supervisor | SI | Service: ALL |
 
 ---
 
@@ -164,8 +168,14 @@ CREATE POLICY "admin_update_customers" ON customers
 |---------|------|----------|---------|-------------|
 | `id` | `uuid` | NO | `gen_random_uuid()` | PK |
 | `customer_id` | `uuid` | NO | - | FK a customers |
-| `source` | `text` | NO | `'qr'` | Origen: 'qr' o 'delivery' |
+| `source` | `text` | NO | `'qr'` | Origen: 'qr', 'delivery' o 'staff_scan' |
 | `notes` | `text` | SI | `NULL` | Notas adicionales |
+| `address` | `text` | SI | `NULL` | Dirección (domicilios) |
+| `payment_method` | `text` | SI | `NULL` | Método de pago (domicilios) |
+| `amount` | `numeric` | SI | `NULL` | Monto total del pedido (domicilios) |
+| `raw_message` | `text` | SI | `NULL` | Mensaje raw (domicilios) |
+| `table_number` | `integer` | SI | `NULL` | Número de mesa (staff_scan) |
+| `registered_by_staff_id` | `uuid` | SI | `NULL` | FK a staff_users — quién registró la visita |
 | `created_at` | `timestamptz` | NO | `now()` | Fecha de la visita |
 
 **Foreign Keys:**
@@ -173,6 +183,7 @@ CREATE POLICY "admin_update_customers" ON customers
 | Columna | Referencia | On Delete |
 |---------|------------|-----------|
 | `customer_id` | `customers(id)` | CASCADE |
+| `registered_by_staff_id` | `staff_users(id)` | SET NULL |
 
 ---
 
@@ -409,6 +420,79 @@ CREATE POLICY "service_select_restaurant_locations" ON restaurant_locations
 
 ---
 
+### staff_users
+
+> Cuentas de meseros con login por PIN (hasheado con bcrypt). Roles: `waiter`, `supervisor`, `admin`.
+
+| Columna | Tipo | Nullable | Default | Descripción |
+|---------|------|----------|---------|-------------|
+| `id` | `uuid` | NO | `gen_random_uuid()` | PK |
+| `name` | `text` | NO | - | Nombre del mesero |
+| `phone` | `text` | NO | - | Número celular (único) |
+| `pin` | `text` | SI | `NULL` | PIN hasheado (bcrypt 10 rounds). NULL = deshabilitado. |
+| `role` | `text` | NO | `'waiter'` | `waiter`, `supervisor`, `admin` |
+| `is_active` | `boolean` | NO | `true` | Si puede hacer login |
+| `last_login_at` | `timestamptz` | SI | `NULL` | Última vez que hizo login |
+| `created_at` | `timestamptz` | NO | `now()` | Fecha de creación |
+| `updated_at` | `timestamptz` | NO | `now()` | Última actualización |
+
+**Índices:**
+
+| Nombre | Columnas | Tipo |
+|--------|----------|------|
+| `staff_users_pkey` | `id` | PRIMARY KEY |
+| `staff_users_phone_key` | `phone` | UNIQUE |
+
+**Políticas RLS:**
+
+```sql
+CREATE POLICY "admin_select_staff_users" ON staff_users FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "admin_insert_staff_users" ON staff_users FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+CREATE POLICY "admin_update_staff_users" ON staff_users FOR UPDATE USING (auth.role() = 'authenticated');
+CREATE POLICY "admin_delete_staff_users" ON staff_users FOR DELETE USING (auth.role() = 'authenticated');
+```
+
+**Triggers:**
+
+| Nombre | Evento | Función |
+|--------|--------|---------|
+| `trg_staff_users_updated_at` | BEFORE UPDATE | `handle_updated_at()` |
+
+---
+
+### staff_devices
+
+> Dispositivos de confianza (celulares/tablets del local) registrados por un supervisor o admin. Permite que el mesero no haga login diario.
+
+| Columna | Tipo | Nullable | Default | Descripción |
+|---------|------|----------|---------|-------------|
+| `id` | `uuid` | NO | `gen_random_uuid()` | PK |
+| `staff_user_id` | `uuid` | SI | `NULL` | FK opcional al mesero que registró el device |
+| `device_fingerprint` | `text` | NO | - | Hash del device (UA + resolución + platform) |
+| `device_name` | `text` | SI | `NULL` | Nombre descriptivo (ej: "Celular del Local") |
+| `is_trusted` | `boolean` | NO | `true` | Si el device sigue siendo confiable |
+| `trusted_at` | `timestamptz` | NO | `now()` | Cuándo se activó |
+| `expires_at` | `timestamptz` | SI | `NULL` | Fecha de expiración (NULL = nunca expira) |
+| `last_used_at` | `timestamptz` | SI | `NULL` | Última vez que se usó |
+| `created_at` | `timestamptz` | NO | `now()` | Fecha de creación |
+
+**Foreign Keys:**
+
+| Columna | Referencia | On Delete |
+|---------|------------|-----------|
+| `staff_user_id` | `staff_users(id)` | SET NULL |
+
+**Políticas RLS:**
+
+```sql
+CREATE POLICY "admin_select_staff_devices" ON staff_devices FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "admin_insert_staff_devices" ON staff_devices FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+CREATE POLICY "admin_update_staff_devices" ON staff_devices FOR UPDATE USING (auth.role() = 'authenticated');
+CREATE POLICY "admin_delete_staff_devices" ON staff_devices FOR DELETE USING (auth.role() = 'authenticated');
+```
+
+---
+
 ## Storage Buckets
 
 ### event-media
@@ -448,6 +532,7 @@ CREATE POLICY "service_select_restaurant_locations" ON restaurant_locations
 | 11 | `00011_rewards_black_tier.sql` | 2026-05-12 | `rewards.is_black` boolean para nivel BLACK | Pendiente |
 | 12 | `00012_calendar_events_and_media.sql` | 2026-05-23 | Tabla `restaurant_events`, columnas `source/media_url/media_type` en `campaigns`, bucket `event-media` + RLS de Storage | Pendiente |
 | 14 | `00014_geolocation.sql` | 2026-05-25 | Tabla `restaurant_locations`, columnas `checkin_lat/checkin_lon/checkin_distance_meters` en `customers`, función `calculate_distance()` Haversine | Pendiente |
+| 15 | `00015_staff_qr_scan.sql` | 2026-05-30 | Tablas `staff_users`, `staff_devices`, FK `visits.registered_by_staff_id`, settings `checkin_mode`/`checkin_first_visit_free`, RLS staff + trigger updated_at | Pendiente |
 
 ---
 

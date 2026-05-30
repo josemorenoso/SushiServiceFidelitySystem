@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { Loader2, Phone, User, MapPin, ArrowLeft } from 'lucide-react'
+import { QRCodeSVG } from 'qrcode.react'
+import { generateCustomerQRToken } from '@/lib/utils/qrcode'
 // import { getCurrentPosition } from '@/lib/utils/geolocation'  // standby — desactivado v1.0.5-3
 
 const COLOMBIAN_CITIES = [
@@ -76,6 +78,14 @@ export function CheckInForm({
   const [acceptsMarketing, setAcceptsMarketing] = useState(false)
   const [loading, setLoading] = useState(false)
   const [tableNumber, setTableNumber] = useState<number | null>(null)
+  const [customerQR, setCustomerQR] = useState<string | null>(null)
+  const [lookupCustomer, setLookupCustomer] = useState<{
+    id?: string
+    name: string
+    total_visits: number
+    current_tier?: string | null
+    total_points?: number
+  } | null>(null)
 
   // ─── Geolocalización standby — desactivado v1.0.5-3 ───
   // const [locationStatus, setLocationStatus] = useState<'idle' | 'requesting' | 'verified' | 'denied' | 'error'>('idle')
@@ -121,7 +131,7 @@ export function CheckInForm({
         body: JSON.stringify({ phone, action: 'lookup', table_number: tableNumber }),
       })
 
-      const data = (await res.json()) as LookupResult & { error?: string; message?: string; customer?: { name: string; total_visits: number } }
+      const data = (await res.json()) as LookupResult & { error?: string; message?: string }
 
       if (!res.ok) {
         onError(data.message ?? 'Error buscando el número')
@@ -130,6 +140,23 @@ export function CheckInForm({
 
       if (data.found && data.customer) {
         onLookupResult(data, phone)
+
+        // ─── MODO STAFF_VERIFIED: mostrar QR dinámico (cliente existente) ───
+        if (data.checkin_mode === 'staff_verified') {
+          const token = await generateCustomerQRToken({
+            sub: data.customer.id,
+            phone,
+            name: data.customer.name,
+          })
+          const qrUrl = `${window.location.origin}/mesero/scan?token=${encodeURIComponent(token)}`
+          setCustomerQR(qrUrl)
+          setLookupCustomer(data.customer)
+          setStep('customer_qr')
+          setLoading(false)
+          return
+        }
+
+        // ─── MODO AUTO: flujo actual ───
         const checkInRes = await fetch('/api/check-in', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -461,6 +488,64 @@ export function CheckInForm({
             Volver
           </button>
         </form>
+      </div>
+    )
+  }
+
+  if (step === 'customer_qr' && customerQR && lookupCustomer) {
+    return (
+      <div className="premium-card animate-fade-in-up w-full p-7 text-center">
+        <div className="mb-4">
+          <h2
+            className="font-playfair text-2xl font-bold"
+            style={{ color: '#1a1c1d', letterSpacing: '-0.02em' }}
+          >
+            ¡Hola, {lookupCustomer.name}!
+          </h2>
+          <p className="mt-1 text-sm" style={{ color: '#9ca3af' }}>
+            Muéstrale este código a tu mesero
+          </p>
+        </div>
+
+        <div className="mx-auto my-6 flex justify-center">
+          <div className="rounded-2xl border-2 border-dashed border-gray-200 p-4">
+            <QRCodeSVG value={customerQR} size={240} level="M" />
+          </div>
+        </div>
+
+        <div className="mb-4 space-y-1 text-sm" style={{ color: '#6b7280' }}>
+          <p>
+            <span className="font-semibold">Visitas:</span> {lookupCustomer.total_visits}
+          </p>
+          {lookupCustomer.current_tier && (
+            <p>
+              <span className="font-semibold">Tier:</span> {lookupCustomer.current_tier}
+            </p>
+          )}
+          {lookupCustomer.total_points !== undefined && (
+            <p>
+              <span className="font-semibold">Puntos:</span> {lookupCustomer.total_points}
+            </p>
+          )}
+        </div>
+
+        <p className="text-xs" style={{ color: '#d1d5db' }}>
+          Este código expira en 5 minutos
+        </p>
+
+        <button
+          type="button"
+          className="mt-6 flex w-full items-center justify-center gap-1.5 py-2 text-sm font-medium transition-colors duration-200"
+          style={{ color: '#9ca3af' }}
+          onClick={() => {
+            setStep('phone')
+            setCustomerQR(null)
+            setLookupCustomer(null)
+          }}
+        >
+          <ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.5} />
+          Volver
+        </button>
       </div>
     )
   }

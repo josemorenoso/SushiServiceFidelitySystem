@@ -12,13 +12,14 @@ function getServiceClient() {
 
 export async function createVisit(params: {
   customerId: string
-  source: 'qr' | 'delivery'
+  source: 'qr' | 'delivery' | 'staff_scan'
   notes?: string
   address?: string
   paymentMethod?: string
   amount?: number
   rawMessage?: string
   tableNumber?: number | null
+  registeredByStaffId?: string | null
 }): Promise<Visit> {
   const supabase = getServiceClient()
   const insertPayload: Record<string, unknown> = {
@@ -33,6 +34,10 @@ export async function createVisit(params: {
   // Only include table_number if present (requires migration 00009)
   if (params.tableNumber != null) {
     insertPayload.table_number = params.tableNumber
+  }
+  // Only include registered_by_staff_id if present (requires migration 00015)
+  if (params.registeredByStaffId != null) {
+    insertPayload.registered_by_staff_id = params.registeredByStaffId
   }
 
   const { data, error } = await supabase
@@ -56,7 +61,6 @@ export async function getRecentVisit(customerId: string, withinMinutes: number =
     .from('visits')
     .select('id')
     .eq('customer_id', customerId)
-    .eq('source', 'qr')
     .gte('created_at', since)
     .limit(1)
 

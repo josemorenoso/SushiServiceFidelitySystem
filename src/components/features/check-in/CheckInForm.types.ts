@@ -7,9 +7,14 @@ export interface CheckInFormProps {
 
 export interface LookupResult {
   found: boolean
+  checkin_mode?: 'auto' | 'staff_verified'
+  checkin_first_visit_free?: boolean
   customer?: {
+    id: string
     name: string
     total_visits: number
+    current_tier?: string | null
+    total_points?: number
   }
 }
 
@@ -78,4 +83,4 @@ export interface TierItem {
   is_black: boolean
 }
 
-export type CheckInStep = 'phone' | 'register' | 'loading'
+export type CheckInStep = 'phone' | 'register' | 'customer_qr' | 'loading'

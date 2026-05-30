@@ -5,6 +5,73 @@
 
 ---
 
+## [1.1.0] — 2026-05-30 — Staff QR Scan: verificación presencial mesero-cliente con QR dinámico
+
+### Added
+
+**Sistema de verificación presencial de dos pasos (cliente → mesero):**
+- `src/app/(public)/mesero/page.tsx` — Login del mesero (PIN de 4-6 dígitos) + activación de dispositivo de confianza.
+- `src/app/(public)/mesero/dashboard/page.tsx` — Dashboard del mesero con stats del día y botón de escaneo.
+- `src/app/(public)/mesero/scan/page.tsx` — Escáner QR con `html5-qrcode`, modo manual fallback, linterna.
+- `src/app/(public)/mesero/confirm/page.tsx` — Confirmación post-escaneo: datos del cliente + input mesa + registro de visita.
+- `src/hooks/useStaffAuth.ts` — Hook de autenticación dual: JWT de mesero (8h) o device_token de confianza.
+- `src/lib/utils/qrcode.ts` — Generación y verificación de tokens JWT efímeros (`jose`) para QR dinámico del cliente (TTL 5 min).
+- `src/app/api/staff/login/route.ts` — Login mesero: phone + PIN → JWT firmado con `STAFF_JWT_SECRET`.
+- `src/app/api/staff/me/route.ts` — Validación de sesión JWT o device_token.
+- `src/app/api/staff/stats/route.ts` — Visitas registradas hoy por mesero/dispositivo.
+- `src/app/api/staff/device/register/route.ts` — Activar celular/tablet del restaurante como dispositivo de confianza (requiere PIN de supervisor).
+- `src/app/api/staff/device/verify/route.ts` — Verificación silenciosa de device_token.
+- `src/app/api/dashboard/staff/route.ts` — CRUD de meseros para admin (crear, listar, toggle activo, reset PIN, eliminar).
+- `supabase/migrations/00015_staff_qr_scan.sql` — Tablas `staff_users`, `staff_devices`, FK `visits.registered_by_staff_id`, settings `checkin_mode` y `checkin_first_visit_free`, RLS, trigger `updated_at`.
+
+**Modo de check-in configurable:**
+- `checkin_mode`: `'auto'` (flujo actual) o `'staff_verified'` (requiere mesero).
+- `checkin_first_visit_free`: `'true'` (default) permite primera visita libre; `'false'` requiere mesero incluso para nuevos.
+
+**Rate limit dual:**
+- Capa base por IP + capa adicional por `staff_id` o `device_token` cuando `source = 'staff_scan'` (máx 10/min).
+
+### Changed
+
+**`/api/check-in/route.ts` — Flujo extendido para staff_verified:**
+- `action: 'lookup'` retorna `checkin_mode`, `checkin_first_visit_free` y `customer.id`.
+- `action: 'register'` respeta `checkin_first_visit_free=false`: rechaza 403 si no hay auth de mesero en modo `staff_verified`.
+- `action: 'checkin'` acepta `source: 'staff_scan'`, `registered_by_staff_id`, `device_token`, `token` (QR JWT).
+- Omite validación de geolocalización cuando `source = 'staff_scan'`.
+- Rechaza check-in de cliente existente en modo `staff_verified` sin mesero autenticado → 403.
+- Valida firma y expiración del QR token (`STAFF_QR_JWT_SECRET`) server-side.
+
+**`src/components/features/check-in/CheckInForm.tsx` — QR dinámico del cliente:**
+- En modo `staff_verified`, cliente existente ve QR dinámico con token JWT firmado (`sub: customer_id`).
+- Pantalla `customer_qr` con datos del cliente, tier, visitas, puntos.
+
+**Servicios actualizados:**
+- `src/services/visit.service.ts` — `source` ampliado a `'qr' | 'delivery' | 'staff_scan'`, `getRecentVisit` sin filtro por source (evita duplicados cruzados).
+- `src/services/points.service.ts` — `awardVisitPoints` mapea `staff_scan` → `visit_staff`.
+- `src/services/customer.service.ts` — `incrementVisit` acepta `staff_scan`.
+- `src/types/database.types.ts` — Tipos `StaffUser`, `StaffDevice`, `PointTransactionSource` con `visit_staff`.
+
+### Security
+
+- QR dinámico no expone datos crudos: payload enmascarado en JWT firmado con expiración 5 min.
+- Validación de TTL obligatoriamente en servidor (`/api/check-in`), nunca solo en frontend.
+- PIN de mesero hasheado con `bcryptjs` (10 salt rounds).
+- Dispositivo de confianza: supervisor activa una vez con PIN, mesero no necesita login diario.
+- Traza completa: cada visita `staff_scan` queda ligada a `registered_by_staff_id`.
+
+### Environment
+
+- `.env.example` — Nuevas variables: `STAFF_JWT_SECRET`, `STAFF_QR_JWT_SECRET`.
+
+### Dependencies
+
+- `jose` (v6.2.3) — JWT edge-compatible para auth de meseros y QR dinámico.
+- `bcryptjs` (v3.0.3) — Hash de PINs.
+- `qrcode.react` (v4.2.0) — QR dinámico del cliente.
+- `html5-qrcode` (v2.3.8) — Escaneo QR del mesero.
+
+---
+
 ## [1.0.9] — 2026-05-30 — HOTFIX: Webhook de delivery enviaba mensajes con formato legacy de milestones
 
 ### Fixed

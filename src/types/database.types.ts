@@ -20,13 +20,14 @@ export interface Customer {
 export interface Visit {
   id: string
   customer_id: string
-  source: 'qr' | 'delivery'
+  source: 'qr' | 'delivery' | 'staff_scan'
   notes: string | null
   address: string | null
   payment_method: string | null
   amount: number | null
   raw_message: string | null
   table_number: number | null
+  registered_by_staff_id: string | null
   created_at: string
 }
 
@@ -76,6 +77,30 @@ export interface AuthorizedNumber {
   created_at: string
 }
 
+export interface StaffUser {
+  id: string
+  name: string
+  phone: string
+  pin: string | null
+  role: 'waiter' | 'supervisor' | 'admin'
+  is_active: boolean
+  last_login_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface StaffDevice {
+  id: string
+  staff_user_id: string | null
+  device_fingerprint: string
+  device_name: string | null
+  is_trusted: boolean
+  trusted_at: string
+  expires_at: string | null
+  last_used_at: string | null
+  created_at: string
+}
+
 export type EventType = 'promo' | 'festival' | 'activacion' | 'aniversario' | 'otro'
 export type EventSendMode = 'auto' | 'remind'
 export type EventStatus = 'planned' | 'scheduled' | 'sent' | 'cancelled' | 'failed'
@@ -108,6 +133,7 @@ export interface RestaurantEvent {
 export type PointTransactionSource =
   | 'visit_qr'
   | 'visit_delivery'
+  | 'visit_staff'
   | 'event_bonus'
   | 'campaign_bonus'
   | 'welcome_bonus'

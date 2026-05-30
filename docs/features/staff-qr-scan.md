@@ -304,6 +304,13 @@ Este proyecto opera bajo **ADR-005: Modelo clone-por-cliente** (ver `docs/02-arc
 3. Agregar a `.env.example`: `STAFF_JWT_SECRET` y `STAFF_QR_JWT_SECRET`.
 4. Verificar que el build compila sin errores.
 
+### Fase 1.5: Dispositivo de confianza (configuración del local)
+1. Supervisor abre `/mesero/activate` en el celular/tablet del restaurante.
+2. Ingresa su número de celular + PIN de supervisor.
+3. POST `/api/staff/device/register` → backend genera `device_token` de 90 días.
+4. Guardar `device_token` en localStorage del navegador.
+5. Redirigir a `/mesero/dashboard`. Desde ese momento el dispositivo está listo.
+
 ### Fase 2: Generación del QR dinámico del cliente
 4. En `CheckInForm.tsx`, tras `action: 'lookup'` exitoso:
    - Mostrar nueva pantalla/estado `showCustomerQR`.
@@ -349,8 +356,9 @@ Este proyecto opera bajo **ADR-005: Modelo clone-por-cliente** (ver `docs/02-arc
 ### Fase 7: Validación
 18. `npm run build` sin errores.
 19. Probar flujo completo localmente:
+    - **Dispositivo de confianza:** Supervisor activa tablet → mesero abre `/mesero` → va directo a dashboard → escanea QR → visita confirmada.
+    - **Login con PIN:** Mesero abre `/mesero` → login con PIN → escanea QR → registra mesa → visita confirmada.
     - Cliente escanea → ingresa celular → ve QR.
-    - Mesero abre `/mesero` → login con PIN → escanea QR → registra mesa → visita confirmada.
 20. Verificar que el flujo QR original (`/check-in` sin mesero) sigue funcionando.
 
 ---
@@ -359,8 +367,9 @@ Este proyecto opera bajo **ADR-005: Modelo clone-por-cliente** (ver `docs/02-arc
 
 - [ ] Instalar dependencias `qrcode.react`, `html5-qrcode`, `jose`, `bcryptjs`
 - [ ] Implementar generación de QR dinámico en `CheckInForm.tsx`
-- [ ] Crear rutas `/mesero/*` y componentes de escaneo/login
-- [ ] Modificar `/api/check-in/route.ts` para `source: 'staff_scan'`, `registered_by_staff_id`, `token`
+- [ ] Crear rutas `/mesero/*` y componentes de escaneo/login/activación
+- [ ] Crear API `/api/staff/device/register` y `/api/staff/device/verify`
+- [ ] Modificar `/api/check-in/route.ts` para `source: 'staff_scan'`, `registered_by_staff_id`, `device_token`, `token`
 - [ ] Actualizar `docs/API_DOCS.md`
 - [ ] Actualizar `docs/DB_SCHEMA.md` (si hay cambio de schema)
 - [ ] Actualizar `CHANGELOG.md`
@@ -412,17 +421,24 @@ CLIENTE EXISTENTE (total_visits ≥ 1)
   → El frontend muestra QR DINÁMICO personal (token firmado con jose)
   → Mensaje: "Muéstrale este QR a tu mesero"
 
-MESERO
+MESERO — Escenario A: Dispositivo de confianza (celular del local)
   → Abre /mesero en el celular del restaurante
-  → Login con PIN (phone + PIN de 4-6 dígitos) → JWT guardado en localStorage (con refresh cookie httpOnly opcional)
-  → Dashboard: stats del día + botón "Escanear QR de Cliente"
-  → Toca el botón → abre cámara (html5-qrcode)
-  → Escanea QR del cliente (parsea token, muestra datos preliminares)
-  → POST /api/check-in con source: 'staff_scan', registered_by_staff_id: uuid-del-mesero
-  → Backend valida token (firma + expiración) y staff_id activo
+  → El navegador ya tiene device_token activo → va DIRECTO al dashboard
+  → Toca "Escanear QR de Cliente" → abre cámara
+  → Escanea QR del cliente
+  → POST /api/check-in con source: 'staff_scan', device_token: xxx
+  → Backend valida token del QR + device_token activo
   → Sistema registra visita, otorga puntos, evalúa tier
-  → Mesero ve en pantalla: puntos ganados, visita #X, premio si aplica
-  → Cliente recibe WhatsApp de confirmación
+  → Mesero ve éxito → Cliente recibe WhatsApp
+
+MESERO — Escenario B: Celular propio (login con PIN)
+  → Abre /mesero en su celular
+  → Login con PIN (phone + PIN de 4-6 dígitos) → JWT en localStorage
+  → Dashboard → Toca "Escanear QR" → escanea
+  → POST /api/check-in con source: 'staff_scan', registered_by_staff_id: uuid-del-mesero
+  → Backend valida token del QR + staff_id activo
+  → Sistema registra visita, otorga puntos, evalúa tier
+  → Mesero ve éxito → Cliente recibe WhatsApp
 ```
 
 **Alternativa: "Todas las visitas requieren mesero"**
@@ -451,17 +467,19 @@ Si checkin_mode === 'staff_verified':
 ### Lógica del backend
 
 ```
-POST /api/check-in { action: 'checkin', phone, source?, registered_by_staff_id?, table_number?, token? }
+POST /api/check-in { action: 'checkin', phone, source?, registered_by_staff_id?, device_token?, table_number?, token? }
 
 1. Leer admin_settings.checkin_mode y checkin_first_visit_free
 2. Buscar cliente por phone
 3. Si mode === 'staff_verified' y cliente existe (total_visits ≥ 1):
-     a. Si NO viene registered_by_staff_id → RECHAZAR 403
-        "Este restaurante requiere validación del mesero."
-     b. Validar que el staff_id corresponde a un mesero activo en staff_users
-     c. Si viene token (QR dinámico): validar firma y expiración con STAFF_QR_JWT_SECRET
-     d. Marcar visita con source: 'staff_scan'
-     e. Guardar registered_by_staff_id en visits
+     a. Validar autenticación del mesero:
+        - Si viene registered_by_staff_id: validar que exista y esté activo en staff_users
+        - Si viene device_token: validar que exista y esté activo en staff_devices
+        - Si NO viene ninguno → RECHAZAR 403
+          "Este restaurante requiere validación del mesero."
+     b. Si viene token (QR dinámico): validar firma y expiración con STAFF_QR_JWT_SECRET
+     c. Marcar visita con source: 'staff_scan'
+     d. Guardar registered_by_staff_id en visits (null si fue por device trust)
 4. Si mode === 'auto':
      a. Flujo actual, sin cambios
 5. Resto del flujo (puntos, tiers, WhatsApp) es idéntico
@@ -476,8 +494,9 @@ POST /api/check-in { action: 'checkin', phone, source?, registered_by_staff_id?,
 | Cliente existente | Auto-check-in + WhatsApp | QR dinámico → mesero escanea | QR dinámico → mesero escanea |
 | Puntos | Al instante | Cuando el mesero escanea | Cuando el mesero escanea |
 | WhatsApp | Al instante | Cuando el mesero escanea | Cuando el mesero escanea |
-| Anti-fraude | Rate limit por IP | Rate limit + QR TTL + PIN mesero + traza | Rate limit + QR TTL + PIN mesero + traza |
+| Anti-fraude | Rate limit por IP | Rate limit + QR TTL + device trust/PIN + traza | Rate limit + QR TTL + device trust/PIN + traza |
 | Fricción cliente | Mínima | Media (primera vez libre) | Alta (siempre con mesero) |
+| Fricción mesero | Ninguna | **Casi cero** (device trust) o Media (PIN) | **Casi cero** (device trust) o Media (PIN) |
 
 ---
 
@@ -590,20 +609,21 @@ Solo se necesita:
 
 El diseño original (secciones 1-13 de este doc) planteaba `/staff` como **ruta pública sin login**. El nuevo requerimiento añade:
 
-- **Autenticación de meseros:** Cada mesero tiene cuenta propia (usuario/contraseña o PIN).
-- **Sesión persistente:** El mesero no debe loguearse en cada uso.
-- **Apartado QR en el menú:** Dentro de la app del mesero, un botón o tab que abre el escáner.
-- **Traza de quién escaneó:** La visita registrada debe quedar asociada al mesero que la escaneó.
+- **Autenticación de meseros:** Cada mesero puede tener cuenta con PIN (para trazabilidad individual).
+- **Dispositivo de confianza:** El celular/tablet del restaurante se configura **una sola vez** por el supervisor y después no requiere PIN. Esto da **0 fricción** al mesero de turno.
+- **Sesión persistente:** El mesero no debe loguearse en cada uso (ya sea por device trust o JWT de larga duración).
+- **Apartado QR en el menú:** Dentro de la app del mesero, un botón que abre el escáner.
+- **Traza de quién escaneó:** La visita registrada queda asociada al mesero (si usó PIN) o al dispositivo del restaurante (si usó device trust).
 
 ### Modelo de datos adicional (requiere migración)
 
 ```sql
--- Nueva tabla: staff_users (usuarios de meseros con login)
+-- Nueva tabla: staff_users (usuarios de meseros con login opcional)
 CREATE TABLE staff_users (
     id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     name            text NOT NULL,
     phone           text NOT NULL UNIQUE,   -- para contacto/recuperación
-    pin             text NOT NULL,           -- hashed bcrypt (no contraseña larga, PIN de 4-6 dígitos)
+    pin             text,                    -- hashed bcrypt (null = solo usa device trust, no login individual)
     role            text NOT NULL DEFAULT 'waiter', -- 'waiter' | 'supervisor' | 'admin'
     is_active       boolean NOT NULL DEFAULT true,
     last_login_at   timestamptz,
@@ -611,7 +631,22 @@ CREATE TABLE staff_users (
     updated_at      timestamptz NOT NULL DEFAULT now()
 );
 
--- Nueva FK en visits: quién registró la visita
+-- Nueva tabla: staff_devices (dispositivos de confianza del restaurante)
+CREATE TABLE staff_devices (
+    id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    staff_user_id       uuid REFERENCES staff_users(id) ON DELETE CASCADE, -- quién activó el dispositivo
+    device_fingerprint  text NOT NULL, -- hash de user agent + screen res + plataforma (no identificable personalmente)
+    device_name         text,          -- ej: "Tablet Caja", "Celular del Local"
+    is_trusted          boolean NOT NULL DEFAULT true,
+    trusted_at          timestamptz NOT NULL DEFAULT now(),
+    expires_at          timestamptz,   -- null = nunca expira (dispositivo del local)
+    last_used_at        timestamptz,
+    created_at          timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_staff_devices_fingerprint ON staff_devices(device_fingerprint);
+CREATE INDEX idx_staff_devices_staff ON staff_devices(staff_user_id);
+
+-- Nueva FK en visits: quién registró la visita (puede ser null si fue por device trust genérico)
 ALTER TABLE visits ADD COLUMN registered_by_staff_id uuid REFERENCES staff_users(id) ON DELETE SET NULL;
 CREATE INDEX idx_visits_registered_by ON visits(registered_by_staff_id);
 ```
@@ -621,22 +656,28 @@ CREATE INDEX idx_visits_registered_by ON visits(registered_by_staff_id);
 ### Flujo actualizado (con login)
 
 ```
-MESERO
-├── Abre /mesero (ruta pública, sin auth)
-├── Login con PIN (POST /api/staff/login)
-│   └── Si válido → JWT en localStorage / cookie
-├── Dashboard del mesero:
-│   ├── Estadísticas del día (visitas registradas por él)
-│   ├── Botón "Escanear QR de Cliente"
-│   └── Cerrar sesión
-├── Toca "Escanear QR" → abre cámara (html5-qrcode)
-├── Escanea QR del cliente
-├── Confirma datos del cliente + número de mesa
-├── POST /api/check-in (con header/session de staff)
-│   └── source: 'staff_scan', registered_by_staff_id: uuid
-└── Pantalla de éxito con resumen
+ESCENARIO A: CELULAR DEL RESTAURANTE (DISPOSITIVO DE CONFIANZA)
+├── Supervisor/Dueño abre /mesero en el celular del local
+├── Toca "Activar este dispositivo" → ingresa su PIN de supervisor
+├── POST /api/staff/device/register
+│   └── Backend genera device_token de larga duración (90 días) → guarda en localStorage
+├── Desde ese momento, cualquier mesero abre /mesero y VA DIRECTO al dashboard
+│   └── El backend valida el device_token silenciosamente
+├── Toca "Escanear QR" → escanea → confirma → POST /api/check-in
+│   └── source: 'staff_scan', device_token: xxx (no registered_by_staff_id)
+└── Pantalla de éxito
 
-CLIENTE
+ESCENARIO B: CELULAR PROPIO DEL MESERO (LOGIN CON PIN)
+├── Mesero abre /mesero en su celular
+├── Ingresa su número + PIN de 4-6 dígitos
+├── POST /api/staff/login
+│   └── Si válido → JWT en localStorage (8 horas)
+├── Dashboard del mesero → toca "Escanear QR"
+├── Escanea → confirma → POST /api/check-in
+│   └── source: 'staff_scan', registered_by_staff_id: uuid-del-mesero
+└── Pantalla de éxito
+
+CLIENTE (ambos escenarios)
 ├── Escanea QR del restaurante → /check-in
 ├── Ingresa celular
 ├── Si existe → muestra QR dinámico personal (qrcode.react)
@@ -650,9 +691,12 @@ CLIENTE
 |--------|------|-------------|------|
 | `POST` | `/api/staff/login` | Login con phone + PIN → JWT firmado con `STAFF_JWT_SECRET` | Público |
 | `POST` | `/api/staff/refresh` | Refresh de token JWT | Público (cookie httpOnly) |
-| `GET` | `/api/staff/me` | Datos del mesero autenticado | Bearer JWT |
-| `GET` | `/api/staff/stats` | Visitas registradas hoy por el mesero | Bearer JWT |
-| `GET` | `/api/dashboard/staff` | Listar meseros del restaurante | Admin JWT |
+| `GET` | `/api/staff/me` | Datos del mesero autenticado (JWT) o del dispositivo (device_token) | Bearer JWT o Device Token |
+| `GET` | `/api/staff/stats` | Visitas registradas hoy (por mesero o por dispositivo) | Bearer JWT o Device Token |
+| `POST` | `/api/staff/device/register` | Registrar celular/tablet del local como dispositivo de confianza (requiere PIN de supervisor) | Bearer JWT (supervisor/admin) |
+| `POST` | `/api/staff/device/verify` | Verificar silenciosamente si el navegador es un dispositivo de confianza | Público (envía device_token) |
+| `DELETE` | `/api/staff/device/:id` | Revocar un dispositivo de confianza | Admin JWT |
+| `GET` | `/api/dashboard/staff` | Listar meseros y dispositivos del restaurante | Admin JWT |
 | `POST` | `/api/dashboard/staff` | Crear mesero (name, phone, pin, role) | Admin JWT |
 | `PATCH` | `/api/dashboard/staff/:id` | Actualizar mesero (toggle activo, resetear PIN) | Admin JWT |
 
@@ -668,10 +712,11 @@ CLIENTE
 
 | Ruta | Descripción | Auth |
 |------|-------------|------|
-| `/mesero` | Login del mesero (PIN) | Sin auth |
-| `/mesero/dashboard` | Home: estadísticas + botón escanear | Requiere JWT |
-| `/mesero/scan` | Cámara de escaneo QR | Requiere JWT |
-| `/mesero/confirm` | Confirmación post-escaneo | Requiere JWT |
+| `/mesero` | Login del mesero (PIN) o redirección a dashboard si es dispositivo de confianza | Sin auth (salvo verificación silenciosa de device_token) |
+| `/mesero/activate` | Pantalla para activar este dispositivo como "de confianza" (requiere PIN de supervisor) | Sin auth |
+| `/mesero/dashboard` | Home: estadísticas + botón escanear | Requiere JWT o Device Token válido |
+| `/mesero/scan` | Cámara de escaneo QR | Requiere JWT o Device Token válido |
+| `/mesero/confirm` | Confirmación post-escaneo | Requiere JWT o Device Token válido |
 
 > **Por qué `/mesero` y no `/staff`:** `/staff` está reservado en el diseño original para la página pública de escaneo. El nuevo requerimiento con login merece un namespace distinto para no confundir con la ruta pública. Si se prefiere, `/staff` puede redirigir a `/mesero`.
 
@@ -684,11 +729,12 @@ CLIENTE
 | `src/app/(public)/mesero/scan/page.tsx` | Visor de cámara con `html5-qrcode` |
 | `src/app/(public)/mesero/confirm/page.tsx` | Tarjeta del cliente + input mesa + botón confirmar |
 | `src/components/features/staff/StaffLoginForm.tsx` | Formulario de login (phone + PIN) |
-| `src/components/features/staff/StaffDashboard.tsx` | Stats del mesero + navegación rápida |
+| `src/components/features/staff/StaffDeviceActivation.tsx` | Pantalla para activar dispositivo de confianza (ingresa PIN supervisor) |
+| `src/components/features/staff/StaffDashboard.tsx` | Stats del mesero / del día + navegación rápida |
 | `src/components/features/staff/StaffScanner.tsx` | Componente de escaneo con `html5-qrcode` |
 | `src/components/features/staff/StaffConfirmation.tsx` | Confirmación de datos + input mesa |
 | `src/components/features/staff/StaffSuccess.tsx` | Éxito post-registro |
-| `src/hooks/useStaffAuth.ts` | Hook para manejar JWT, logout, proteger rutas `/mesero/*` |
+| `src/hooks/useStaffAuth.ts` | Hook para manejar JWT, device_token, logout, proteger rutas `/mesero/*` |
 
 ### Seguridad y anti-abuso (nuevas capas)
 
@@ -697,8 +743,9 @@ CLIENTE
 | **QR con TTL** | El token JWT del QR incluye `exp` (expiración en 5 min). El backend (`/api/check-in`) valida firma y expiración con `STAFF_QR_JWT_SECRET`. El frontend del mesero nunca valida el TTL. |
 | **Rate limit dual** | Mantener rate limit por IP (`checkin:${ip}`) SIEMPRE como capa base. Adicionalmente, rate limit por staff (`checkin:${staffId}`) cuando source es staff_scan. |
 | **PIN (no password)** | 4-6 dígitos numéricos, bcrypt hashed (requiere instalar `bcryptjs`). Fácil de recordar para meseros, seguro contra fuerza bruta con rate limit. |
-| **Traza completa** | Cada visita `staff_scan` queda ligada al `staff_user` que la registró (`visits.registered_by_staff_id`). El admin puede auditar quién escaneó a quién. |
-| **Sesión corta** | JWT expira en 8 horas (turno de trabajo). Refresh token en cookie httpOnly opcional. |
+| **Traza completa** | Cada visita `staff_scan` queda ligada al `staff_user` que la registró (`visits.registered_by_staff_id`) o al dispositivo (`staff_devices.id`). El admin puede auditar quién/qué escaneó a quién. |
+| **Dispositivo de confianza** | El supervisor activa un dispositivo una sola vez con su PIN. El `device_token` se guarda en localStorage y se valida silenciosamente en cada request. Puede revocarse desde el dashboard del admin. |
+| **Sesión corta (PIN)** | JWT expira en 8 horas (turno de trabajo). Refresh token en cookie httpOnly opcional. |
 | **Inactividad** | *(Futuro / Nice-to-have)* Auto-logout tras 30 min sin actividad en la app del mesero. Complejidad alta en webapp PWA; prioridad baja respecto al core. |
 
 ### Dependencias nuevas (adicional a las del diseño original)
@@ -713,18 +760,19 @@ CLIENTE
 ### Pendiente actualizado (post-auditoría + nuevo requerimiento)
 
 - [ ] Instalar dependencias: `qrcode.react`, `html5-qrcode`, `jose`, `bcryptjs`
-- [ ] Crear migración SQL: tabla `staff_users`, columna `visits.registered_by_staff_id`, ampliar `visits.source` enum implícito
+- [ ] Crear migración SQL: tabla `staff_users`, tabla `staff_devices`, columna `visits.registered_by_staff_id`, ampliar `visits.source` enum implícito
 - [ ] Agregar `checkin_mode` y `checkin_first_visit_free` a seeds de `admin_settings`
 - [ ] Crear API `/api/staff/login`, `/api/staff/me`, `/api/staff/stats`
-- [ ] Crear API `/api/dashboard/staff` — CRUD de meseros para admin
-- [ ] Modificar `POST /api/check-in`: aceptar `source: 'staff_scan'`, `registered_by_staff_id`, `token`; validar staff activo + token firma/exp; rechazar check-in existente en modo `staff_verified` sin staff
+- [ ] Crear API `/api/staff/device/register` y `/api/staff/device/verify`
+- [ ] Crear API `/api/dashboard/staff` — CRUD de meseros y dispositivos para admin
+- [ ] Modificar `POST /api/check-in`: aceptar `source: 'staff_scan'`, `registered_by_staff_id`, `device_token`, `token`; validar staff activo O device trust + token firma/exp; rechazar check-in existente en modo `staff_verified` sin auth
 - [ ] Ampliar `CheckInRequestBody`, `PointTransactionSource`, `awardVisitPoints()`, `incrementVisit()`
 - [ ] Fix `getRecentVisit()` — quitar filtro `.eq('source', 'qr')`
 - [ ] Modificar lookup para retornar `checkin_mode`, `checkin_first_visit_free`, `current_tier`
 - [ ] Modificar `CheckInForm.tsx` para detener auto-check-in y mostrar QR dinámico (token JWT)
-- [ ] Crear rutas `/mesero`, `/mesero/dashboard`, `/mesero/scan`, `/mesero/confirm`
-- [ ] Crear hook `useStaffAuth.ts` y componentes de staff
-- [ ] Agregar RLS para `staff_users`
+- [ ] Crear rutas `/mesero`, `/mesero/activate`, `/mesero/dashboard`, `/mesero/scan`, `/mesero/confirm`
+- [ ] Crear hook `useStaffAuth.ts` y componentes de staff (incluyendo `StaffDeviceActivation`)
+- [ ] Agregar RLS para `staff_users` y `staff_devices`
 - [ ] Actualizar `docs/DB_SCHEMA.md`, `docs/API_DOCS.md`, `docs/03-security.md`, `docs/02-architecture.md`
 - [ ] Actualizar `.env.example` con `STAFF_JWT_SECRET` y `STAFF_QR_JWT_SECRET`
 - [ ] Actualizar `CHANGELOG.md`
@@ -748,6 +796,7 @@ Durante la revisión del documento previo al desarrollo se identificaron y corri
 8. **Falta de tabla `staff_users` y RLS:** No se definía RLS para la nueva tabla ni endpoints del dashboard para que el admin gestione meseros.
 9. **Falta de setting `checkin_first_visit_free`:** La sub-opción "primera visita libre" no tenía un mecanismo de configuración definido. Se agregó como key en `admin_settings`.
 10. **`/staff` pública contradecía el requerimiento de login:** Se eliminó la propuesta de ruta pública sin auth.
+11. **PIN obligatorio en todos los dispositivos = fricción innecesaria:** Post-auditoría se introdujo el modelo de **Dispositivo de Confianza** para el celular/tablet del restaurante, eliminando el login diario del mesero en el 90% de los casos de uso. El PIN individual se mantiene como opción avanzada para trazabilidad.
 
 ### Errores menores corregidos
 
@@ -756,6 +805,7 @@ Durante la revisión del documento previo al desarrollo se identificaron y corri
 - **Dependencias:** se agregó `bcryptjs` explícitamente; se aclaró que el PIN se hashea, no almacena en texto plano.
 - **`CheckInForm.tsx`** hace auto-checkin inmediato hoy; se agregó requisito de que el lookup debe retornar `checkin_mode` para que el frontend decida si detener el auto-checkin.
 - Se agregaron variables de entorno faltantes (`STAFF_JWT_SECRET`, `STAFF_QR_JWT_SECRET`) a la lista de pendientes y a `.env.example`.
+- **Nuevo enfoque Device Trust (post-auditoría v2):** Se reemplazó el modelo "todos los meseros con PIN" por "dispositivo de confianza para el local + PIN opcional para celulares propios", reduciendo fricción del mesero a prácticamente cero.
 
 ### Archivos adicionales identificados que deben actualizarse
 
@@ -767,4 +817,4 @@ Durante la revisión del documento previo al desarrollo se identificaron y corri
 
 ---
 
-*Última actualización: 2026-05-30 (Auditoría v1.0.x + Nuevo requerimiento: app del mesero con login + QR scanner)*
+*Última actualización: 2026-05-30 v2 (Auditoría v1.0.x + Device Trust: dispositivo de confianza para 0 fricción del mesero + PIN opcional para trazabilidad individual)*

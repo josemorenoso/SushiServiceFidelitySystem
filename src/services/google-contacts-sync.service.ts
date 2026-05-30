@@ -11,7 +11,7 @@ interface ContactSyncPayload {
   city?: string | null
   totalVisits?: number
   address?: string | null
-  source: 'qr' | 'delivery'
+  source: 'qr' | 'delivery' | 'staff_scan'
   action: 'created' | 'updated'
 }
 

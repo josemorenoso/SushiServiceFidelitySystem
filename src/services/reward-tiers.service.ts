@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import type { RewardTier } from '@/types/database.types'
+import { getTierEmoji } from '@/lib/tier-emojis'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -111,18 +112,12 @@ export async function buildTiersRoadmap(currentPoints: number): Promise<string> 
   const tiers = await getAllTiers()
   if (tiers.length === 0) return '🌟 ¡Seguí sumando puntos para desbloquear premios!'
 
-  const tierEmojis: Record<string, string> = {
-    'Bronce': '🥉',
-    'Plata': '🥈',
-    'Oro': '🥇',
-    'BLACK': '🖤',
-  }
-
   const lines: string[] = []
   let foundNext = false
 
-  for (const t of tiers) {
-    const emoji = tierEmojis[t.tier_name] ?? '🎯'
+  for (let i = 0; i < tiers.length; i++) {
+    const t = tiers[i]
+    const emoji = getTierEmoji(i, t.is_black)
     const reached = currentPoints >= t.point_threshold
 
     if (reached) {

@@ -1,6 +1,7 @@
 'use client'
 
 import { Lock, Target, CheckCircle2, Box } from 'lucide-react'
+import { getTierEmoji } from '@/lib/tier-emojis'
 
 interface TierItem {
   tier_name: string
@@ -13,13 +14,6 @@ interface TierItem {
 interface TiersRoadmapProps {
   tiers: TierItem[]
   totalPoints: number
-}
-
-const tierEmojis: Record<string, string> = {
-  'Bronce': '🥉',
-  'Plata': '🥈',
-  'Oro': '🥇',
-  'BLACK': '🖤',
 }
 
 export function TiersRoadmap({ tiers, totalPoints }: TiersRoadmapProps) {
@@ -41,7 +35,7 @@ export function TiersRoadmap({ tiers, totalPoints }: TiersRoadmapProps) {
           const reached = totalPoints >= tier.point_threshold
           const isNext = !reached && (index === 0 || totalPoints >= sorted[index - 1].point_threshold)
           const remaining = tier.point_threshold - totalPoints
-          const emoji = tierEmojis[tier.tier_name] ?? '🎯'
+          const emoji = getTierEmoji(index, tier.is_black)
 
           return (
             <div

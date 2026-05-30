@@ -32,7 +32,14 @@ Sistema de verificación presencial de dos pasos entre cliente y mesero usando c
 - En modo **automático**: ve su progreso, puntos sumados y premio (si aplica) directamente.
 - En modo **validado**: ve un **QR dinámico personal** que debe mostrarle al mesero.
 
-**Paso 2 (Mesero) — solo en modo validado:** El mesero abre `/mesero` en el celular del restaurante, inicia sesión con un PIN, toca "Escanear QR de Cliente" y apunta la cámara al QR del cliente. Al confirmar, el sistema registra la visita, suma puntos, evalúa tiers y dispara el WhatsApp.
+**Paso 2 (Mesero) — solo en modo validado:** El mesero abre `/mesero` en el celular del restaurante. Hay dos formas de operar:
+
+| Modo de uso | ¿Qué hace el mesero? | ¿Requiere PIN? | ¿Cuándo usarlo? |
+|-------------|---------------------|----------------|-----------------|
+| **Dispositivo de confianza** (recomendado) | Abre `/mesero` → ya está activado. Toca "Escanear QR de Cliente" directamente. | **NO** | Celular/tablet del restaurante que queda en caja. Configurado una vez por el supervisor. |
+| **Login con PIN individual** | Abre `/mesero` → ingresa su número + PIN de 4-6 dígitos → toca "Escanear QR de Cliente". | **SÍ** | Mesero que usa su propio celular, o cuando el dueño quiere trazabilidad individual de quién escaneó. |
+
+En ambos casos, al escanear el QR del cliente y confirmar, el sistema registra la visita, suma puntos, evalúa tiers y dispara el WhatsApp.
 
 Esta feature introduce un paso de verificación interactivo entre cliente y restaurante **sin romper el flujo actual**, porque el dueño elige si activarlo o no.
 
@@ -58,6 +65,7 @@ Esta feature introduce un paso de verificación interactivo entre cliente y rest
 | **customers** | Fuente de datos del cliente (phone, name, total_visits, current_tier) | Reutiliza existente |
 | **visits** | Registro de la visita con `source = 'staff_scan'` + `registered_by_staff_id` | **Nueva columna** |
 | **staff_users** | Meseros con login (PIN hasheado, rol, activo) | **Nueva tabla** |
+| **staff_devices** | Dispositivos autorizados del restaurante (celular/tablet de caja) | **Nueva tabla** |
 | **restaurant_locations** | Geolocalización del restaurante (ya implementado en v1.0.5) | Reutiliza existente |
 | **point_transactions** | Transacción de puntos por la visita registrada | Reutiliza existente; source agrega `'visit_staff'` |
 | **mystery_box_results** | Resultado de la caja misteria si aplica | Reutiliza existente |
@@ -85,9 +93,17 @@ Esta feature introduce un paso de verificación interactivo entre cliente y rest
 
 ### Paso 2: Mesero escanea el QR del cliente
 
-1. El mesero abre `/mesero` en el celular del restaurante.
-2. Inicia sesión con su número de celular + PIN de 4-6 dígitos.
-3. En el dashboard toca "Escanear QR de Cliente"; se abre `/mesero/scan`.
+**Escenario A: Celular del restaurante (dispositivo de confianza)**
+1. El mesero abre `/mesero` en el celular del local.
+2. El sistema detecta que este navegador ya está activado como **dispositivo de confianza** (token persistente guardado en localStorage, validado silenciosamente).
+3. Va directo al dashboard. Toca "Escanear QR de Cliente".
+
+**Escenario B: Celular propio del mesero (login con PIN)**
+1. El mesero abre `/mesero` en su celular.
+2. Ingresa su número de celular + PIN de 4-6 dígitos.
+3. El sistema valida PIN y emite JWT. El mesero va al dashboard. Toca "Escanear QR de Cliente".
+
+**Paso común (ambos escenarios):**
 4. La página solicita permiso de cámara y muestra el visor de escaneo (`html5-qrcode`).
 5. El mesero apunta su cámara al QR del cliente.
 6. El sistema extrae del QR un **token efímero firmado** (`jose`) que contiene `phone`, `name`, `customer_id` y `ts` (timestamp de generación).
@@ -258,7 +274,9 @@ Este proyecto opera bajo **ADR-005: Modelo clone-por-cliente** (ver `docs/02-arc
 
 ## Restricciones
 
-- La ruta `/mesero` es pública **solo para login**. Las sub-rutas `/mesero/dashboard`, `/mesero/scan` y `/mesero/confirm` requieren JWT de mesero válido.
+- La ruta `/mesero` tiene **dos modos de acceso**:
+  - **Dispositivo de confianza:** El navegador presenta un `device_token` persistente (localStorage) validado silenciosamente por el backend. No requiere PIN. Ideal para el celular/tablet del restaurante.
+  - **Login con PIN:** Sub-rutas `/mesero/dashboard`, `/mesero/scan` y `/mesero/confirm` requieren JWT de mesero válido (emitido tras validar PIN).
 - El QR dinámico del cliente debe tener un **tiempo de vida corto** (ej: 5 minutos) para evitar reutilización de screenshots antiguas. La validación del TTL (`ts`) se hace **obligatoriamente en el servidor** (`/api/check-in`), nunca solo en el frontend del mesero.
 - Si el cliente no tiene cámara o no quiere usarla, el mesero puede usar el **modo manual**: escribir el número de celular del cliente en un input y confirmar (el backend valida duplicados igual que con QR).
 - La validación de geolocalización del cliente se **salta** cuando `source = 'staff_scan'`.

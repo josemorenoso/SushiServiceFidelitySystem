@@ -38,19 +38,10 @@ import {
   X,
 } from 'lucide-react'
 import type { RewardTier, MysteryPrize } from '@/types/database.types'
+import { getTierEmoji } from '@/lib/tier-emojis'
 
-// ═══════════════════════════════════════════════════════════════
-// Tier emojis
-// ═══════════════════════════════════════════════════════════════
-const TIER_EMOJIS: Record<string, string> = {
-  'Bronce': '🥉',
-  'Plata': '🥈',
-  'Oro': '🥇',
-  'BLACK': '🖤',
-}
-
-function tierEmoji(name: string): string {
-  return TIER_EMOJIS[name] ?? '🎯'
+function tierEmoji(index: number, isBlack: boolean): string {
+  return getTierEmoji(index, isBlack)
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -294,10 +285,10 @@ export default function RewardsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {sortedTiers.map((t) => (
+                {sortedTiers.map((t, idx) => (
                   <TableRow key={t.id} className={t.is_black ? 'bg-amber-50/60 dark:bg-amber-950/20' : !t.is_active ? 'opacity-50' : ''}>
                     <TableCell>
-                      <span className="text-lg">{tierEmoji(t.tier_name)}</span>
+                      <span className="text-lg">{tierEmoji(idx, t.is_black)}</span>
                     </TableCell>
                     <TableCell className="text-center">
                       {t.is_black ? (

@@ -1,20 +1,36 @@
 # Documentación de API
 
 **Base URL:** `/api`
-**Autenticación:** Bearer Token (JWT) — Supabase Auth
-**Última actualización:** 2026-05-28
+**Autenticación:**
+- **Dashboard endpoints** — Cookie-based (Supabase SSR, sesión admin via `supabase.auth.getUser()`)
+- **Staff endpoints públicos** (`/api/staff/*`) — Bearer Token (Staff JWT) o `X-Device-Token`
+- **Webhooks / Cron** — `x-webhook-secret` o `CRON_SECRET`
+**Última actualización:** 2026-05-30
 > **Nota:** Validación de geolocalización está en **STANDBY** (v1.0.5-3). El backend no valida GPS por defecto. Puede reactivarse descomentando el bloque en `src/app/api/check-in/route.ts`.
 
 ---
 
 ## Autenticación
 
-Endpoints protegidos (dashboard) requieren:
-```
-Authorization: Bearer {access_token}
+### Dashboard (Admin)
+Endpoints bajo `/api/dashboard/*` usan **cookie-based auth** via Supabase SSR. El servidor lee la sesión del admin desde las cookies automáticamente. No se envía header `Authorization` manualmente.
+
+```typescript
+const supabase = await createClient() // @/lib/supabase/server
+const { data: { user } } = await supabase.auth.getUser()
+if (!user) return 401
 ```
 
-Webhooks validan origen por número autorizado o `CRON_SECRET`.
+### Staff (Mesero)
+Endpoints bajo `/api/staff/*` requieren **Bearer Token** (JWT de mesero) o **`X-Device-Token`** (dispositivo de confianza):
+
+```
+Authorization: Bearer {staff_jwt}
+X-Device-Token: {device_fingerprint}
+```
+
+### Webhooks / Cron
+Webhooks validan origen por número autorizado o `x-webhook-secret`. Cron jobs validan `CRON_SECRET`.
 
 ---
 
@@ -29,37 +45,37 @@ Webhooks validan origen por número autorizado o `CRON_SECRET`.
 | POST | /api/webhook/twilio-incoming | Auto-responder mensajes entrantes al número | Twilio Signature |
 | GET/POST | /api/cron/birthday | Enviar felicitaciones de cumpleaños | CRON_SECRET |
 | GET/POST | /api/cron/reactivation | Enviar reactivaciones (21 días inactivos) | CRON_SECRET |
-| GET | /api/dashboard/metrics | Métricas generales | Admin JWT |
-| GET | /api/dashboard/customers | Lista de clientes | Admin JWT |
-| POST | /api/dashboard/campaigns | Crear campaña manual | Admin JWT |
-| POST | /api/dashboard/campaigns/:id/send | Ejecutar campaña | Admin JWT |
-| GET | /api/dashboard/campaigns/estimate | Estimar audiencia con filtros | Admin JWT |
-| POST | /api/dashboard/campaigns/manual | Crear y ejecutar campaña manual | Admin JWT |
-| GET | /api/dashboard/twilio-balance | Saldo Twilio + costo por mensaje | Admin JWT |
-| GET | /api/dashboard/analytics | Analytics completos del dashboard | Admin JWT |
-| GET | /api/dashboard/templates | Listar plantillas Twilio Content API | Admin JWT |
-| POST | /api/dashboard/templates | Crear plantilla + submit aprobación WhatsApp | Admin JWT |
-| POST | /api/dashboard/check-in-override | Registrar visita extra (admin override) | Admin JWT |
-| GET | /api/dashboard/settings | Obtener configuración del admin | Admin JWT |
-| PUT | /api/dashboard/settings | Actualizar configuración | Admin JWT |
-| GET | /api/dashboard/customers/:id | Detalle de un cliente | Admin JWT |
-| GET | /api/dashboard/customers/:id/next-reward | Próxima recompensa del cliente | Admin JWT |
-| POST | /api/dashboard/rewards | Crear recompensa (visit_milestone opcional) | Admin JWT |
-| DELETE | /api/dashboard/rewards?id=X | Eliminar recompensa | Admin JWT |
-| PATCH | /api/dashboard/rewards | Actualizar `is_active`, `title` y/o `visit_milestone` | Admin JWT |
-| GET | /api/dashboard/calendar/events | Listar eventos en rango `?from=&to=` | Admin JWT |
-| POST | /api/dashboard/calendar/events | Crear evento del calendario | Admin JWT |
-| GET | /api/dashboard/calendar/events/:id | Detalle de un evento | Admin JWT |
-| PATCH | /api/dashboard/calendar/events/:id | Actualizar evento | Admin JWT |
-| DELETE | /api/dashboard/calendar/events/:id | Cancelar evento (soft-delete) | Admin JWT |
-| POST | /api/dashboard/calendar/media-upload | Subir imagen/video a `event-media` | Admin JWT |
-| DELETE | /api/dashboard/calendar/media-upload?path=X | Borrar asset del bucket | Admin JWT |
-| GET | /api/dashboard/location | Obtener ubicación del restaurante | Admin JWT |
-| PUT | /api/dashboard/location | Actualizar ubicación del restaurante | Admin JWT |
-| GET | /api/dashboard/staff | Listar meseros y dispositivos | Admin JWT |
-| POST | /api/dashboard/staff | Crear mesero (admin) | Admin JWT |
-| PATCH | /api/dashboard/staff | Actualizar mesero (toggle, reset PIN) | Admin JWT |
-| DELETE | /api/dashboard/staff | Eliminar mesero | Admin JWT |
+| GET | /api/dashboard/metrics | Métricas generales | Admin Cookie |
+| GET | /api/dashboard/customers | Lista de clientes | Admin Cookie |
+| POST | /api/dashboard/campaigns | Crear campaña manual | Admin Cookie |
+| POST | /api/dashboard/campaigns/:id/send | Ejecutar campaña | Admin Cookie |
+| GET | /api/dashboard/campaigns/estimate | Estimar audiencia con filtros | Admin Cookie |
+| POST | /api/dashboard/campaigns/manual | Crear y ejecutar campaña manual | Admin Cookie |
+| GET | /api/dashboard/twilio-balance | Saldo Twilio + costo por mensaje | Admin Cookie |
+| GET | /api/dashboard/analytics | Analytics completos del dashboard | Admin Cookie |
+| GET | /api/dashboard/templates | Listar plantillas Twilio Content API | Admin Cookie |
+| POST | /api/dashboard/templates | Crear plantilla + submit aprobación WhatsApp | Admin Cookie |
+| POST | /api/dashboard/check-in-override | Registrar visita extra (admin override) | Admin Cookie |
+| GET | /api/dashboard/settings | Obtener configuración del admin | Admin Cookie |
+| PUT | /api/dashboard/settings | Actualizar configuración | Admin Cookie |
+| GET | /api/dashboard/customers/:id | Detalle de un cliente | Admin Cookie |
+| GET | /api/dashboard/customers/:id/next-reward | Próxima recompensa del cliente | Admin Cookie |
+| POST | /api/dashboard/rewards | Crear recompensa (visit_milestone opcional) | Admin Cookie |
+| DELETE | /api/dashboard/rewards?id=X | Eliminar recompensa | Admin Cookie |
+| PATCH | /api/dashboard/rewards | Actualizar `is_active`, `title` y/o `visit_milestone` | Admin Cookie |
+| GET | /api/dashboard/calendar/events | Listar eventos en rango `?from=&to=` | Admin Cookie |
+| POST | /api/dashboard/calendar/events | Crear evento del calendario | Admin Cookie |
+| GET | /api/dashboard/calendar/events/:id | Detalle de un evento | Admin Cookie |
+| PATCH | /api/dashboard/calendar/events/:id | Actualizar evento | Admin Cookie |
+| DELETE | /api/dashboard/calendar/events/:id | Cancelar evento (soft-delete) | Admin Cookie |
+| POST | /api/dashboard/calendar/media-upload | Subir imagen/video a `event-media` | Admin Cookie |
+| DELETE | /api/dashboard/calendar/media-upload?path=X | Borrar asset del bucket | Admin Cookie |
+| GET | /api/dashboard/location | Obtener ubicación del restaurante | Admin Cookie |
+| PUT | /api/dashboard/location | Actualizar ubicación del restaurante | Admin Cookie |
+| GET | /api/dashboard/staff | Listar meseros y dispositivos | Admin Cookie |
+| POST | /api/dashboard/staff | Crear mesero (admin) | Admin Cookie |
+| PATCH | /api/dashboard/staff | Actualizar mesero (toggle, reset PIN) | Admin Cookie |
+| DELETE | /api/dashboard/staff | Eliminar mesero | Admin Cookie |
 | POST | /api/staff/login | Login mesero (phone + PIN) | NO |
 | GET | /api/staff/me | Validar sesión mesero | Staff JWT / Device |
 | GET | /api/staff/stats | Visitas registradas hoy | Staff JWT / Device |

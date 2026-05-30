@@ -566,3 +566,5 @@ $$ LANGUAGE plpgsql;
 | admin_settings | Admin | Admin | Admin | NO |
 | restaurant_events | Admin + Service | Admin + Service | Admin + Service | Admin |
 | restaurant_locations | Admin + Service | Admin | Admin | Admin |
+| staff_users | Admin + Service | Admin + Service | Admin + Service | Admin |
+| staff_devices | Admin + Service | Admin + Service | Admin + Service | Admin |

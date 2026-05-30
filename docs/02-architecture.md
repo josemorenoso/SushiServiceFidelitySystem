@@ -79,17 +79,30 @@ Tablas principales previstas:
 - **rewards** — Configuración de recompensas por metas
 - **campaigns** — Campañas de marketing (manuales y automáticas)
 - **campaign_messages** — Mensajes enviados por campaña
-- **authorized_numbers** — Números de meseros autorizados para webhook
-- **admin_settings** — Configuración del admin (key-value: ticket promedio, etc.)
+- **authorized_numbers** — Números de meseros autorizados para webhook (domicilios)
+- **admin_settings** — Configuración del admin (key-value: ticket promedio, modo check-in, etc.)
 - **admin_users** — Administradores del dashboard (vía Supabase Auth)
+- **staff_users** — Meseros del restaurante (login con PIN hasheado, roles: waiter/supervisor/admin)
+- **staff_devices** — Dispositivos de confianza (celulares/tablets del local registrados por supervisor)
 
 ## Flujo de Datos
 
-### QR Check-in (Presencial)
+### QR Check-in (Presencial) — Modo `auto` (legacy)
 ```
 Cliente escanea QR → /check-in → Ingresa celular
   → Si nuevo: Formulario completo → Supabase INSERT → Twilio WhatsApp bienvenida
   → Si existe: +1 visita → Evalúa meta → Twilio WhatsApp recompensa (si aplica)
+```
+
+### QR Check-in — Modo `staff_verified` (v1.1.0+)
+```
+Cliente escanea QR → /check-in → Ingresa celular
+  → Si nuevo: Registro + welcome bonus → Muestra QR dinámico personal (token JWT 5 min)
+  → Si existe: Muestra QR dinámico personal (token JWT 5 min)
+
+Mesero (dispositivo de confianza o login con PIN) → Abre /mesero → Escanea QR del cliente
+  → Valida firma JWT del QR → Confirma mesa → Registra visita (source='staff_scan')
+  → Suma puntos → Evalúa tier → Twilio WhatsApp
 ```
 
 ### Domicilios (WhatsApp)
@@ -125,6 +138,8 @@ Admin login (Supabase Auth) → /dashboard → Métricas, Clientes, Recompensas,
 | `NEXT_PUBLIC_BRAND_NAME` | Nombre completo del restaurante (ej: "Sushi Service") | pública | SI |
 | `NEXT_PUBLIC_BRAND_SHORT` | Nombre corto para UI compacta | pública | NO |
 | `NEXT_PUBLIC_BRAND_TAGLINE` | Tagline del restaurante | pública | NO |
+| `STAFF_JWT_SECRET` | Secret para firmar JWT de sesión de meseros | privada | SI (si usa staff scan) |
+| `STAFF_QR_JWT_SECRET` | Secret para firmar tokens efímeros del QR dinámico del cliente | privada | SI (si usa staff scan) |
 | `N8N_BASE_URL` | URL base de n8n | privada | NO |
 
 ## Convenciones del Proyecto

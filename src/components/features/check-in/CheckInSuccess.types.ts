@@ -36,8 +36,6 @@ export interface CheckInSuccessProps {
     message: string
     is_black?: boolean
   } | null
-  nextRewardHint?: string | null
-  roadmap?: RoadmapItem[]
   tierUnlocked?: TierUnlockedDisplay | null
   nextTier?: NextTierDisplay | null
   tiers?: TierItem[]

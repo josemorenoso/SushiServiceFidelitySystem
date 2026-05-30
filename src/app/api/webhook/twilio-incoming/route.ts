@@ -81,7 +81,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   // Twilio intercepts STOP/START before hitting this webhook in most cases,
   // but handle defensively just in case.
-  if (['STOP', 'UNSTOP', 'START', 'BAJA', 'ALTA'].includes(upper)) {
+  if (['STOP', 'UNSTOP', 'START', 'BAJA', 'ALTA', 'SALIR', 'NO'].includes(upper)) {
     return new NextResponse(null, { status: 200 })
   }
 

@@ -342,7 +342,7 @@ export async function executeAutoEvent(eventId: string): Promise<ExecuteAutoEven
         '6': mediaUrl,
       }
 
-      const result = await sendTemplateMessage(customer.phone, templateSid, variables)
+      const result = await sendTemplateMessage(customer.phone, templateSid, variables, mediaUrl)
       await recordCampaignMessage({
         campaignId: campaign.id,
         customerId: customer.id,

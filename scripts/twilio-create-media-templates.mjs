@@ -91,6 +91,10 @@ const templates = [
 ]
 
 function buildTemplateBody(mimeHint) {
+  const sampleMediaUrl = mimeHint === 'image'
+    ? 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3f/JPEG_example_flower.jpg/800px-JPEG_example_flower.jpg'
+    : 'https://www.w3schools.com/html/mov_bbb.mp4'
+
   return {
     friendly_name: undefined, // set per-template
     language: 'es',
@@ -100,14 +104,12 @@ function buildTemplateBody(mimeHint) {
       '3': 'Festival Gastronómico',
       '4': 'sábado 14 de junio',
       '5': '¡Te esperamos con tu familia! 🍽️',
-      '6': mimeHint === 'image'
-        ? 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3f/JPEG_example_flower.jpg/800px-JPEG_example_flower.jpg'
-        : 'https://www.w3schools.com/html/mov_bbb.mp4',
+      '6': sampleMediaUrl,
     },
     types: {
       'twilio/media': {
         body: TEMPLATE_BODY,
-        media: ['{{6}}'],
+        media: [sampleMediaUrl], // URL real de ejemplo (Twilio NO acepta {{N}} aquí)
       },
     },
   }

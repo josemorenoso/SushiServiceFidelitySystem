@@ -5,6 +5,36 @@
 
 ---
 
+## [1.0.7] — 2026-05-30 — HOTFIX: Check-in duplicados, residuos legacy, permisos RLS
+
+### Fixed
+
+**Cap de 24 horas eliminado (bug crítico):**
+- `src/app/api/check-in/route.ts`: `getRecentVisit(customer.id, 0.5)` → `1440`. El comentario "30 segundos para testing" nunca se cambió en producción, permitiendo check-ins ilimitados.
+
+**Residuos del sistema legacy de recompensas por visitas:**
+- `src/app/api/check-in/route.ts`: Eliminado import y lógica legacy de `reward.service.ts` (`checkRewardForVisit`, `getNextReward`, `buildRewardsRoadmap`, `getUpcomingRewards`). El endpoint ya no evalúa recompensas basadas en `visit_milestone` ni devuelve `reward`/`roadmap` legacy en la respuesta JSON.
+- `src/components/features/check-in/CheckInSuccess.tsx`: Eliminada sección "Tus próximos premios" que mostraba `roadmap` basado en visitas (imágenes del bug: #3 Soda, #4 Postre, etc.). Eliminado `nextRewardHint` legacy.
+- `src/app/(public)/check-in/page.tsx`: Eliminados `roadmap` y `nextRewardHint` del estado, handlers y props de `CheckInSuccess`.
+- `src/components/features/check-in/CheckInForm.types.ts`: `reward`, `nextReward`, `roadmap` ahora opcionales en `CheckInResult`/`RegisterResult` para reflejar el API actual.
+- `src/components/features/check-in/CheckInSuccess.types.ts`: Eliminados `roadmap` y `nextRewardHint` de las props.
+
+**WhatsApp variables mal mapeadas:**
+- `src/app/api/check-in/route.ts`: Eliminado el **LEGACY FALLBACK** que usaba plantillas de visitas (`welcome_back_*`) con variables de visitas cuando no había plantillas de puntos configuradas. Este fallback causaba que `{{2}}` = total_visits (ej: 2) apareciera como "+2 puntos" y `{{3}}` = título de recompensa apareciera como saldo. Ahora si no hay template de puntos, solo se loguea advertencia y NO se envía mensaje incorrecto.
+
+**Error `permission denied for table customers`:**
+- `supabase/migrations/00015_service_role_policies.sql`: **NUEVA MIGRACIÓN**. Agrega políticas RLS explícitas para `service_role` en `customers` y `visits` (SELECT, INSERT, UPDATE). Las tablas creadas en 00001 no tenían políticas de service role, lo que causaba denegación de permisos en producción cuando el service client intentaba leer/escribir.
+
+### Archivos afectados
+- `src/app/api/check-in/route.ts`
+- `src/components/features/check-in/CheckInSuccess.tsx`
+- `src/components/features/check-in/CheckInSuccess.types.ts`
+- `src/app/(public)/check-in/page.tsx`
+- `src/components/features/check-in/CheckInForm.types.ts`
+- `supabase/migrations/00015_service_role_policies.sql`
+
+---
+
 ## [1.0.6] — 2026-05-28 — Script bulk para crear plantillas Twilio de texto
 
 ### Added
@@ -14,6 +44,24 @@
 
 **Documentación:**
 - `docs/PLANTILLAS.md`: Checklist actualizado — las plantillas de texto (1-11) ahora se crean vía script bulk, no manualmente por Dashboard.
+
+---
+
+## [1.0.6-1] — 2026-05-28 — Fix: Plantillas twilio/media rechazadas por formato inválido
+
+### Fixed
+
+**Script — twilio-create-media-templates.mjs:**
+- `media: ['{{6}}']` → `media: [sampleMediaUrl]`. Twilio Content API **no acepta variables `{{N}}`** dentro del array `media`; requiere una URL real de ejemplo. Este era el motivo del rechazo "(tipo no textual)" sin explicación adicional.
+
+**Backend — whatsapp.service.ts:**
+- `sendTemplateMessage()` ahora acepta un cuarto parámetro opcional `mediaUrl`. Cuando se envía una plantilla `twilio/media`, Twilio usa `mediaUrl` para sobreescribir la URL de ejemplo aprobada con la URL dinámica del evento (imagen/video del bucket `event-media`).
+
+**Backend — calendar.service.ts:**
+- `executeAutoEvent` ahora pasa `mediaUrl` al enviar mensajes de evento, conectando el pipeline completo de envío con media dinámica.
+
+**Documentación:**
+- `docs/features/calendar.md`: Pipeline de envío movido de "pausado" a "implementado (pendiente aprobación Meta)".
 
 ---
 

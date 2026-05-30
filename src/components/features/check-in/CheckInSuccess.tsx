@@ -32,8 +32,6 @@ export function CheckInSuccess({
   totalPoints,
   pointsAwarded,
   reward,
-  nextRewardHint,
-  roadmap,
   tierUnlocked,
   nextTier,
   tiers,
@@ -295,78 +293,6 @@ export function CheckInSuccess({
           </h3>
           <p className="mt-1.5 text-sm" style={{ color: "#b45309" }}>
             Te enviamos los detalles por WhatsApp. ¡Muestra el mensaje para reclamar tu premio!
-          </p>
-        </div>
-      )}
-
-      {roadmap && roadmap.length > 0 && (
-        <div className="premium-card p-5 space-y-3">
-          <h3
-            className="text-sm font-bold text-center uppercase tracking-wide"
-            style={{ color: '#9ca3af', letterSpacing: '0.06em' }}
-          >
-            Tus próximos premios
-          </h3>
-          <div className="space-y-2.5">
-            {roadmap.map((r, i) => {
-              const remaining = r.milestone - totalVisits
-              const isNext = i === 0
-              return (
-                <div
-                  key={r.milestone}
-                  className="flex items-center gap-3 rounded-xl px-3 py-2.5"
-                  style={{
-                    background: r.is_black
-                      ? 'rgba(26,28,29,0.06)'
-                      : isNext ? 'rgba(251, 191, 36, 0.08)' : 'rgba(0,0,0,0.015)',
-                    border: r.is_black
-                      ? '1px solid rgba(251, 191, 36, 0.35)'
-                      : isNext ? '1px solid rgba(251, 191, 36, 0.2)' : '1px solid transparent',
-                  }}
-                >
-                  <div
-                    className="flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold shrink-0"
-                    style={{
-                      background: r.is_black
-                        ? 'linear-gradient(135deg, #1a1c1d 0%, #374151 100%)'
-                        : isNext
-                          ? 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)'
-                          : 'rgba(0,0,0,0.04)',
-                      color: r.is_black ? '#fbbf24' : isNext ? '#fff' : '#9ca3af',
-                      boxShadow: r.is_black
-                        ? '0 3px 10px rgba(0,0,0,0.25)'
-                        : isNext ? '0 3px 10px rgba(245, 158, 11, 0.25)' : 'none',
-                    }}
-                  >
-                    {r.is_black ? <Crown style={{ width: 14, height: 14 }} strokeWidth={1.5} /> : `#${r.milestone}`}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate" style={{ color: r.is_black ? '#92400e' : isNext ? '#92400e' : '#6b7280' }}>
-                      {r.is_black ? `BLACK: ${r.title}` : r.title}
-                    </p>
-                    <p className="text-[11px]" style={{ color: r.is_black ? '#b45309' : isNext ? '#b45309' : '#d1d5db' }}>
-                      {remaining === 1 ? '¡En tu siguiente visita!' : `Faltan ${remaining} visitas`}
-                    </p>
-                  </div>
-                  {r.is_black ? (
-                    <Crown className="h-4 w-4 shrink-0" style={{ color: '#fbbf24' }} strokeWidth={1.5} />
-                  ) : isNext && (
-                    <span className="text-lg" aria-hidden>🎯</span>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
-      {nextRewardHint && !reward && (!roadmap || roadmap.length === 0) && (
-        <div
-          className="premium-card p-4 text-center"
-          style={{ border: '1px solid rgba(16, 185, 129, 0.2)' }}
-        >
-          <p className="text-sm font-medium" style={{ color: '#059669' }}>
-            🎁 {nextRewardHint}
           </p>
         </div>
       )}

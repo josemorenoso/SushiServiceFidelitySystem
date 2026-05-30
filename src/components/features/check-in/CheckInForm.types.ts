@@ -48,7 +48,6 @@ export interface RegisterResult {
     total_points?: number
   }
   points_awarded?: number
-  roadmap?: RoadmapItem[]
   tiers?: unknown[]
 }
 
@@ -62,17 +61,11 @@ export interface CheckInResult {
   points_awarded?: number
   tier_unlocked?: TierUnlockedInfo | null
   next_tier?: NextTierInfo | null
-  reward: {
+  reward?: {
     title: string
     message: string
     is_black?: boolean
   } | null
-  nextReward?: {
-    milestone: number
-    title: string
-    hint: string
-  } | null
-  roadmap?: RoadmapItem[]
   tiers_roadmap?: string
   tiers?: TierItem[]
 }

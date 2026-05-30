@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import type { RoadmapItem } from '@/components/features/check-in/CheckInForm.types'
 import { validatePhone } from '@/lib/validators/phone'
 import { findCustomerByPhone, createCustomer, incrementVisit } from '@/services/customer.service'
 import { createVisit, getRecentVisit } from '@/services/visit.service'
-import { checkRewardForVisit, getNextReward, getRewardTitle, getRemainingForReward, buildRewardsRoadmap, getUpcomingRewards } from '@/services/reward.service'
 import { sendTemplateMessage } from '@/services/whatsapp.service'
 import { getMultipleSettings } from '@/services/settings.service'
 import { syncGoogleContact } from '@/services/google-contacts-sync.service'
@@ -227,13 +225,6 @@ export async function POST(request: NextRequest) {
         console.error('[CheckIn] Error sync Google Contacts:', err)
       }
 
-      let welcomeRoadmap: RoadmapItem[] = []
-      try {
-        welcomeRoadmap = await getUpcomingRewards(customer.total_visits)
-      } catch (err) {
-        console.error('[CheckIn] Error obteniendo upcoming rewards:', err)
-      }
-
       let allTiers: unknown[] = []
       try {
         allTiers = await getAllTiers()
@@ -250,7 +241,6 @@ export async function POST(request: NextRequest) {
             total_points: welcomePoints.newBalance,
           },
           points_awarded: welcomePoints.pointsAwarded,
-          roadmap: welcomeRoadmap,
           tiers: allTiers,
         },
         { status: 201 }
@@ -267,8 +257,8 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      // Verificar check-in duplicado (30 segundos para testing — cambiar a 1440 en producción)
-      const recentVisit = await getRecentVisit(customer.id, 0.5)
+      // Verificar check-in duplicado (mínimo 24h entre check-ins QR)
+      const recentVisit = await getRecentVisit(customer.id, 1440)
       if (recentVisit) {
         return NextResponse.json(
           {
@@ -328,29 +318,11 @@ export async function POST(request: NextRequest) {
 
       // Fetch settings para plantillas
       const settings = await getMultipleSettings([
-        'welcome_back_template_sid',           // legacy fallback
-        'welcome_back_near_template_sid',      // remaining === 1
-        'welcome_back_far_template_sid',       // remaining >= 2
-        'reward_template_sid',
         'points_earned_far_template_sid',      // puntos sumados (lejos)
         'points_earned_near_template_sid',     // puntos sumados (cerca)
         'tier_unlocked_template_sid',          // tier desbloqueado
       ])
 
-      // Evaluar recompensa legacy y roadmap
-      const reward = await checkRewardForVisit(updated.total_visits)
-      let roadmap = '🌟 ¡Sigue acumulando visitas para más premios!'
-      try {
-        roadmap = await buildRewardsRoadmap(updated.total_visits)
-      } catch (err) {
-        console.error('[CheckIn] Error generando rewards roadmap:', err)
-      }
-      let upcomingRewards: RoadmapItem[] = []
-      try {
-        upcomingRewards = await getUpcomingRewards(updated.total_visits)
-      } catch (err) {
-        console.error('[CheckIn] Error obteniendo upcoming rewards:', err)
-      }
       let tiersRoadmapText = '🌟 ¡Seguí sumando puntos para desbloquear premios!'
       try {
         tiersRoadmapText = await buildTiersRoadmap(pointsResult.newBalance)
@@ -405,7 +377,6 @@ export async function POST(request: NextRequest) {
             points_remaining: nextTierInfo.pointsRemaining,
             threshold: nextTierInfo.tier.point_threshold,
           } : null,
-          roadmap: upcomingRewards,
           tiers_roadmap: tiersRoadmapText,
         })
       }
@@ -438,43 +409,7 @@ export async function POST(request: NextRequest) {
           }
         )
       } else {
-        // ─── LEGACY FALLBACK: usar plantillas de visitas si no hay de puntos ───
-        if (reward) {
-          const rewardTemplateConfigured = !!settings.reward_template_sid
-          if (rewardTemplateConfigured) {
-            await sendCheckinTemplate(
-              settings.reward_template_sid,
-              'reward',
-              cleaned,
-              { '1': updated.name, '2': String(updated.total_visits), '3': reward.title, '4': roadmap }
-            )
-          } else {
-            const fallbackSid = settings.welcome_back_far_template_sid
-              ?? settings.welcome_back_near_template_sid
-              ?? settings.welcome_back_template_sid
-            await sendCheckinTemplate(
-              fallbackSid,
-              'welcome_back (fallback por falta de template reward)',
-              cleaned,
-              { '1': updated.name, '2': String(updated.total_visits), '3': reward.title, '4': roadmap }
-            )
-          }
-        } else {
-          const nextReward = await getNextReward(updated.total_visits)
-          const remaining = getRemainingForReward(updated.total_visits, nextReward)
-          const rewardTitle = getRewardTitle(nextReward)
-          const isNear = remaining === 1
-          const targetSid = isNear
-            ? (settings.welcome_back_near_template_sid ?? settings.welcome_back_template_sid)
-            : (settings.welcome_back_far_template_sid ?? settings.welcome_back_template_sid)
-
-          await sendCheckinTemplate(
-            targetSid,
-            isNear ? 'welcome_back_near' : 'welcome_back_far',
-            cleaned,
-            { '1': updated.name, '2': String(updated.total_visits), '3': rewardTitle, '4': roadmap }
-          )
-        }
+        console.warn('[CheckIn] No hay plantilla de puntos configurada (points_earned_near/far_template_sid). Mensaje WhatsApp NO enviado.')
       }
 
       const allTiersForResponse = await getAllTiers()
@@ -486,13 +421,11 @@ export async function POST(request: NextRequest) {
           total_points: pointsResult.newBalance,
         },
         points_awarded: pointsResult.pointsAwarded,
-        reward: reward ? { title: reward.title, message: reward.message_template, is_black: reward.is_black } : null,
         next_tier: nextTierInfo ? {
           name: nextTierInfo.tier.tier_name,
           points_remaining: nextTierInfo.pointsRemaining,
           threshold: nextTierInfo.tier.point_threshold,
         } : null,
-        roadmap: upcomingRewards,
         tiers_roadmap: tiersRoadmapText,
         tiers: allTiersForResponse,
       })

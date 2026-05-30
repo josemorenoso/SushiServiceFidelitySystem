@@ -136,13 +136,12 @@ El admin puede hacer override con `force: true` si entiende el trade-off.
   - [src/app/api/dashboard/calendar/events/[id]/route.ts](../../src/app/api/dashboard/calendar/events/%5Bid%5D/route.ts) — GET/PATCH/DELETE
   - [src/app/api/dashboard/calendar/media-upload/route.ts](../../src/app/api/dashboard/calendar/media-upload/route.ts) — POST/DELETE
 
-### ⏸ Pausado (fuera de scope por decisión explícita: "no tocar plantillas")
-Estos componentes existirán cuando las plantillas Twilio tipo `twilio/media` estén aprobadas por Meta. Quedan documentados pero no implementados:
-- [ ] Plantillas Twilio `event_template_image` y `event_template_video` vía `scripts/twilio-setup.mjs`
-- [ ] Soporte `mediaUrl` en `sendTemplateMessage` ([src/services/whatsapp.service.ts](../../src/services/whatsapp.service.ts))
-- [ ] `executeScheduledEvent` en `calendar.service.ts` (el path de envío)
-- [ ] Endpoint `PATCH ?action=execute` para disparo manual
-- [ ] Cron `/api/cron/calendar-dispatch` + registro en `vercel.json`
+### ✅ Implementado (pendiente aprobación Meta)
+Estos componentes están implementados pero dependen de que Meta apruebe las plantillas `twilio/media`:
+- [x] Plantillas Twilio `event_template_image` y `event_template_video` vía `scripts/twilio-create-media-templates.mjs`
+- [x] Soporte `mediaUrl` en `sendTemplateMessage` ([src/services/whatsapp.service.ts](../../src/services/whatsapp.service.ts))
+- [x] `executeAutoEvent` en `calendar.service.ts` (el path de envío)
+- [x] Cron `/api/cron/calendar-dispatch` + registro en `vercel.json` (pendiente: agregar a vercel.json)
 - [ ] Modificaciones a crons existentes:
   - `reactivation/route.ts`: aplicar `filterByMonthlyCap` + marcar `source='reactivation'`
   - `birthday/route.ts`: marcar `source='birthday'` (NO aplicar cap)
@@ -161,19 +160,15 @@ Estos componentes existirán cuando las plantillas Twilio tipo `twilio/media` es
 
 ---
 
-## Por qué el path de envío está pausado
+## Estado del pipeline de envío
 
-Por decisión del usuario en esta iteración: las plantillas Twilio tipo `twilio/media` requieren aprobación de Meta (24-72h) y representan riesgo en el quality rating del número compartido si se cablean sin cuidado. La capa de datos + UI puede construirse y probarse en aislamiento; el envío real se conecta como una iteración separada cuando las plantillas estén aprobadas y validadas.
+El pipeline de envío está implementado. Las plantillas `twilio/media` se crean vía `scripts/twilio-create-media-templates.mjs` y el envío dinámico funciona pasando `mediaUrl` al SDK de Twilio junto con `contentSid`.
 
-Concretamente, lo que está listo permite:
+**Bloqueante actual:** Meta debe aprobar las plantillas `twilio/media` antes de que los mensajes con media sean entregables (24-72h tras envío a aprobación).
+
+**Lo que está listo:**
 - Planificar eventos con metadata y media en el calendario
 - Listar/editar/cancelar desde el dashboard
 - Calcular cap mensual y blackouts sobre la audiencia
-- Ver eventos "due" sin que el sistema envíe nada
-
-El día que se cableen las plantillas, el cambio incremental es:
-1. Crear plantillas en `twilio-setup.mjs` y guardar SIDs en `admin_settings`
-2. Re-añadir `options.mediaUrl` en `sendTemplateMessage`
-3. Re-añadir `executeScheduledEvent` en `calendar.service.ts`
-4. Crear cron `calendar-dispatch` + registrar en `vercel.json`
-5. Cablear `findDueAutoEvents` → `executeScheduledEvent` en el cron
+- Pipeline de envío automático vía cron `calendar-dispatch`
+- Reemplazo dinámico de media URL al enviar (Twilio usa `mediaUrl` para sobreescribir la URL de ejemplo de la plantilla aprobada)

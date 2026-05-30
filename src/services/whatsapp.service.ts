@@ -40,7 +40,8 @@ function getTwilioClient() {
 export async function sendTemplateMessage(
   phone: string,
   contentSid: string,
-  variables: Record<string, string>
+  variables: Record<string, string>,
+  mediaUrl?: string
 ): Promise<TwilioMessageResponse | null> {
   const config = getTwilioClient()
   if (!config) {
@@ -66,13 +67,18 @@ export async function sendTemplateMessage(
     const subset: Record<string, string> = {}
     sortedKeys.slice(0, maxVars).forEach((k) => { subset[k] = sanitized[k] })
 
+    const messagePayload: Record<string, string> = {
+      from: config.whatsappNumber,
+      to: formatPhoneForWhatsApp(phone),
+      contentSid,
+      contentVariables: JSON.stringify(subset),
+    }
+    if (mediaUrl) {
+      messagePayload.mediaUrl = mediaUrl
+    }
+
     try {
-      const message = await client.messages.create({
-        from: config.whatsappNumber,
-        to: formatPhoneForWhatsApp(phone),
-        contentSid,
-        contentVariables: JSON.stringify(subset),
-      })
+      const message = await client.messages.create(messagePayload as any)
       if (maxVars < sortedKeys.length) {
         console.warn(`[WhatsApp] Enviado con ${maxVars}/${sortedKeys.length} vars (mismatch corregido): ${message.sid}`)
       } else {

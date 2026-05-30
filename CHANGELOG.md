@@ -25,13 +25,21 @@
 **Error `permission denied for table customers`:**
 - `supabase/migrations/00015_service_role_policies.sql`: **NUEVA MIGRACIÓN**. Agrega políticas RLS explícitas para `service_role` en `customers` y `visits` (SELECT, INSERT, UPDATE). Las tablas creadas en 00001 no tenían políticas de service role, lo que causaba denegación de permisos en producción cuando el service client intentaba leer/escribir.
 
+**Tier Bronce desaparecido / empieza en Plata:**
+- `supabase/migrations/00016_ensure_default_tiers.sql`: **NUEVA MIGRACIÓN**. Inserta o actualiza los 4 tiers default (Bronce 150pts, Plata 350pts, Oro 600pts, BLACK 1000pts) garantizando que existan y estén activos con premios y umbrales correctos. Resuelve el problema donde el primer tier visible era Plata porque Bronce había sido desactivado o eliminado en la DB.
+
+**Webhook opt-out "SALIR":**
+- `src/app/api/webhook/twilio-incoming/route.ts`: Agregados `SALIR` y `NO` a la lista de keywords de opt-out. El template de WhatsApp dice "Responde SALIR para no recibir más mensajes" pero el webhook no manejaba esta palabra en español. Ahora devuelve 200 silencioso en lugar del mensaje genérico automático.
+
 ### Archivos afectados
 - `src/app/api/check-in/route.ts`
 - `src/components/features/check-in/CheckInSuccess.tsx`
 - `src/components/features/check-in/CheckInSuccess.types.ts`
 - `src/app/(public)/check-in/page.tsx`
 - `src/components/features/check-in/CheckInForm.types.ts`
+- `src/app/api/webhook/twilio-incoming/route.ts`
 - `supabase/migrations/00015_service_role_policies.sql`
+- `supabase/migrations/00016_ensure_default_tiers.sql`
 
 ---
 

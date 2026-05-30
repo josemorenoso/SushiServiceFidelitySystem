@@ -21,12 +21,18 @@
 **¿Por qué esto importa?**
 El dueño ya puede crear, renombrar y eliminar tiers desde el dashboard (`/dashboard/rewards`). Con emojis dinámicos, cualquier nombre funciona visualmente: "Plata", "Oro", "Diamante", "Diamante VIP", "Esmeralda", etc. No hay límite de cantidad de tiers (más allá del sentido comercial).
 
+### Fixed
+
+**Tiers legacy duplicados en base de datos:**
+- `supabase/migrations/00017_cleanup_legacy_tiers.sql` — **NUEVO**: Desactiva tiers duplicados creados porque la migración 00016 usó `ON CONFLICT (point_threshold)` y los umbrales viejos (350, 600) no conflictaron con los nuevos (150, 300, 450). Resultado: aparecían 6 tiers en lugar de 4. Esta migración desactiva los obsoletos y reordena `sort_order`.
+
 ### Archivos afectados
 - `src/lib/tier-emojis.ts`
 - `src/components/features/check-in/TiersRoadmap.tsx`
 - `src/app/(dashboard)/dashboard/rewards/page.tsx`
 - `src/services/reward-tiers.service.ts`
 - `supabase/migrations/00016_ensure_default_tiers.sql`
+- `supabase/migrations/00017_cleanup_legacy_tiers.sql`
 
 ---
 

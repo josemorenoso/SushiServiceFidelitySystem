@@ -35,7 +35,10 @@ import {
   Pencil,
   KeyRound,
   Smartphone,
-  X,
+  ScanLine,
+  Copy,
+  Check,
+  Search,
 } from 'lucide-react'
 import { Toaster, toast } from 'sonner'
 import type { StaffUser, StaffDevice } from '@/types/database.types'
@@ -90,6 +93,7 @@ export default function StaffPage() {
   const [newPin, setNewPin] = useState('')
   const [newRole, setNewRole] = useState<'waiter' | 'supervisor' | 'admin'>('waiter')
   const [creating, setCreating] = useState(false)
+  const [phoneError, setPhoneError] = useState<string | null>(null)
 
   // Edit dialog
   const [editingStaff, setEditingStaff] = useState<StaffUser | null>(null)
@@ -98,9 +102,21 @@ export default function StaffPage() {
   const [editPin, setEditPin] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
 
+  // Delete dialog
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
+  const [deleting, setDeleting] = useState(false)
+
   // Action states
   const [toggling, setToggling] = useState<string | null>(null)
-  const [deleting, setDeleting] = useState<string | null>(null)
+
+  // Filters
+  const [search, setSearch] = useState('')
+  const [filterRole, setFilterRole] = useState<'all' | 'waiter' | 'supervisor' | 'admin'>('all')
+  const [filterActive, setFilterActive] = useState<'all' | 'active' | 'inactive'>('all')
+
+  // Copy link state
+  const [copied, setCopied] = useState(false)
+  const meseroUrl = typeof window !== 'undefined' ? `${window.location.origin}/mesero` : '/mesero'
 
   const fetchData = useCallback(async () => {
     try {
@@ -121,10 +137,27 @@ export default function StaffPage() {
     setNewPhone('')
     setNewPin('')
     setNewRole('waiter')
+    setPhoneError(null)
+  }
+
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(meseroUrl)
+      setCopied(true)
+      toast.success('Enlace copiado')
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      toast.error('No se pudo copiar')
+    }
   }
 
   const handleCreate = async () => {
+    setPhoneError(null)
     if (!newName.trim() || !newPhone.trim() || !newPin.trim()) return
+    if (!/^\d{10}$/.test(newPhone)) {
+      setPhoneError('El número debe tener exactamente 10 dígitos')
+      return
+    }
     setCreating(true)
     try {
       const res = await fetch('/api/dashboard/staff', {
@@ -134,7 +167,7 @@ export default function StaffPage() {
       })
       const json = await res.json()
       if (!res.ok) {
-        toast.error(json.message || json.error || 'Error al crear')
+        toast.error(json.message || json.error || `Error ${res.status} al crear mesero`)
         return
       }
       toast.success(`Mesero "${newName.trim()}" creado`)
@@ -142,7 +175,7 @@ export default function StaffPage() {
       setShowCreate(false)
       fetchData()
     } catch {
-      toast.error('Error de conexión')
+      toast.error('Error de conexión al crear mesero')
     } finally {
       setCreating(false)
     }
@@ -207,23 +240,40 @@ export default function StaffPage() {
     }
   }
 
-  const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`Eliminar a "${name}"? Esta acción no se puede deshacer.`)) return
-    setDeleting(id)
+  const confirmDelete = (id: string, name: string) => {
+    setDeleteTarget({ id, name })
+  }
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    setDeleting(true)
     try {
-      const res = await fetch(`/api/dashboard/staff?id=${id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/dashboard/staff?id=${deleteTarget.id}`, { method: 'DELETE' })
       if (!res.ok) { toast.error('Error al eliminar'); return }
-      toast.success(`"${name}" eliminado`)
-      setData((prev) => ({ ...prev, staff: prev.staff.filter((s) => s.id !== id) }))
+      toast.success(`"${deleteTarget.name}" eliminado`)
+      setData((prev) => ({ ...prev, staff: prev.staff.filter((s) => s.id !== deleteTarget.id) }))
+      setDeleteTarget(null)
     } catch {
       toast.error('Error de conexión')
     } finally {
-      setDeleting(null)
+      setDeleting(false)
     }
   }
 
   const devicesForStaff = (staffId: string) =>
     data.devices.filter((d) => d.staff_user_id === staffId)
+
+  // Filtered staff list
+  const filteredStaff = data.staff.filter((s) => {
+    if (search) {
+      const q = search.toLowerCase()
+      if (!s.name.toLowerCase().includes(q) && !s.phone.includes(q)) return false
+    }
+    if (filterRole !== 'all' && s.role !== filterRole) return false
+    if (filterActive === 'active' && !s.is_active) return false
+    if (filterActive === 'inactive' && s.is_active) return false
+    return true
+  })
 
   return (
     <div className="space-y-6">
@@ -249,17 +299,53 @@ export default function StaffPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {/* Filters */}
+          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por nombre o celular..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <select
+              value={filterRole}
+              onChange={(e) => setFilterRole(e.target.value as typeof filterRole)}
+              className="h-9 rounded-md border border-input bg-transparent px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              <option value="all">Todos los roles</option>
+              <option value="waiter">Mesero</option>
+              <option value="supervisor">Supervisor</option>
+              <option value="admin">Admin</option>
+            </select>
+            <select
+              value={filterActive}
+              onChange={(e) => setFilterActive(e.target.value as typeof filterActive)}
+              className="h-9 rounded-md border border-input bg-transparent px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              <option value="all">Todos los estados</option>
+              <option value="active">Activos</option>
+              <option value="inactive">Inactivos</option>
+            </select>
+          </div>
+
           {loading ? (
             <div className="space-y-3">
               {[1, 2, 3].map((i) => (
                 <Skeleton key={i} className="h-12 w-full" />
               ))}
             </div>
-          ) : data.staff.length === 0 ? (
+          ) : filteredStaff.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <UserCog className="h-10 w-10 mx-auto mb-3 opacity-30" />
-              <p className="text-sm font-medium">Aún no hay meseros registrados</p>
-              <p className="text-xs mt-1">Crea un mesero para habilitar el escaneo QR con PIN.</p>
+              <p className="text-sm font-medium">
+                {data.staff.length === 0 ? 'Aún no hay meseros registrados' : 'Sin resultados para la búsqueda'}
+              </p>
+              {data.staff.length === 0 && (
+                <p className="text-xs mt-1">Crea un mesero para habilitar el escaneo QR con PIN.</p>
+              )}
             </div>
           ) : (
             <Table>
@@ -274,7 +360,7 @@ export default function StaffPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data.staff.map((s) => (
+                {filteredStaff.map((s) => (
                   <TableRow key={s.id}>
                     <TableCell className="font-medium">{s.name}</TableCell>
                     <TableCell className="font-mono text-sm">{formatPhone(s.phone)}</TableCell>
@@ -322,15 +408,10 @@ export default function StaffPage() {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
-                          onClick={() => handleDelete(s.id, s.name)}
-                          disabled={deleting === s.id}
+                          onClick={() => confirmDelete(s.id, s.name)}
                           title="Eliminar"
                         >
-                          {deleting === s.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Trash2 className="h-4 w-4" />
-                          )}
+                          <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
                     </TableCell>
@@ -343,18 +424,24 @@ export default function StaffPage() {
       </Card>
 
       {/* Devices Section */}
-      {data.devices.length > 0 && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Smartphone className="h-4 w-4" />
-              Dispositivos de confianza
-            </CardTitle>
-            <CardDescription>
-              Celulares o tablets del restaurante activados para escanear sin PIN.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Smartphone className="h-4 w-4" />
+            Dispositivos de confianza
+          </CardTitle>
+          <CardDescription>
+            Celulares o tablets del restaurante activados para escanear sin PIN.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {data.devices.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <Smartphone className="h-8 w-8 mx-auto mb-2 opacity-30" />
+              <p className="text-sm">Ningún dispositivo activado aún.</p>
+              <p className="text-xs mt-1">El supervisor puede activar el celular del local desde <span className="font-mono">/mesero</span>.</p>
+            </div>
+          ) : (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -392,9 +479,59 @@ export default function StaffPage() {
                 })}
               </TableBody>
             </Table>
-          </CardContent>
-        </Card>
-      )}
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ═══ App del Mesero ═══ */}
+      <Card className="border-red-100 bg-red-50/40">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <ScanLine className="h-4 w-4 text-red-500" />
+            App del Mesero
+          </CardTitle>
+          <CardDescription>
+            Comparte este enlace con tus meseros. Al abrirlo, pueden iniciar sesión con su PIN o escanear directo si el dispositivo ya fue activado.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* URL + copy button */}
+          <div className="flex items-center gap-2">
+            <div className="flex-1 rounded-lg border border-red-200 bg-white px-3 py-2 font-mono text-sm text-gray-700 select-all">
+              {meseroUrl}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCopyLink}
+              className="gap-2 border-red-200 text-red-600 hover:bg-red-50"
+            >
+              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              {copied ? 'Copiado' : 'Copiar'}
+            </Button>
+          </div>
+
+          {/* Mini pasos */}
+          <div className="grid gap-2 sm:grid-cols-3">
+            <div className="rounded-lg bg-white p-3 text-center shadow-sm">
+              <p className="text-2xl font-bold text-red-500 mb-1">1</p>
+              <p className="text-xs text-gray-600">Crea un mesero con PIN desde esta página</p>
+            </div>
+            <div className="rounded-lg bg-white p-3 text-center shadow-sm">
+              <p className="text-2xl font-bold text-red-500 mb-1">2</p>
+              <p className="text-xs text-gray-600">Envía el enlace al celular del local o del mesero</p>
+            </div>
+            <div className="rounded-lg bg-white p-3 text-center shadow-sm">
+              <p className="text-2xl font-bold text-red-500 mb-1">3</p>
+              <p className="text-xs text-gray-600">El mesero toca <strong>Escanear QR</strong> y listo</p>
+            </div>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            <strong>Dispositivo del local:</strong> El supervisor abre el enlace y toca &quot;Activar este dispositivo&quot; con su PIN una sola vez. Después, cualquier mesero puede escanear sin login.
+          </p>
+        </CardContent>
+      </Card>
 
       {/* ═══ Create Dialog ═══ */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
@@ -427,11 +564,20 @@ export default function StaffPage() {
               </Label>
               <Input
                 value={newPhone}
-                onChange={(e) => setNewPhone(e.target.value)}
+                onChange={(e) => {
+                  setNewPhone(e.target.value.replace(/\D/g, '').slice(0, 10))
+                  setPhoneError(null)
+                }}
                 placeholder="3001234567"
                 maxLength={10}
+                inputMode="numeric"
+                className={phoneError ? 'border-red-400 focus-visible:ring-red-300' : ''}
               />
-              <p className="text-[10px] text-muted-foreground">Celular colombiano sin +57. Ej: 3024254326</p>
+              {phoneError ? (
+                <p className="text-[10px] text-red-500">{phoneError}</p>
+              ) : (
+                <p className="text-[10px] text-muted-foreground">Colombiano sin +57. Ej: 3024254326</p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs flex items-center gap-1.5">
@@ -440,7 +586,7 @@ export default function StaffPage() {
               </Label>
               <Input
                 value={newPin}
-                onChange={(e) => setNewPin(e.target.value)}
+                onChange={(e) => setNewPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
                 placeholder="1234"
                 maxLength={6}
                 type="password"
@@ -520,7 +666,7 @@ export default function StaffPage() {
               </Label>
               <Input
                 value={editPin}
-                onChange={(e) => setEditPin(e.target.value)}
+                onChange={(e) => setEditPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
                 placeholder="Dejar vacío para no cambiar"
                 maxLength={6}
                 type="password"
@@ -556,6 +702,35 @@ export default function StaffPage() {
             >
               {savingEdit ? <Loader2 className="h-4 w-4 animate-spin" /> : <Pencil className="h-4 w-4" />}
               {savingEdit ? 'Guardando...' : 'Guardar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ═══ Delete Confirm Dialog ═══ */}
+      <Dialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <Trash2 className="h-4 w-4" />
+              Eliminar mesero
+            </DialogTitle>
+            <DialogDescription>
+              ¿Eliminar a <strong>{deleteTarget?.name}</strong>? Esta acción no se puede deshacer y eliminará también sus dispositivos asociados.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={deleting}
+              className="gap-2"
+            >
+              {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              {deleting ? 'Eliminando...' : 'Eliminar'}
             </Button>
           </DialogFooter>
         </DialogContent>

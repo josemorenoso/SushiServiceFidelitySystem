@@ -208,10 +208,7 @@ X-Device-Token: {device_fingerprint}
 { "error": "Ubicación requerida", "message": "El restaurante requiere activar la ubicación para hacer check-in" }
 ```
 
-**Response 429 (check-in duplicado < 1h):**
-```json
-{ "error": "Check-in reciente", "message": "Ya registraste una visita...", "customer": { "name": "Juan", "total_visits": 5 } }
-```
+> **Nota:** Ya no existe cap de 24h entre check-ins. Los clientes pueden acumular visitas ilimitadas por día.
 
 ---
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { validatePhone } from '@/lib/validators/phone'
 import { findCustomerByPhone, createCustomer, incrementVisit } from '@/services/customer.service'
-import { createVisit, getRecentVisit } from '@/services/visit.service'
+import { createVisit } from '@/services/visit.service'
 import { sendTemplateMessage } from '@/services/whatsapp.service'
 import { getMultipleSettings } from '@/services/settings.service'
 import { syncGoogleContact } from '@/services/google-contacts-sync.service'
@@ -437,19 +437,6 @@ export async function POST(request: NextRequest) {
             { status: 403 }
           )
         }
-      }
-
-      // Verificar check-in duplicado (mínimo 24h entre check-ins)
-      const recentVisit = await getRecentVisit(customer.id, 1440)
-      if (recentVisit) {
-        return NextResponse.json(
-          {
-            error: 'Check-in reciente',
-            message: `Ya registraste tu visita hoy, ${customer.name}. ¡Solo puedes registrar una visita por día!`,
-            customer: { name: customer.name, total_visits: customer.total_visits },
-          },
-          { status: 429 }
-        )
       }
 
       const updated = await incrementVisit(customer.id, customer.total_visits, source)

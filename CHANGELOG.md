@@ -31,6 +31,11 @@
 **Rate limit dual:**
 - Capa base por IP + capa adicional por `staff_id` o `device_token` cuando `source = 'staff_scan'` (máx 10/min).
 
+**Cap de 24h entre check-ins ELIMINADO:**
+- Antes: `getRecentVisit(customer.id, 1440)` rechazaba check-ins del mismo cliente dentro de 24h.
+- Ahora: los clientes pueden acumular visitas ilimitadas por día. Cada visita otorga puntos y evalúa tiers.
+- La restricción solo existía en `action = 'checkin'` (cliente existente); registro de nuevos clientes nunca tuvo cap.
+
 ### Changed
 
 **`/api/check-in/route.ts` — Flujo extendido para staff_verified:**

@@ -357,24 +357,19 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      // Leer modo de check-in
+      // Leer templates para WhatsApp
       const settings = await getMultipleSettings([
-        'checkin_mode',
-        'checkin_first_visit_free',
         'points_earned_far_template_sid',
         'points_earned_near_template_sid',
         'tier_unlocked_template_sid',
       ])
-      const checkinMode = settings.checkin_mode ?? 'auto'
-      const firstVisitFree = settings.checkin_first_visit_free !== 'false'
-      const isExistingCustomer = customer.total_visits >= 1
 
-      // ─── Anti-fraude: modo staff_verified ───
-      if (checkinMode === 'staff_verified' && isExistingCustomer && source !== 'staff_scan') {
+      // ─── Solo mesero puede registrar visitas ───
+      if (source !== 'staff_scan') {
         return NextResponse.json(
           {
             error: 'Validación requerida',
-            message: 'Este restaurante requiere que un mesero valide tu visita.',
+            message: 'Solo un mesero puede registrar visitas.',
           },
           { status: 403 }
         )
@@ -382,61 +377,58 @@ export async function POST(request: NextRequest) {
 
       let staffAuthValid = false
       let resolvedStaffId: string | null = null
+      const supabase = getServiceClient()
 
-      if (source === 'staff_scan') {
-        const supabase = getServiceClient()
-
-        // Validar QR token (firma + expiración)
-        if (qrToken) {
-          try {
-            await verifyCustomerQRToken(qrToken)
-          } catch {
-            return NextResponse.json(
-              { error: 'QR inválido', message: 'El código QR del cliente ha expirado o es inválido.' },
-              { status: 403 }
-            )
-          }
-        }
-
-        // Validar auth del mesero: staff_id O device_token
-        if (registered_by_staff_id) {
-          const { data: staff } = await supabase
-            .from('staff_users')
-            .select('id, is_active')
-            .eq('id', registered_by_staff_id)
-            .single()
-          if (staff && staff.is_active) {
-            staffAuthValid = true
-            resolvedStaffId = staff.id
-          }
-        } else if (device_token) {
-          const { data: device } = await supabase
-            .from('staff_devices')
-            .select('id, is_trusted, expires_at')
-            .eq('device_fingerprint', device_token)
-            .eq('is_trusted', true)
-            .single()
-          if (device) {
-            if (!device.expires_at || new Date(device.expires_at) >= new Date()) {
-              staffAuthValid = true
-              // Actualizar last_used_at del dispositivo
-              await supabase
-                .from('staff_devices')
-                .update({ last_used_at: new Date().toISOString() })
-                .eq('id', device.id)
-            }
-          }
-        }
-
-        if (!staffAuthValid) {
+      // Validar QR token del cliente (firma + expiración)
+      if (qrToken) {
+        try {
+          await verifyCustomerQRToken(qrToken)
+        } catch {
           return NextResponse.json(
-            {
-              error: 'No autorizado',
-              message: 'Mesero o dispositivo no válido. No se puede registrar la visita.',
-            },
+            { error: 'QR inválido', message: 'El código QR del cliente ha expirado o es inválido.' },
             { status: 403 }
           )
         }
+      }
+
+      // Validar auth del mesero: staff_id O device_token
+      if (registered_by_staff_id) {
+        const { data: staff } = await supabase
+          .from('staff_users')
+          .select('id, is_active')
+          .eq('id', registered_by_staff_id)
+          .single()
+        if (staff && staff.is_active) {
+          staffAuthValid = true
+          resolvedStaffId = staff.id
+        }
+      } else if (device_token) {
+        const { data: device } = await supabase
+          .from('staff_devices')
+          .select('id, is_trusted, expires_at')
+          .eq('device_fingerprint', device_token)
+          .eq('is_trusted', true)
+          .single()
+        if (device) {
+          if (!device.expires_at || new Date(device.expires_at) >= new Date()) {
+            staffAuthValid = true
+            // Actualizar last_used_at del dispositivo
+            await supabase
+              .from('staff_devices')
+              .update({ last_used_at: new Date().toISOString() })
+              .eq('id', device.id)
+          }
+        }
+      }
+
+      if (!staffAuthValid) {
+        return NextResponse.json(
+          {
+            error: 'No autorizado',
+            message: 'Mesero o dispositivo no válido. No se puede registrar la visita.',
+          },
+          { status: 403 }
+        )
       }
 
       const updated = await incrementVisit(customer.id, customer.total_visits, source)

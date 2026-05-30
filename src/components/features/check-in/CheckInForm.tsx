@@ -141,45 +141,18 @@ export function CheckInForm({
       if (data.found && data.customer) {
         onLookupResult(data, phone)
 
-        // ─── MODO STAFF_VERIFIED: mostrar QR dinámico (cliente existente) ───
-        if (data.checkin_mode === 'staff_verified') {
-          const token = await generateCustomerQRToken({
-            sub: data.customer.id,
-            phone,
-            name: data.customer.name,
-          })
-          const qrUrl = `${window.location.origin}/mesero/scan?token=${encodeURIComponent(token)}`
-          setCustomerQR(qrUrl)
-          setLookupCustomer(data.customer)
-          setStep('customer_qr')
-          setLoading(false)
-          return
-        }
-
-        // ─── MODO AUTO: flujo actual ───
-        const checkInRes = await fetch('/api/check-in', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone, action: 'checkin', table_number: tableNumber }),
+        // ─── Cliente frecuente: siempre mostrar QR para escaneo de mesero ───
+        const token = await generateCustomerQRToken({
+          sub: data.customer.id,
+          phone,
+          name: data.customer.name,
         })
-
-        const checkInData = await checkInRes.json()
-
-        if (checkInRes.status === 429) {
-          onCheckInSuccess({
-            message: 'duplicate',
-            customer: checkInData.customer,
-            reward: null,
-          }, phone)
-          return
-        }
-
-        if (!checkInRes.ok) {
-          onError(checkInData.message ?? 'Error registrando visita')
-          return
-        }
-
-        onCheckInSuccess(checkInData, phone)
+        const qrUrl = `${window.location.origin}/mesero/scan?token=${encodeURIComponent(token)}`
+        setCustomerQR(qrUrl)
+        setLookupCustomer(data.customer)
+        setStep('customer_qr')
+        setLoading(false)
+        return
       } else {
         setStep('register')
       }

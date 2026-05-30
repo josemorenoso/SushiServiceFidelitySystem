@@ -5,6 +5,20 @@
 
 ---
 
+## [1.1.1] — 2026-05-30 — Auto-checkin eliminado: solo mesero registra visitas
+
+### Changed
+
+**`src/components/features/check-in/CheckInForm.tsx`:**
+- Cliente frecuente siempre genera QR dinámico. El auto-checkin directo fue eliminado.
+- El mesero es el único que puede registrar visitas escaneando el QR del cliente.
+
+**`src/app/api/check-in/route.ts`:**
+- `action: 'checkin'` siempre requiere `source: 'staff_scan'` con autenticación válida de mesero.
+- El modo `checkin_mode` ya no determina si el cliente puede auto-registrarse; solo controla si la primera visita de nuevos clientes requiere mesero (`checkin_first_visit_free=false`).
+
+---
+
 ## [1.1.0] — 2026-05-30 — Staff QR Scan: verificación presencial mesero-cliente con QR dinámico
 
 ### Added

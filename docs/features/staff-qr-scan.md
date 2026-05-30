@@ -11,16 +11,15 @@
 
 El dueño del restaurante quiere **evitar estafas y abusos** al sistema de fidelización. Hoy cualquier persona puede escanear el QR desde su casa, ingresar el número de un cliente y sumarle visitas/puntos sin estar físicamente en el local.
 
-La solución es un **sistema de dos pasos con QR dinámico** que obliga a que un **mesero valide presencialmente** cada visita antes de que se otorguen puntos, niveles y premios.
+La solución es un **sistema de verificación presencial con QR dinámico** donde solo un **mesero autenticado** puede registrar visitas escaneando el QR del cliente.
 
-Además, el dueño quiere **decidir cómo funciona el check-in** desde el Dashboard:
+**Reglas del sistema:**
+- **Nadie** puede auto-asignarse visitas.
+- **Cliente nuevo:** se registra → welcome bonus + visita 1 → ve QR para mesero (para futuras visitas).
+- **Cliente frecuente:** ingresa celular → **siempre muestra QR** → mesero escanea → visita registrada.
+- **Solo el mesero**, escaneando el QR del cliente con su celular/tablet autenticado, puede registrar la visita.
 
-| Modo | ¿Qué pasa? | ¿Cuándo usarlo? |
-|------|-----------|----------------|
-| **Automático** | Cliente escanea → ingresa celular → suma visita y puntos al instante. El premio aparece en su pantalla y se lo muestra al mesero para redimirlo. | Cuando quieres la menor fricción posible. |
-| **Validado por mesero** | Cliente escanea → ingresa celular → **solo le muestra un QR personal**. El mesero debe escanear ese QR desde la webapp del restaurante para que la visita, los puntos y el premio se activen. | Cuando quieres evitar fraudes y asegurar que el cliente estuvo en el local. |
-
-**La clave:** el dueño puede cambiar de modo en cualquier momento desde Ajustes, sin tocar código.
+**Sub-opción configurable por el dueño:** `checkin_first_visit_free` determina si un cliente nuevo puede recibir su primera visita automáticamente al registrarse, o si también requiere que un mesero la valide.
 
 ---
 
@@ -28,11 +27,9 @@ Además, el dueño quiere **decidir cómo funciona el check-in** desde el Dashbo
 
 Sistema de verificación presencial de dos pasos entre cliente y mesero usando códigos QR dinámicos, con un **modo de operación configurable** por el administrador del restaurante.
 
-**Paso 1 (Cliente):** Escanea el QR estático del restaurante → ingresa su número de celular en `/check-in` → el sistema le muestra algo diferente según el modo activo:
-- En modo **automático**: ve su progreso, puntos sumados y premio (si aplica) directamente.
-- En modo **validado**: ve un **QR dinámico personal** que debe mostrarle al mesero.
+**Paso 1 (Cliente):** Escanea el QR estático del restaurante → ingresa su número de celular en `/check-in` → **siempre muestra su QR dinámico personal** para que el mesero lo escanee.
 
-**Paso 2 (Mesero) — solo en modo validado:** El mesero abre `/mesero` en el celular del restaurante. Hay dos formas de operar:
+**Paso 2 (Mesero):** El mesero abre `/mesero` en el celular del restaurante. Hay dos formas de operar:
 
 | Modo de uso | ¿Qué hace el mesero? | ¿Requiere PIN? | ¿Cuándo usarlo? |
 |-------------|---------------------|----------------|-----------------|
@@ -41,16 +38,13 @@ Sistema de verificación presencial de dos pasos entre cliente y mesero usando c
 
 En ambos casos, al escanear el QR del cliente y confirmar, el sistema registra la visita, suma puntos, evalúa tiers y dispara el WhatsApp.
 
-Esta feature introduce un paso de verificación interactivo entre cliente y restaurante **sin romper el flujo actual**, porque el dueño elige si activarlo o no.
+Esta feature garantiza que **solo un mesero autenticado** puede registrar visitas, eliminando fraudes de auto-checkin.
 
 ---
 
 ## Objetivo
 
 - **Prevenir fraudes:** Que nadie pueda sumar visitas/puntos desde fuera del restaurante.
-- **Darle control al dueño:** Que él decida si quiere check-in automático o validado por mesero.
-- **Mantener flexibilidad:** Si el restaurante está muy lleno, puede ponerlo en automático. Si detecta abusos, lo pone en validado.
-- **Reutilizar el flujo existente:** El `/check-in` actual sigue funcionando; solo se añade una capa extra cuando el modo lo requiere.
 - **Trazabilidad:** Saber qué mesero registró cada visita.
 - **Compatibilidad 100%:** El sistema de puntos, tiers y Mystery Box funciona igual en ambos modos.
 
@@ -89,7 +83,8 @@ Esta feature introduce un paso de verificación interactivo entre cliente y rest
    - Tier actual (Bronce, Plata, Oro, BLACK).
    - Total de visitas y puntos.
    - Instrucción: "Muéstrale este QR a tu mesero".
-6. **Respuesta no encontrado:** Flujo de registro nuevo (nombre, cumpleaños) → tras registrar, también muestra el QR personal.
+   - **No se registra visita.** El QR es solo identificación.
+6. **Respuesta no encontrado:** Flujo de registro nuevo (nombre, cumpleaños) → welcome bonus + visita 1 automática → muestra el QR personal.
 
 ### Paso 2: Mesero escanea el QR del cliente
 
@@ -124,18 +119,19 @@ Esta feature introduce un paso de verificación interactivo entre cliente y rest
      "action": "checkin",
      "source": "staff_scan",
      "table_number": "12",
-     "lat": null,
-     "lon": null
+     "registered_by_staff_id": "uuid-del-mesero",
+     "token": "jwt-del-qr-del-cliente"
    }
    ```
-2. El API route ejecuta el mismo flujo de check-in existente:
+2. El backend **rechaza** si `source !== 'staff_scan'` o si no hay auth válida de mesero.
+3. El API route ejecuta el flujo de check-in:
    - Incrementa `total_visits`.
    - Crea registro en `visits` (source = 'staff_scan').
    - Evalúa y otorga puntos aleatorios.
    - Evalúa subida de tier.
    - Ejecuta lógica de Mystery Box si aplica.
    - Envía mensaje WhatsApp de confirmación.
-3. El mesero ve pantalla de éxito con resumen: puntos ganados, tier, recompensa si aplica.
+4. El mesero ve pantalla de éxito con resumen: puntos ganados, tier, recompensa si aplica.
 
 ---
 
@@ -143,7 +139,7 @@ Esta feature introduce un paso de verificación interactivo entre cliente y rest
 
 | Archivo | Responsabilidad |
 |---------|----------------|
-| `src/components/features/check-in/CheckInForm.tsx` | **MODIFICAR** — Post-lookup, mostrar QR dinámico del cliente en lugar de auto-registrar visita. |
+| `src/components/features/check-in/CheckInForm.tsx` | **MODIFICAR** — Post-lookup, siempre mostrar QR dinámico del cliente. Nunca auto-registrar visita. |
 | `src/components/features/staff/StaffScanner.tsx` | **CREAR** — Componente de escaneo QR con `html5-qrcode`. |
 | `src/components/features/staff/StaffScanner.types.ts` | **CREAR** — Tipos del escáner. |
 | `src/components/features/staff/StaffConfirmation.tsx` | **CREAR** — Tarjeta de confirmación post-escaneo (datos cliente + input mesa). |
@@ -177,16 +173,12 @@ Esta feature introduce un paso de verificación interactivo entre cliente y rest
 ```
 
 **Comportamiento por `source`:**
-| source | Valida geolocalización | Requiere staff_id | Comportamiento |
-|--------|----------------------|-------------------|----------------|
-| `undefined` / `"qr"` | SÍ (si está activa) | NO | Flujo actual v1.0.5 (cliente debe estar cerca) |
-| `"staff_scan"` | NO | **SÍ** | El mesero confirma presencia física. Se salta GPS. Se valida que `registered_by_staff_id` exista y esté activo. |
+| source | Requiere staff auth | Comportamiento |
+|--------|-------------------|----------------|
+| `"staff_scan"` | **SÍ** | El mesero escanea QR del cliente y confirma. Requiere `registered_by_staff_id` activo O `device_token` de confianza. Valida firma del QR token. |
+| Cualquier otro | — | **Rechazado con 403.** Nadie excepto un mesero autenticado puede registrar visitas. |
 
-> **Validación anti-fraude en modo `staff_verified`:** Si `checkin_mode === 'staff_verified'` y la petición es `action: 'checkin'` para un cliente existente sin `registered_by_staff_id` válido, el servidor debe rechazar con **403**:
-> ```json
-> { "error": "Validación requerida", "message": "Este restaurante requiere que un mesero valide tu visita." }
-> ```
-> Esto evita que cualquiera con el número de un cliente sume visitas desde fuera del local.
+> **Validación:** El backend siempre rechaza `action: 'checkin'` si `source !== 'staff_scan'` o si no hay autenticación válida de mesero (staff_id activo o device_token de confianza).
 
 > **Razón:** El mesero está físicamente en el restaurante. La validación de presencia la hace el mesero autenticado al escanear el QR del cliente frente a él.
 
@@ -390,34 +382,20 @@ En `admin_settings` se agregan nuevas keys controlables desde **Dashboard > Ajus
 
 El dueño puede cambiar esto en cualquier momento sin redeploy.
 
-### Modo `auto` (Comportamiento actual)
+### Flujo de check-in
 
-El flujo es exactamente el que existe hoy. No cambia nada.
-
-```
-Cliente escanea QR → /check-in → Ingresa celular
-  → Si nuevo: Registro → +1 visita + puntos de bienvenida → WhatsApp
-  → Si existe: Auto-check-in → +1 visita + puntos aleatorios → Evalúa tier → WhatsApp
-```
-
-El cliente ve su progreso/premio en pantalla inmediatamente y se lo muestra al mesero si quiere redimirlo.
-
-### Modo `staff_verified` (Requiere mesero)
-
-En este modo el check-in se divide en dos: el cliente genera un QR de identidad, y el mesero lo escanea para "activar" la visita.
-
-**Sub-opción recomendada: "Primera visita libre, resto con mesero"** (controlada por `checkin_first_visit_free`)
+El check-in siempre requiere un mesero autenticado para registrar visitas. El QR del cliente es solo identificación.
 
 ```
 CLIENTE NUEVO (total_visits = 0)
-  → Escanea QR → /check-in → Registro → +1 visita automática (bienvenida)
-  → Muestra pantalla de éxito normal con puntos
+  → Escanea QR → /check-in → Registro → +1 visita automática (bienvenida) + welcome bonus
+  → Muestra pantalla de éxito con puntos
   → WhatsApp de bienvenida
+  → Luego muestra QR dinámico (para futuras visitas)
 
 CLIENTE EXISTENTE (total_visits ≥ 1)
   → Escanea QR → /check-in → Ingresa celular
-  → NO se registra visita automáticamente
-  → El sistema lee checkin_mode y, si es staff_verified, responde lookup con modo = staff_verified
+  → NO se registra visita
   → El frontend muestra QR DINÁMICO personal (token firmado con jose)
   → Mensaje: "Muéstrale este QR a tu mesero"
 
@@ -441,62 +419,58 @@ MESERO — Escenario B: Celular propio (login con PIN)
   → Mesero ve éxito → Cliente recibe WhatsApp
 ```
 
-**Alternativa: "Todas las visitas requieren mesero"**
-
-Igual que arriba, pero `checkin_first_visit_free = 'false'`: incluso la primera visita del cliente nuevo pasa por el mesero. Más seguro, más fricción.
+**Sub-opción configurable: "Primera visita libre"** (`checkin_first_visit_free`)
+- **`'true'` (default):** Cliente nuevo recibe visita 1 automáticamente al registrarse. Frecuentes requieren mesero.
+- **`'false'`:** Incluso la primera visita requiere mesero. Más seguro, más fricción.
 
 ### Lógica del frontend del cliente
 
 ```
 POST /api/check-in { action: 'lookup', phone }
-  → Recibe { found, customer, checkin_mode, current_tier } del servidor
+  → Recibe { found, customer, current_tier } del servidor
 
-Si checkin_mode === 'auto':
-  → Hace auto-check-in inmediato (flujo actual)
-  → Muestra éxito/puntos/premio
+Si encontrado (cliente existente):
+  → Genera QR dinámico como token JWT firmado (phone + customer_id + timestamp + exp)
+  → Muestra pantalla "Muéstrale este QR a tu mesero"
+  → NO hace auto-check-in (solo mesero puede registrar visita)
 
-Si checkin_mode === 'staff_verified':
-  → Si es cliente nuevo (total_visits === 0) Y checkin_first_visit_free === 'true':
-     → Auto-check-in de bienvenida (registro completo)
-     → Muestra éxito
-  → Si no:
-     → Genera QR dinámico como token JWT firmado (phone + customer_id + timestamp + exp)
-     → Muestra pantalla "Muéstrale este QR a tu mesero"
+Si no encontrado (cliente nuevo):
+  → Muestra formulario de registro
+  → Tras registro: welcome bonus + visita 1 + QR dinámico
 ```
 
 ### Lógica del backend
 
 ```
-POST /api/check-in { action: 'checkin', phone, source?, registered_by_staff_id?, device_token?, table_number?, token? }
+POST /api/check-in { action: 'checkin', phone, source, registered_by_staff_id?, device_token?, table_number?, token? }
 
-1. Leer admin_settings.checkin_mode y checkin_first_visit_free
-2. Buscar cliente por phone
-3. Si mode === 'staff_verified' y cliente existe (total_visits ≥ 1):
-     a. Validar autenticación del mesero:
-        - Si viene registered_by_staff_id: validar que exista y esté activo en staff_users
-        - Si viene device_token: validar que exista y esté activo en staff_devices
-        - Si NO viene ninguno → RECHAZAR 403
-          "Este restaurante requiere validación del mesero."
-     b. Si viene token (QR dinámico): validar firma y expiración con STAFF_QR_JWT_SECRET
-     c. Marcar visita con source: 'staff_scan'
-     d. Guardar registered_by_staff_id en visits (null si fue por device trust)
-4. Si mode === 'auto':
-     a. Flujo actual, sin cambios
-5. Resto del flujo (puntos, tiers, WhatsApp) es idéntico
-     a. Nota: awardVisitPoints debe aceptar source 'staff_scan' y mapear a tx_source 'visit_staff'
+1. Buscar cliente por phone
+2. Rechazar si source !== 'staff_scan':
+   → 403: "Solo un mesero puede registrar visitas."
+3. Validar autenticación del mesero:
+   - Si viene registered_by_staff_id: validar que exista y esté activo en staff_users
+   - Si viene device_token: validar que exista y esté activo en staff_devices
+   - Si NO viene ninguno → RECHAZAR 403
+     "Mesero o dispositivo no válido."
+4. Si viene token (QR dinámico del cliente): validar firma y expiración con STAFF_QR_JWT_SECRET
+5. Marcar visita con source: 'staff_scan'
+6. Guardar registered_by_staff_id en visits (null si fue por device trust)
+7. Flujo de puntos, tiers, WhatsApp (idéntico)
+   Nota: awardVisitPoints acepta source 'staff_scan' y mapea a tx_source 'visit_staff'
 ```
 
 ### Tabla de comportamiento por configuración
 
-| Escenario | `auto` | `staff_verified` (primera libre) | `staff_verified` (todas con mesero) |
-|-----------|--------|----------------------------------|-------------------------------------|
-| Cliente nuevo | Auto-check-in + WhatsApp | Auto-check-in bienvenida, luego QR | Siempre QR → mesero |
-| Cliente existente | Auto-check-in + WhatsApp | QR dinámico → mesero escanea | QR dinámico → mesero escanea |
-| Puntos | Al instante | Cuando el mesero escanea | Cuando el mesero escanea |
-| WhatsApp | Al instante | Cuando el mesero escanea | Cuando el mesero escanea |
-| Anti-fraude | Rate limit por IP | Rate limit + QR TTL + device trust/PIN + traza | Rate limit + QR TTL + device trust/PIN + traza |
-| Fricción cliente | Mínima | Media (primera vez libre) | Alta (siempre con mesero) |
-| Fricción mesero | Ninguna | **Casi cero** (device trust) o Media (PIN) | **Casi cero** (device trust) o Media (PIN) |
+| Escenario | `checkin_first_visit_free = true` (default) | `checkin_first_visit_free = false` |
+|-----------|---------------------------------------------|-------------------------------------|
+| Cliente nuevo | Registro → +1 visita + welcome bonus → QR | Registro → solo welcome bonus → QR |
+| Cliente existente | QR → mesero escanea → visita registrada | QR → mesero escanea → visita registrada |
+| Primera visita | Automática (welcome) | Requiere mesero |
+| Puntos frecuente | Cuando el mesero escanea | Cuando el mesero escanea |
+| WhatsApp | Cuando el mesero escanea | Cuando el mesero escanea |
+| Anti-fraude | Rate limit + QR TTL + device trust/PIN + traza | Rate limit + QR TTL + device trust/PIN + traza |
+| Fricción cliente | Media | Alta |
+| Fricción mesero | **Casi cero** (device trust) | **Casi cero** (device trust) |
 
 ---
 
@@ -557,7 +531,6 @@ CLIENTE RECIBE SU DOMICILIO (de Rappi, Didi o pedido directo)
 | | QR de mesa (en el local) | Mini QR de caja (domicilio) |
 |---|--------------------------|----------------------------|
 | **Ubicación** | Pegado en mesas/paredes del local | Pegado en cajas de comida para llevar/domicilio |
-| **Modo `auto`** | Cliente se auto-registra visita | Cliente nuevo se auto-registra (bienvenida) |
 | **Modo `staff_verified`** | Cliente existente muestra QR a mesero | Cliente existente solo ve QR dinámico (sin mesero = sin visita) |
 | **Objetivo** | Fidelizar al que ya vino al local | **Captar** al que pidió por app y convertirlo en cliente directo |
 
@@ -568,7 +541,7 @@ Solo se necesita:
 2. **Pegar uno en cada caja** que salga del restaurante, sin importar si el pedido vino por Rappi, Didi, WhatsApp o presencial para llevar.
 3. El sistema ya funciona: es el mismo `/check-in` con el modo `staff_verified` activo.
 
-> **Nota:** En modo `auto`, el QR de caja también funciona pero con el riesgo de que un cliente existente reescanee múltiples veces para sumar visitas. El modo `staff_verified` es lo que hace segura esta estrategia de captación.
+> **Nota:** El modo `staff_verified` garantiza que un cliente existente nunca pueda auto-sumar visitas, solo puede mostrar su QR a un mesero con login.
 
 ---
 
@@ -581,7 +554,7 @@ Solo se necesita:
 
 | Aspecto | Estado | Detalle |
 |---------|--------|---------|
-| **Flujo actual** | Auto-check-in sin validación presencial | `CheckInForm.tsx` llama `action: 'checkin'` inmediatamente tras `lookup` exitoso (`@src/components/features/check-in/CheckInForm.tsx:131-155`). El cliente solo ingresa celular y ya suma visita + puntos. |
+| **Flujo actual** | Eliminado auto-checkin | `CheckInForm.tsx` ya no hace auto-checkin. Siempre genera QR dinámico para que el mesero escanee. |
 | **Geolocalización** | Comentada/Standby | Código de validación GPS está comentado en `check-in/route.ts` (`@src/app/api/check-in/route.ts:108-143`). Columnas `checkin_lat/lon/distance_meters` existen en `customers` pero no se usan. |
 | `visits.source` | Enum limitado | `visit.service.ts` solo acepta `'qr' | 'delivery'` (`@src/services/visit.service.ts:15`). No existe `'staff_scan'`. |
 | `visits.table_number` | Ya existe | La columna `table_number` ya está en la tabla (`@docs/DB_SCHEMA.md:169`, migración `00009`). El servicio `createVisit` ya la soporta (`@src/services/visit.service.ts:21,34`). |
@@ -593,7 +566,7 @@ Solo se necesita:
 
 ### Gaps críticos identificados
 
-1. **Sin validación presencial real:** Cualquier persona con el número de un cliente puede sumarle visitas/puntos desde cualquier lugar.
+1. **Sin validación presencial real:** Corregido. Solo un mesero autenticado puede registrar visitas.
 2. **Sin autenticación de meseros:** No hay forma de saber QUÉ mesero registró la visita. No hay trazabilidad.
 3. **Source `'staff_scan'` no existe:** El enum de `visits.source` y la lógica del API no lo reconocen.
 4. **Duplicados por source separados:** Si un cliente hace check-in QR y luego un mesero escanea su QR, ambas cuentan como visitas distintas porque `getRecentVisit` filtra por `source = 'qr'`.
@@ -765,11 +738,11 @@ CLIENTE (ambos escenarios)
 - [ ] Crear API `/api/staff/login`, `/api/staff/me`, `/api/staff/stats`
 - [ ] Crear API `/api/staff/device/register` y `/api/staff/device/verify`
 - [ ] Crear API `/api/dashboard/staff` — CRUD de meseros y dispositivos para admin
-- [ ] Modificar `POST /api/check-in`: aceptar `source: 'staff_scan'`, `registered_by_staff_id`, `device_token`, `token`; validar staff activo O device trust + token firma/exp; rechazar check-in existente en modo `staff_verified` sin auth
+- [x] Modificar `POST /api/check-in`: aceptar `source: 'staff_scan'`, `registered_by_staff_id`, `device_token`, `token`; validar staff activo O device trust + token firma/exp; rechazar check-in si `source !== 'staff_scan'`
 - [ ] Ampliar `CheckInRequestBody`, `PointTransactionSource`, `awardVisitPoints()`, `incrementVisit()`
 - [ ] Fix `getRecentVisit()` — quitar filtro `.eq('source', 'qr')`
 - [ ] Modificar lookup para retornar `checkin_mode`, `checkin_first_visit_free`, `current_tier`
-- [ ] Modificar `CheckInForm.tsx` para detener auto-check-in y mostrar QR dinámico (token JWT)
+- [x] Modificar `CheckInForm.tsx` para detener auto-check-in y mostrar QR dinámico (token JWT)
 - [ ] Crear rutas `/mesero`, `/mesero/activate`, `/mesero/dashboard`, `/mesero/scan`, `/mesero/confirm`
 - [ ] Crear hook `useStaffAuth.ts` y componentes de staff (incluyendo `StaffDeviceActivation`)
 - [ ] Agregar RLS para `staff_users` y `staff_devices`
@@ -817,4 +790,4 @@ Durante la revisión del documento previo al desarrollo se identificaron y corri
 
 ---
 
-*Última actualización: 2026-05-30 v2 (Auditoría v1.0.x + Device Trust: dispositivo de confianza para 0 fricción del mesero + PIN opcional para trazabilidad individual)*
+*Última actualización: 2026-05-30 v3 (Auto-checkin ELIMINADO: solo mesero registra visitas. Cliente nuevo: registro + welcome bonus + visita 1 automática. Cliente frecuente: siempre QR → mesero escanea.)*

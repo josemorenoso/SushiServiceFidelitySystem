@@ -49,7 +49,7 @@ export function CustomerDetailDialog({ customer, open, onOpenChange, onVisitsAdd
   const [reason, setReason] = useState('')
   const [adding, setAdding] = useState(false)
   const [addSuccess, setAddSuccess] = useState(false)
-  const [nextReward, setNextReward] = useState<{ milestone: number; title: string } | null>(null)
+  const [nextTier, setNextTier] = useState<{ name: string; threshold: number; safe_reward: string; points_remaining: number } | null>(null)
 
   const [editMode, setEditMode] = useState(false)
   const [editName, setEditName] = useState('')
@@ -72,8 +72,8 @@ export function CustomerDetailDialog({ customer, open, onOpenChange, onVisitsAdd
       setEditMarketing(customer.accepts_marketing)
       fetch(`/api/dashboard/customers/${customer.id}/next-reward`)
         .then((r) => r.json())
-        .then((d) => setNextReward(d.reward ?? null))
-        .catch(() => setNextReward(null))
+        .then((d) => setNextTier(d.next_tier ?? null))
+        .catch(() => setNextTier(null))
     }
   }, [customer, open])
 
@@ -251,12 +251,18 @@ export function CustomerDetailDialog({ customer, open, onOpenChange, onVisitsAdd
           </div>
 
           {/* Stats */}
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-4 gap-2">
             <div className="rounded-xl p-3 text-center" style={{ background: 'rgba(0,0,0,0.02)' }}>
               <p className="text-2xl font-bold" style={{ color: '#1a1c1d', letterSpacing: '-0.04em' }}>
-                {customer.total_visits}
+                {customer.total_points}
               </p>
-              <p className="text-[10px] font-semibold uppercase" style={{ color: '#9ca3af' }}>Visitas</p>
+              <p className="text-[10px] font-semibold uppercase" style={{ color: '#9ca3af' }}>Puntos</p>
+            </div>
+            <div className="rounded-xl p-3 text-center" style={{ background: 'rgba(0,0,0,0.02)' }}>
+              <p className="text-xs font-bold" style={{ color: '#1a1c1d', letterSpacing: '-0.04em' }}>
+                {customer.current_tier || '—'}
+              </p>
+              <p className="text-[10px] font-semibold uppercase" style={{ color: '#9ca3af' }}>Nivel</p>
             </div>
             <div className="rounded-xl p-3 text-center" style={{ background: 'rgba(0,0,0,0.02)' }}>
               <p className="text-2xl font-bold" style={{ color: '#1a1c1d', letterSpacing: '-0.04em' }}>
@@ -272,8 +278,8 @@ export function CustomerDetailDialog({ customer, open, onOpenChange, onVisitsAdd
             </div>
           </div>
 
-          {/* Next reward */}
-          {nextReward && (
+          {/* Next tier */}
+          {nextTier && (
             <div
               className="flex items-center gap-2 rounded-xl p-3"
               style={{ background: 'rgba(251, 191, 36, 0.08)', border: '1px solid rgba(251, 191, 36, 0.2)' }}
@@ -281,10 +287,10 @@ export function CustomerDetailDialog({ customer, open, onOpenChange, onVisitsAdd
               <Gift className="h-4 w-4" style={{ color: '#F59E0B' }} strokeWidth={1.5} />
               <div className="flex-1">
                 <p className="text-xs font-semibold" style={{ color: '#92400E' }}>
-                  Próxima recompensa en visita #{nextReward.milestone}
+                  Próximo nivel: {nextTier.name} ({nextTier.threshold} pts)
                 </p>
                 <p className="text-xs" style={{ color: '#B45309' }}>
-                  {nextReward.title} — le faltan {nextReward.milestone - customer.total_visits} visita(s)
+                  {nextTier.safe_reward} — le faltan {nextTier.points_remaining} pts
                 </p>
               </div>
             </div>

@@ -33,15 +33,14 @@ Tablas involucradas:
 5. **OpenAI (gpt-4o-mini) extrae datos del texto libre** (nombre, celular, dirección, pago, monto) — ver `docs/features/delivery-ai-parsing.md`
 6. n8n busca/crea/actualiza contacto en Google Contacts
 7. n8n llama a `POST /api/webhook/delivery` con datos parseados
-8. Nuestra API crea/actualiza cliente + visita + evalúa recompensas (near/far/reward)
+8. Nuestra API crea/actualiza cliente + visita + otorga puntos + evalúa tiers desbloqueados
 9. n8n responde a Twilio con TwiML de confirmación
 
-### Plantilla WhatsApp por escenario (v0.23.0)
-- Cliente nuevo → `welcome_template_sid` (`{{1}}=nombre`)
-- Visita = milestone → `reward_template_sid` (`{{3}}=título premio`)
-- Falta 1 al próximo premio → `welcome_back_near_template_sid`
-- Faltan 2+ → `welcome_back_far_template_sid`
-- Sin near/far configurada → fallback a `welcome_back_template_sid` legacy
+### Plantilla WhatsApp por escenario (v1.0.9+)
+- Cliente nuevo → `welcome_template_sid` (`{{1}}=nombre`, `{{2}}=puntos totales`, `{{3}}=roadmap tiers`)
+- Tier desbloqueado → `tier_unlocked_template_sid` (`{{1}}=nombre`, `{{2}}=nombre tier`, `{{3}}=premio safe`, `{{4}}=roadmap tiers`)
+- Sin tier nuevo, cerca del siguiente (≤30 pts) → `points_earned_near_template_sid` (`{{1}}=nombre`, `{{2}}=puntos ganados`, `{{3}}=balance`, `{{4}}=próximo premio`)
+- Sin tier nuevo, lejos del siguiente (>30 pts) → `points_earned_far_template_sid` (`{{1}}=nombre`, `{{2}}=puntos ganados`, `{{3}}=balance`, `{{4}}=roadmap tiers`)
 
 ### Flujo QR Check-in → Google Contacts
 1. Cliente hace check-in por QR
@@ -71,7 +70,8 @@ El mesero reenvía un mensaje que contiene el teléfono del cliente. El nodo `pa
 | `src/lib/validators/twilio.ts` | Validación de firma Twilio (utilidad) |
 | `src/services/customer.service.ts` | Reutiliza: findByPhone, createCustomer, incrementVisit |
 | `src/services/visit.service.ts` | Reutiliza: createVisit (con campos delivery) |
-| `src/services/reward.service.ts` | Reutiliza: checkRewardForVisit |
+| `src/services/points.service.ts` | Reutiliza: awardVisitPoints, awardWelcomeBonus |
+| `src/services/reward-tiers.service.ts` | Reutiliza: evaluateNewTier, getNextTier, buildTiersRoadmap |
 | `n8n/domicilios_whatsapp_v4.json` | Workflow n8n: Twilio → IA parseo → Google Contacts → API |
 | `n8n/google_contacts_sync.json` | Workflow n8n: QR check-in → Google Contacts sync |
 

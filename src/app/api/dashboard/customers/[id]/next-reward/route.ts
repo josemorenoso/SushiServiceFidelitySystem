@@ -22,22 +22,29 @@ export async function GET(
 
   const { data: customer } = await db
     .from('customers')
-    .select('total_visits')
+    .select('total_points')
     .eq('id', id)
     .single()
 
-  if (!customer) return NextResponse.json({ reward: null })
+  if (!customer) return NextResponse.json({ next_tier: null })
 
-  const { data: reward } = await db
-    .from('rewards')
-    .select('visit_milestone, title')
+  const { data: nextTier } = await db
+    .from('reward_tiers')
+    .select('tier_name, point_threshold, safe_reward_title')
     .eq('is_active', true)
-    .gt('visit_milestone', customer.total_visits)
-    .order('visit_milestone', { ascending: true })
+    .gt('point_threshold', customer.total_points ?? 0)
+    .order('point_threshold', { ascending: true })
     .limit(1)
     .single()
 
   return NextResponse.json({
-    reward: reward ? { milestone: reward.visit_milestone, title: reward.title } : null,
+    next_tier: nextTier
+      ? {
+          name: nextTier.tier_name,
+          threshold: nextTier.point_threshold,
+          safe_reward: nextTier.safe_reward_title,
+          points_remaining: nextTier.point_threshold - (customer.total_points ?? 0),
+        }
+      : null,
   })
 }

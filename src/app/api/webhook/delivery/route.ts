@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { validatePhone } from '@/lib/validators/phone'
 import { findCustomerByPhone, createCustomer, incrementVisit, updateCustomerCityIfNull, updateCustomerBirthdayIfNull } from '@/services/customer.service'
 import { createVisit } from '@/services/visit.service'
-import { checkRewardForVisit, getNextReward, getRewardTitle, getRemainingForReward, buildRewardsRoadmap } from '@/services/reward.service'
-import { buildTiersRoadmap } from '@/services/reward-tiers.service'
+import { awardVisitPoints, awardWelcomeBonus } from '@/services/points.service'
+import { evaluateNewTier, getNextTier, buildTiersRoadmap, updateCustomerTier } from '@/services/reward-tiers.service'
 import { sendTemplateMessage } from '@/services/whatsapp.service'
 import { getMultipleSettings } from '@/services/settings.service'
 import { syncGoogleContact } from '@/services/google-contacts-sync.service'
@@ -119,7 +119,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    await createVisit({
+    const visit = await createVisit({
       customerId: customer.id,
       source: 'delivery',
       notes: metodo_pago ? `Pago: ${metodo_pago}` : undefined,
@@ -131,39 +131,82 @@ export async function POST(request: NextRequest) {
 
     const settings = await getMultipleSettings([
       'welcome_template_sid',
-      'welcome_back_template_sid',           // legacy fallback
-      'welcome_back_near_template_sid',
-      'welcome_back_far_template_sid',
-      'reward_template_sid',
+      'points_earned_far_template_sid',
+      'points_earned_near_template_sid',
+      'tier_unlocked_template_sid',
     ])
-    const reward = await checkRewardForVisit(customer.total_visits)
 
-    const roadmap = await buildRewardsRoadmap(customer.total_visits)
-    const tiersRoadmap = await buildTiersRoadmap(customer.total_points ?? 0)
+    // Puntos de bienvenida para nuevos clientes
+    let welcomePoints = { pointsAwarded: 0, newBalance: 0 }
+    if (isNew) {
+      try {
+        welcomePoints = await awardWelcomeBonus(customer.id)
+      } catch (err) {
+        console.error('[Delivery] Error otorgando puntos de bienvenida:', err)
+      }
+    }
+
+    // Para clientes existentes: otorgar puntos por visita y evaluar tiers
+    let pointsResult = { pointsAwarded: welcomePoints.pointsAwarded, newBalance: welcomePoints.newBalance }
+    let newTier = null
+    let nextTierInfo = null
+    let tiersRoadmapText = '🌟 ¡Seguí sumando puntos para desbloquear premios!'
+
+    if (!isNew) {
+      const previousPoints = customer.total_points ?? 0
+      try {
+        pointsResult = await awardVisitPoints(customer.id, visit.id, 'delivery')
+        console.log(`[Delivery] Puntos otorgados: +${pointsResult.pointsAwarded} → balance=${pointsResult.newBalance} (prev=${previousPoints})`)
+      } catch (err) {
+        console.error('[Delivery] ERROR otorgando puntos (se usa fallback 0):', err)
+        pointsResult = { pointsAwarded: 0, newBalance: previousPoints }
+      }
+
+      try {
+        newTier = await evaluateNewTier(previousPoints, pointsResult.newBalance)
+        if (newTier) {
+          await updateCustomerTier(customer.id, newTier.tier_name)
+        }
+        nextTierInfo = await getNextTier(pointsResult.newBalance)
+      } catch (err) {
+        console.error('[Delivery] ERROR evaluando tiers (se continúa sin tiers):', err)
+      }
+    }
+
+    try {
+      tiersRoadmapText = await buildTiersRoadmap(pointsResult.newBalance)
+    } catch (err) {
+      console.error('[Delivery] Error generando tiers roadmap:', err)
+    }
 
     if (isNew) {
-      await sendDeliveryTemplate(settings.welcome_template_sid, 'welcome', cleaned, { '1': customer.name, '2': String(customer.total_points ?? 0), '3': tiersRoadmap })
-    } else if (reward) {
-      await sendDeliveryTemplate(settings.reward_template_sid, 'reward', cleaned, {
+      await sendDeliveryTemplate(settings.welcome_template_sid, 'welcome', cleaned, {
         '1': customer.name,
-        '2': String(customer.total_visits),
-        '3': reward.title,
-        '4': roadmap,
+        '2': String(pointsResult.newBalance),
+        '3': tiersRoadmapText,
+      })
+    } else if (newTier) {
+      await sendDeliveryTemplate(settings.tier_unlocked_template_sid, 'tier_unlocked', cleaned, {
+        '1': customer.name,
+        '2': newTier.tier_name,
+        '3': newTier.safe_reward_title,
+        '4': tiersRoadmapText,
       })
     } else {
-      const nextReward = await getNextReward(customer.total_visits)
-      const remaining = getRemainingForReward(customer.total_visits, nextReward)
-      const rewardTitle = getRewardTitle(nextReward)
-      const isNear = remaining === 1
-      const targetSid = isNear
-        ? (settings.welcome_back_near_template_sid ?? settings.welcome_back_template_sid)
-        : (settings.welcome_back_far_template_sid ?? settings.welcome_back_template_sid)
-      await sendDeliveryTemplate(targetSid, isNear ? 'welcome_back_near' : 'welcome_back_far', cleaned, {
-        '1': customer.name,
-        '2': String(customer.total_visits),
-        '3': rewardTitle,
-        '4': roadmap,
-      })
+      const isNearTier = nextTierInfo && nextTierInfo.pointsRemaining <= 30
+      const targetSid = isNearTier
+        ? settings.points_earned_near_template_sid
+        : settings.points_earned_far_template_sid
+      if (targetSid) {
+        await sendDeliveryTemplate(targetSid, isNearTier ? 'points_earned_near' : 'points_earned_far', cleaned, {
+          '1': customer.name,
+          '2': String(pointsResult.pointsAwarded),
+          '3': String(pointsResult.newBalance),
+          '4': isNearTier ? nextTierInfo!.tier.safe_reward_title : tiersRoadmapText,
+        })
+      } else {
+        console.warn('[Delivery] No hay plantilla de puntos configurada (points_earned_near/far_template_sid). Mensaje WhatsApp NO enviado.')
+      }
     }
 
     // Google Contacts sync (awaited — Vercel mata fire-and-forget)
@@ -189,8 +232,10 @@ export async function POST(request: NextRequest) {
         name: customer.name,
         phone: customer.phone,
         total_visits: customer.total_visits,
+        total_points: pointsResult.newBalance,
       },
-      reward: reward ? { title: reward.title } : null,
+      points_awarded: pointsResult.pointsAwarded,
+      tier_unlocked: newTier ? { name: newTier.tier_name, safe_reward: newTier.safe_reward_title } : null,
     })
   } catch (error) {
     console.error('[Delivery] Error:', error)

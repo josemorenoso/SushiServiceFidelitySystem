@@ -5,6 +5,23 @@
 
 ---
 
+## [1.0.9] — 2026-05-30 — HOTFIX: Webhook de delivery enviaba mensajes con formato legacy de milestones
+
+### Fixed
+
+**Webhook de domicilios migrado al sistema de puntos:**
+- `src/app/api/webhook/delivery/route.ts`: Reemplazada toda la lógica legacy de `reward.service.ts` (`checkRewardForVisit`, `getNextReward`, `buildRewardsRoadmap`) por el sistema de puntos (`awardVisitPoints`, `evaluateNewTier`, `getNextTier`, `buildTiersRoadmap`).
+- **Otorgamiento de puntos en domicilios**: Ahora las visitas de delivery otorgan puntos aleatorios inteligentes (`awardVisitPoints`) y evalúan si el cliente cruza un nuevo tier (`evaluateNewTier`).
+- **Puntos de bienvenida en domicilios**: Los clientes nuevos de delivery ahora reciben `awardWelcomeBonus` (antes no recibían nada).
+- **Plantillas WhatsApp actualizadas**: Eliminadas `welcome_back_near/far_template_sid` y `reward_template_sid` (legacy). Ahora se usan `points_earned_near_template_sid`, `points_earned_far_template_sid` y `tier_unlocked_template_sid` — igual que el check-in QR.
+- **Variables corregidas**: Los mensajes ahora envían `pointsAwarded`, `newBalance` y `tiersRoadmap` en lugar de `total_visits`, `rewardTitle` y `roadmap` de milestones.
+- **Respuesta JSON**: Incluye `total_points` y `tier_unlocked` en lugar de `reward` legacy.
+
+### Archivos afectados
+- `src/app/api/webhook/delivery/route.ts`
+
+---
+
 ## [1.0.8] — 2026-05-30 — Tiers dinámicos: nombres y emojis editables por el admin
 
 ### Changed

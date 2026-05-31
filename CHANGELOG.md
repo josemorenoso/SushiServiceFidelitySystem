@@ -5,6 +5,18 @@
 
 ---
 
+## [1.1.5] — 2026-05-31 — Feat: capturador de errores para diagnosticar crashes del mesero
+
+### Added
+
+**`src/app/(public)/mesero/error.tsx`:**
+- Nuevo Next.js Error Boundary para la ruta `/mesero/**` que captura cualquier error de React y muestra el mensaje + stack trace en pantalla, en vez del genérico "This page couldn't load".
+
+**`src/app/(public)/mesero/scan/page.tsx` & `src/app/(public)/mesero/confirm/page.tsx`:**
+- `window.addEventListener('error')` y `window.addEventListener('unhandledrejection')` para capturar errores de librerías externas (como `html5-qrcode`) y mostrarlos en la UI del celular.
+
+---
+
 ## [1.1.4] — 2026-05-31 — Fix: race condition en scanner QR del mesero
 
 ### Fixed

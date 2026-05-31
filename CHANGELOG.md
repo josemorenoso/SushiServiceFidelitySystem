@@ -5,6 +5,41 @@
 
 ---
 
+## [1.1.9] — 2026-05-31 — Fix: crash React #310 en check-in de cliente registrado
+
+### Fixed
+
+**`src/components/features/check-in/CheckInForm.tsx`:**
+- **Causa raíz:** El `useEffect` del polling automático estaba ubicado DESPUÉS de dos `return` condicionales (`step === 'phone'` y `step === 'register'`), violando las Reglas de Hooks de React.
+- En el primer render (`step = 'phone'`) React registraba N hooks; al cambiar a `step = 'customer_qr'` detectaba N+1 hooks y lanzaba el error #310 ("Rendered fewer hooks than expected").
+- **Fix:** El `useEffect` del polling se movió ANTES de todos los `return` condicionales, junto con los demás hooks del componente.
+
+**`src/app/(public)/check-in/page.tsx`:**
+- `handleCheckInSuccess` envuelto en `useCallback` para evitar que la referencia cambie en cada render y reinicie innecesariamente el intervalo de polling.
+
+---
+
+## [1.1.8] — 2026-05-31 — Fix: selectores de plantillas faltantes en Dashboard > Ajustes
+
+### Fixed
+
+**`src/app/(dashboard)/dashboard/settings/page.tsx`:**
+- Agregados 7 nuevos selectores de plantillas WhatsApp faltantes para el sistema de puntos + Mystery Box:
+  - `reward_safe_template_sid` — Premio seguro (cliente eligió "a la segura")
+  - `mystery_box_result_template_sid` — Resultado de Mystery Box normal
+  - `golden_box_result_template_sid` — Resultado de Golden Box (pity timer)
+  - `points_earned_far_template_sid` — Puntos sumados (lejos del premio)
+  - `points_earned_near_template_sid` — Puntos sumados (cerca del premio)
+  - `tier_unlocked_template_sid` — Tier desbloqueado (antes de elegir safe/mystery)
+  - `reactivation_aggressive_template_sid` — Reactivación agresiva (25d+)
+- Los selectores nuevos se agrupan visualmente bajo "Sistema de Puntos + Mystery Box".
+- El `handleSaveTemplates` ahora persiste todas las nuevas keys en `admin_settings`.
+
+**`docs/features/flujo-plantillas-recompensas-campanas.md`:**
+- Actualizada la tabla de configuración en sección 8 con las nuevas keys de plantillas del sistema de puntos.
+
+---
+
 ## [1.1.7] — 2026-05-31 — Feat: polling automático para flujo completo del cliente post-QR
 
 ### Added

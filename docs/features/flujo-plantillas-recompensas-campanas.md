@@ -286,20 +286,25 @@ Tu nivel actual: {{3}}
 
 ---
 
-## 8. Configuración necesaria en Dashboard > Ajustes (v0.23.0)
+## 8. Configuración necesaria en Dashboard > Ajustes (v1.1.8)
 
 | Key en admin_settings | Tipo de mensaje | Variables |
 |----------------------|-----------------|-----------|
-| `welcome_template_sid` | Bienvenida (registro nuevo) | {{1}}=nombre |
-| `welcome_back_near_template_sid` | Visita: cerca de premio (faltan 1) | {{1}}=nombre, {{2}}=visitas, {{3}}=título premio |
-| `welcome_back_far_template_sid` | Visita: lejos de premio (faltan ≥2) | {{1}}=nombre, {{2}}=visitas, {{3}}=título premio |
-| `welcome_back_template_sid` | (Legacy) Fallback si no hay near/far | {{1}}=nombre, {{2}}=visitas, {{3}}=título premio |
-| `reward_template_sid` | Ganaste premio (milestone) | {{1}}=nombre, {{2}}=visitas, {{3}}=título del premio ganado |
-| `birthday_template_sid` | Cumpleaños (cron) | {{1}}=nombre |
-| `reactivation_no_reward_template_sid` | Reactivación SIN regalo | {{1}}=nombre |
+| `welcome_template_sid` | Bienvenida (registro nuevo) | {{1}}=nombre, {{2}}=puntos iniciales, {{3}}=roadmap tiers |
+| `welcome_back_near_template_sid` | Visita: cerca de premio (faltan 1) — **Legacy** | {{1}}=nombre, {{2}}=visitas, {{3}}=título premio |
+| `welcome_back_far_template_sid` | Visita: lejos de premio (faltan ≥2) — **Legacy** | {{1}}=nombre, {{2}}=visitas, {{3}}=título premio |
+| `reward_template_sid` | Ganaste premio (milestone) — **Legacy** | {{1}}=nombre, {{2}}=visitas, {{3}}=título del premio ganado |
+| `birthday_template_sid` | Cumpleaños (cron) | {{1}}=nombre, {{2}}=puntos actuales |
+| `reactivation_no_reward_template_sid` | Reactivación SIN regalo (suave 21d) | {{1}}=nombre, {{2}}=puntos actuales, {{3}}=próximo tier |
 | `reactivation_with_reward_template_sid` | Reactivación CON regalo | {{1}}=nombre, {{3}}=título premio fijo |
+| `reactivation_aggressive_template_sid` | Reactivación AGRESIVA (25d+) | {{1}}=nombre, {{2}}=puntos actuales, {{3}}=próximo tier |
 | `reactivation_reward_id` | UUID del reward fijo para reactivación | — |
-| `reactivation_template_sid` | (Legacy) Plantilla anterior única | {{1}}=nombre, {{2}}=visitas, {{3}}=hint |
+| `points_earned_far_template_sid` | Puntos sumados (lejos del premio) | {{1}}=nombre, {{2}}=puntos ganados, {{3}}=puntos totales, {{4}}=roadmap tiers |
+| `points_earned_near_template_sid` | Puntos sumados (cerca del premio) | {{1}}=nombre, {{2}}=puntos ganados, {{3}}=puntos totales, {{4}}=próximo premio |
+| `tier_unlocked_template_sid` | Tier desbloqueado (antes de elegir safe/mystery) | {{1}}=nombre, {{2}}=tier, {{3}}=premio seguro, {{4}}=roadmap tiers |
+| `reward_safe_template_sid` | Premio seguro (cliente eligió "a la segura") | {{1}}=nombre, {{2}}=tier, {{3}}=premio ganado, {{4}}=roadmap tiers |
+| `mystery_box_result_template_sid` | Mystery Box resultado | {{1}}=nombre, {{2}}=tier, {{3}}=premio mystery box, {{4}}=roadmap tiers |
+| `golden_box_result_template_sid` | Golden Box resultado (pity timer) | {{1}}=nombre, {{2}}=premio golden box, {{3}}=roadmap tiers |
 
 ### Problemas resueltos (v0.21.0)
 1. ~~Cron birthday/reactivation usan free-text~~ → ✅ Ahora usan plantillas, sin fallback free-text

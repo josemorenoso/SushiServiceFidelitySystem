@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { CheckInForm, CheckInSuccess } from '@/components/features/check-in'
 import { Toaster, toast } from 'sonner'
 import { UtensilsCrossed } from 'lucide-react'
@@ -29,7 +29,7 @@ export default function CheckInPage() {
     })
   }
 
-  const handleCheckInSuccess = (result: CheckInResult, phone: string) => {
+  const handleCheckInSuccess = useCallback((result: CheckInResult, phone: string) => {
     const resultType = result.message === 'tier_unlocked' ? 'tier_unlocked'
       : result.message === 'points_earned' ? 'points_earned'
       : result.message === 'duplicate' ? 'duplicate'
@@ -48,7 +48,7 @@ export default function CheckInPage() {
       tiers: result.tiers,
       phone,
     })
-  }
+  }, [])
 
   const handleError = (message: string) => {
     toast.error(message)

@@ -120,6 +120,51 @@ export function CheckInForm({
     }
   }, [])
 
+  // ─── Polling automático: detectar cuando el mesero registra la visita ───
+  // IMPORTANTE: debe estar aquí, ANTES de cualquier return condicional, para
+  // que React llame este hook en el mismo orden en cada render (Rules of Hooks).
+  useEffect(() => {
+    if (step !== 'customer_qr' || !phone) return
+
+    let cancelled = false
+    const poll = async () => {
+      try {
+        setCheckingStatus(true)
+        const res = await fetch(`/api/check-in/status?phone=${encodeURIComponent(phone)}`)
+        const data = await res.json()
+        if (cancelled) return
+
+        if (data.hasRecentVisit) {
+          const result: CheckInResult = {
+            message: 'points_earned',
+            customer: {
+              name: data.customer.name,
+              total_visits: data.customer.total_visits,
+              total_points: data.customer.total_points,
+            },
+            points_awarded: data.points_awarded ?? 0,
+            next_tier: data.next_tier ?? null,
+            tiers: data.tiers ?? [],
+          }
+          onCheckInSuccess(result, phone)
+          return
+        }
+      } catch (err) {
+        console.error('[CheckInForm] Status poll error:', err)
+      } finally {
+        if (!cancelled) setCheckingStatus(false)
+      }
+    }
+
+    poll()
+    const interval = setInterval(poll, 5000)
+
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [step, phone, onCheckInSuccess])
+
   const handlePhoneSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (phone.length < 10) return
@@ -201,6 +246,52 @@ export function CheckInForm({
       setLoading(false)
     }
   }
+
+  // ─── Polling automático: detectar cuando el mesero registra la visita ───
+  // DEBE ir antes de cualquier return condicional para cumplir las Reglas de Hooks
+  useEffect(() => {
+    if (step !== 'customer_qr' || !phone) return
+
+    let cancelled = false
+    const poll = async () => {
+      try {
+        setCheckingStatus(true)
+        const res = await fetch(`/api/check-in/status?phone=${encodeURIComponent(phone)}`)
+        const data = await res.json()
+        if (cancelled) return
+
+        if (data.hasRecentVisit) {
+          // Visita registrada — transicionar a éxito
+          const result: CheckInResult = {
+            message: 'points_earned',
+            customer: {
+              name: data.customer.name,
+              total_visits: data.customer.total_visits,
+              total_points: data.customer.total_points,
+            },
+            points_awarded: data.points_awarded ?? 0,
+            next_tier: data.next_tier ?? null,
+            tiers: data.tiers ?? [],
+          }
+          onCheckInSuccess(result, phone)
+          return
+        }
+      } catch (err) {
+        console.error('[CheckInForm] Status poll error:', err)
+      } finally {
+        if (!cancelled) setCheckingStatus(false)
+      }
+    }
+
+    // Primera consulta inmediata, luego cada 5 segundos
+    poll()
+    const interval = setInterval(poll, 5000)
+
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [step, phone, onCheckInSuccess])
 
   if (step === 'phone') {
     return (
@@ -467,51 +558,6 @@ export function CheckInForm({
       </div>
     )
   }
-
-  // ─── Polling automático: detectar cuando el mesero registra la visita ───
-  useEffect(() => {
-    if (step !== 'customer_qr' || !phone) return
-
-    let cancelled = false
-    const poll = async () => {
-      try {
-        setCheckingStatus(true)
-        const res = await fetch(`/api/check-in/status?phone=${encodeURIComponent(phone)}`)
-        const data = await res.json()
-        if (cancelled) return
-
-        if (data.hasRecentVisit) {
-          // Visita registrada — transicionar a éxito
-          const result: CheckInResult = {
-            message: 'points_earned',
-            customer: {
-              name: data.customer.name,
-              total_visits: data.customer.total_visits,
-              total_points: data.customer.total_points,
-            },
-            points_awarded: data.points_awarded ?? 0,
-            next_tier: data.next_tier ?? null,
-            tiers: data.tiers ?? [],
-          }
-          onCheckInSuccess(result, phone)
-          return
-        }
-      } catch (err) {
-        console.error('[CheckInForm] Status poll error:', err)
-      } finally {
-        if (!cancelled) setCheckingStatus(false)
-      }
-    }
-
-    // Primera consulta inmediata, luego cada 5 segundos
-    poll()
-    const interval = setInterval(poll, 5000)
-
-    return () => {
-      cancelled = true
-      clearInterval(interval)
-    }
-  }, [step, phone, onCheckInSuccess])
 
   if (step === 'customer_qr' && customerQR && lookupCustomer) {
     return (

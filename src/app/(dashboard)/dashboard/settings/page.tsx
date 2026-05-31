@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { Settings, DollarSign, Save, Loader2, CheckCircle, Crown, CalendarHeart, Mail, RefreshCw, MessageCircle, Gift, UserPlus, X, Plus, Zap, MapPin } from 'lucide-react'
+import { Settings, DollarSign, Save, Loader2, CheckCircle, Crown, CalendarHeart, Mail, RefreshCw, MessageCircle, Gift, UserPlus, X, Plus, Zap, MapPin, Sparkles, Package, TrendingUp, Trophy, Flame } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 
@@ -111,6 +111,13 @@ export default function SettingsPage() {
   const [reactivationNoRewardSid, setReactivationNoRewardSid] = useState('')
   const [reactivationWithRewardSid, setReactivationWithRewardSid] = useState('')
   const [reactivationRewardId, setReactivationRewardId] = useState('')
+  const [safeRewardTemplateSid, setSafeRewardTemplateSid] = useState('')
+  const [mysteryBoxResultTemplateSid, setMysteryBoxResultTemplateSid] = useState('')
+  const [goldenBoxResultTemplateSid, setGoldenBoxResultTemplateSid] = useState('')
+  const [pointsEarnedFarTemplateSid, setPointsEarnedFarTemplateSid] = useState('')
+  const [pointsEarnedNearTemplateSid, setPointsEarnedNearTemplateSid] = useState('')
+  const [tierUnlockedTemplateSid, setTierUnlockedTemplateSid] = useState('')
+  const [reactivationAggressiveTemplateSid, setReactivationAggressiveTemplateSid] = useState('')
   const [templatesSaving, setTemplatesSaving] = useState(false)
   const [templatesSaved, setTemplatesSaved] = useState(false)
 
@@ -172,6 +179,13 @@ export default function SettingsPage() {
         setReactivationNoRewardSid(settingsData.reactivation_no_reward_template_sid ?? legacyReact)
         setReactivationWithRewardSid(settingsData.reactivation_with_reward_template_sid ?? '')
         setReactivationRewardId(settingsData.reactivation_reward_id ?? '')
+        setSafeRewardTemplateSid(settingsData.reward_safe_template_sid ?? '')
+        setMysteryBoxResultTemplateSid(settingsData.mystery_box_result_template_sid ?? '')
+        setGoldenBoxResultTemplateSid(settingsData.golden_box_result_template_sid ?? '')
+        setPointsEarnedFarTemplateSid(settingsData.points_earned_far_template_sid ?? '')
+        setPointsEarnedNearTemplateSid(settingsData.points_earned_near_template_sid ?? '')
+        setTierUnlockedTemplateSid(settingsData.tier_unlocked_template_sid ?? '')
+        setReactivationAggressiveTemplateSid(settingsData.reactivation_aggressive_template_sid ?? '')
 
         const allTemplates: TwilioTemplate[] = templatesData.templates ?? []
         setTemplates(allTemplates)
@@ -244,6 +258,13 @@ export default function SettingsPage() {
         saveSetting('reactivation_no_reward_template_sid', reactivationNoRewardSid),
         saveSetting('reactivation_with_reward_template_sid', reactivationWithRewardSid),
         saveSetting('reactivation_reward_id', reactivationRewardId),
+        saveSetting('reward_safe_template_sid', safeRewardTemplateSid),
+        saveSetting('mystery_box_result_template_sid', mysteryBoxResultTemplateSid),
+        saveSetting('golden_box_result_template_sid', goldenBoxResultTemplateSid),
+        saveSetting('points_earned_far_template_sid', pointsEarnedFarTemplateSid),
+        saveSetting('points_earned_near_template_sid', pointsEarnedNearTemplateSid),
+        saveSetting('tier_unlocked_template_sid', tierUnlockedTemplateSid),
+        saveSetting('reactivation_aggressive_template_sid', reactivationAggressiveTemplateSid),
       ])
       setTemplatesSaved(true)
       setTimeout(() => setTemplatesSaved(false), 3000)
@@ -674,6 +695,82 @@ export default function SettingsPage() {
               <p className="text-[10px]" style={{ color: '#b0b0b0' }}>
                 Si seleccionas una recompensa Y configuras "Reactivación CON regalo", el cron usará esa plantilla con `{'{{3}}'}` = título del premio.
               </p>
+            </div>
+
+            {/* Reactivation AGRESIVA (25d+) */}
+            <TemplateSelector
+              label="Reactivación AGRESIVA (25d+)"
+              icon={<Flame className="h-3.5 w-3.5" style={{ color: '#DC2626' }} />}
+              hint="Variables: {{1}}=nombre, {{2}}=puntos actuales, {{3}}=próximo tier. Para clientes inactivos 25+ días."
+              value={reactivationAggressiveTemplateSid}
+              onChange={setReactivationAggressiveTemplateSid}
+              templates={approvedTemplates}
+            />
+
+            <div className="border-t border-dashed border-gray-200 pt-4">
+              <p className="text-[10px] font-semibold uppercase tracking-widest mb-3" style={{ color: '#6b7280' }}>
+                Sistema de Puntos + Mystery Box
+              </p>
+
+              {/* Puntos sumados (lejos) */}
+              <TemplateSelector
+                label="Puntos sumados (lejos del premio)"
+                icon={<TrendingUp className="h-3.5 w-3.5" style={{ color: '#3B82F6' }} />}
+                hint="Variables: {{1}}=nombre, {{2}}=puntos ganados hoy, {{3}}=puntos totales, {{4}}=roadmap tiers"
+                value={pointsEarnedFarTemplateSid}
+                onChange={setPointsEarnedFarTemplateSid}
+                templates={approvedTemplates}
+              />
+
+              {/* Puntos sumados (cerca) */}
+              <TemplateSelector
+                label="Puntos sumados (cerca del premio)"
+                icon={<TrendingUp className="h-3.5 w-3.5" style={{ color: '#10B981' }} />}
+                hint="Variables: {{1}}=nombre, {{2}}=puntos ganados hoy, {{3}}=puntos totales, {{4}}=próximo premio"
+                value={pointsEarnedNearTemplateSid}
+                onChange={setPointsEarnedNearTemplateSid}
+                templates={approvedTemplates}
+              />
+
+              {/* Tier desbloqueado */}
+              <TemplateSelector
+                label="Tier desbloqueado (antes de elegir safe/mystery)"
+                icon={<Trophy className="h-3.5 w-3.5" style={{ color: '#F59E0B' }} />}
+                hint="Variables: {{1}}=nombre, {{2}}=tier alcanzado, {{3}}=premio seguro, {{4}}=roadmap tiers"
+                value={tierUnlockedTemplateSid}
+                onChange={setTierUnlockedTemplateSid}
+                templates={approvedTemplates}
+              />
+
+              {/* Premio seguro */}
+              <TemplateSelector
+                label="Premio seguro (cliente eligió 'a la segura')"
+                icon={<Package className="h-3.5 w-3.5" style={{ color: '#6366F1' }} />}
+                hint="Variables: {{1}}=nombre, {{2}}=tier, {{3}}=premio ganado, {{4}}=roadmap tiers"
+                value={safeRewardTemplateSid}
+                onChange={setSafeRewardTemplateSid}
+                templates={approvedTemplates}
+              />
+
+              {/* Mystery Box resultado */}
+              <TemplateSelector
+                label="Mystery Box resultado"
+                icon={<Sparkles className="h-3.5 w-3.5" style={{ color: '#8B5CF6' }} />}
+                hint="Variables: {{1}}=nombre, {{2}}=tier, {{3}}=premio mystery box, {{4}}=roadmap tiers"
+                value={mysteryBoxResultTemplateSid}
+                onChange={setMysteryBoxResultTemplateSid}
+                templates={approvedTemplates}
+              />
+
+              {/* Golden Box resultado */}
+              <TemplateSelector
+                label="Golden Box resultado (pity timer)"
+                icon={<Crown className="h-3.5 w-3.5" style={{ color: '#FFD700' }} />}
+                hint="Variables: {{1}}=nombre, {{2}}=premio golden box, {{3}}=roadmap tiers"
+                value={goldenBoxResultTemplateSid}
+                onChange={setGoldenBoxResultTemplateSid}
+                templates={approvedTemplates}
+              />
             </div>
 
             <SaveButton saving={templatesSaving} saved={templatesSaved} onClick={handleSaveTemplates} disabled={templatesSaving} />

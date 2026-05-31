@@ -5,6 +5,22 @@
 
 ---
 
+## [1.1.7] — 2026-05-31 — Feat: polling automático para flujo completo del cliente post-QR
+
+### Added
+
+**`src/app/api/check-in/status/route.ts`:**
+- Nuevo endpoint `GET /api/check-in/status?phone=XXX` que devuelve el estado del cliente + su visita más reciente (últimos 5 minutos).
+- Incluye: `hasRecentVisit`, `customer` (name, total_visits, total_points), `points_awarded`, `next_tier`, `tiers`.
+
+**`src/components/features/check-in/CheckInForm.tsx`:**
+- Cuando el cliente está en el step `customer_qr` (mostrando su QR), se inicia polling automático cada 5 segundos al nuevo endpoint.
+- Cuando detecta una visita recién registrada (`hasRecentVisit: true`), transiciona automáticamente a `onCheckInSuccess`, mostrando la pantalla de éxito con puntos, visitas y roadmap de tiers.
+- Indicador visual "Esperando confirmación del mesero..." mientras hace polling.
+- Cleanup del intervalo al desmontar el componente.
+
+---
+
 ## [1.1.6] — 2026-05-31 — Fix: accessibility warnings en input de mesa
 
 ### Fixed

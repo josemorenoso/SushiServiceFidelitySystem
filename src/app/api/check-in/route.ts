@@ -10,12 +10,50 @@ import { awardVisitPoints, awardWelcomeBonus } from '@/services/points.service'
 import { evaluateNewTier, getNextTier, buildTiersRoadmap, updateCustomerTier, getAllTiers } from '@/services/reward-tiers.service'
 import { verifyCustomerQRToken, generateCustomerQRToken } from '@/lib/utils/qrcode'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { jwtVerify } from 'jose'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!url || !key) throw new Error('Missing Supabase env vars')
   return createServiceClient(url, key)
+}
+
+function getStaffSecret(): Uint8Array | null {
+  const s = process.env.STAFF_JWT_SECRET
+  if (!s) return null
+  return new TextEncoder().encode(s)
+}
+
+/**
+ * Deriva staff_id o device_token desde headers Authorization/X-Device-Token.
+ * Usado por la app del mesero que manda auth via headers, no body.
+ */
+async function resolveStaffAuthFromHeaders(
+  request: NextRequest
+): Promise<{ staffId: string | null; deviceToken: string | null }> {
+  const authHeader = request.headers.get('authorization')
+  const bearer = authHeader?.toLowerCase().startsWith('bearer ')
+    ? authHeader.slice(7).trim()
+    : null
+  const deviceToken = request.headers.get('x-device-token')
+
+  let staffId: string | null = null
+  if (bearer) {
+    const secret = getStaffSecret()
+    if (secret) {
+      try {
+        const { payload } = await jwtVerify(bearer, secret, { clockTolerance: 60 })
+        if (typeof payload.sub === 'string') staffId = payload.sub
+      } catch (err) {
+        console.warn('[CheckIn] Bearer staff JWT inválido:', err instanceof Error ? err.message : err)
+      }
+    } else {
+      console.warn('[CheckIn] STAFF_JWT_SECRET no configurado — no se puede validar Bearer del mesero')
+    }
+  }
+
+  return { staffId, deviceToken: deviceToken || null }
 }
 
 // Rate limits por IP
@@ -108,7 +146,16 @@ export async function POST(request: NextRequest) {
     }
 
     // ─── RATE LIMITING por staff (cuando source es staff_scan) ───
-    const { source = 'qr', registered_by_staff_id, device_token } = body
+    const { source = 'qr' } = body
+    let { registered_by_staff_id, device_token } = body
+
+    // Si no vinieron en body, derivarlos de headers (la app del mesero los manda asi)
+    if (source === 'staff_scan' && !registered_by_staff_id && !device_token) {
+      const resolved = await resolveStaffAuthFromHeaders(request)
+      registered_by_staff_id = resolved.staffId
+      device_token = resolved.deviceToken
+    }
+
     if (source === 'staff_scan') {
       const staffKey = registered_by_staff_id
         ? `checkin:staff:${registered_by_staff_id}`

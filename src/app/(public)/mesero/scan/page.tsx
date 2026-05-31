@@ -99,6 +99,17 @@ export default function MeseroScanPage() {
       return
     }
 
+    // Persist decoded data before navigating — confirm page reads this on first render
+    // to avoid App Router's Suspense gap where useSearchParams returns empty on first paint
+    try {
+      sessionStorage.setItem(
+        'mesero_pending_customer',
+        JSON.stringify({ name: payload.name, phone: payload.phone, sub: payload.sub, token })
+      )
+    } catch {
+      // sessionStorage unavailable — confirm falls back to URL decode
+    }
+
     // Detener scanner limpiamente antes de navegar para evitar race condition
     const stopAndNavigate = async () => {
       if (scannerRef.current) {

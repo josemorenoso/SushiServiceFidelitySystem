@@ -38,6 +38,22 @@ function MeseroConfirmContent() {
   } | null>(null)
   const [tableNumber, setTableNumber] = useState('')
 
+  // Leer datos del cliente desde sessionStorage (escritos por scan/page.tsx antes de navegar).
+  // Lazy initializer: se ejecuta síncronamente en el primer render, evitando el "Suspense gap"
+  // de App Router donde useSearchParams devuelve null en la primera pintura.
+  const [sessionCustomer] = useState<{ name: string; phone: string } | null>(() => {
+    if (typeof window === 'undefined') return null
+    try {
+      const raw = sessionStorage.getItem('mesero_pending_customer')
+      if (!raw) return null
+      sessionStorage.removeItem('mesero_pending_customer')
+      const data = JSON.parse(raw) as { name: string; phone: string; sub: string; token: string }
+      return { name: data.name, phone: data.phone }
+    } catch {
+      return null
+    }
+  })
+
   // Redirigir si no hay auth
   useEffect(() => {
     if (!authLoading && !session) {
@@ -102,8 +118,8 @@ function MeseroConfirmContent() {
     lookup()
   }, [manualPhone])
 
-  const customerName = decoded?.name ?? manualCustomer?.name ?? 'Cliente'
-  const customerPhone = decoded?.phone ?? manualCustomer?.phone ?? manualPhone ?? ''
+  const customerName = decoded?.name ?? sessionCustomer?.name ?? manualCustomer?.name ?? 'Cliente'
+  const customerPhone = decoded?.phone ?? sessionCustomer?.phone ?? manualCustomer?.phone ?? manualPhone ?? ''
   const maskedPhone = customerPhone.length >= 7
     ? `${customerPhone.slice(0, 3)}••••${customerPhone.slice(-3)}`
     : customerPhone

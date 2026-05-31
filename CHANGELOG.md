@@ -5,6 +5,17 @@
 
 ---
 
+## [1.1.4] — 2026-05-31 — Fix: race condition en scanner QR del mesero
+
+### Fixed
+
+**`src/app/(public)/mesero/scan/page.tsx`:**
+- Agregado `navigatingRef` para prevenir que `handleScan` se ejecute múltiples veces si el scanner dispara callbacks duplicados.
+- `handleScan` ahora detiene el scanner (`await stop() + clear()`) **antes** de llamar `router.push`, eliminando la race condition que causaba el crash "This page couldn't load" al desmontar el componente mientras `Html5Qrcode` aún estaba activo.
+- Reset de `navigatingRef.current = false` cuando el decode del QR falla, permitiendo reintentar.
+
+---
+
 ## [1.1.3] — 2026-05-31 — Fix: diagnóstico de error de conexión en lookup de clientes existentes
 
 ### Fixed

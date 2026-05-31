@@ -38,13 +38,15 @@ export async function GET(request: NextRequest) {
 
     const supabase = getServiceClient()
 
-    // Buscar la visita más reciente (últimos 5 minutos)
-    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString()
+    // Buscar la visita más reciente registrada por un mesero (últimos 30 minutos)
+    // Solo source='staff_scan' — las visitas de bienvenida (source='qr') no deben activar el polling
+    const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString()
     const { data: visits } = await supabase
       .from('visits')
       .select('id, created_at, source, table_number')
       .eq('customer_id', customer.id)
-      .gte('created_at', fiveMinutesAgo)
+      .eq('source', 'staff_scan')
+      .gte('created_at', thirtyMinutesAgo)
       .order('created_at', { ascending: false })
       .limit(1)
 

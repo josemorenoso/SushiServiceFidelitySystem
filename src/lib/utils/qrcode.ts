@@ -26,7 +26,7 @@ export async function generateCustomerQRToken(
 ): Promise<string> {
   const token = await new SignJWT({ ...payload, ts: Math.floor(Date.now() / 1000) })
     .setProtectedHeader({ alg: 'HS256' })
-    .setExpirationTime('5m')
+    .setExpirationTime('30m')
     .setIssuedAt()
     .sign(QR_SECRET())
 
@@ -40,7 +40,7 @@ export async function generateCustomerQRToken(
 export async function verifyCustomerQRToken(token: string): Promise<CustomerQRToken> {
   const { payload } = await jwtVerify(token, QR_SECRET(), {
     clockTolerance: 10,
-    maxTokenAge: '5m',
+    maxTokenAge: '30m',
   })
 
   if (

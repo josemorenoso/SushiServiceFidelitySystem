@@ -70,7 +70,9 @@ async function submitApproval(sid, name) {
 }
 
 // ── Definición de plantillas ──────────────────────────────────────────────────
-const TEMPLATE_BODY = `¡Hola {{1}}! 🎉 *{{2}}* te invita a *{{3}}* — {{4}}.\n\n{{5}}`
+// Meta requiere suficiente texto entre variables (ratio ~1 var / 50 chars).
+// Con 5 variables este body de ~170 chars cumple la regla.
+const TEMPLATE_BODY = `¡Hola {{1}}! 🎉\n\n*{{2}}* tiene el placer de invitarte a vivir una noche especial:\n*{{3}}* 🍽️\n\n📅 {{4}}\n\n{{5}}\n\n¡Te esperamos con tu familia!\n\n_Responde SALIR para no recibir más mensajes._`
 
 const templates = [
   {
@@ -91,9 +93,11 @@ const templates = [
 ]
 
 function buildTemplateBody(mimeHint) {
+  // URLs de Google Storage / gstatic — accesibles por bots de Meta sin bloqueos.
+  // Wikipedia y W3Schools bloquean user-agents de crawlers → rechazo en aprobación.
   const sampleMediaUrl = mimeHint === 'image'
-    ? 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3f/JPEG_example_flower.jpg/800px-JPEG_example_flower.jpg'
-    : 'https://www.w3schools.com/html/mov_bbb.mp4'
+    ? 'https://www.gstatic.com/webp/gallery3/1.png'
+    : 'https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4'
 
   return {
     friendly_name: undefined, // set per-template

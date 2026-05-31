@@ -178,7 +178,7 @@ const templates = [
     meta_name: `reactivacion_agresiva_${slug(BRAND_NAME)}`,
     category: 'MARKETING',
     description: 'Reactivación agresiva — 25+ días sin visitar',
-    body: `{{1}}, tus *{{2}} puntos* llevan tiempo sin moverse 👀🍣\n\nEstás cerca de ganarte *{{3}}* — sería una lástima dejarlo ahí\n\nVuelve esta semana y sigue sumando, nosotros mantenemos tu progreso 💪\n\n_— ${BRAND_NAME}_\n\n_Responde SALIR para no recibir más mensajes._`,
+    body: `Hola *{{1}}* 👀🍣\n\nTus *{{2}} puntos* llevan tiempo sin moverse\n\nEstás cerca de ganarte *{{3}}* — sería una lástima dejarlo ahí\n\nVuelve esta semana y sigue sumando, nosotros mantenemos tu progreso 💪\n\n_— ${BRAND_NAME}_\n\n_Responde SALIR para no recibir más mensajes._`,
     variables: {
       '1': 'Daniela',
       '2': '128',

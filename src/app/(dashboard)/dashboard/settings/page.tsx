@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { Settings, DollarSign, Save, Loader2, CheckCircle, Crown, CalendarHeart, Mail, RefreshCw, Gift, UserPlus, X, Plus, Zap, MapPin, Sparkles, Package, TrendingUp, Trophy, Flame } from 'lucide-react'
+import { Settings, DollarSign, Save, Loader2, CheckCircle, Crown, CalendarHeart, Mail, RefreshCw, Gift, UserPlus, X, Plus, Zap, MapPin, Sparkles, Package, TrendingUp, Flame } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 
@@ -113,7 +113,6 @@ export default function SettingsPage() {
   const [goldenBoxResultTemplateSid, setGoldenBoxResultTemplateSid] = useState('')
   const [pointsEarnedFarTemplateSid, setPointsEarnedFarTemplateSid] = useState('')
   const [pointsEarnedNearTemplateSid, setPointsEarnedNearTemplateSid] = useState('')
-  const [tierUnlockedTemplateSid, setTierUnlockedTemplateSid] = useState('')
   const [reactivationAggressiveTemplateSid, setReactivationAggressiveTemplateSid] = useState('')
   const [templatesSaving, setTemplatesSaving] = useState(false)
   const [templatesSaved, setTemplatesSaved] = useState(false)
@@ -176,7 +175,6 @@ export default function SettingsPage() {
         setGoldenBoxResultTemplateSid(settingsData.golden_box_result_template_sid ?? '')
         setPointsEarnedFarTemplateSid(settingsData.points_earned_far_template_sid ?? '')
         setPointsEarnedNearTemplateSid(settingsData.points_earned_near_template_sid ?? '')
-        setTierUnlockedTemplateSid(settingsData.tier_unlocked_template_sid ?? '')
         setReactivationAggressiveTemplateSid(settingsData.reactivation_aggressive_template_sid ?? '')
 
         const allTemplates: TwilioTemplate[] = templatesData.templates ?? []
@@ -252,7 +250,6 @@ export default function SettingsPage() {
         saveSetting('golden_box_result_template_sid', goldenBoxResultTemplateSid),
         saveSetting('points_earned_far_template_sid', pointsEarnedFarTemplateSid),
         saveSetting('points_earned_near_template_sid', pointsEarnedNearTemplateSid),
-        saveSetting('tier_unlocked_template_sid', tierUnlockedTemplateSid),
         saveSetting('reactivation_aggressive_template_sid', reactivationAggressiveTemplateSid),
       ])
       setTemplatesSaved(true)
@@ -597,7 +594,7 @@ export default function SettingsPage() {
             <TemplateSelector
               label="Bienvenida (registro nuevo)"
               icon={<UserPlus className="h-3.5 w-3.5" style={{ color: '#10B981' }} />}
-              hint="Variables: {{1}}=nombre"
+              hint="Variables: {{1}}=nombre · {{2}}=pts iniciales · {{3}}=roadmap tiers"
               value={welcomeTemplateSid}
               onChange={setWelcomeTemplateSid}
               templates={approvedTemplates}
@@ -607,54 +604,56 @@ export default function SettingsPage() {
             <TemplateSelector
               label="Cumpleaños (cron diario)"
               icon={<CalendarHeart className="h-3.5 w-3.5" style={{ color: '#EC4899' }} />}
-              hint="Variables: {{1}}=nombre"
+              hint="Variables: {{1}}=nombre · {{2}}=pts actuales"
               value={birthdayTemplateSid}
               onChange={setBirthdayTemplateSid}
               templates={approvedTemplates}
             />
 
-            {/* Reactivation SIN regalo */}
+            {/* Reactivation Suave (día 21) */}
             <TemplateSelector
-              label="Reactivación SIN regalo"
+              label="Reactivación Suave (día 21)"
               icon={<RefreshCw className="h-3.5 w-3.5" style={{ color: '#F97316' }} />}
-              hint="Variables: {{1}}=nombre. Mensaje tipo 'te echamos de menos'."
+              hint="Variables: {{1}}=nombre · {{2}}=pts actuales · {{3}}=próximo premio. Cron día 21 sin visitar."
               value={reactivationNoRewardSid}
               onChange={setReactivationNoRewardSid}
               templates={approvedTemplates}
             />
 
-            {/* Reactivation CON regalo */}
-            <TemplateSelector
-              label="Reactivación CON regalo"
-              icon={<RefreshCw className="h-3.5 w-3.5" style={{ color: '#EF4444' }} />}
-              hint="Variables: {{1}}=nombre, {{3}}=premio. Si está configurada y hay reward seleccionado abajo, se usa esta plantilla."
-              value={reactivationWithRewardSid}
-              onChange={setReactivationWithRewardSid}
-              templates={approvedTemplates}
-            />
-
-            {/* Reactivation reward picker */}
-            <div className="space-y-1.5">
-              <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest" style={{ color: '#6b7280' }}>
-                <Gift className="h-3.5 w-3.5" style={{ color: '#EF4444' }} />
-                Recompensa para reactivación CON regalo
-              </label>
-              <select
-                value={reactivationRewardId}
-                onChange={(e) => setReactivationRewardId(e.target.value)}
-                className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm transition-colors outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/50"
-              >
-                <option value="">— Sin recompensa fija (usa plantilla SIN regalo) —</option>
-                {rewards.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.title}{r.visit_milestone !== null ? ` (visita #${r.visit_milestone})` : ' (sin milestone)'}
-                  </option>
-                ))}
-              </select>
-              <p className="text-[10px]" style={{ color: '#b0b0b0' }}>
-                Si seleccionas una recompensa Y configuras "Reactivación CON regalo", el cron usará esa plantilla con `{'{{3}}'}` = título del premio.
-              </p>
-            </div>
+            {/* ── Sistema antiguo (legacy) ── */}
+            <details className="rounded-lg border border-dashed" style={{ borderColor: 'rgba(156,163,175,0.4)' }}>
+              <summary className="cursor-pointer px-3 py-2 text-[10px] font-semibold uppercase tracking-widest select-none" style={{ color: '#9ca3af' }}>
+                Sistema antiguo — No usar si ya migraste a puntos
+              </summary>
+              <div className="px-3 pb-3 space-y-3 pt-2">
+                <TemplateSelector
+                  label="Reactivación CON regalo (legacy)"
+                  icon={<RefreshCw className="h-3.5 w-3.5" style={{ color: '#9ca3af' }} />}
+                  hint="Variables: {{1}}=nombre, {{3}}=premio. Solo instancias que aún no migraron a puntos."
+                  value={reactivationWithRewardSid}
+                  onChange={setReactivationWithRewardSid}
+                  templates={approvedTemplates}
+                />
+                <div className="space-y-1.5">
+                  <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest" style={{ color: '#9ca3af' }}>
+                    <Gift className="h-3.5 w-3.5" />
+                    Recompensa fija (legacy)
+                  </label>
+                  <select
+                    value={reactivationRewardId}
+                    onChange={(e) => setReactivationRewardId(e.target.value)}
+                    className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm transition-colors outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/50"
+                  >
+                    <option value="">— Sin recompensa fija —</option>
+                    {rewards.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.title}{r.visit_milestone !== null ? ` (visita #${r.visit_milestone})` : ' (sin milestone)'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </details>
 
             {/* Reactivation AGRESIVA (25d+) */}
             <TemplateSelector
@@ -688,16 +687,6 @@ export default function SettingsPage() {
                 hint="Variables: {{1}}=nombre, {{2}}=puntos ganados hoy, {{3}}=puntos totales, {{4}}=próximo premio"
                 value={pointsEarnedNearTemplateSid}
                 onChange={setPointsEarnedNearTemplateSid}
-                templates={approvedTemplates}
-              />
-
-              {/* Tier desbloqueado */}
-              <TemplateSelector
-                label="Tier desbloqueado (antes de elegir safe/mystery)"
-                icon={<Trophy className="h-3.5 w-3.5" style={{ color: '#F59E0B' }} />}
-                hint="Variables: {{1}}=nombre, {{2}}=tier alcanzado, {{3}}=premio seguro, {{4}}=roadmap tiers"
-                value={tierUnlockedTemplateSid}
-                onChange={setTierUnlockedTemplateSid}
                 templates={approvedTemplates}
               />
 

@@ -11,6 +11,7 @@ export default function MeseroScanPage() {
   const router = useRouter()
   const { session, loading: authLoading } = useStaffAuth()
   const scannerRef = useRef<Html5Qrcode | null>(null)
+  const navigatingRef = useRef(false)
   const [scanning, setScanning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [torchOn, setTorchOn] = useState(false)
@@ -60,6 +61,9 @@ export default function MeseroScanPage() {
   }, [authLoading, session, showManual])
 
   const handleScan = (decodedText: string) => {
+    if (navigatingRef.current) return
+    navigatingRef.current = true
+
     // Extraer token de URL si viene como URL completa
     let token = decodedText
     try {
@@ -72,16 +76,29 @@ export default function MeseroScanPage() {
 
     const payload = decodeCustomerQRTokenUnsafe(token)
     if (!payload) {
+      navigatingRef.current = false
       setError('Código QR inválido')
       return
     }
 
-    // Stop scanner before navigating
-    if (scannerRef.current) {
-      scannerRef.current.stop().catch(() => {})
+    // Detener scanner limpiamente antes de navegar para evitar race condition
+    const stopAndNavigate = async () => {
+      if (scannerRef.current) {
+        try {
+          await scannerRef.current.stop()
+        } catch {
+          // ignore
+        }
+        try {
+          scannerRef.current.clear()
+        } catch {
+          // ignore
+        }
+      }
+      router.push(`/mesero/confirm?token=${encodeURIComponent(token)}`)
     }
 
-    router.push(`/mesero/confirm?token=${encodeURIComponent(token)}`)
+    stopAndNavigate()
   }
 
   const handleManualSubmit = (e: React.FormEvent) => {

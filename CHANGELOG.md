@@ -5,6 +5,16 @@
 
 ---
 
+## [1.1.6] — 2026-05-31 — Fix: accessibility warnings en input de mesa
+
+### Fixed
+
+**`src/app/(public)/mesero/confirm/page.tsx`:**
+- Agregado `id="table-number"` y `name="table_number"` al input de número de mesa.
+- Agregado `htmlFor="table-number"` al `<label>` para eliminar warnings de accesibilidad del browser.
+
+---
+
 ## [1.1.5] — 2026-05-31 — Feat: capturador de errores para diagnosticar crashes del mesero
 
 ### Added

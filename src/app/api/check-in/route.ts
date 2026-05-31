@@ -8,7 +8,7 @@ import { syncGoogleContact } from '@/services/google-contacts-sync.service'
 import { rateLimit, getClientIp } from '@/lib/rate-limit'
 import { awardVisitPoints, awardWelcomeBonus } from '@/services/points.service'
 import { evaluateNewTier, getNextTier, buildTiersRoadmap, updateCustomerTier, getAllTiers } from '@/services/reward-tiers.service'
-import { verifyCustomerQRToken } from '@/lib/utils/qrcode'
+import { verifyCustomerQRToken, generateCustomerQRToken } from '@/lib/utils/qrcode'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 
 function getServiceClient() {
@@ -176,10 +176,22 @@ export async function POST(request: NextRequest) {
       const firstVisitFree = settings.checkin_first_visit_free !== 'false'
 
       if (customer) {
+        let qr_token: string | null = null
+        try {
+          qr_token = await generateCustomerQRToken({
+            sub: customer.id,
+            phone: cleaned,
+            name: customer.name,
+          })
+        } catch {
+          // STAFF_QR_JWT_SECRET not set — QR flow disabled but lookup still succeeds
+        }
+
         return NextResponse.json({
           found: true,
           checkin_mode: checkinMode,
           checkin_first_visit_free: firstVisitFree,
+          qr_token,
           customer: {
             id: customer.id,
             name: customer.name,

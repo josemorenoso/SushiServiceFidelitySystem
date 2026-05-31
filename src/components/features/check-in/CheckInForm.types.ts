@@ -9,6 +9,7 @@ export interface LookupResult {
   found: boolean
   checkin_mode?: 'auto' | 'staff_verified'
   checkin_first_visit_free?: boolean
+  qr_token?: string | null
   customer?: {
     id: string
     name: string

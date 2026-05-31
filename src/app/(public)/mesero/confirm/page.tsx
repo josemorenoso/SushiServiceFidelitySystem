@@ -90,6 +90,13 @@ function MeseroConfirmContent() {
     ? `${customerPhone.slice(0, 3)}••••${customerPhone.slice(-3)}`
     : customerPhone
 
+  // Si llegó con token pero no se pudo decodificar, avisar (no dejar el botón muerto en silencio)
+  useEffect(() => {
+    if (token && !decoded && !error) {
+      setError('No se pudo leer el QR del cliente. Pídele que regenere el QR o usa el modo manual.')
+    }
+  }, [token, decoded, error])
+
   const handleRegister = async () => {
     if (!customerPhone) return
     setLoading(true)

@@ -178,12 +178,15 @@ export async function POST(request: NextRequest) {
       if (customer) {
         let qr_token: string | null = null
         try {
+          console.log('[CheckIn] Generando QR token para cliente:', customer.id, customer.name)
           qr_token = await generateCustomerQRToken({
             sub: customer.id,
             phone: cleaned,
-            name: customer.name,
+            name: customer.name || 'Cliente',
           })
-        } catch {
+          console.log('[CheckIn] QR token generado OK')
+        } catch (qrErr) {
+          console.error('[CheckIn] Error generando QR token:', qrErr)
           // STAFF_QR_JWT_SECRET not set — QR flow disabled but lookup still succeeds
         }
 
@@ -194,10 +197,10 @@ export async function POST(request: NextRequest) {
           qr_token,
           customer: {
             id: customer.id,
-            name: customer.name,
-            total_visits: customer.total_visits,
-            current_tier: customer.current_tier,
-            total_points: customer.total_points,
+            name: customer.name || 'Cliente',
+            total_visits: customer.total_visits ?? 0,
+            current_tier: customer.current_tier ?? null,
+            total_points: customer.total_points ?? 0,
           },
         })
       }

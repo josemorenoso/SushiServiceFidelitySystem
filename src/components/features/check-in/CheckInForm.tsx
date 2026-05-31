@@ -155,8 +155,10 @@ export function CheckInForm({
       } else {
         setStep('register')
       }
-    } catch {
-      onError('Error de conexión. Intenta de nuevo.')
+    } catch (err) {
+      console.error('[CheckInForm] Lookup error:', err)
+      const msg = err instanceof Error ? err.message : 'Error de conexión. Intenta de nuevo.'
+      onError(msg)
     } finally {
       setLoading(false)
     }

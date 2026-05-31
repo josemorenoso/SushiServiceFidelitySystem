@@ -5,6 +5,19 @@
 
 ---
 
+## [1.1.3] — 2026-05-31 — Fix: diagnóstico de error de conexión en lookup de clientes existentes
+
+### Fixed
+
+**`src/components/features/check-in/CheckInForm.tsx`:**
+- Catch de `handlePhoneSubmit` ahora loguea el error real en consola y muestra el mensaje original en lugar de ocultarlo bajo "Error de conexión".
+
+**`src/app/api/check-in/route.ts`:**
+- Logging en lookup de clientes existentes: console.log antes/después de `generateCustomerQRToken` y console.error en el catch.
+- Fallbacks defensivos en la respuesta del cliente: `name || 'Cliente'`, `total_visits ?? 0`, `total_points ?? 0`.
+
+---
+
 ## [1.1.2] — 2026-05-30 — Dashboard admin para gestión de meseros QR
 
 ### Added

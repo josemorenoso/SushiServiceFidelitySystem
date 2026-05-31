@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Loader2, Phone, User, MapPin, ArrowLeft } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
-import { generateCustomerQRToken } from '@/lib/utils/qrcode'
 // import { getCurrentPosition } from '@/lib/utils/geolocation'  // standby — desactivado v1.0.5-3
 
 const COLOMBIAN_CITIES = [
@@ -141,16 +140,16 @@ export function CheckInForm({
       if (data.found && data.customer) {
         onLookupResult(data, phone)
 
-        // ─── Cliente frecuente: siempre mostrar QR para escaneo de mesero ───
-        const token = await generateCustomerQRToken({
-          sub: data.customer.id,
-          phone,
-          name: data.customer.name,
-        })
-        const qrUrl = `${window.location.origin}/mesero/scan?token=${encodeURIComponent(token)}`
-        setCustomerQR(qrUrl)
-        setLookupCustomer(data.customer)
-        setStep('customer_qr')
+        // ─── Cliente frecuente: usar token firmado que devuelve el servidor ───
+        if (data.qr_token) {
+          const qrUrl = `${window.location.origin}/mesero/scan?token=${encodeURIComponent(data.qr_token)}`
+          setCustomerQR(qrUrl)
+          setLookupCustomer(data.customer)
+          setStep('customer_qr')
+        } else {
+          // STAFF_QR_JWT_SECRET no configurado — mostrar mensaje de fallback
+          onError('Configura STAFF_QR_JWT_SECRET para habilitar el QR de mesero.')
+        }
         setLoading(false)
         return
       } else {

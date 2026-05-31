@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { Settings, DollarSign, Save, Loader2, CheckCircle, Crown, CalendarHeart, Mail, RefreshCw, MessageCircle, Gift, UserPlus, X, Plus, Zap, MapPin, Sparkles, Package, TrendingUp, Trophy, Flame } from 'lucide-react'
+import { Settings, DollarSign, Save, Loader2, CheckCircle, Crown, CalendarHeart, Mail, RefreshCw, Gift, UserPlus, X, Plus, Zap, MapPin, Sparkles, Package, TrendingUp, Trophy, Flame } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 
@@ -104,9 +104,6 @@ export default function SettingsPage() {
   const [templatesLoading, setTemplatesLoading] = useState(true)
   const [rewards, setRewards] = useState<RewardOption[]>([])
   const [welcomeTemplateSid, setWelcomeTemplateSid] = useState('')
-  const [welcomeBackNearTemplateSid, setWelcomeBackNearTemplateSid] = useState('')
-  const [welcomeBackFarTemplateSid, setWelcomeBackFarTemplateSid] = useState('')
-  const [rewardTemplateSid, setRewardTemplateSid] = useState('')
   const [birthdayTemplateSid, setBirthdayTemplateSid] = useState('')
   const [reactivationNoRewardSid, setReactivationNoRewardSid] = useState('')
   const [reactivationWithRewardSid, setReactivationWithRewardSid] = useState('')
@@ -168,11 +165,6 @@ export default function SettingsPage() {
           try { setBenefits(JSON.parse(settingsData.black_benefits)) } catch { /* keep default */ }
         }
         if (settingsData.welcome_template_sid) setWelcomeTemplateSid(settingsData.welcome_template_sid)
-        // near/far: si no hay valor, intenta usar el legacy welcome_back_template_sid como default
-        const legacyBack = settingsData.welcome_back_template_sid ?? ''
-        setWelcomeBackNearTemplateSid(settingsData.welcome_back_near_template_sid ?? legacyBack)
-        setWelcomeBackFarTemplateSid(settingsData.welcome_back_far_template_sid ?? legacyBack)
-        if (settingsData.reward_template_sid) setRewardTemplateSid(settingsData.reward_template_sid)
         if (settingsData.birthday_template_sid) setBirthdayTemplateSid(settingsData.birthday_template_sid)
         // reactivación: legacy reactivation_template_sid migra a reactivation_no_reward por defecto
         const legacyReact = settingsData.reactivation_template_sid ?? ''
@@ -251,9 +243,6 @@ export default function SettingsPage() {
     try {
       await Promise.all([
         saveSetting('welcome_template_sid', welcomeTemplateSid),
-        saveSetting('welcome_back_near_template_sid', welcomeBackNearTemplateSid),
-        saveSetting('welcome_back_far_template_sid', welcomeBackFarTemplateSid),
-        saveSetting('reward_template_sid', rewardTemplateSid),
         saveSetting('birthday_template_sid', birthdayTemplateSid),
         saveSetting('reactivation_no_reward_template_sid', reactivationNoRewardSid),
         saveSetting('reactivation_with_reward_template_sid', reactivationWithRewardSid),
@@ -611,36 +600,6 @@ export default function SettingsPage() {
               hint="Variables: {{1}}=nombre"
               value={welcomeTemplateSid}
               onChange={setWelcomeTemplateSid}
-              templates={approvedTemplates}
-            />
-
-            {/* Welcome Back NEAR (visita con próximo premio en visit+1) */}
-            <TemplateSelector
-              label="Visita: cerca de premio (faltan 1)"
-              icon={<MessageCircle className="h-3.5 w-3.5" style={{ color: '#3B82F6' }} />}
-              hint="Variables: {{1}}=nombre, {{2}}=visitas, {{3}}=título del próximo premio"
-              value={welcomeBackNearTemplateSid}
-              onChange={setWelcomeBackNearTemplateSid}
-              templates={approvedTemplates}
-            />
-
-            {/* Welcome Back FAR (visita con próximo premio en visit+2 o más) */}
-            <TemplateSelector
-              label="Visita: lejos de premio (faltan 2+)"
-              icon={<MessageCircle className="h-3.5 w-3.5" style={{ color: '#6366F1' }} />}
-              hint="Variables: {{1}}=nombre, {{2}}=visitas, {{3}}=título del próximo premio"
-              value={welcomeBackFarTemplateSid}
-              onChange={setWelcomeBackFarTemplateSid}
-              templates={approvedTemplates}
-            />
-
-            {/* Reward (milestone) */}
-            <TemplateSelector
-              label="Ganaste premio (milestone)"
-              icon={<Gift className="h-3.5 w-3.5" style={{ color: '#F59E0B' }} />}
-              hint="Variables: {{1}}=nombre, {{2}}=visitas, {{3}}=nombre del premio"
-              value={rewardTemplateSid}
-              onChange={setRewardTemplateSid}
               templates={approvedTemplates}
             />
 

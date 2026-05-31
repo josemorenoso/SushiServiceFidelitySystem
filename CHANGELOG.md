@@ -24,7 +24,7 @@
 ### Fixed
 
 **`src/app/(dashboard)/dashboard/settings/page.tsx`:**
-- Agregados 7 nuevos selectores de plantillas WhatsApp faltantes para el sistema de puntos + Mystery Box:
+- **Agregados 7 nuevos selectores** de plantillas WhatsApp faltantes para el sistema de puntos + Mystery Box:
   - `reward_safe_template_sid` — Premio seguro (cliente eligió "a la segura")
   - `mystery_box_result_template_sid` — Resultado de Mystery Box normal
   - `golden_box_result_template_sid` — Resultado de Golden Box (pity timer)
@@ -32,11 +32,15 @@
   - `points_earned_near_template_sid` — Puntos sumados (cerca del premio)
   - `tier_unlocked_template_sid` — Tier desbloqueado (antes de elegir safe/mystery)
   - `reactivation_aggressive_template_sid` — Reactivación agresiva (25d+)
+- **Eliminados 3 selectores legacy** que el backend ya no usaba (código muerto que confundía la UI):
+  - `welcome_back_near_template_sid` — Visita: cerca de premio (legacy)
+  - `welcome_back_far_template_sid` — Visita: lejos de premio (legacy)
+  - `reward_template_sid` — Ganaste premio milestone (legacy)
 - Los selectores nuevos se agrupan visualmente bajo "Sistema de Puntos + Mystery Box".
-- El `handleSaveTemplates` ahora persiste todas las nuevas keys en `admin_settings`.
+- El `handleSaveTemplates` ahora persiste solo las keys activas en `admin_settings`.
 
 **`docs/features/flujo-plantillas-recompensas-campanas.md`:**
-- Actualizada la tabla de configuración en sección 8 con las nuevas keys de plantillas del sistema de puntos.
+- Actualizada la tabla de configuración en sección 8: agregadas las 7 nuevas keys y removidas las 3 legacy.
 
 ---
 

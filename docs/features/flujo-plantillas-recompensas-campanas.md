@@ -286,14 +286,11 @@ Tu nivel actual: {{3}}
 
 ---
 
-## 8. Configuración necesaria en Dashboard > Ajustes (v1.1.8)
+## 8. Configuración necesaria en Dashboard > Ajustes (v1.1.9)
 
 | Key en admin_settings | Tipo de mensaje | Variables |
 |----------------------|-----------------|-----------|
 | `welcome_template_sid` | Bienvenida (registro nuevo) | {{1}}=nombre, {{2}}=puntos iniciales, {{3}}=roadmap tiers |
-| `welcome_back_near_template_sid` | Visita: cerca de premio (faltan 1) — **Legacy** | {{1}}=nombre, {{2}}=visitas, {{3}}=título premio |
-| `welcome_back_far_template_sid` | Visita: lejos de premio (faltan ≥2) — **Legacy** | {{1}}=nombre, {{2}}=visitas, {{3}}=título premio |
-| `reward_template_sid` | Ganaste premio (milestone) — **Legacy** | {{1}}=nombre, {{2}}=visitas, {{3}}=título del premio ganado |
 | `birthday_template_sid` | Cumpleaños (cron) | {{1}}=nombre, {{2}}=puntos actuales |
 | `reactivation_no_reward_template_sid` | Reactivación SIN regalo (suave 21d) | {{1}}=nombre, {{2}}=puntos actuales, {{3}}=próximo tier |
 | `reactivation_with_reward_template_sid` | Reactivación CON regalo | {{1}}=nombre, {{3}}=título premio fijo |

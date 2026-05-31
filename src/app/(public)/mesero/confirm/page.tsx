@@ -45,6 +45,24 @@ function MeseroConfirmContent() {
     }
   }, [authLoading, session, router])
 
+  // Capturador global de errores para diagnosticar crashes
+  useEffect(() => {
+    const handleErr = (e: ErrorEvent) => {
+      console.error('[WindowError]', e.error)
+      setError(`CRASH: ${e.message} — Captura esta pantalla y envíala.`)
+    }
+    const handleRejection = (e: PromiseRejectionEvent) => {
+      console.error('[UnhandledRejection]', e.reason)
+      setError(`CRASH: ${String(e.reason)} — Captura esta pantalla y envíala.`)
+    }
+    window.addEventListener('error', handleErr)
+    window.addEventListener('unhandledrejection', handleRejection)
+    return () => {
+      window.removeEventListener('error', handleErr)
+      window.removeEventListener('unhandledrejection', handleRejection)
+    }
+  }, [])
+
   const decoded = token ? decodeCustomerQRTokenUnsafe(token) : null
 
   // Si es modo manual (solo phone), hacer lookup para mostrar datos

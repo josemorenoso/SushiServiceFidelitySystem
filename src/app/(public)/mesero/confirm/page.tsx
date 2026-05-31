@@ -241,12 +241,14 @@ function MeseroConfirmContent() {
           )}
 
           <div className="space-y-3">
-            <label className="block text-xs font-medium uppercase tracking-wider text-gray-500">
+            <label htmlFor="table-number" className="block text-xs font-medium uppercase tracking-wider text-gray-500">
               Número de mesa
             </label>
             <div className="relative">
               <Hash className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <input
+                id="table-number"
+                name="table_number"
                 type="text"
                 inputMode="numeric"
                 placeholder="Ej: 12"

@@ -125,11 +125,16 @@
 # Archivo que se modifica              → Doc que se debe leer primero
 # ─────────────────────────────────     ──────────────────────────────
 # src/app/(public)/check-in/*          → docs/features/qr-checkin.md
+# src/app/(public)/mesero/*            → docs/features/staff-qr-scan.md
+# src/app/api/check-in/*               → docs/API_DOCS.md + docs/features/staff-qr-scan.md
+# src/app/api/staff/*                  → docs/features/staff-qr-scan.md + docs/03-security.md
 # src/app/api/webhook/delivery/*       → docs/features/delivery-webhook.md + docs/03-security.md
 # src/app/api/cron/*                   → docs/features/campaigns.md
 # src/app/(dashboard)/*                → docs/features/dashboard.md
 # src/lib/supabase/*                   → docs/02-architecture.md + docs/03-security.md
 # src/lib/twilio/*                     → docs/02-architecture.md
+# src/lib/utils/qrcode.ts              → docs/features/staff-qr-scan.md
+# src/hooks/useStaffAuth.ts            → docs/features/staff-qr-scan.md
 # src/services/*                       → docs/features/[feature].md correspondiente
 # supabase/migrations/*.sql            → docs/DB_SCHEMA.md
 # src/app/api/**                       → docs/API_DOCS.md + docs/features/[feature].md

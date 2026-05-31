@@ -99,10 +99,14 @@ Cliente escanea QR → /check-in → Ingresa celular
 Cliente escanea QR → /check-in → Ingresa celular
   → Si nuevo: Registro + welcome bonus → Muestra QR dinámico personal (token JWT 5 min)
   → Si existe: Muestra QR dinámico personal (token JWT 5 min)
+  → Inicia polling cada 5s a /api/check-in/status
 
 Mesero (dispositivo de confianza o login con PIN) → Abre /mesero → Escanea QR del cliente
   → Valida firma JWT del QR → Confirma mesa → Registra visita (source='staff_scan')
   → Suma puntos → Evalúa tier → Twilio WhatsApp
+
+Cliente detecta visita reciente (polling) → Pantalla cambia automáticamente a éxito
+  → Muestra puntos ganados, saldo, roadmap de tiers
 ```
 
 ### Domicilios (WhatsApp)

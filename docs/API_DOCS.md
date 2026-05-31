@@ -5,7 +5,7 @@
 - **Dashboard endpoints** — Cookie-based (Supabase SSR, sesión admin via `supabase.auth.getUser()`)
 - **Staff endpoints públicos** (`/api/staff/*`) — Bearer Token (Staff JWT) o `X-Device-Token`
 - **Webhooks / Cron** — `x-webhook-secret` o `CRON_SECRET`
-**Última actualización:** 2026-05-30
+**Última actualización:** 2026-05-31
 > **Nota:** Validación de geolocalización está en **STANDBY** (v1.0.5-3). El backend no valida GPS por defecto. Puede reactivarse descomentando el bloque en `src/app/api/check-in/route.ts`.
 
 ---
@@ -41,6 +41,7 @@ Webhooks validan origen por número autorizado o `x-webhook-secret`. Cron jobs v
 | GET | /api/health | Estado del servidor | NO |
 | GET | /api/health/twilio | Test conexión Twilio (saldo) | NO |
 | POST | /api/check-in | Registrar visita (QR) | NO (público) |
+| GET | /api/check-in/status | Estado del cliente + visita reciente | NO (público) |
 | POST | /api/webhook/delivery | Recibir datos de domicilio (n8n/Twilio) | x-webhook-secret |
 | POST | /api/webhook/twilio-incoming | Auto-responder mensajes entrantes al número | Twilio Signature |
 | GET/POST | /api/cron/birthday | Enviar felicitaciones de cumpleaños | CRON_SECRET |
@@ -225,6 +226,71 @@ X-Device-Token: {device_fingerprint}
 ```
 
 > **Nota:** Ya no existe cap de 24h entre check-ins. Los clientes pueden acumular visitas ilimitadas por día.
+
+---
+
+### Check-in Status (Polling del cliente)
+
+**`GET /api/check-in/status?phone=3001234567`** — Sin autenticación (ruta pública)
+
+Endpoint para que la pantalla del cliente (mostrando el QR) detecte automáticamente cuando el mesero ha registrado la visita.
+
+**Query params:**
+| Param | Tipo | Requerido | Descripción |
+|-------|------|-----------|-------------|
+| `phone` | `string` | Sí | Número de celular del cliente (formato colombiano) |
+
+**Response 200 (cliente encontrado, visita reciente):**
+```json
+{
+  "found": true,
+  "hasRecentVisit": true,
+  "customer": {
+    "name": "Juan Pérez",
+    "total_visits": 5,
+    "total_points": 310
+  },
+  "points_awarded": 65,
+  "next_tier": {
+    "name": "Oro",
+    "points_remaining": 90,
+    "threshold": 400
+  },
+  "tiers": [
+    { "tier_name": "Bronce", "point_threshold": 150, "safe_reward_title": "Bebida gratis", "mystery_box_enabled": true, "is_black": false },
+    ...
+  ]
+}
+```
+
+**Response 200 (cliente encontrado, sin visita reciente):**
+```json
+{
+  "found": true,
+  "hasRecentVisit": false,
+  "customer": { "name": "Juan Pérez", "total_visits": 4, "total_points": 245 },
+  "points_awarded": 0,
+  "next_tier": { "name": "Plata", "points_remaining": 105, "threshold": 350 },
+  "tiers": [...]
+}
+```
+
+**Response 200 (cliente no encontrado):**
+```json
+{ "found": false }
+```
+
+**Response 400:**
+```json
+{ "error": "Se requiere phone" }
+```
+
+**Response 400 (teléfono inválido):**
+```json
+{ "error": "Teléfono inválido" }
+```
+
+> **Nota:** Una "visita reciente" se define como una visita creada en los últimos 5 minutos. El endpoint busca en la tabla `visits` y, si encuentra una, consulta la tabla `point_transactions` para obtener los puntos otorgados en esa visita.
 
 ---
 

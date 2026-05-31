@@ -1,7 +1,8 @@
 # Feature: Verificación Cliente-Mesero con QR Dinámico
 
-> **Estado:** En progreso (backend completo, frontend admin completado, app mesero completada)
+> **Estado:** ✅ COMPLETADO (v1.1.7)
 > **Prioridad:** URGENTE
+> **Última actualización:** 2026-05-31
 > **Archivos clave:** `src/components/features/check-in/CheckInForm.tsx`, `src/app/(public)/mesero/page.tsx`, `src/app/api/check-in/route.ts`, `src/app/(dashboard)/dashboard/staff/page.tsx`
 > **Dependencias nuevas:** `qrcode.react` (generación QR cliente), `html5-qrcode` (escaneo mesero), `jose` (JWT para auth de meseros)
 
@@ -357,15 +358,17 @@ Este proyecto opera bajo **ADR-005: Modelo clone-por-cliente** (ver `docs/02-arc
 
 ## Pendiente
 
-- [ ] Instalar dependencias `qrcode.react`, `html5-qrcode`, `jose`, `bcryptjs`
-- [ ] Implementar generación de QR dinámico en `CheckInForm.tsx`
-- [ ] Crear rutas `/mesero/*` y componentes de escaneo/login/activación
-- [ ] Crear API `/api/staff/device/register` y `/api/staff/device/verify`
-- [ ] Modificar `/api/check-in/route.ts` para `source: 'staff_scan'`, `registered_by_staff_id`, `device_token`, `token`
-- [ ] Actualizar `docs/API_DOCS.md`
-- [ ] Actualizar `docs/DB_SCHEMA.md` (si hay cambio de schema)
-- [ ] Actualizar `CHANGELOG.md`
-- [ ] Build + validación E2E
+- [x] Instalar dependencias `qrcode.react`, `html5-qrcode`, `jose`, `bcryptjs`
+- [x] Implementar generación de QR dinámico en `CheckInForm.tsx`
+- [x] Crear rutas `/mesero/*` y componentes de escaneo/login/activación
+- [x] Crear API `/api/staff/device/register` y `/api/staff/device/verify`
+- [x] Modificar `/api/check-in/route.ts` para `source: 'staff_scan'`, `registered_by_staff_id`, `device_token`, `token`
+- [x] Actualizar `docs/API_DOCS.md`
+- [x] Actualizar `docs/DB_SCHEMA.md` (si hay cambio de schema)
+- [x] Actualizar `CHANGELOG.md`
+- [x] Build + validación E2E
+- [x] Polling automático para flujo completo del cliente post-QR
+- [x] Fixes: base64url decode, race condition scanner, auth headers fallback, error boundaries
 
 ---
 
@@ -419,6 +422,28 @@ MESERO — Escenario B: Celular propio (login con PIN)
   → Mesero ve éxito → Cliente recibe WhatsApp
 ```
 
+### Flujo completo con polling automático (v1.1.7+)
+
+El cliente ya NO se queda atrapado en la pantalla del QR. Después de que el mesero escanea y confirma:
+
+```
+CLIENTE EXISTENTE (total_visits ≥ 1)
+  → Escanea QR → /check-in → Ingresa celular
+  → Muestra QR DINÁMICO personal
+  → Inicia polling automático cada 5s a /api/check-in/status
+  → MESERO escanea QR → confirma mesa → registra visita
+  → Cliente detecta visita reciente → pantalla cambia AUTOMÁTICAMENTE a éxito
+  → Cliente ve: puntos ganados, saldo, roadmap de tiers
+  → Cliente recibe WhatsApp con puntos y próximo premio
+```
+
+| Ventaja | Descripción |
+|---------|-------------|
+| **Sin fricción** | El cliente no necesita tocar nada después de mostrar el QR |
+| **Feedback inmediato** | En cuanto el mesero confirma, el celular del cliente cambia a éxito |
+| **WhatsApp funciona** | El backend envía el mensaje como siempre, independientemente de la pantalla del cliente |
+| **Roadmap visible** | El cliente ve su progreso hacia el próximo tier en tiempo real |
+
 **Sub-opción configurable: "Primera visita libre"** (`checkin_first_visit_free`)
 - **`'true'` (default):** Cliente nuevo recibe visita 1 automáticamente al registrarse. Frecuentes requieren mesero.
 - **`'false'`:** Incluso la primera visita requiere mesero. Más seguro, más fricción.
@@ -433,10 +458,14 @@ Si encontrado (cliente existente):
   → Genera QR dinámico como token JWT firmado (phone + customer_id + timestamp + exp)
   → Muestra pantalla "Muéstrale este QR a tu mesero"
   → NO hace auto-check-in (solo mesero puede registrar visita)
+  → Inicia polling a `/api/check-in/status?phone=XXX` cada 5 segundos
+  → Cuando detecta visita reciente (< 5 min), llama `onCheckInSuccess()` automáticamente
+  → Cliente ve pantalla de éxito con puntos, visitas y roadmap de tiers
 
 Si no encontrado (cliente nuevo):
   → Muestra formulario de registro
   → Tras registro: welcome bonus + visita 1 + QR dinámico
+  → También inicia polling (por si el mesero registra una visita adicional)
 ```
 
 ### Lógica del backend
@@ -458,6 +487,16 @@ POST /api/check-in { action: 'checkin', phone, source, registered_by_staff_id?, 
 7. Flujo de puntos, tiers, WhatsApp (idéntico)
    Nota: awardVisitPoints acepta source 'staff_scan' y mapea a tx_source 'visit_staff'
 ```
+
+### Polling automático del cliente
+
+**Endpoint:** `GET /api/check-in/status?phone=3001234567`
+
+**Funcionamiento:**
+- El frontend del cliente consulta este endpoint cada 5 segundos mientras muestra el QR.
+- El endpoint busca la visita más reciente del cliente (últimos 5 minutos).
+- Si encuentra una visita reciente, devuelve `hasRecentVisit: true` con los datos actualizados del cliente (puntos, visitas, tier).
+- El frontend recibe esto y transiciona automáticamente a la pantalla de éxito.
 
 ### Tabla de comportamiento por configuración
 
@@ -791,4 +830,43 @@ Durante la revisión del documento previo al desarrollo se identificaron y corri
 
 ---
 
-*Última actualización: 2026-05-30 v3 (Auto-checkin ELIMINADO: solo mesero registra visitas. Cliente nuevo: registro + welcome bonus + visita 1 automática. Cliente frecuente: siempre QR → mesero escanea.)*
+## Bugs de Producción Encontrados y Fixes (2026-05-31)
+
+### Bug 1: "Error de conexión" con clientes existentes
+
+**Síntoma:** Al ingresar un número ya registrado, aparecía "Error de conexión".
+**Causa:** `generateCustomerQRToken` se llamaba en el componente `CheckInForm.tsx` (browser) donde `process.env` no existe → crash.
+**Fix:** Mover la generación del QR token al servidor (`/api/check-in` lookup). El servidor genera el JWT y lo devuelve en `qr_token`.
+**Commit:** `6652eca`
+
+### Bug 2: "Cliente" genérico + botón deshabilitado
+
+**Síntoma:** A veces el nombre del cliente aparecía como "Cliente" y el botón "Registrar Visita" estaba gris/inactivo.
+**Causa:** `decodeCustomerQRTokenUnsafe` usaba `atob()` directo sobre payload JWT en **base64url** (`-`/`_`). `atob` del navegador espera base64 estándar (`+`/`/`). Cuando el payload contenía `-` o `_`, `atob` lanzaba `InvalidCharacterError` y retornaba `null`.
+**Fix:** Convertir base64url → base64 + padding antes de `atob`, y usar `TextDecoder` para UTF-8 (nombres con tildes/ñ).
+**Commit:** `518bd4e`
+
+### Bug 3: "Mesero o dispositivo no válido" al registrar visita
+
+**Síntoma:** El mesero pulsaba "Registrar Visita" pero recibía 403.
+**Causa:** El backend leía `registered_by_staff_id`/`device_token` del **body**, pero el frontend los mandaba en **headers** (`Authorization` / `X-Device-Token`).
+**Fix:** Helper `resolveStaffAuthFromHeaders` en `/api/check-in/route.ts` que deriva auth de headers si no viene en body.
+**Commit:** `061a8ab`
+
+### Bug 4: "This page couldn't load" al escanear QR
+
+**Síntoma:** Al escanear un QR, la pantalla del mesero crasheaba con "This page couldn't load".
+**Causa:** Race condition: `router.push` corría mientras `Html5Qrcode` aún no terminó de detenerse. Al desmontar el componente, la librería lanzaba excepción no atrapada.
+**Fix:** `navigatingRef` + `await scanner.stop()` + `scanner.clear()` **antes** de llamar `router.push`.
+**Commit:** `d5851d5`
+
+### Bug 5: Cliente se quedaba atrapado en pantalla del QR
+
+**Síntoma:** Después de que el mesero registraba la visita, el cliente seguía viendo el QR y nunca veía su éxito/puntos.
+**Causa:** No había mecanismo para que la pantalla del cliente se enterara de que la visita fue registrada.
+**Fix:** Nuevo endpoint `GET /api/check-in/status` + polling automático cada 5s en `CheckInForm.tsx`. Cuando detecta visita reciente, transiciona a `onCheckInSuccess` automáticamente.
+**Commit:** `3edd135`
+
+---
+
+*Última actualización: 2026-05-31 v4 (Polling automático + fixes de producción documentados.)*

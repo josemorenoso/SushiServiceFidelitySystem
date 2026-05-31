@@ -36,6 +36,7 @@ import type {
   CheckInFormProps,
   CheckInStep,
   LookupResult,
+  CheckInResult,
 } from './CheckInForm.types'
 
 export function CheckInForm({
@@ -85,6 +86,7 @@ export function CheckInForm({
     current_tier?: string | null
     total_points?: number
   } | null>(null)
+  const [checkingStatus, setCheckingStatus] = useState(false)
 
   // ─── Geolocalización standby — desactivado v1.0.5-3 ───
   // const [locationStatus, setLocationStatus] = useState<'idle' | 'requesting' | 'verified' | 'denied' | 'error'>('idle')
@@ -466,6 +468,51 @@ export function CheckInForm({
     )
   }
 
+  // ─── Polling automático: detectar cuando el mesero registra la visita ───
+  useEffect(() => {
+    if (step !== 'customer_qr' || !phone) return
+
+    let cancelled = false
+    const poll = async () => {
+      try {
+        setCheckingStatus(true)
+        const res = await fetch(`/api/check-in/status?phone=${encodeURIComponent(phone)}`)
+        const data = await res.json()
+        if (cancelled) return
+
+        if (data.hasRecentVisit) {
+          // Visita registrada — transicionar a éxito
+          const result: CheckInResult = {
+            message: 'points_earned',
+            customer: {
+              name: data.customer.name,
+              total_visits: data.customer.total_visits,
+              total_points: data.customer.total_points,
+            },
+            points_awarded: data.points_awarded ?? 0,
+            next_tier: data.next_tier ?? null,
+            tiers: data.tiers ?? [],
+          }
+          onCheckInSuccess(result, phone)
+          return
+        }
+      } catch (err) {
+        console.error('[CheckInForm] Status poll error:', err)
+      } finally {
+        if (!cancelled) setCheckingStatus(false)
+      }
+    }
+
+    // Primera consulta inmediata, luego cada 5 segundos
+    poll()
+    const interval = setInterval(poll, 5000)
+
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [step, phone, onCheckInSuccess])
+
   if (step === 'customer_qr' && customerQR && lookupCustomer) {
     return (
       <div className="premium-card animate-fade-in-up w-full p-7 text-center">
@@ -506,6 +553,14 @@ export function CheckInForm({
         <p className="text-xs" style={{ color: '#d1d5db' }}>
           Este código expira en 5 minutos
         </p>
+
+        {/* Estado de polling */}
+        {checkingStatus && (
+          <div className="mt-4 flex items-center justify-center gap-2 text-xs" style={{ color: '#9ca3af' }}>
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            Esperando confirmación del mesero...
+          </div>
+        )}
 
         <button
           type="button"

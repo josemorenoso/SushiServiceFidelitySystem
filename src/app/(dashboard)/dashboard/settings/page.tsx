@@ -114,6 +114,8 @@ export default function SettingsPage() {
   const [pointsEarnedFarTemplateSid, setPointsEarnedFarTemplateSid] = useState('')
   const [pointsEarnedNearTemplateSid, setPointsEarnedNearTemplateSid] = useState('')
   const [reactivationAggressiveTemplateSid, setReactivationAggressiveTemplateSid] = useState('')
+  const [eventTemplateImageSid, setEventTemplateImageSid] = useState('')
+  const [eventTemplateVideoSid, setEventTemplateVideoSid] = useState('')
   const [templatesSaving, setTemplatesSaving] = useState(false)
   const [templatesSaved, setTemplatesSaved] = useState(false)
 
@@ -176,6 +178,8 @@ export default function SettingsPage() {
         setPointsEarnedFarTemplateSid(settingsData.points_earned_far_template_sid ?? '')
         setPointsEarnedNearTemplateSid(settingsData.points_earned_near_template_sid ?? '')
         setReactivationAggressiveTemplateSid(settingsData.reactivation_aggressive_template_sid ?? '')
+        setEventTemplateImageSid(settingsData.event_template_image_sid ?? '')
+        setEventTemplateVideoSid(settingsData.event_template_video_sid ?? '')
 
         const allTemplates: TwilioTemplate[] = templatesData.templates ?? []
         setTemplates(allTemplates)
@@ -251,6 +255,8 @@ export default function SettingsPage() {
         saveSetting('points_earned_far_template_sid', pointsEarnedFarTemplateSid),
         saveSetting('points_earned_near_template_sid', pointsEarnedNearTemplateSid),
         saveSetting('reactivation_aggressive_template_sid', reactivationAggressiveTemplateSid),
+        saveSetting('event_template_image_sid', eventTemplateImageSid),
+        saveSetting('event_template_video_sid', eventTemplateVideoSid),
       ])
       setTemplatesSaved(true)
       setTimeout(() => setTemplatesSaved(false), 3000)
@@ -717,6 +723,33 @@ export default function SettingsPage() {
                 hint="Variables: {{1}}=nombre, {{2}}=premio golden box, {{3}}=roadmap tiers"
                 value={goldenBoxResultTemplateSid}
                 onChange={setGoldenBoxResultTemplateSid}
+                templates={approvedTemplates}
+              />
+            </div>
+
+            <div className="border-t border-dashed border-gray-200 pt-4">
+              <p className="text-[10px] font-semibold uppercase tracking-widest mb-3" style={{ color: '#6b7280' }}>
+                Calendario / Eventos
+              </p>
+              <p className="text-[10px] mb-3" style={{ color: '#b0b0b0' }}>
+                Plantillas con imagen o video para campañas del calendario. La imagen/video se adjunta al crear cada evento.
+              </p>
+
+              <TemplateSelector
+                label="Evento con imagen (JPG/PNG)"
+                icon={<CalendarHeart className="h-3.5 w-3.5" style={{ color: '#6366F1' }} />}
+                hint="Variables: {{1}}=nombre · {{2}}=restaurante · {{3}}=título evento · {{4}}=fecha · {{5}}=CTA"
+                value={eventTemplateImageSid}
+                onChange={setEventTemplateImageSid}
+                templates={approvedTemplates}
+              />
+
+              <TemplateSelector
+                label="Evento con video (MP4)"
+                icon={<Sparkles className="h-3.5 w-3.5" style={{ color: '#8B5CF6' }} />}
+                hint="Variables: {{1}}=nombre · {{2}}=restaurante · {{3}}=título evento · {{4}}=fecha · {{5}}=CTA"
+                value={eventTemplateVideoSid}
+                onChange={setEventTemplateVideoSid}
                 templates={approvedTemplates}
               />
             </div>

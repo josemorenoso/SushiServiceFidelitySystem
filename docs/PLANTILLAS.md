@@ -185,12 +185,17 @@ _Responde SALIR para no recibir más mensajes._
 
 ---
 
-## Plantilla 4 — Tier Desbloqueado (safe reward)
+## Plantilla 4 — Premio Seguro (después de elegir 'a la segura')
 
 **Slot:** `reward_safe_template_sid`
 **Categoría Twilio:** `MARKETING`
 **Variables:** `{{1}}`=Nombre · `{{2}}`=Nombre tier · `{{3}}`=Premio ganado · `{{4}}`=Roadmap
-**Cuándo se envía:** Cliente alcanza tier y elige premio seguro en la web
+**Cuándo se envía:** Cliente alcanza tier y elige premio seguro en la web (lo envía `/api/mystery-box/resolve`)
+
+> **Importante — dos mensajes distintos en el cruce de tier:**
+> 1. **Al cruzar el nivel** (en el check-in del mesero) se envía el slot `tier_unlocked_template_sid` (mismas 4 variables que abajo). Si ese slot está vacío en Dashboard → Ajustes, NO se envía nada en el momento del cruce.
+> 2. **Después de que el cliente elige** en la web (safe / mystery / golden) se envía el slot correspondiente (`reward_safe_template_sid` / `mystery_box_result_template_sid` / `golden_box_result_template_sid`).
+> Configura ambos para que el cliente reciba mensaje aunque cierre la web sin elegir.
 
 ```
 ¡{{1}}, gracias por volver! Alcanzaste el nivel *{{2}}* 🏆🍣
@@ -475,7 +480,8 @@ CAMPAÑAS MANUALES
 | `welcome_template_sid` | Bienvenida (registro) | {{1}}=nombre, {{2}}=pts iniciales, {{3}}=roadmap |
 | `points_earned_far_template_sid` | Puntos sumados (lejos) | {{1}}=nombre, {{2}}=pts ganados, {{3}}=pts total, {{4}}=roadmap |
 | `points_earned_near_template_sid` | Puntos sumados (cerca) | {{1}}=nombre, {{2}}=pts ganados, {{3}}=pts total, {{4}}=premio |
-| `reward_safe_template_sid` | Tier desbloqueado (safe) | {{1}}=nombre, {{2}}=tier, {{3}}=premio, {{4}}=roadmap |
+| `tier_unlocked_template_sid` | Tier desbloqueado (al cruzar nivel, antes de elegir) | {{1}}=nombre, {{2}}=tier, {{3}}=premio safe, {{4}}=roadmap |
+| `reward_safe_template_sid` | Premio seguro (después de elegir 'a la segura') | {{1}}=nombre, {{2}}=tier, {{3}}=premio, {{4}}=roadmap |
 | `mystery_box_result_template_sid` | Mystery Box resultado | {{1}}=nombre, {{2}}=tier, {{3}}=premio, {{4}}=roadmap |
 | `golden_box_result_template_sid` | Golden Box resultado | {{1}}=nombre, {{2}}=premio, {{3}}=roadmap |
 | `birthday_template_sid` | Cumpleaños | {{1}}=nombre, {{2}}=pts actuales |

@@ -84,20 +84,33 @@ interface CheckInRequestBody {
  * Si no hay SID configurado, solo loguea advertencia.
  * Variables estándar: {{1}}=nombre, {{2}}=visitas, {{3}}=hint/premio
  */
+interface WhatsAppSendStatus {
+  sent: boolean
+  templateType: string
+  reason?: string
+}
+
 async function sendCheckinTemplate(
   templateSid: string | undefined,
   templateType: string,
   phone: string,
   variables: Record<string, string>
-): Promise<void> {
+): Promise<WhatsAppSendStatus> {
   if (!templateSid) {
     console.warn(`[CheckIn] No hay plantilla configurada para "${templateType}" — mensaje NO enviado. Configúrala en Dashboard > Ajustes.`)
-    return
+    return { sent: false, templateType, reason: 'no_template_configured' }
   }
   try {
-    await sendTemplateMessage(phone, templateSid, variables)
+    const res = await sendTemplateMessage(phone, templateSid, variables)
+    if (!res) {
+      // sendTemplateMessage devuelve null cuando Twilio no está configurado o el envío falló
+      console.warn(`[CheckIn] Plantilla "${templateType}" NO enviada (Twilio sin config o rechazó el envío). Revisa logs [WhatsApp].`)
+      return { sent: false, templateType, reason: 'twilio_error_or_unconfigured' }
+    }
+    return { sent: true, templateType }
   } catch (err) {
     console.error(`[CheckIn] Error enviando plantilla ${templateType}:`, err)
+    return { sent: false, templateType, reason: err instanceof Error ? err.message : 'unknown_error' }
   }
 }
 
@@ -531,7 +544,50 @@ export async function POST(request: NextRequest) {
         console.error('[CheckIn] Error generando tiers roadmap:', err)
       }
 
-      // Google Contacts sync (best-effort pero awaited para Vercel)
+      // ─── ENVÍO DE WHATSAPP ───
+      // Se envía ANTES del sync de Google Contacts para que una latencia/timeout del
+      // webhook externo nunca impida la entrega del mensaje al cliente.
+      let whatsappStatus: WhatsAppSendStatus = { sent: false, templateType: 'none', reason: 'not_attempted' }
+
+      if (newTier) {
+        // Tier desbloqueado: mensaje en el momento del cruce (requiere tier_unlocked_template_sid)
+        whatsappStatus = await sendCheckinTemplate(
+          settings.tier_unlocked_template_sid,
+          'tier_unlocked',
+          cleaned,
+          { '1': updated.name, '2': newTier.tier_name, '3': newTier.safe_reward_title, '4': tiersRoadmapText }
+        )
+      } else {
+        // Sin tier nuevo: puntos sumados. Cada caso usa SU plantilla — sin fallback engañoso.
+        const isNearTier = !!(nextTierInfo && nextTierInfo.pointsRemaining <= 30)
+        if (isNearTier) {
+          whatsappStatus = await sendCheckinTemplate(
+            settings.points_earned_near_template_sid,
+            'points_earned_near',
+            cleaned,
+            {
+              '1': updated.name,
+              '2': String(pointsResult.pointsAwarded),
+              '3': String(pointsResult.newBalance),
+              '4': nextTierInfo!.tier.safe_reward_title,
+            }
+          )
+        } else {
+          whatsappStatus = await sendCheckinTemplate(
+            settings.points_earned_far_template_sid,
+            'points_earned_far',
+            cleaned,
+            {
+              '1': updated.name,
+              '2': String(pointsResult.pointsAwarded),
+              '3': String(pointsResult.newBalance),
+              '4': tiersRoadmapText,
+            }
+          )
+        }
+      }
+
+      // Google Contacts sync (best-effort, DESPUÉS del WhatsApp para no bloquear la entrega)
       try {
         await syncGoogleContact({
           phone: cleaned,
@@ -547,16 +603,6 @@ export async function POST(request: NextRequest) {
       // ─── NUEVO SISTEMA DE PUNTOS ───
       // Si el cliente desbloqueó un tier → responder con opciones de reward/mystery box
       if (newTier) {
-        // Enviar plantilla de tier desbloqueado (si existe)
-        if (settings.tier_unlocked_template_sid) {
-          await sendCheckinTemplate(
-            settings.tier_unlocked_template_sid,
-            'tier_unlocked',
-            cleaned,
-            { '1': updated.name, '2': newTier.tier_name, '3': newTier.safe_reward_title, '4': tiersRoadmapText }
-          )
-        }
-
         return NextResponse.json({
           message: 'tier_unlocked',
           customer: {
@@ -579,43 +625,13 @@ export async function POST(request: NextRequest) {
             threshold: nextTierInfo.tier.point_threshold,
           } : null,
           tiers_roadmap: tiersRoadmapText,
+          whatsapp: whatsappStatus,
         })
-      }
-
-      // ─── SIN TIER NUEVO: puntos sumados, evaluar cercanía ───
-      const isNearTier = nextTierInfo && nextTierInfo.pointsRemaining <= 30
-
-      if (isNearTier && settings.points_earned_near_template_sid) {
-        await sendCheckinTemplate(
-          settings.points_earned_near_template_sid,
-          'points_earned_near',
-          cleaned,
-          {
-            '1': updated.name,
-            '2': String(pointsResult.pointsAwarded),
-            '3': String(pointsResult.newBalance),
-            '4': nextTierInfo!.tier.safe_reward_title,
-          }
-        )
-      } else if (settings.points_earned_far_template_sid) {
-        await sendCheckinTemplate(
-          settings.points_earned_far_template_sid,
-          'points_earned_far',
-          cleaned,
-          {
-            '1': updated.name,
-            '2': String(pointsResult.pointsAwarded),
-            '3': String(pointsResult.newBalance),
-            '4': tiersRoadmapText,
-          }
-        )
-      } else {
-        console.warn('[CheckIn] No hay plantilla de puntos configurada (points_earned_near/far_template_sid). Mensaje WhatsApp NO enviado.')
       }
 
       const allTiersForResponse = await getAllTiers()
       return NextResponse.json({
-        message: newTier ? 'tier_unlocked' : 'points_earned',
+        message: 'points_earned',
         customer: {
           name: updated.name,
           total_visits: updated.total_visits,
@@ -629,6 +645,7 @@ export async function POST(request: NextRequest) {
         } : null,
         tiers_roadmap: tiersRoadmapText,
         tiers: allTiersForResponse,
+        whatsapp: whatsappStatus,
       })
     }
 

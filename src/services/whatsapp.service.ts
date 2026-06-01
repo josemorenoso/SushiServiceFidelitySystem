@@ -93,7 +93,13 @@ export async function sendTemplateMessage(
         console.warn(`[WhatsApp] Variable count mismatch (${maxVars} vars), reintentando con ${maxVars - 1}…`)
         continue
       }
-      console.error(`[WhatsApp] Error enviando template ${contentSid}:`, error)
+      // Exponer el código de error de Twilio para diagnóstico (p.ej. 63016 opt-out,
+      // 21655 contentSid inválido, 63007 número fuera de WhatsApp). Antes el fallo se
+      // perdía y el cliente quedaba sin mensaje sin rastro de la causa.
+      const twilioErr = error as { code?: number | string; status?: number; moreInfo?: string }
+      console.error(
+        `[WhatsApp] FALLO envío template contentSid=${contentSid} code=${twilioErr?.code ?? 'n/a'} status=${twilioErr?.status ?? 'n/a'} msg="${errMsg}"${twilioErr?.moreInfo ? ` info=${twilioErr.moreInfo}` : ''}`
+      )
       return null
     }
   }

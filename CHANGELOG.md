@@ -5,6 +5,30 @@
 
 ---
 
+## [1.2.1] — 2026-05-31 — Fix: auditoría del sistema de plantillas WhatsApp
+
+### Fixed
+
+**`src/app/(dashboard)/dashboard/settings/page.tsx`:**
+- **Causa raíz (slot huérfano):** el backend (`check-in`, `webhook/delivery`, `check-in-override`) lee y envía `tier_unlocked_template_sid`, pero el Dashboard NUNCA guardaba esa key → al cruzar un tier no salía mensaje en el momento del cruce.
+- **Fix:** agregado el selector **"Tier desbloqueado (al cruzar nivel)"** con estado, carga y `saveSetting('tier_unlocked_template_sid', ...)`.
+
+**`src/app/api/check-in/route.ts`:**
+- **Visibilidad de fallos:** `sendCheckinTemplate` ahora devuelve `{ sent, templateType, reason }` y la respuesta del check-in incluye un objeto `whatsapp` con el estado real del envío. Antes los fallos de Twilio se tragaban en silencio (puntos subían, mensaje no llegaba, sin rastro).
+- **Fallo near→far eliminado:** si el cliente está "cerca" pero `points_earned_near_template_sid` no está configurado, ya NO se manda por error la plantilla "lejos"; se reporta `no_template_configured`.
+- **Orden de envío:** el WhatsApp se envía ANTES del sync de Google Contacts (webhook externo) para que su latencia/timeout nunca impida la entrega del mensaje.
+
+**`src/services/whatsapp.service.ts`:**
+- En el fallo de envío se loguea el **código de error de Twilio** (`code`/`status`/`moreInfo`) — p.ej. 63016 (opt-out), 21655 (contentSid inválido), 63007 (número fuera de WhatsApp) — para diagnosticar por qué no llega un mensaje.
+
+### Docs
+- `docs/PLANTILLAS.md`: documentado el slot `tier_unlocked_template_sid` y aclarado el flujo de **dos mensajes** en el cruce de tier (al cruzar vs. tras elegir premio).
+
+### Nota de configuración
+- Tras desplegar, en **Dashboard → Ajustes** hay que asignar la plantilla al nuevo slot "Tier desbloqueado" (si se desea mensaje en el cruce) y verificar que "Puntos sumados (cerca)" siga asignado.
+
+---
+
 ## [1.2.0] — 2026-05-31 — Fix: puntos en 0, premio no aparece y crash scan→confirm
 
 ### Fixed

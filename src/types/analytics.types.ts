@@ -83,6 +83,10 @@ export interface ROIEstimate {
   reactivatedThisMonth: number
   avgTicket: number
   estimatedROI: number
+  campaignAttractionRate?: number
+  newFromCampaigns?: number
+  campaignROI?: number
+  retentionROI?: number
 }
 
 export interface DashboardAnalytics {

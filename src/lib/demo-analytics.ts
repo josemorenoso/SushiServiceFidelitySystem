@@ -189,12 +189,21 @@ export function computeDemoAnalytics(customers: DemoCustomer[]): DashboardAnalyt
     })
   }
 
-  // --- Demo ROI ---
-  const lastReact = reactivationRate[reactivationRate.length - 1]
+  // --- Demo ROI --- valores fijos para presentación a prospectos
+  const DEMO_REACTIVATED = 32
+  const DEMO_CAMPAIGN_RATE = 23
+  const DEMO_AVG_TICKET = 35000
+  const DEMO_NEW_FROM_CAMPAIGNS = Math.round(customers.length * (DEMO_CAMPAIGN_RATE / 100))
+  const retentionROI = DEMO_REACTIVATED * DEMO_AVG_TICKET
+  const campaignROI = DEMO_NEW_FROM_CAMPAIGNS * DEMO_AVG_TICKET
   const roiEstimate: ROIEstimate = {
-    reactivatedThisMonth: lastReact?.returned ?? 0,
-    avgTicket: 35000,
-    estimatedROI: (lastReact?.returned ?? 0) * 35000,
+    reactivatedThisMonth: DEMO_REACTIVATED,
+    avgTicket: DEMO_AVG_TICKET,
+    estimatedROI: retentionROI + campaignROI,
+    campaignAttractionRate: DEMO_CAMPAIGN_RATE,
+    newFromCampaigns: DEMO_NEW_FROM_CAMPAIGNS,
+    retentionROI,
+    campaignROI,
   }
 
   return {

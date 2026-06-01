@@ -5,6 +5,43 @@
 
 ---
 
+## [1.2.3] — 2026-06-01 — Feature: ROI demo con 32 reactivados + 23% atracción de campaña
+
+### Added
+
+**Demo ROI desglosado (solo modo demo — dashboard real sin cambios):**
+- `src/lib/demo-analytics.ts`: ROI fijo con `DEMO_REACTIVATED = 32` y `DEMO_CAMPAIGN_RATE = 23%`. Calcula `retentionROI`, `campaignROI` y `estimatedROI` combinado.
+- `src/components/dashboard/ROICard.tsx`: rediseñado para mostrar desglose en dos filas cuando los datos incluyen `campaignAttractionRate` (solo en modo demo). Modo real queda igual.
+- `src/types/analytics.types.ts`: campos opcionales `campaignAttractionRate`, `newFromCampaigns`, `campaignROI`, `retentionROI` en `ROIEstimate`.
+
+### Added
+
+**Credenciales Supabase:**
+- `.env.local`: creado con template completo comentado — pegar URL, anon key y service role para operaciones locales y CLI.
+
+---
+
+## [1.2.2] — 2026-06-01 — Config: opt-out keyword SALIR + documentación de replicación
+
+### Changed
+
+**Twilio Console — Opt-Out Management:**
+- Agregado `SALIR` como keyword de opt-out en el Messaging Service `SushiService-Fidelity` (vía API REST). Este es el keyword que usan todas las plantillas del sistema para la instrucción de desuscripción.
+- Keywords de opt-out ahora: `STOP, STOPALL, UNSUBSCRIBE, CANCEL, END, QUIT, BAJA, CANCELAR, SALIR`.
+- Keywords de opt-in: `START, YES, UNSTOP, ALTA, ACEPTO`.
+- Keywords de help: `HELP, INFO, AYUDA`.
+
+### Docs
+
+- **`docs/features/twilio-opt-out.md`** (nuevo): documentación completa del feature con:
+  - Estado actual de keywords configurados.
+  - Método 1: consola web.
+  - Método 2: script PowerShell reproducible vía API REST.
+  - Checklist de replicación para nuevo cliente.
+- **`docs/CONFIGURACIONES_TWILIO_SISTEMA.md`**: actualizada la sección 3 (Opt-Out) con `SALIR` y el snippet de API REST para replicación rápida.
+
+---
+
 ## [1.2.1] — 2026-05-31 — Fix: auditoría del sistema de plantillas WhatsApp
 
 ### Fixed

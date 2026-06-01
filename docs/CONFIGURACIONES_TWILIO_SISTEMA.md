@@ -94,11 +94,23 @@ Cuando un cliente responde **STOP, BAJA, CANCELAR** al número Twilio:
 
 | Sección | Keywords a agregar |
 |---------|-------------------|
-| Opt-out | `BAJA, CANCELAR, FUERA, BASTA` |
-| Opt-in | `ALTA, ACEPTO, QUIERO` |
-| Help | `AYUDA, INFO` |
+| Opt-out | `STOP, BAJA, CANCELAR, SALIR, FUERA, BASTA` |
+| Opt-in | `START, ALTA, ACEPTO, QUIERO` |
+| Help | `HELP, AYUDA, INFO` |
 
-STOP en inglés ya está activado por defecto — no hace falta agregarlo.
+> `SALIR` es la palabra clave principal que usan todas las plantillas del sistema para la instrucción de desuscripción.
+
+### 3.2a Método API (replicación rápida, sin consola web)
+
+Para automatizar la configuración en un nuevo clone/cliente, usar la API REST directamente:
+
+```powershell
+$headers = @{ Authorization = "Basic $( [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes('ACxx:AUTH_TOKEN')) )"; "Content-Type" = "application/x-www-form-urlencoded" }
+$body = "OptOutKeywords=STOP,STOPALL,UNSUBSCRIBE,CANCEL,END,QUIT,BAJA,CANCELAR,SALIR&OptInKeywords=START,YES,UNSTOP,ALTA,ACEPTO&HelpKeywords=HELP,INFO,AYUDA"
+Invoke-WebRequest -Uri "https://messaging.twilio.com/v1/Services/MGxx" -Method POST -Headers $headers -Body $body -UseBasicParsing
+```
+
+Reemplazar `ACxx:AUTH_TOKEN` y `MGxx` con las credenciales y SID del nuevo cliente. Documentación completa en `docs/features/twilio-opt-out.md`.
 
 ### 3.3 Obligación legal Meta
 

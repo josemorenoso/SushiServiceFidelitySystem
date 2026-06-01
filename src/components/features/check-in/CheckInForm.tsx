@@ -135,14 +135,16 @@ export function CheckInForm({
         if (cancelled) return
 
         if (data.hasRecentVisit) {
+          const tierUnlocked = data.tier_unlocked ?? null
           const result: CheckInResult = {
-            message: 'points_earned',
+            message: tierUnlocked ? 'tier_unlocked' : 'points_earned',
             customer: {
               name: data.customer.name,
               total_visits: data.customer.total_visits,
               total_points: data.customer.total_points,
             },
             points_awarded: data.points_awarded ?? 0,
+            tier_unlocked: tierUnlocked,
             next_tier: data.next_tier ?? null,
             tiers: data.tiers ?? [],
           }

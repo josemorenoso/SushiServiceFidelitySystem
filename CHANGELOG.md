@@ -5,6 +5,31 @@
 
 ---
 
+## [1.2.0] — 2026-05-31 — Fix: puntos en 0, premio no aparece y crash scan→confirm
+
+### Fixed
+
+**`src/app/api/check-in/status/route.ts`:**
+- **Causa raíz (puntos +0):** la consulta a `point_transactions` filtraba por columnas inexistentes `visit_id` y `type`. La tabla usa `reference_id` (id de la visita) y `source`. Resultado: `points_awarded` siempre era `0` aunque el saldo total fuera correcto.
+- **Fix:** consulta corregida a `.eq('reference_id', visitId).in('source', ['visit_staff','visit_qr','visit_delivery'])`.
+- **Nuevo:** el endpoint ahora calcula y devuelve `tier_unlocked` — el tier de mayor umbral que el cliente superó y aún no reclamó (sin fila en `mystery_box_results`). Esto entrega el flujo de premio al celular del cliente vía polling y auto-recupera unlocks perdidos.
+
+**`src/components/features/check-in/CheckInForm.tsx`:**
+- El polling ahora lee `data.tier_unlocked` y emite `message: 'tier_unlocked'` cuando corresponde (antes hardcodeaba `'points_earned'` e ignoraba el tier). El cliente ya ve la elección safe vs Mystery Box.
+
+**`src/app/(public)/mesero/scan/page.tsx`:**
+- **Causa raíz (crash / "page couldn't load" / tener que tocar "volver"):** html5-qrcode lanza un error SÍNCRONO `Cannot stop, scanner is not running or paused` al llamar `stop()` cuando el scanner ya no está activo, provocando un `unhandledrejection` que rompía la navegación scan→confirm en móvil.
+- **Fix:** nuevo helper `safeStopScanner()` que verifica `getState()` y atrapa la excepción. Se usa en el teardown, al navegar tras escanear, al alternar modo manual.
+- El modo manual ahora limpia `sessionStorage` para no mostrar un cliente obsoleto.
+
+**`src/app/(public)/mesero/confirm/page.tsx`:**
+- El lazy initializer ya NO borra `sessionStorage` en el primer render (se perdía el nombre del cliente al recargar). Ahora se limpia solo tras registrar la visita con éxito.
+
+### Docs
+- `docs/API_DOCS.md`: documentado el campo `tier_unlocked` y la consulta corregida de `point_transactions`.
+
+---
+
 ## [1.1.9] — 2026-05-31 — Fix: crash React #310 en check-in de cliente registrado
 
 ### Fixed

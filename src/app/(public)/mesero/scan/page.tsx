@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useStaffAuth } from '@/hooks/useStaffAuth'
-import { Html5Qrcode } from 'html5-qrcode'
+import { Html5Qrcode, Html5QrcodeScannerState } from 'html5-qrcode'
 import { Loader2, ArrowLeft, Flashlight, FlashlightOff, Keyboard } from 'lucide-react'
 import { decodeCustomerQRTokenUnsafe } from '@/lib/utils/qrcode'
 
@@ -17,6 +17,28 @@ export default function MeseroScanPage() {
   const [torchOn, setTorchOn] = useState(false)
   const [manualPhone, setManualPhone] = useState('')
   const [showManual, setShowManual] = useState(false)
+
+  // Detiene el scanner de forma segura: html5-qrcode lanza un error SÍNCRONO
+  // ("Cannot stop, scanner is not running or paused") si stop() se llama cuando
+  // ya no está activo. Eso provoca un unhandledrejection que rompe la navegación
+  // scan→confirm en móvil. Verificamos el estado y atrapamos cualquier excepción.
+  const safeStopScanner = async () => {
+    const scanner = scannerRef.current
+    if (!scanner) return
+    try {
+      const state = scanner.getState()
+      if (state === Html5QrcodeScannerState.SCANNING || state === Html5QrcodeScannerState.PAUSED) {
+        await scanner.stop()
+      }
+    } catch {
+      // scanner ya detenido o en transición — ignorar
+    }
+    try {
+      scanner.clear()
+    } catch {
+      // ignore
+    }
+  }
 
   useEffect(() => {
     if (!authLoading && !session) {
@@ -71,10 +93,7 @@ export default function MeseroScanPage() {
     start()
 
     return () => {
-      if (scannerRef.current) {
-        scannerRef.current.stop().catch(() => {})
-        scannerRef.current.clear()
-      }
+      void safeStopScanner()
     }
   }, [authLoading, session, showManual])
 
@@ -112,27 +131,23 @@ export default function MeseroScanPage() {
 
     // Detener scanner limpiamente antes de navegar para evitar race condition
     const stopAndNavigate = async () => {
-      if (scannerRef.current) {
-        try {
-          await scannerRef.current.stop()
-        } catch {
-          // ignore
-        }
-        try {
-          scannerRef.current.clear()
-        } catch {
-          // ignore
-        }
-      }
+      await safeStopScanner()
       router.push(`/mesero/confirm?token=${encodeURIComponent(token)}`)
     }
 
-    stopAndNavigate()
+    void stopAndNavigate()
   }
 
   const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (manualPhone.length < 10) return
+    // Limpiar dato de cliente previo (de un escaneo anterior) para no mostrar
+    // un nombre obsoleto en la pantalla de confirmación del modo manual.
+    try {
+      sessionStorage.removeItem('mesero_pending_customer')
+    } catch {
+      // ignore
+    }
     router.push(`/mesero/confirm?phone=${encodeURIComponent(manualPhone)}`)
   }
 
@@ -182,9 +197,7 @@ export default function MeseroScanPage() {
           </button>
           <button
             onClick={() => {
-              if (scannerRef.current) {
-                scannerRef.current.stop().catch(() => {})
-              }
+              void safeStopScanner()
               setShowManual(!showManual)
             }}
             className="rounded-xl p-2 text-white/70 transition-colors hover:bg-white/10"

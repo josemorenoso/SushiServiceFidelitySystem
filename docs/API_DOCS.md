@@ -251,6 +251,14 @@ Endpoint para que la pantalla del cliente (mostrando el QR) detecte automáticam
     "total_points": 310
   },
   "points_awarded": 65,
+  "tier_unlocked": {
+    "id": "uuid-del-tier",
+    "name": "Plata",
+    "safe_reward": "Bebida gratis",
+    "mystery_box_enabled": true,
+    "mystery_prizes": [ { "title": "Postre", "probability": 0.3, "emoji": "🍰" } ],
+    "is_black": false
+  },
   "next_tier": {
     "name": "Oro",
     "points_remaining": 90,
@@ -262,6 +270,8 @@ Endpoint para que la pantalla del cliente (mostrando el QR) detecte automáticam
   ]
 }
 ```
+
+> **`tier_unlocked`**: Es `null` salvo que el cliente haya superado el umbral de un tier y aún no lo haya reclamado (sin fila en `mystery_box_results` para ese `tier_id`). Devuelve el tier de mayor umbral pendiente. El cliente lo consume solo cuando `hasRecentVisit` es `true`, mostrando el flujo de elección de premio (safe vs Mystery Box) en su propio dispositivo.
 
 **Response 200 (cliente encontrado, sin visita reciente):**
 ```json
@@ -290,7 +300,8 @@ Endpoint para que la pantalla del cliente (mostrando el QR) detecte automáticam
 { "error": "Teléfono inválido" }
 ```
 
-> **Nota:** Una "visita reciente" se define como una visita creada en los últimos 5 minutos. El endpoint busca en la tabla `visits` y, si encuentra una, consulta la tabla `point_transactions` para obtener los puntos otorgados en esa visita.
+> **Nota:** Una "visita reciente" se define como una visita `source = 'staff_scan'` creada en los últimos 30 minutos. El endpoint busca en la tabla `visits` y, si encuentra una, consulta `point_transactions` filtrando por `reference_id` (id de la visita) y `source IN ('visit_staff','visit_qr','visit_delivery')` para obtener los puntos otorgados.  
+> **Importante:** `point_transactions` usa las columnas `reference_id` y `source` (NO `visit_id`/`type`). Consultar las columnas incorrectas devuelve `points_awarded = 0` aunque el saldo sea correcto.
 
 ---
 

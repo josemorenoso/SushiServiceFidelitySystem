@@ -46,7 +46,8 @@ function MeseroConfirmContent() {
     try {
       const raw = sessionStorage.getItem('mesero_pending_customer')
       if (!raw) return null
-      sessionStorage.removeItem('mesero_pending_customer')
+      // NO borrar aquí: si la página se recarga, perderíamos el nombre del cliente.
+      // Se limpia tras registrar la visita con éxito (ver handleRegister).
       const data = JSON.parse(raw) as { name: string; phone: string; sub: string; token: string }
       return { name: data.name, phone: data.phone }
     } catch {
@@ -163,6 +164,13 @@ function MeseroConfirmContent() {
         setError(data.message || 'Error registrando visita')
         setLoading(false)
         return
+      }
+
+      // Visita registrada: limpiar el dato temporal del cliente
+      try {
+        sessionStorage.removeItem('mesero_pending_customer')
+      } catch {
+        // ignore
       }
 
       setSuccess({

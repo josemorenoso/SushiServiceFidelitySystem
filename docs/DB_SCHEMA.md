@@ -533,6 +533,7 @@ CREATE POLICY "admin_delete_staff_devices" ON staff_devices FOR DELETE USING (au
 | 12 | `00012_calendar_events_and_media.sql` | 2026-05-23 | Tabla `restaurant_events`, columnas `source/media_url/media_type` en `campaigns`, bucket `event-media` + RLS de Storage | Pendiente |
 | 14 | `00014_geolocation.sql` | 2026-05-25 | Tabla `restaurant_locations`, columnas `checkin_lat/checkin_lon/checkin_distance_meters` en `customers`, función `calculate_distance()` Haversine | Pendiente |
 | 15 | `00015_staff_qr_scan.sql` | 2026-05-30 | Tablas `staff_users`, `staff_devices`, FK `visits.registered_by_staff_id`, settings `checkin_mode`/`checkin_first_visit_free`, RLS staff + trigger updated_at | Pendiente |
+| 19 | `00019_legacy_points_backfill.sql` | 2026-06-01 | Backfill de puntos para clientes con visitas previas al sistema de puntos: 1 visita → 75 pts, 2 visitas → 125 pts. Inserta `point_transactions` con source `admin_adjustment`. | Pendiente |
 
 ---
 

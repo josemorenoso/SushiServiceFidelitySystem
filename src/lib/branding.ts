@@ -19,3 +19,10 @@ export const BRAND_TAGLINE =
 export const BRAND_DESCRIPTION =
   process.env.NEXT_PUBLIC_BRAND_DESCRIPTION ||
   'Registra tus visitas, acumula premios y disfruta de beneficios exclusivos.'
+
+// Label del rol del staff — cambia por cliente según tipo de negocio
+// Restaurante: "Mesero" | Barbería: "Barbero" | etc.
+export const STAFF_LABEL =
+  process.env.NEXT_PUBLIC_STAFF_ROLE_LABEL ?? 'Mesero'
+
+export const STAFF_LABEL_PLURAL = `${STAFF_LABEL}s`

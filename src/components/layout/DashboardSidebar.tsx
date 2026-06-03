@@ -16,7 +16,7 @@ import {
   CalendarDays,
   UserCog,
 } from 'lucide-react'
-import { BRAND_NAME } from '@/lib/branding'
+import { BRAND_NAME, STAFF_LABEL_PLURAL } from '@/lib/branding'
 
 const navItems = [
   { href: '/dashboard', label: 'Métricas', icon: LayoutDashboard },
@@ -26,7 +26,7 @@ const navItems = [
   { href: '/dashboard/calendar', label: 'Calendario', icon: CalendarDays },
   { href: '/dashboard/qr', label: 'Código QR', icon: QrCode },
   { href: '/dashboard/templates', label: 'Plantillas', icon: FileText },
-  { href: '/dashboard/staff', label: 'Meseros QR', icon: UserCog },
+  { href: '/dashboard/staff', label: `${STAFF_LABEL_PLURAL} QR`, icon: UserCog },
   { href: '/dashboard/authorized-numbers', label: 'Autorizados Domicilio', icon: ShieldCheck },
   { href: '/dashboard/settings', label: 'Ajustes', icon: Settings },
 ]

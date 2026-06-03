@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Sparkles, Gift } from 'lucide-react'
+import { STAFF_LABEL } from '@/lib/branding'
 import type { MysteryPrizeDisplay } from './CheckInSuccess.types'
 
 interface MysteryBoxResultProps {
@@ -118,7 +119,7 @@ export function MysteryBoxResult({
                 <div className="mt-4 flex items-center justify-center gap-2">
                   <Gift className="h-4 w-4" style={{ color: '#059669' }} strokeWidth={1.5} />
                   <p className="text-sm font-medium" style={{ color: '#059669' }}>
-                    Mostrále este mensaje al mesero para reclamar
+                    Mostrále este mensaje al {STAFF_LABEL.toLowerCase()} para reclamar
                   </p>
                 </div>
               )}

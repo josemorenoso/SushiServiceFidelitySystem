@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useStaffAuth } from '@/hooks/useStaffAuth'
+import { STAFF_LABEL } from '@/lib/branding'
 import { Loader2, ScanLine, LogOut, ClipboardList } from 'lucide-react'
 
 export default function MeseroDashboardPage() {
@@ -56,7 +57,7 @@ export default function MeseroDashboardPage() {
         <div className="mx-auto flex max-w-md items-center justify-between">
           <div>
             <p className="text-xs text-gray-500">
-              {session.type === 'device' ? 'Dispositivo de confianza' : 'Mesero'}
+              {session.type === 'device' ? 'Dispositivo de confianza' : STAFF_LABEL}
             </p>
             <h1 className="text-lg font-bold text-gray-900">{session.name}</h1>
           </div>

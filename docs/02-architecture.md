@@ -144,6 +144,7 @@ Admin login (Supabase Auth) → /dashboard → Métricas, Clientes, Recompensas,
 | `NEXT_PUBLIC_BRAND_TAGLINE` | Tagline del restaurante | pública | NO |
 | `STAFF_JWT_SECRET` | Secret para firmar JWT de sesión de meseros | privada | SI (si usa staff scan) |
 | `STAFF_QR_JWT_SECRET` | Secret para firmar tokens efímeros del QR dinámico del cliente | privada | SI (si usa staff scan) |
+| `NEXT_PUBLIC_STAFF_ROLE_LABEL` | Etiqueta del rol del staff. `Mesero` (restaurante), `Barbero` (barbería), etc. Default: `Mesero` | pública | NO |
 | `N8N_BASE_URL` | URL base de n8n | privada | NO |
 
 ## Convenciones del Proyecto

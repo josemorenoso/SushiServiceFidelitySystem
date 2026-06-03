@@ -5,6 +5,39 @@
 
 ---
 
+## [1.2.5] — 2026-06-03 — feat: NEXT_PUBLIC_STAFF_ROLE_LABEL + script validate-env + Notion Paso a Paso
+
+### Added
+- `src/lib/branding.ts` — nuevas exportaciones `STAFF_LABEL` y `STAFF_LABEL_PLURAL` leídas de `NEXT_PUBLIC_STAFF_ROLE_LABEL` (default: `Mesero`). Permite adaptar el sistema a cualquier tipo de negocio sin tocar código.
+- `scripts/validate-env.mjs` — validador de entorno ejecutable antes de cada deploy. Verifica variables requeridas, formatos (JWT length, prefijo whatsapp:) y conexión real a Supabase.
+- `.env.example` — nueva variable `NEXT_PUBLIC_STAFF_ROLE_LABEL=Mesero` documentada.
+
+### Changed
+- `src/components/layout/DashboardSidebar.tsx` — nav label "Meseros QR" ahora usa `STAFF_LABEL_PLURAL` (retrocompatible).
+- `src/components/layout/DashboardHeader.tsx` — ídem.
+- `src/app/(public)/mesero/page.tsx` — título "App del Mesero" → `App del ${STAFF_LABEL}`.
+- `src/app/(public)/mesero/dashboard/page.tsx` — badge de sesión usa `STAFF_LABEL`.
+- `src/components/features/check-in/CheckInForm.tsx` — textos cliente-facing ("Muéstrale este código a tu mesero") usan `STAFF_LABEL`.
+- `src/components/features/check-in/CheckInSuccess.tsx` — ídem.
+- `src/components/features/check-in/MysteryBoxResult.tsx` — ídem.
+
+### Notes
+- Cambio 100% retrocompatible. Sin `NEXT_PUBLIC_STAFF_ROLE_LABEL` configurada, el sistema se comporta exactamente igual que antes.
+- Para barberías: agregar `NEXT_PUBLIC_STAFF_ROLE_LABEL=Barbero` en Vercel.
+
+---
+
+## [1.2.4] — 2026-06-02 — Docs: Sistema de operaciones, pipeline de ventas y guía de delegación
+
+### Added
+
+**Documentos operativos para escalar implementaciones y delegar:**
+- `docs/operaciones/PROCESO_VENTAS_IMPLEMENTACION.md` — Pipeline completo de ventas e implementación por cliente nuevo. 5 fases: Lead → Reunión → Setup (2 días) → Cliente Activo → Offboarding. Incluye scripts de mensajes, tiempos estimados, y checklist pre-launch.
+- `docs/operaciones/ESTRUCTURA_NOTION.md` — Especificación exacta de 4 bases de datos para Notion: Leads y Clientes, Tareas de Implementación, Inventario Técnico (restringido), y Seguimiento Mensual. Incluye propiedades, vistas, plantillas de tareas pre-creadas, y flujo de trabajo diario/semanal/mensual.
+- `docs/operaciones/DELEGACION_GUIDE.md` — 11 tareas delegables a un asistente virtual medio tiempo ($1.5M–$2.5M COP/mes). Cada tarea incluye instrucciones exactas, tiempo estimado, nivel de riesgo, mensajes copy-paste, y lo que NO se puede delegar (cierre de venta, deploy final, fixes técnicos).
+
+---
+
 ## [1.2.3] — 2026-06-01 — Feature: ROI demo con 32 reactivados + 23% atracción de campaña
 
 ### Added

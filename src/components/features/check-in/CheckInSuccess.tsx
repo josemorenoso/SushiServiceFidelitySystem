@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
 import { CheckCircle, Crown, Gift, PartyPopper, RotateCcw, Star } from 'lucide-react'
+import { STAFF_LABEL } from '@/lib/branding'
 import { GoogleReviewPopup } from './GoogleReviewPopup'
 import { PointsDisplay } from './PointsDisplay'
 import { RewardChoice } from './RewardChoice'
@@ -212,7 +213,7 @@ export function CheckInSuccess({
               {mysteryResult.prize_title}
             </h3>
             <p className="mt-1.5 text-sm" style={{ color: '#059669' }}>
-              Mostrále este mensaje al mesero para reclamar tu premio 🎁
+              Mostrále este mensaje al {STAFF_LABEL.toLowerCase()} para reclamar tu premio 🎁
             </p>
           </div>
         )

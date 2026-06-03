@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Loader2, Phone, User, MapPin, ArrowLeft } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
+import { STAFF_LABEL } from '@/lib/branding'
 // import { getCurrentPosition } from '@/lib/utils/geolocation'  // standby — desactivado v1.0.5-3
 
 const COLOMBIAN_CITIES = [
@@ -526,7 +527,7 @@ export function CheckInForm({
             ¡Hola, {lookupCustomer.name}!
           </h2>
           <p className="mt-1 text-sm" style={{ color: '#9ca3af' }}>
-            Muéstrale este código a tu mesero
+            Muéstrale este código a tu {STAFF_LABEL.toLowerCase()}
           </p>
         </div>
 
@@ -560,7 +561,7 @@ export function CheckInForm({
         {checkingStatus && (
           <div className="mt-4 flex items-center justify-center gap-2 text-xs" style={{ color: '#9ca3af' }}>
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            Esperando confirmación del mesero...
+            Esperando confirmación del {STAFF_LABEL.toLowerCase()}...
           </div>
         )}
 

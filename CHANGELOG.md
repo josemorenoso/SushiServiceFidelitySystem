@@ -5,6 +5,18 @@
 
 ---
 
+## [1.2.6] — 2026-06-03 — feat: preview dinámica de recompensas + política de privacidad (Ley 1581)
+
+### Added
+- `src/app/api/public/reward-tiers/route.ts` — endpoint público (sin auth) que expone los tiers activos para la preview del check-in. Rate limited 60/min por IP.
+- `src/components/features/check-in/RewardsPreview.tsx` — componente que muestra los tiers reales (nombre, puntos, premio seguro) debajo del botón Continuar en el paso del celular. Carga dinámica desde DB; si falla, no bloquea el formulario.
+- `src/app/(public)/privacidad/page.tsx` — página de política de privacidad (Ley 1581 Colombia). Usa `BRAND_NAME` para personalización por clon. Link de contacto vía `RESTAURANT_WHATSAPP_LINK`.
+
+### Changed
+- `src/components/features/check-in/CheckInForm.tsx` — step 'phone': fetch de tiers al montar, render de `RewardsPreview` si hay tiers disponibles. Checkbox de consentimiento ahora incluye link a `/privacidad` (Política de Privacidad).
+
+---
+
 ## [1.2.5] — 2026-06-03 — feat: NEXT_PUBLIC_STAFF_ROLE_LABEL + script validate-env + Notion Paso a Paso
 
 ### Added

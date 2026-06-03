@@ -4,6 +4,15 @@ import { useState, useEffect, useRef } from 'react'
 import { Loader2, Phone, User, MapPin, ArrowLeft } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { STAFF_LABEL } from '@/lib/branding'
+import { RewardsPreview } from './RewardsPreview'
+
+interface TierPreview {
+  tier_name: string
+  point_threshold: number
+  safe_reward_title: string
+  is_black: boolean
+  sort_order: number
+}
 // import { getCurrentPosition } from '@/lib/utils/geolocation'  // standby — desactivado v1.0.5-3
 
 const COLOMBIAN_CITIES = [
@@ -88,6 +97,14 @@ export function CheckInForm({
     total_points?: number
   } | null>(null)
   const [checkingStatus, setCheckingStatus] = useState(false)
+  const [previewTiers, setPreviewTiers] = useState<TierPreview[]>([])
+
+  useEffect(() => {
+    fetch('/api/public/reward-tiers')
+      .then((r) => r.json())
+      .then((data) => { if (Array.isArray(data)) setPreviewTiers(data) })
+      .catch(() => {})
+  }, [])
 
   // ─── Geolocalización standby — desactivado v1.0.5-3 ───
   // const [locationStatus, setLocationStatus] = useState<'idle' | 'requesting' | 'verified' | 'denied' | 'error'>('idle')
@@ -316,6 +333,8 @@ export function CheckInForm({
             )}
           </button>
         </form>
+
+        {previewTiers.length > 0 && <RewardsPreview tiers={previewTiers} />}
       </div>
     )
   }
@@ -481,7 +500,16 @@ export function CheckInForm({
               className="text-xs leading-relaxed cursor-pointer"
               style={{ color: "#6b7280" }}
             >
-              Acepto ser parte de la familia y recibir regalos, recompensas y comunicaciones por WhatsApp
+              Acepto recibir regalos, recompensas y comunicaciones por WhatsApp. He leído y acepto la{' '}
+            <a
+              href="/privacidad"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline"
+              style={{ color: '#E63946' }}
+            >
+              Política de Privacidad
+            </a>.
             </label>
           </div>
 

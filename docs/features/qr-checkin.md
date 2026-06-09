@@ -119,9 +119,22 @@ Tablas involucradas (detalle completo en `DB_SCHEMA.md`):
 - Botón "Continuar"
 - Branding del restaurante (logo, colores)
 
+- Premios visibles: tarjetas grandes (`RewardsPreview`) con emoji, premio y puntos por tier, badge del rango de puntos por visita (gamificación) y explicación de la Mystery Box.
+
 ### Pantalla 2: Registro (solo clientes nuevos)
-- Campos: Nombre, Fecha de Nacimiento
+- Campos: Nombre, Ciudad, Fecha de Nacimiento, consentimiento
 - Botón "Registrarme"
+- Premios grandes (`RewardsPreview`) también visibles aquí.
+
+### Pantalla 2b: Tarjeta del cliente (cliente existente — `CustomerCard`)
+Estilo wallet (reemplaza la pantalla del QR simple) para que el cliente entienda qué hacer y sienta progreso:
+- Banner rojo imperativo "DILE AL {MESERO} QUE TE ESCANEE" (acción dominante) + "Si no, NO sumás puntos".
+- QR 270px con borde rojo pulsante.
+- Termómetro de puntos gigante (h-8) con animación de llenado y texto "{puntos} / {umbral} pts".
+- Próximo premio: emoji del tier + "Te faltan N pts: {premio}".
+- Camino completo de recompensas (`TiersRoadmap`): cada tier con estado alcanzado/próximo/bloqueado.
+- Overlay de dopamina: al detectar (vía polling) que el mesero registró la visita, flash verde "¡Listo! +X pts" ~1.6s antes de la pantalla de éxito.
+- Decisión de producto: NO se muestran sellos de visitas — el progreso es solo por puntaje.
 
 ### Pantalla 3: Éxito
 - Mensaje personalizado (bienvenida o bienvenido de vuelta)

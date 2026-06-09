@@ -7,7 +7,7 @@ interface TierItem {
   tier_name: string
   point_threshold: number
   safe_reward_title: string
-  mystery_box_enabled: boolean
+  mystery_box_enabled?: boolean
   is_black: boolean
 }
 

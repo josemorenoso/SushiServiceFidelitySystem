@@ -39,6 +39,7 @@ import {
   Copy,
   Check,
   Search,
+  Ban,
 } from 'lucide-react'
 import { Toaster, toast } from 'sonner'
 import type { StaffUser, StaffDevice } from '@/types/database.types'
@@ -260,6 +261,40 @@ export default function StaffPage() {
     }
   }
 
+  const handleRevokeDevice = async (id: string) => {
+    if (!window.confirm('¿Revocar este dispositivo? Dejará de poder registrar visitas.')) return
+    try {
+      const res = await fetch('/api/dashboard/staff/device', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ device_id: id }),
+      })
+      if (!res.ok) { toast.error('No se pudo revocar el dispositivo'); return }
+      toast.success('Dispositivo revocado')
+      await fetchData()
+    } catch {
+      toast.error('Error de conexión')
+    }
+  }
+
+  const handleDeleteDevice = async (id: string) => {
+    if (!window.confirm('¿Eliminar definitivamente este dispositivo?')) return
+    try {
+      const res = await fetch(`/api/dashboard/staff/device?id=${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        toast.error(d.error ?? 'No se pudo eliminar el dispositivo')
+        return
+      }
+      toast.success('Dispositivo eliminado')
+      await fetchData()
+    } catch {
+      toast.error('Error de conexión')
+    }
+  }
+
   const devicesForStaff = (staffId: string) =>
     data.devices.filter((d) => d.staff_user_id === staffId)
 
@@ -450,6 +485,7 @@ export default function StaffPage() {
                   <TableHead>Estado</TableHead>
                   <TableHead className="hidden sm:table-cell">Último uso</TableHead>
                   <TableHead className="hidden sm:table-cell">Expira</TableHead>
+                  <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -473,6 +509,31 @@ export default function StaffPage() {
                       </TableCell>
                       <TableCell className="hidden sm:table-cell text-xs text-muted-foreground">
                         {d.expires_at ? timeAgo(d.expires_at) : 'Nunca'}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          {d.is_trusted ? (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-amber-600 hover:text-amber-700 hover:bg-amber-50"
+                              onClick={() => handleRevokeDevice(d.id)}
+                              title="Revocar"
+                            >
+                              <Ban className="h-4 w-4" />
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
+                              onClick={() => handleDeleteDevice(d.id)}
+                              title="Eliminar"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   )

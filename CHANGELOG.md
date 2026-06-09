@@ -5,6 +5,29 @@
 
 ---
 
+## [1.3.0] — 2026-06-08 — feat: fidelización visual Fase 1 ("a prueba de imbéciles")
+
+> Request: el cliente no entiende que debe mostrar el QR al mesero (visitas fantasma), los premios se ven chiquitos, no se pueden eliminar dispositivos. Objetivo: tarjeta visual estilo wallet, premios grandes, gestión de dispositivos.
+
+### Added
+- `src/components/features/check-in/CustomerCard.tsx` — tarjeta tipo wallet que reemplaza la pantalla del QR del cliente: banner rojo imperativo "DILE AL MESERO QUE TE ESCANEE", QR 270px con borde pulsante, termómetro de puntos gigante (h-8) con animación de llenado, camino completo de recompensas (reusa `TiersRoadmap`), y overlay de dopamina "+X pts" cuando el mesero registra la visita.
+- `src/app/api/public/points-range/route.ts` — endpoint público que expone el rango de puntos por visita (`{ min, max }`) desde `admin_settings`. Rate limited 60/min por IP, cache 60s. Usado como gatillo de gamificación en el registro.
+- `src/app/api/dashboard/staff/device/route.ts` — `PATCH` (revocar, soft → `is_trusted=false`) y `DELETE` (eliminar, hard, solo si ya revocado) de dispositivos de confianza. Protegido por sesión de dashboard.
+
+### Changed
+- `src/components/features/check-in/RewardsPreview.tsx` — rediseño completo: tarjetas grandes en carrusel horizontal (emoji 40px, premio, pts), título destacado, badge del rango de puntos por visita, y explicación de la Mystery Box. Ahora se muestra también en el step `register` (antes solo en `phone`).
+- `src/components/features/check-in/CheckInForm.tsx` — usa `CustomerCard` para el step `customer_qr`; fetch del rango de puntos; overlay de dopamina ~1.6s antes de pasar a la pantalla de éxito; `RewardsPreview` con `pointsRange` en `phone` y `register`. Removidos imports sin uso (`QRCodeSVG`, `STAFF_LABEL`).
+- `src/app/api/public/reward-tiers/route.ts` — el payload público ahora incluye `mystery_box_enabled` (requerido por `TiersRoadmap` en la tarjeta).
+- `src/components/features/check-in/TiersRoadmap.tsx` — `mystery_box_enabled` ahora opcional en el tipo (compatibilidad con el payload público).
+- `src/app/(dashboard)/dashboard/staff/page.tsx` — columna "Acciones" en la tabla de dispositivos con botones Revocar (si activo) y Eliminar (si revocado), con confirmación y toasts.
+
+### Notes
+- Fase 2 (documentada, NO implementada): tarjeta digital permanente accesible fuera del check-in, envío por WhatsApp con link permanente, y tarjetas/cupones personalizados desde el dashboard.
+- Decisión de producto: NO se usan "sellos de visitas" — el progreso es solo por puntaje (termómetro), para no confundir con los puntos.
+- Spec: `docs/features/visual-loyalty-fase1-spec.md`. Plan: `docs/superpowers/plans/2026-06-08-visual-loyalty-fase1.md`.
+
+---
+
 ## [1.2.6] — 2026-06-03 — feat: preview dinámica de recompensas + política de privacidad (Ley 1581)
 
 ### Added

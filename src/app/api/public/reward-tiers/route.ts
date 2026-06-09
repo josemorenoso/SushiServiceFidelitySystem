@@ -14,10 +14,11 @@ export async function GET(request: NextRequest) {
 
   try {
     const tiers = await getAllTiers()
-    const publicTiers = tiers.map(({ tier_name, point_threshold, safe_reward_title, is_black, sort_order }) => ({
+    const publicTiers = tiers.map(({ tier_name, point_threshold, safe_reward_title, mystery_box_enabled, is_black, sort_order }) => ({
       tier_name,
       point_threshold,
       safe_reward_title,
+      mystery_box_enabled: mystery_box_enabled ?? false,
       is_black,
       sort_order,
     }))

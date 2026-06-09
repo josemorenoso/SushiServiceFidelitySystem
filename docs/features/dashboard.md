@@ -29,6 +29,13 @@ Dar al administrador visibilidad completa del programa de fidelidad: cuántos cl
 | `/dashboard/campaigns` | Campañas automáticas (birthday/reactivation) + ejecución manual + historial |
 | `/dashboard/qr` | Generación y descarga de código QR para mesas |
 | `/dashboard/templates` | Plantillas Twilio Content API — crear, sincronizar, ver estado de aprobación |
+| `/dashboard/staff` | Gestión de meseros (PIN) y dispositivos de confianza |
+
+## Gestión de dispositivos de confianza (`/dashboard/staff`)
+Los dispositivos del local (celulares/tablets) se activan desde `/mesero` para escanear sin PIN. Desde la tabla de dispositivos del dashboard se pueden gestionar:
+- **Revocar** (soft) — `PATCH /api/dashboard/staff/device` con `{ device_id }`. Pone `is_trusted = false`; el dispositivo deja de poder registrar visitas (la API de check-in exige `is_trusted = true`). Disponible mientras el dispositivo está activo.
+- **Eliminar** (hard) — `DELETE /api/dashboard/staff/device?id={device_id}`. Borra la fila. Solo permitido si el dispositivo ya está revocado (devuelve 409 si sigue activo).
+- Ambos endpoints requieren sesión de dashboard (Supabase Auth); la UI pide confirmación antes de ejecutar.
 
 ## Componentes
 | Componente | Responsabilidad |

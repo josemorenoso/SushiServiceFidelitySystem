@@ -2,14 +2,14 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { Loader2, Phone, User, MapPin, ArrowLeft } from 'lucide-react'
-import { QRCodeSVG } from 'qrcode.react'
-import { STAFF_LABEL } from '@/lib/branding'
 import { RewardsPreview } from './RewardsPreview'
+import { CustomerCard } from './CustomerCard'
 
 interface TierPreview {
   tier_name: string
   point_threshold: number
   safe_reward_title: string
+  mystery_box_enabled?: boolean
   is_black: boolean
   sort_order: number
 }
@@ -98,11 +98,24 @@ export function CheckInForm({
   } | null>(null)
   const [checkingStatus, setCheckingStatus] = useState(false)
   const [previewTiers, setPreviewTiers] = useState<TierPreview[]>([])
+  const [pointsRange, setPointsRange] = useState<{ min: number; max: number } | null>(null)
+  const [justEarnedPoints, setJustEarnedPoints] = useState<number | null>(null)
 
   useEffect(() => {
     fetch('/api/public/reward-tiers')
       .then((r) => r.json())
       .then((data) => { if (Array.isArray(data)) setPreviewTiers(data) })
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    fetch('/api/public/points-range')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data && typeof data.min === 'number' && typeof data.max === 'number') {
+          setPointsRange({ min: data.min, max: data.max })
+        }
+      })
       .catch(() => {})
   }, [])
 
@@ -154,6 +167,7 @@ export function CheckInForm({
 
         if (data.hasRecentVisit) {
           const tierUnlocked = data.tier_unlocked ?? null
+          const awarded = data.points_awarded ?? 0
           const result: CheckInResult = {
             message: tierUnlocked ? 'tier_unlocked' : 'points_earned',
             customer: {
@@ -161,12 +175,14 @@ export function CheckInForm({
               total_visits: data.customer.total_visits,
               total_points: data.customer.total_points,
             },
-            points_awarded: data.points_awarded ?? 0,
+            points_awarded: awarded,
             tier_unlocked: tierUnlocked,
             next_tier: data.next_tier ?? null,
             tiers: data.tiers ?? [],
           }
-          onCheckInSuccess(result, phone)
+          // Mostrar overlay de dopamina ~1.6s, luego continuar al éxito
+          setJustEarnedPoints(awarded)
+          setTimeout(() => onCheckInSuccess(result, phone), 1600)
           return
         }
       } catch (err) {
@@ -334,7 +350,7 @@ export function CheckInForm({
           </button>
         </form>
 
-        {previewTiers.length > 0 && <RewardsPreview tiers={previewTiers} />}
+        {previewTiers.length > 0 && <RewardsPreview tiers={previewTiers} pointsRange={pointsRange} />}
       </div>
     )
   }
@@ -540,73 +556,28 @@ export function CheckInForm({
             Volver
           </button>
         </form>
+
+        {previewTiers.length > 0 && <RewardsPreview tiers={previewTiers} pointsRange={pointsRange} />}
       </div>
     )
   }
 
   if (step === 'customer_qr' && customerQR && lookupCustomer) {
     return (
-      <div className="premium-card animate-fade-in-up w-full p-7 text-center">
-        <div className="mb-4">
-          <h2
-            className="font-playfair text-2xl font-bold"
-            style={{ color: '#1a1c1d', letterSpacing: '-0.02em' }}
-          >
-            ¡Hola, {lookupCustomer.name}!
-          </h2>
-          <p className="mt-1 text-sm" style={{ color: '#9ca3af' }}>
-            Muéstrale este código a tu {STAFF_LABEL.toLowerCase()}
-          </p>
-        </div>
-
-        <div className="mx-auto my-6 flex justify-center">
-          <div className="rounded-2xl border-2 border-dashed border-gray-200 p-4">
-            <QRCodeSVG value={customerQR} size={240} level="M" />
-          </div>
-        </div>
-
-        <div className="mb-4 space-y-1 text-sm" style={{ color: '#6b7280' }}>
-          <p>
-            <span className="font-semibold">Visitas:</span> {lookupCustomer.total_visits}
-          </p>
-          {lookupCustomer.current_tier && (
-            <p>
-              <span className="font-semibold">Tier:</span> {lookupCustomer.current_tier}
-            </p>
-          )}
-          {lookupCustomer.total_points !== undefined && (
-            <p>
-              <span className="font-semibold">Puntos:</span> {lookupCustomer.total_points}
-            </p>
-          )}
-        </div>
-
-        <p className="text-xs" style={{ color: '#d1d5db' }}>
-          Este código expira en 30 minutos
-        </p>
-
-        {/* Estado de polling */}
-        {checkingStatus && (
-          <div className="mt-4 flex items-center justify-center gap-2 text-xs" style={{ color: '#9ca3af' }}>
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            Esperando confirmación del {STAFF_LABEL.toLowerCase()}...
-          </div>
-        )}
-
-        <button
-          type="button"
-          className="mt-6 flex w-full items-center justify-center gap-1.5 py-2 text-sm font-medium transition-colors duration-200"
-          style={{ color: '#9ca3af' }}
-          onClick={() => {
-            setStep('phone')
-            setCustomerQR(null)
-            setLookupCustomer(null)
-          }}
-        >
-          <ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.5} />
-          Volver
-        </button>
-      </div>
+      <CustomerCard
+        name={lookupCustomer.name}
+        totalPoints={lookupCustomer.total_points ?? 0}
+        qrUrl={customerQR}
+        tiers={previewTiers}
+        checkingStatus={checkingStatus}
+        justEarnedPoints={justEarnedPoints}
+        onBack={() => {
+          setStep('phone')
+          setCustomerQR(null)
+          setLookupCustomer(null)
+          setJustEarnedPoints(null)
+        }}
+      />
     )
   }
 

@@ -5,6 +5,41 @@
 
 ---
 
+## [1.5.1] — 2026-06-10 — refactor: Mensajería como panel colapsable dentro de Métricas
+
+> Request: mover la sección de Mensajería al área de Métricas detrás de un botón que se deba presionar para ver (que no esté plenamente visible).
+
+### Added
+- `src/components/dashboard/TwilioMessagesPanel.tsx` — panel colapsable con la UI completa de Mensajería WhatsApp (KPIs, gráfico de área, tabla de opt-outs, selector 7/30/90 días, `TwilioWallet`). **Carga diferida:** la consulta a la Twilio Messages API solo se dispara cuando el usuario abre el panel por primera vez, para no penalizar la carga del dashboard.
+
+### Changed
+- `src/app/(dashboard)/dashboard/page.tsx` — monta `<TwilioMessagesPanel>` al final de la página de Métricas, colapsado tras un botón "Mensajería WhatsApp".
+- `src/components/layout/DashboardSidebar.tsx` y `DashboardHeader.tsx` — removido el nav item "Mensajería" (y el icono `MessageCircle` sin uso); ahora se accede desde Métricas.
+
+### Removed
+- `src/app/(dashboard)/dashboard/mensajes/page.tsx` — página standalone eliminada; su contenido vive ahora en el panel colapsable.
+
+---
+
+## [1.5.0] — 2026-06-10 — feat: Dashboard de Métricas de Twilio (Req P2.3)
+
+> Request: desarrollar P2.3 (Dashboard Twilio) de `docs/requerimientos/REQUERIMIENTOS_SISTEMA.md`. Solo este P2.
+
+### Added
+- `src/app/api/dashboard/twilio-metrics/route.ts` — endpoint que consulta la Twilio Messages API en tiempo real (hasta 5 páginas × 1000 msgs, rango 1-90 días): conteos por estado (enviados/entregados/leídos/fallidos/no entregados/en tránsito), tasas de entrega y lectura, timeline diario, y detección de opt-outs por doble vía (keyword inbound SALIR/STOP/... + error 21610/63016 outbound) con mapeo a nombres de `customers`. Auth: Admin Cookie. Tipado estricto sin `any`.
+- `src/app/(dashboard)/dashboard/mensajes/page.tsx` — página "Mensajería WhatsApp": 4 KPI cards, gráfico de área (recharts, ya en deps) con evolución diaria, tabla de opt-outs con cliente/motivo/fecha, selector de rango 7/30/90 días, advertencia si los datos están truncados, y `TwilioWallet` (saldo) reusado.
+- `docs/features/twilio-metrics.md` — doc de la feature (arquitectura, limitaciones, pendientes).
+
+### Changed
+- `src/components/layout/DashboardSidebar.tsx` y `DashboardHeader.tsx` — nav item "Mensajería" (`/dashboard/mensajes`, icono `MessageCircle`).
+- `docs/API_DOCS.md` — endpoint `/api/dashboard/twilio-metrics` documentado (tabla + sección con response).
+
+### Notes
+- Sin cambios de DB: las métricas se leen on-demand de Twilio (no requiere status callbacks ni almacenamiento local).
+- Limitación: read rate depende de confirmaciones de lectura del cliente WhatsApp; opt-outs solo detectables dentro del rango consultado (Twilio no expone lista de bloqueados vía API).
+
+---
+
 ## [1.4.0] — 2026-06-10 — feat: requerimientos P1 (reactivación configurable, rediseño reseñas, rediseño campañas)
 
 > Request: desarrollar los 3 requerimientos P1 de `docs/requerimientos/REQUERIMIENTOS_SISTEMA.md` (P1.1 días reactivación configurables, P1.2 rediseño review UX, P1.3 rediseño módulo campañas).

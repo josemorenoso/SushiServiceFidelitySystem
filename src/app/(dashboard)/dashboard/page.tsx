@@ -16,6 +16,7 @@ import { AcquisitionChannelChart } from '@/components/dashboard/AcquisitionChann
 import { ReactivationRateChart } from '@/components/dashboard/ReactivationRateChart'
 import { CampaignEfficiencyChart } from '@/components/dashboard/CampaignEfficiencyChart'
 import { BlackTierSection } from '@/components/dashboard/BlackTierSection'
+import { TwilioMessagesPanel } from '@/components/dashboard/TwilioMessagesPanel'
 import { CustomerDetailDialog } from '@/components/dashboard/CustomerDetailDialog'
 import type { Customer } from '@/types/database.types'
 
@@ -91,6 +92,8 @@ export default function DashboardPage() {
       <ReactivationRateChart data={data?.reactivationRate ?? []} loading={loading} />
 
       <CampaignEfficiencyChart />
+
+      <TwilioMessagesPanel />
 
       <CustomerDetailDialog
         customer={selectedCustomer}

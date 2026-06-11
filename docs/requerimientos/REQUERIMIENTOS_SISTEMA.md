@@ -115,7 +115,7 @@
 
 ## P2.3 — Dashboard de Métricas de Twilio (SMS/WhatsApp) (Req 2)
 
-- [ ] **Desarrollado**
+- [x] **Desarrollado** — v1.5.0 (2026-06-10), reubicado en v1.5.1 como panel colapsable dentro de Métricas (`/dashboard`) tras un botón. Endpoint `/api/dashboard/twilio-metrics`. Doc: `docs/features/twilio-metrics.md`.
 
 **Problema actual:**
 - No hay visibilidad de métricas de entrega de mensajes.
@@ -169,7 +169,7 @@
 | P1 | P1.3 | Rediseño Campañas (5) | Alto | Media-Alta | ✅ v1.4.0 |
 | P2 | P2.1 | QRs Dinámicos (3) | Medio-Alto | Media | [ ] |
 | P2 | P2.2 | Health Check N8N (4) | Medio | Baja | [ ] |
-| P2 | P2.3 | Dashboard Twilio (2) | Medio | Media | [ ] |
+| P2 | P2.3 | Dashboard Twilio (2) | Medio | Media | ✅ v1.5.0 |
 | P3 | P3.1 | Reactivación Adaptativa (6B) | Alto | Alta | [ ] |
 
 ---

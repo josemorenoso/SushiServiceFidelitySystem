@@ -53,6 +53,7 @@ Webhooks validan origen por número autorizado o `x-webhook-secret`. Cron jobs v
 | GET | /api/dashboard/campaigns/estimate | Estimar audiencia con filtros | Admin Cookie |
 | POST | /api/dashboard/campaigns/manual | Crear y ejecutar campaña manual | Admin Cookie |
 | GET | /api/dashboard/twilio-balance | Saldo Twilio + costo por mensaje | Admin Cookie |
+| GET | /api/dashboard/twilio-metrics | Métricas de entrega/lectura/opt-outs WhatsApp | Admin Cookie |
 | GET | /api/dashboard/analytics | Analytics completos del dashboard | Admin Cookie |
 | GET | /api/dashboard/templates | Listar plantillas Twilio Content API | Admin Cookie |
 | POST | /api/dashboard/templates | Crear plantilla + submit aprobación WhatsApp | Admin Cookie |
@@ -391,6 +392,42 @@ Si ninguno está configurado, retorna `{ ok: false, error: "..." }` sin enviar.
   "reactivation_aggressive_days": 25
 }
 ```
+
+---
+
+### Dashboard: Twilio Metrics
+
+**`GET /api/dashboard/twilio-metrics?days={7|30|90}`** — Admin Cookie (Supabase session)
+
+Consulta la Twilio Messages API en tiempo real (hasta 5.000 mensajes) y agrega métricas de entrega. Detecta opt-outs por keyword inbound (SALIR/STOP/...) y por error 21610/63016 en outbound.
+
+**Query Params:** `days` — rango en días (1-90, default 30).
+
+**Response 200:**
+```json
+{
+  "days": 30,
+  "since": "2026-05-11",
+  "totals": {
+    "total": 240,
+    "delivered": 228,
+    "read": 150,
+    "failed": 8,
+    "undelivered": 2,
+    "pending": 2,
+    "deliveryRate": 95,
+    "readRate": 66
+  },
+  "optOuts": [
+    { "phone": "573001234567", "name": "Juan Pérez", "date": "...", "reason": "keyword", "detail": "Respondió \"SALIR\"" }
+  ],
+  "optOutCount": 1,
+  "timeline": [{ "date": "2026-05-11", "enviados": 12, "entregados": 11, "leidos": 7, "fallidos": 1 }],
+  "truncated": false
+}
+```
+
+**Errores:** `401` sin sesión, `503` Twilio no configurado, `500` error de Twilio API.
 
 ---
 

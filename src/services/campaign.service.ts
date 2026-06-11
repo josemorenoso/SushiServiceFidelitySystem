@@ -39,12 +39,13 @@ export async function findBirthdayCustomers(): Promise<Customer[]> {
 }
 
 /**
- * Finds customers inactive for more than REACTIVATION_DAYS,
+ * Finds customers inactive for more than `reactivationDays` (default REACTIVATION_DAYS),
  * respecting the global frequency cap (last_campaign_at).
+ * El valor configurable viene de admin_settings via getReactivationDaysConfig().
  */
-export async function findInactiveCustomers(): Promise<Customer[]> {
+export async function findInactiveCustomers(reactivationDays: number = REACTIVATION_DAYS): Promise<Customer[]> {
   const supabase = getServiceClient()
-  const cutoffDate = new Date(Date.now() - REACTIVATION_DAYS * 24 * 60 * 60 * 1000).toISOString()
+  const cutoffDate = new Date(Date.now() - reactivationDays * 24 * 60 * 60 * 1000).toISOString()
   const campaignCapDate = new Date(Date.now() - FREQUENCY_CAP_DAYS * 24 * 60 * 60 * 1000).toISOString()
 
   const { data, error } = await supabase

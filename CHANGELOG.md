@@ -5,6 +5,30 @@
 
 ---
 
+## [1.4.0] — 2026-06-10 — feat: requerimientos P1 (reactivación configurable, rediseño reseñas, rediseño campañas)
+
+> Request: desarrollar los 3 requerimientos P1 de `docs/requerimientos/REQUERIMIENTOS_SISTEMA.md` (P1.1 días reactivación configurables, P1.2 rediseño review UX, P1.3 rediseño módulo campañas).
+
+### Added
+- `src/components/features/check-in/GoogleReviewCard.tsx` — card inline de solicitud de reseña (reemplaza el modal `GoogleReviewPopup`): sin overlay ni X (elimina "instinct close"), CTA a Google siempre habilitado con microcopy explícito, rating interno opcional separado visualmente con disclaimer "NO es la reseña de Google", estado de confirmación post-clic.
+- `src/services/settings.service.ts` — `getReactivationDaysConfig()`: lee `reactivation_soft_days`/`reactivation_aggressive_days` de `admin_settings` con fallback a constantes y validación (agresiva > suave, si no → suave+4).
+- `docs/features/review-flow.md` — doc de la feature de reseñas.
+- `docs/requerimientos/REQUERIMIENTOS_SISTEMA.md` — reorganizado en secciones P1/P2/P3 con checks de desarrollo por requerimiento.
+
+### Changed
+- `src/services/campaign.service.ts` — `findInactiveCustomers(reactivationDays?)` ahora acepta días como parámetro (default `REACTIVATION_DAYS`).
+- `src/app/api/cron/reactivation/route.ts` — usa días configurables vía `getReactivationDaysConfig()` para cutoffs suave/agresivo; response incluye `reactivation_soft_days` y `reactivation_aggressive_days`. Removido import de `REACTIVATION_AGGRESSIVE_DAYS`.
+- `src/app/(dashboard)/dashboard/settings/page.tsx` — nueva sección "Reactivación de Clientes" con inputs de días suave/agresiva, validación en UI (agresiva > suave) y guardado en `admin_settings`.
+- `src/app/(dashboard)/dashboard/campaigns/page.tsx` — rediseño UX: fila de KPIs del mes (campañas, mensajes, última ejecución), badge de estado real por campaña automática (Activa/Sin plantilla según settings), preview real del body de la plantilla Twilio configurada (en card y en dialog de confirmación), días de reactivación dinámicos en la descripción, botón "Ejecutar Ahora" deshabilitado sin plantilla, estados del historial traducidos al español, link directo a Ajustes.
+- `src/components/features/check-in/CheckInSuccess.tsx` — usa `GoogleReviewCard` inline (entre el mensaje de WhatsApp y el botón "Nuevo check-in") en lugar del popup modal; timer de aparición 4s → 2.5s.
+
+### Notes
+- `src/components/features/check-in/GoogleReviewPopup.tsx` queda DEPRECADO sin referencias (no se eliminó — pendiente autorización).
+- Nuevas keys en `admin_settings` (sin migración — tabla key/value): `reactivation_soft_days`, `reactivation_aggressive_days`. Documentadas en `docs/DB_SCHEMA.md` y `docs/API_DOCS.md`.
+- Docs actualizados: `docs/features/campaigns.md`, `docs/features/review-flow.md` (nuevo), `docs/DB_SCHEMA.md`, `docs/API_DOCS.md`.
+
+---
+
 ## [1.3.0] — 2026-06-08 — feat: fidelización visual Fase 1 ("a prueba de imbéciles")
 
 > Request: el cliente no entiende que debe mostrar el QR al mesero (visitas fantasma), los premios se ven chiquitos, no se pueden eliminar dispositivos. Objetivo: tarjeta visual estilo wallet, premios grandes, gestión de dispositivos.

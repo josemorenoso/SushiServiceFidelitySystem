@@ -45,7 +45,7 @@ Webhooks validan origen por número autorizado o `x-webhook-secret`. Cron jobs v
 | POST | /api/webhook/delivery | Recibir datos de domicilio (n8n/Twilio) | x-webhook-secret |
 | POST | /api/webhook/twilio-incoming | Auto-responder mensajes entrantes al número | Twilio Signature |
 | GET/POST | /api/cron/birthday | Enviar felicitaciones de cumpleaños | CRON_SECRET |
-| GET/POST | /api/cron/reactivation | Enviar reactivaciones (21 días inactivos) | CRON_SECRET |
+| GET/POST | /api/cron/reactivation | Enviar reactivaciones (días configurables, default 21/25) | CRON_SECRET |
 | GET | /api/dashboard/metrics | Métricas generales | Admin Cookie |
 | GET | /api/dashboard/customers | Lista de clientes | Admin Cookie |
 | POST | /api/dashboard/campaigns | Crear campaña manual | Admin Cookie |
@@ -374,6 +374,8 @@ Recibe datos pre-parseados por n8n y registra cliente + visita en la DB.
 2. `reactivation_no_reward_template_sid` → modo "te echamos de menos" (sólo `{{1}}=nombre`)
 3. `reactivation_template_sid` (legacy) → fallback con `{{1}}, {{2}}, {{3}}=título próximo premio del cliente`
 
+**Días configurables (v1.4.0):** lee `reactivation_soft_days` (default 21) y `reactivation_aggressive_days` (default 25) de `admin_settings` vía `getReactivationDaysConfig()`. Si la agresiva ≤ suave, se fuerza a `suave + 4`.
+
 Si ninguno está configurado, retorna `{ ok: false, error: "..." }` sin enviar.
 
 **Response 200:**
@@ -383,7 +385,10 @@ Si ninguno está configurado, retorna `{ ok: false, error: "..." }` sin enviar.
   "campaign_id": "uuid",
   "sent": 12,
   "failed": 1,
-  "total_inactive_customers": 13
+  "aggressive_sent": 3,
+  "total_inactive_customers": 13,
+  "reactivation_soft_days": 21,
+  "reactivation_aggressive_days": 25
 }
 ```
 

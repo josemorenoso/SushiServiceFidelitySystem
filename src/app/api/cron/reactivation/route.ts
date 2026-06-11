@@ -9,10 +9,9 @@ import {
   updateCustomerLastCampaignAt,
 } from '@/services/campaign.service'
 import { sendTemplateMessage } from '@/services/whatsapp.service'
-import { getMultipleSettings } from '@/services/settings.service'
+import { getMultipleSettings, getReactivationDaysConfig } from '@/services/settings.service'
 import { getRewardById, getNextReward, getRewardTitle, buildRewardsRoadmap } from '@/services/reward.service'
 import { filterByMonthlyCap } from '@/services/campaign.service'
-import { REACTIVATION_AGGRESSIVE_DAYS } from '@/constants/rewards'
 import { getNextTier, buildTiersRoadmap } from '@/services/reward-tiers.service'
 
 async function handleCron() {
@@ -73,7 +72,10 @@ async function handleCron() {
       })
     }
 
-    const customers = await findInactiveCustomers()
+    // Días de reactivación configurables (Settings > Reactivación)
+    const { softDays, aggressiveDays } = await getReactivationDaysConfig()
+
+    const customers = await findInactiveCustomers(softDays)
 
     if (customers.length === 0) {
       return NextResponse.json({
@@ -86,9 +88,9 @@ async function handleCron() {
       })
     }
 
-    // Separar clientes en dos grupos: suave (21d) y agresivo (25d+)
+    // Separar clientes en dos grupos: suave (softDays) y agresivo (aggressiveDays+)
     const aggressiveCutoff = new Date(
-      Date.now() - REACTIVATION_AGGRESSIVE_DAYS * 24 * 60 * 60 * 1000
+      Date.now() - aggressiveDays * 24 * 60 * 60 * 1000
     ).toISOString()
     const softCustomers = customers.filter(
       (c) => c.last_visit_at && c.last_visit_at >= aggressiveCutoff
@@ -97,7 +99,7 @@ async function handleCron() {
       (c) => c.last_visit_at && c.last_visit_at < aggressiveCutoff
     )
 
-    // Plantilla agresiva (25d+)
+    // Plantilla agresiva (aggressiveDays+)
     const aggressiveSid = settings.reactivation_aggressive_template_sid
 
     const campaign = await getOrCreateTodayCampaign('reactivation', `template:${templateSid}|mode:${mode}`)
@@ -109,7 +111,7 @@ async function handleCron() {
     // Aplicar cap mensual a clientes suaves
     const { eligible: softEligible, excluded: softExcludedCap } = await filterByMonthlyCap(softCustomers)
 
-    // ─── PASS 1: Clientes suaves (21d) ───
+    // ─── PASS 1: Clientes suaves (softDays) ───
     for (const customer of softEligible) {
       const alreadySent = await hasRecentCampaignMessage(customer.id, 'reactivation', 30)
       if (alreadySent) continue
@@ -170,7 +172,7 @@ async function handleCron() {
     // Aplicar cap mensual a clientes agresivos
     const { eligible: aggressiveEligible, excluded: aggressiveExcludedCap } = await filterByMonthlyCap(aggressiveCustomers)
 
-    // ─── PASS 2: Clientes agresivos (25d+) ───
+    // ─── PASS 2: Clientes agresivos (aggressiveDays+) ───
     if (aggressiveSid && aggressiveEligible.length > 0) {
       for (const customer of aggressiveEligible) {
         const alreadySent = await hasRecentCampaignMessage(customer.id, 'reactivation', 30)
@@ -230,6 +232,8 @@ async function handleCron() {
       failed,
       aggressive_sent: aggressiveSent,
       total_inactive_customers: customers.length,
+      reactivation_soft_days: softDays,
+      reactivation_aggressive_days: aggressiveDays,
     })
   } catch (error) {
     console.error('[Cron Reactivation] Error:', error)

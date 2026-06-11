@@ -131,6 +131,13 @@ export default function SettingsPage() {
   const [pointsSaving, setPointsSaving] = useState(false)
   const [pointsSaved, setPointsSaved] = useState(false)
 
+  // Reactivation days config
+  const [reactivationSoftDays, setReactivationSoftDays] = useState('21')
+  const [reactivationAggressiveDays, setReactivationAggressiveDays] = useState('25')
+  const [reactivationSaving, setReactivationSaving] = useState(false)
+  const [reactivationSaved, setReactivationSaved] = useState(false)
+  const [reactivationError, setReactivationError] = useState<string | null>(null)
+
   // Location config
   const [locationLat, setLocationLat] = useState('')
   const [locationLon, setLocationLon] = useState('')
@@ -196,6 +203,8 @@ export default function SettingsPage() {
         if (settingsData.shortfall_max) setShortfallMax(settingsData.shortfall_max)
         if (settingsData.pity_timer_threshold) setPityThreshold(settingsData.pity_timer_threshold)
         if (settingsData.points_system_enabled !== undefined) setPointsEnabled(settingsData.points_system_enabled === 'true')
+        if (settingsData.reactivation_soft_days) setReactivationSoftDays(settingsData.reactivation_soft_days)
+        if (settingsData.reactivation_aggressive_days) setReactivationAggressiveDays(settingsData.reactivation_aggressive_days)
         if (settingsData.geo_strict_mode !== undefined) setGeoStrictMode(settingsData.geo_strict_mode === 'true')
 
         if (locationData) {
@@ -283,6 +292,34 @@ export default function SettingsPage() {
       setTimeout(() => setPointsSaved(false), 3000)
     } catch { /* silent */ } finally {
       setPointsSaving(false)
+    }
+  }
+
+  const handleSaveReactivation = async () => {
+    const soft = parseInt(reactivationSoftDays, 10)
+    const aggressive = parseInt(reactivationAggressiveDays, 10)
+    setReactivationError(null)
+    if (!Number.isInteger(soft) || soft < 1) {
+      setReactivationError('Los días de reactivación suave deben ser un número mayor a 0.')
+      return
+    }
+    if (!Number.isInteger(aggressive) || aggressive <= soft) {
+      setReactivationError('Los días de reactivación agresiva deben ser mayores que los de la suave.')
+      return
+    }
+    setReactivationSaving(true)
+    setReactivationSaved(false)
+    try {
+      await Promise.all([
+        saveSetting('reactivation_soft_days', String(soft)),
+        saveSetting('reactivation_aggressive_days', String(aggressive)),
+      ])
+      setReactivationSaved(true)
+      setTimeout(() => setReactivationSaved(false), 3000)
+    } catch (err) {
+      setReactivationError(err instanceof Error ? err.message : 'Error guardando')
+    } finally {
+      setReactivationSaving(false)
     }
   }
 
@@ -501,6 +538,54 @@ export default function SettingsPage() {
           </div>
 
           <SaveButton saving={pointsSaving} saved={pointsSaved} onClick={handleSavePoints} disabled={pointsSaving || loading} />
+        </div>
+      </div>
+
+      {/* ─── REACTIVACIÓN ─── */}
+      <div className="dashboard-card p-6 max-w-2xl" style={{ border: '1px solid rgba(249, 115, 22, 0.15)' }}>
+        <div className="flex items-center gap-3 mb-6">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ background: 'rgba(249, 115, 22, 0.15)' }}>
+            <RefreshCw className="h-5 w-5" strokeWidth={1.5} style={{ color: '#f97316' }} />
+          </div>
+          <div>
+            <h2 className="text-base font-bold" style={{ color: '#1a1c1d' }}>Reactivación de Clientes</h2>
+            <p className="text-xs" style={{ color: '#9ca3af' }}>Días de inactividad antes de enviar el mensaje de “te extrañamos”. Ajusta según el ciclo de visita de tu negocio.</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="text-[11px] font-semibold" style={{ color: '#6b7280' }}>Reactivación suave (días)</label>
+            <Input
+              type="number"
+              min={1}
+              value={reactivationSoftDays}
+              onChange={(e) => setReactivationSoftDays(e.target.value)}
+              disabled={loading}
+              placeholder="21"
+            />
+            <p className="text-[10px]" style={{ color: '#b0b0b0' }}>Primer toque amistoso. Default: 21 días.</p>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[11px] font-semibold" style={{ color: '#6b7280' }}>Reactivación agresiva (días)</label>
+            <Input
+              type="number"
+              min={2}
+              value={reactivationAggressiveDays}
+              onChange={(e) => setReactivationAggressiveDays(e.target.value)}
+              disabled={loading}
+              placeholder="25"
+            />
+            <p className="text-[10px]" style={{ color: '#b0b0b0' }}>Segundo toque con incentivo. Default: 25 días. Debe ser mayor que la suave.</p>
+          </div>
+        </div>
+
+        {reactivationError && (
+          <p className="text-xs mt-3 font-medium" style={{ color: '#ef4444' }}>{reactivationError}</p>
+        )}
+
+        <div className="mt-4">
+          <SaveButton saving={reactivationSaving} saved={reactivationSaved} onClick={handleSaveReactivation} disabled={reactivationSaving || loading} />
         </div>
       </div>
 

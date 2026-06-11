@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
 import { CheckCircle, Crown, Gift, PartyPopper, RotateCcw, Star } from 'lucide-react'
 import { STAFF_LABEL } from '@/lib/branding'
-import { GoogleReviewPopup } from './GoogleReviewPopup'
+import { GoogleReviewCard } from './GoogleReviewCard'
 import { PointsDisplay } from './PointsDisplay'
 import { RewardChoice } from './RewardChoice'
 import { MysteryBoxResult } from './MysteryBoxResult'
@@ -46,7 +46,8 @@ export function CheckInSuccess({
 
   useEffect(() => {
     if (type !== 'duplicate') {
-      const timer = setTimeout(() => setShowReview(true), 4000)
+      // Card inline de reseña: aparece a los 2.5s, sin modal (Req P1.2)
+      const timer = setTimeout(() => setShowReview(true), 2500)
       return () => clearTimeout(timer)
     }
   }, [type])
@@ -302,6 +303,13 @@ export function CheckInSuccess({
         Te hemos enviado un mensaje por WhatsApp con los detalles.
       </p>
 
+      {/* Solicitud de reseña — card inline, no modal (Req P1.2) */}
+      <GoogleReviewCard
+        customerName={customerName}
+        totalVisits={totalVisits}
+        visible={showReview}
+      />
+
       {/* Botón volver */}
       <button
         className="btn-secondary-premium flex h-[52px] w-full items-center justify-center gap-2 rounded-xl text-sm font-medium"
@@ -311,13 +319,6 @@ export function CheckInSuccess({
         <RotateCcw className="h-3.5 w-3.5" strokeWidth={1.5} />
         Nuevo check-in
       </button>
-
-      <GoogleReviewPopup
-        customerName={customerName}
-        totalVisits={totalVisits}
-        visible={showReview}
-        onClose={() => setShowReview(false)}
-      />
     </div>
   )
 }

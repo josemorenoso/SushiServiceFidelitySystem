@@ -311,6 +311,8 @@ CREATE POLICY "admin_update_customers" ON customers
 | `shortfall_max` | `30` | Máximo de puntos corto en 2da visita |
 | `pity_timer_threshold` | `2` | Racha de premios bajos antes de Golden Box |
 | `points_system_enabled` | `true` | Feature flag: sistema de puntos activo |
+| `reactivation_soft_days` | _(vacío inicial — fallback `21`)_ | Días de inactividad para reactivación suave (configurable v1.4.0) |
+| `reactivation_aggressive_days` | _(vacío inicial — fallback `25`)_ | Días de inactividad para reactivación agresiva (configurable v1.4.0, debe ser > suave) |
 
 **Políticas RLS:**
 

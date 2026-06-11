@@ -1,6 +1,6 @@
 # Feature: Campañas — Control de Tráfico Centralizado
 
-**Última actualización:** 2026-05-09
+**Última actualización:** 2026-06-10 (v1.4.0 — días de reactivación configurables + rediseño UI)
 
 ---
 
@@ -104,16 +104,44 @@ Response incluye:
 
 ---
 
-## Constantes
+## Constantes y Settings Configurables
 
-Definidas en `src/constants/rewards.ts`:
+Definidas en `src/constants/rewards.ts` (fallbacks):
 
 | Constante | Valor | Descripción |
 |-----------|-------|-------------|
-| `REACTIVATION_DAYS` | 21 | Días de inactividad para disparar reactivación |
+| `REACTIVATION_DAYS` | 21 | Fallback: días para reactivación suave |
+| `REACTIVATION_AGGRESSIVE_DAYS` | 25 | Fallback: días para reactivación agresiva |
 | `FREQUENCY_CAP_DAYS` | 7 | Mínimo de días entre mensajes por cliente |
 | `RECOVERY_ZONE_START_DAYS` | 18 | Inicio zona de recuperación (días sin visita) |
 | `RECOVERY_ZONE_END_DAYS` | 25 | Fin zona de recuperación (días sin visita) |
+
+### Días de Reactivación Configurables (v1.4.0 — Req 6A)
+
+Los días de reactivación ya NO están fijos: se leen de `admin_settings` vía
+`getReactivationDaysConfig()` en `src/services/settings.service.ts`:
+
+| Setting key | Default (fallback) | Editable en |
+|-------------|--------------------|-------------|
+| `reactivation_soft_days` | 21 | Dashboard > Ajustes > Reactivación de Clientes |
+| `reactivation_aggressive_days` | 25 | Dashboard > Ajustes > Reactivación de Clientes |
+
+Reglas de validación:
+- Ambos deben ser enteros positivos; si no, se usa el fallback.
+- La agresiva debe ser > suave; si no, el backend la fuerza a `suave + 4` y la UI bloquea el guardado.
+- `findInactiveCustomers(reactivationDays)` ahora acepta el valor como parámetro (default `REACTIVATION_DAYS`).
+
+### Rediseño UI del Módulo de Campañas (v1.4.0 — Req 5)
+
+`src/app/(dashboard)/dashboard/campaigns/page.tsx`:
+- **KPIs del mes**: campañas ejecutadas, mensajes enviados, última ejecución.
+- **Badge de estado real** por campaña automática: `Activa` (verde, plantilla configurada) o `Sin plantilla` (rojo) según `admin_settings`.
+- **Preview real del mensaje**: muestra el body de la plantilla Twilio configurada (fetch a `/api/dashboard/templates`), también en el dialog de confirmación antes de ejecutar.
+- **Días dinámicos**: la descripción de Reactivación muestra los días configurados (no hardcoded).
+- **Botón "Ejecutar Ahora" deshabilitado** si no hay plantilla configurada.
+- **Historial traducido**: estados en español (Finalizada/En curso/Borrador/Fallida).
+- Separación explícita Automáticas / Manuales / Historial vía tabs (ya existía, se mantiene).
+- Link directo a Ajustes para configurar plantillas y días.
 
 ---
 
@@ -123,7 +151,10 @@ Definidas en `src/constants/rewards.ts`:
 |---------|----------------|
 | `src/constants/rewards.ts` | Constantes de timing |
 | `src/services/campaign.service.ts` | `findInactiveCustomers()`, `updateCustomerLastCampaignAt()` |
-| `src/app/api/cron/reactivation/route.ts` | Cron 21 días |
+| `src/services/settings.service.ts` | `getReactivationDaysConfig()` — días configurables |
+| `src/app/api/cron/reactivation/route.ts` | Cron reactivación (días configurables) |
+| `src/app/(dashboard)/dashboard/settings/page.tsx` | UI de configuración de días |
+| `src/app/(dashboard)/dashboard/campaigns/page.tsx` | UI rediseñada del módulo |
 | `src/app/api/cron/birthday/route.ts` | Cron cumpleaños |
 | `src/app/api/dashboard/campaigns/manual/route.ts` | Campañas manuales |
 | `src/app/api/dashboard/campaigns/estimate/route.ts` | Estimado de audiencia |

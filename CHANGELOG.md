@@ -5,6 +5,16 @@
 
 ---
 
+## [1.5.2] — 2026-06-10 — feat: desglose de fallos por motivo en Mensajería
+
+> Request: entender por qué hay 59 mensajes fallidos — el panel solo contaba los fallos sin explicar la causa.
+
+### Added
+- `src/app/api/dashboard/twilio-metrics/route.ts` — agrega `failureBreakdown` al response: agrupa los outbound `failed`/`undelivered` por `error_code` con descripción legible (`describeTwilioError`: número inválido, sin WhatsApp, opt-out, plantilla rechazada, etc.).
+- `src/components/dashboard/TwilioMessagesPanel.tsx` — nueva sección "¿Por qué fallaron?" (tabla cantidad/motivo/código) visible solo cuando hay fallos.
+
+---
+
 ## [1.5.1] — 2026-06-10 — refactor: Mensajería como panel colapsable dentro de Métricas
 
 > Request: mover la sección de Mensajería al área de Métricas detrás de un botón que se deba presionar para ver (que no esté plenamente visible).

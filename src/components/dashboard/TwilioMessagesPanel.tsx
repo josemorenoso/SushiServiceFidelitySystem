@@ -53,6 +53,12 @@ interface OptOutEntry {
   detail: string
 }
 
+interface FailureReason {
+  code: number
+  count: number
+  description: string
+}
+
 interface TwilioMetrics {
   days: number
   since: string
@@ -68,6 +74,7 @@ interface TwilioMetrics {
   }
   optOuts: OptOutEntry[]
   optOutCount: number
+  failureBreakdown: FailureReason[]
   timeline: TimelinePoint[]
   truncated: boolean
 }
@@ -271,6 +278,45 @@ export function TwilioMessagesPanel() {
               )}
             </CardContent>
           </Card>
+
+          {/* ─── Motivos de fallo ─── */}
+          {!loading && metrics && metrics.failureBreakdown.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <XCircle className="h-4 w-4 text-red-600" />
+                  ¿Por qué fallaron? ({metrics.totals.failed + metrics.totals.undelivered} mensajes)
+                </CardTitle>
+                <CardDescription>
+                  Motivo que reportó Twilio para cada envío fallido o no entregado. La causa más común suele ser números sin WhatsApp o mal escritos.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-16">Cant.</TableHead>
+                      <TableHead>Motivo</TableHead>
+                      <TableHead className="w-24 text-right">Código</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {metrics.failureBreakdown.map((f) => (
+                      <TableRow key={f.code}>
+                        <TableCell>
+                          <Badge variant="destructive" className="text-xs">{f.count}</Badge>
+                        </TableCell>
+                        <TableCell className="text-sm">{f.description}</TableCell>
+                        <TableCell className="text-right text-xs text-muted-foreground">
+                          {f.code === 0 ? '—' : f.code}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
 
           {/* ─── Opt-Outs ─── */}
           <Card>

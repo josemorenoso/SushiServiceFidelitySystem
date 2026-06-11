@@ -41,6 +41,7 @@ Se deduplica por teléfono (últimos 10 dígitos) y se cruza con `customers` par
 | Leídos | status `read` (WhatsApp read receipts) |
 | Tasa de lectura | leídos / entregados |
 | Fallidos | `failed` + `undelivered` |
+| Motivos de fallo | `failureBreakdown`: agrupa fallidos por `error_code` con descripción legible (número inválido, sin WhatsApp, opt-out, plantilla rechazada...) |
 | En tránsito | `queued` + `accepted` + `sending` + `sent` |
 | Timeline | Conteo diario por estado (gráfico de área con recharts) |
 

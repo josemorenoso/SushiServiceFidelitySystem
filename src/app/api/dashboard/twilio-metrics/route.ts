@@ -48,6 +48,37 @@ interface OptOutEntry {
   detail: string
 }
 
+interface FailureReason {
+  code: number
+  count: number
+  description: string
+}
+
+/**
+ * Descripción legible de los códigos de error de Twilio más comunes en WhatsApp.
+ * Ref: https://www.twilio.com/docs/api/errors
+ */
+function describeTwilioError(code: number): string {
+  switch (code) {
+    case 0: return 'Fallo genérico sin código (rechazado por el operador o WhatsApp)'
+    case 21211: return 'Número inválido o mal formado'
+    case 21408: return 'Sin permiso para enviar a ese país/región'
+    case 21610: return 'Cliente con opt-out (respondió SALIR/STOP y quedó bloqueado)'
+    case 21612: return 'No se puede enrutar el mensaje a ese número'
+    case 21614: return 'Número no válido para mensajería'
+    case 21656: return 'Contenido de plantilla inválido (formato/saltos de línea)'
+    case 30008: return 'Error de entrega desconocido (operador/WhatsApp lo rechazó)'
+    case 63003: return 'El destinatario no tiene WhatsApp en ese número'
+    case 63005: return 'Mensaje bloqueado por políticas de Meta'
+    case 63013: return 'Bloqueado por política de WhatsApp/Meta'
+    case 63015: return 'Número no registrado en WhatsApp'
+    case 63016: return 'Plantilla no coincide con una aprobada / fuera de ventana 24h'
+    case 63018: return 'Límite de mensajes por día alcanzado'
+    case 63024: return 'Plantilla de WhatsApp inválida o no aprobada'
+    default: return `Error ${code} (ver docs de Twilio)`
+  }
+}
+
 // Keywords de opt-out configurados en el Messaging Service (docs/features/twilio-opt-out.md)
 const OPT_OUT_KEYWORDS = new Set([
   'stop', 'stopall', 'unsubscribe', 'cancel', 'end', 'quit',
@@ -131,6 +162,18 @@ export async function GET(request: NextRequest) {
     // 'read' implica entregado: la tasa de entrega incluye leídos
     const deliveredOrRead = delivered + read
 
+    // ─── Desglose de fallos por código de error ───
+    const failureCounts = new Map<number, number>()
+    for (const m of outbound) {
+      if (m.status === 'failed' || m.status === 'undelivered') {
+        const code = m.error_code ?? 0
+        failureCounts.set(code, (failureCounts.get(code) ?? 0) + 1)
+      }
+    }
+    const failureBreakdown: FailureReason[] = Array.from(failureCounts.entries())
+      .map(([code, count]) => ({ code, count, description: describeTwilioError(code) }))
+      .sort((a, b) => b.count - a.count)
+
     // ─── Opt-outs ───
     const optOutMap = new Map<string, OptOutEntry>()
     for (const m of inbound) {
@@ -213,6 +256,7 @@ export async function GET(request: NextRequest) {
       },
       optOuts,
       optOutCount: optOuts.length,
+      failureBreakdown,
       timeline: Array.from(timelineMap.values()),
       truncated: messages.length >= MAX_PAGES * PAGE_SIZE,
     })

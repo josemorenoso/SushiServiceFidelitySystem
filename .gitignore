@@ -46,3 +46,9 @@ next-env.d.ts
 
 # Carpeta local de desarrollo (archivos ya sincronizados a src/)
 restaurant-qr/
+
+# Credenciales y tooling Notion (NO commitear)
+Notion.md
+.notion_token
+.notion_lib.mjs
+.tmp_*

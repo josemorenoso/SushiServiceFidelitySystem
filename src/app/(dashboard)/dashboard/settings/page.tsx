@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { Settings, DollarSign, Save, Loader2, CheckCircle, Crown, CalendarHeart, Mail, RefreshCw, Gift, UserPlus, X, Plus, Zap, MapPin, Sparkles, Package, TrendingUp, Flame } from 'lucide-react'
+import { Settings, DollarSign, Save, Loader2, CheckCircle, Crown, CalendarHeart, Mail, RefreshCw, Gift, UserPlus, X, Plus, Zap, MapPin, Sparkles, Package, TrendingUp, Flame, ScanLine } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 
@@ -131,6 +131,12 @@ export default function SettingsPage() {
   const [pointsSaving, setPointsSaving] = useState(false)
   const [pointsSaved, setPointsSaved] = useState(false)
 
+  // Check-in verification config
+  const [checkinMode, setCheckinMode] = useState<'auto' | 'staff_verified'>('auto')
+  const [firstVisitFree, setFirstVisitFree] = useState(true)
+  const [checkinSaving, setCheckinSaving] = useState(false)
+  const [checkinSaved, setCheckinSaved] = useState(false)
+
   // Reactivation days config
   const [reactivationSoftDays, setReactivationSoftDays] = useState('21')
   const [reactivationAggressiveDays, setReactivationAggressiveDays] = useState('25')
@@ -203,6 +209,8 @@ export default function SettingsPage() {
         if (settingsData.shortfall_max) setShortfallMax(settingsData.shortfall_max)
         if (settingsData.pity_timer_threshold) setPityThreshold(settingsData.pity_timer_threshold)
         if (settingsData.points_system_enabled !== undefined) setPointsEnabled(settingsData.points_system_enabled === 'true')
+        if (settingsData.checkin_mode === 'staff_verified' || settingsData.checkin_mode === 'auto') setCheckinMode(settingsData.checkin_mode)
+        setFirstVisitFree(settingsData.checkin_first_visit_free !== 'false')
         if (settingsData.reactivation_soft_days) setReactivationSoftDays(settingsData.reactivation_soft_days)
         if (settingsData.reactivation_aggressive_days) setReactivationAggressiveDays(settingsData.reactivation_aggressive_days)
         if (settingsData.geo_strict_mode !== undefined) setGeoStrictMode(settingsData.geo_strict_mode === 'true')
@@ -292,6 +300,21 @@ export default function SettingsPage() {
       setTimeout(() => setPointsSaved(false), 3000)
     } catch { /* silent */ } finally {
       setPointsSaving(false)
+    }
+  }
+
+  const handleSaveCheckin = async () => {
+    setCheckinSaving(true)
+    setCheckinSaved(false)
+    try {
+      await Promise.all([
+        saveSetting('checkin_mode', checkinMode),
+        saveSetting('checkin_first_visit_free', String(firstVisitFree)),
+      ])
+      setCheckinSaved(true)
+      setTimeout(() => setCheckinSaved(false), 3000)
+    } catch { /* silent */ } finally {
+      setCheckinSaving(false)
     }
   }
 
@@ -538,6 +561,83 @@ export default function SettingsPage() {
           </div>
 
           <SaveButton saving={pointsSaving} saved={pointsSaved} onClick={handleSavePoints} disabled={pointsSaving || loading} />
+        </div>
+      </div>
+
+      {/* ─── CHECK-IN Y VERIFICACIÓN ─── */}
+      <div className="dashboard-card p-6 max-w-2xl" style={{ border: '1px solid rgba(14, 165, 233, 0.15)' }}>
+        <div className="flex items-center gap-3 mb-6">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ background: 'rgba(14, 165, 233, 0.15)' }}>
+            <ScanLine className="h-5 w-5" strokeWidth={1.5} style={{ color: '#0ea5e9' }} />
+          </div>
+          <div>
+            <h2 className="text-base font-bold" style={{ color: '#1a1c1d' }}>Check-in y Verificación</h2>
+            <p className="text-xs" style={{ color: '#9ca3af' }}>Controla cómo se validan las visitas de los clientes.</p>
+          </div>
+        </div>
+
+        <div className="space-y-5">
+          {/* Modo de check-in */}
+          <div>
+            <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: '#6b7280' }}>
+              Modo de check-in
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setCheckinMode('auto')}
+                className={`rounded-xl border p-3 text-left transition-all ${
+                  checkinMode === 'auto' ? 'border-sky-500 ring-2 ring-sky-500/20' : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <p className="text-sm font-semibold" style={{ color: '#1a1c1d' }}>Automático</p>
+                <p className="text-[11px] mt-0.5" style={{ color: '#9ca3af' }}>El cliente registra su visita solo al escanear el QR de la mesa. Sin fricción, menos seguro.</p>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCheckinMode('staff_verified')}
+                className={`rounded-xl border p-3 text-left transition-all ${
+                  checkinMode === 'staff_verified' ? 'border-sky-500 ring-2 ring-sky-500/20' : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <p className="text-sm font-semibold" style={{ color: '#1a1c1d' }}>Verificado por mesero</p>
+                <p className="text-[11px] mt-0.5" style={{ color: '#9ca3af' }}>El cliente muestra su QR personal y el mesero lo escanea para sumar la visita. Anti-fraude.</p>
+              </button>
+            </div>
+          </div>
+
+          {/* Primera visita libre */}
+          <div className="flex items-center justify-between gap-4 rounded-xl border border-gray-200 p-3">
+            <div>
+              <p className="text-sm font-semibold" style={{ color: '#1a1c1d' }}>Primera visita automática</p>
+              <p className="text-[11px] mt-0.5" style={{ color: '#9ca3af' }}>
+                <strong>Activado:</strong> el cliente nuevo recibe su primera visita al registrarse.{' '}
+                <strong>Desactivado:</strong> tras registrarse se le muestra su QR y el mesero debe escanearlo para validar la primera visita (recomendado para promos, influencers y QR dinámicos).
+              </p>
+              {checkinMode === 'auto' && !firstVisitFree && (
+                <p className="text-[11px] mt-1 font-medium" style={{ color: '#d97706' }}>
+                  ⚠️ Esta opción solo aplica en modo “Verificado por mesero”.
+                </p>
+              )}
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={firstVisitFree}
+              onClick={() => setFirstVisitFree(!firstVisitFree)}
+              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none ${
+                firstVisitFree ? 'bg-sky-500' : 'bg-gray-200'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  firstVisitFree ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+
+          <SaveButton saving={checkinSaving} saved={checkinSaved} onClick={handleSaveCheckin} disabled={checkinSaving || loading} />
         </div>
       </div>
 

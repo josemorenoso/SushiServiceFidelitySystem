@@ -298,9 +298,12 @@ export async function POST(request: NextRequest) {
       const checkinMode = regSettings.checkin_mode ?? 'auto'
       const firstVisitFree = regSettings.checkin_first_visit_free !== 'false'
 
-      // Si modo staff_verified y primera visita NO es libre, requiere auth de mesero
+      // Si modo staff_verified y primera visita NO es libre, valida si hay auth de mesero.
+      // Con auth válida (mesero registrando en el local) la visita se cuenta de una.
+      // Sin auth, el registro continúa pero la visita queda PENDIENTE del escaneo del mesero.
       let regStaffAuthValid = false
       let regResolvedStaffId: string | null = null
+      let pendingStaffScan = false
       if (checkinMode === 'staff_verified' && !firstVisitFree) {
         const supabase = getServiceClient()
         if (registered_by_staff_id) {
@@ -328,13 +331,7 @@ export async function POST(request: NextRequest) {
         }
 
         if (!regStaffAuthValid) {
-          return NextResponse.json(
-            {
-              error: 'Validación requerida',
-              message: 'Este restaurante requiere que un mesero valide la primera visita.',
-            },
-            { status: 403 }
-          )
+          pendingStaffScan = true
         }
       }
 
@@ -344,21 +341,25 @@ export async function POST(request: NextRequest) {
         birthday: birthday ?? null,
         city: city?.trim() || null,
         accepts_marketing: body.accepts_marketing ?? true,
+        countFirstVisit: !pendingStaffScan,
       })
 
       // Visita (best-effort — no debe bloquear el registro)
-      // Usa source staff_scan si fue validado por mesero, sino qr
+      // Usa source staff_scan si fue validado por mesero, sino qr.
+      // Si está pendiente del escaneo del mesero, NO se crea visita todavía.
       const regSource: 'qr' | 'staff_scan' = regResolvedStaffId ? 'staff_scan' : 'qr'
       let visitRecord
-      try {
-        visitRecord = await createVisit({
-          customerId: customer.id,
-          source: regSource,
-          tableNumber: body.table_number ?? null,
-          registeredByStaffId: regResolvedStaffId,
-        })
-      } catch (visitErr) {
-        console.error('[CheckIn] Error creando visita (registro continuará):', visitErr)
+      if (!pendingStaffScan) {
+        try {
+          visitRecord = await createVisit({
+            customerId: customer.id,
+            source: regSource,
+            tableNumber: body.table_number ?? null,
+            registeredByStaffId: regResolvedStaffId,
+          })
+        } catch (visitErr) {
+          console.error('[CheckIn] Error creando visita (registro continuará):', visitErr)
+        }
       }
 
       // Puntos de bienvenida (Endowed Progress Effect)
@@ -404,6 +405,36 @@ export async function POST(request: NextRequest) {
         allTiers = await getAllTiers()
       } catch (err) {
         console.error('[CheckIn] Error obteniendo tiers:', err)
+      }
+
+      // Primera visita pendiente del mesero: devolver QR dinámico para que lo escanee
+      if (pendingStaffScan) {
+        let regQrToken: string | null = null
+        try {
+          regQrToken = await generateCustomerQRToken({
+            sub: customer.id,
+            phone: cleaned,
+            name: customer.name || 'Cliente',
+          })
+        } catch (qrErr) {
+          console.error('[CheckIn] Error generando QR token post-registro:', qrErr)
+        }
+
+        return NextResponse.json(
+          {
+            message: 'registered_pending_scan',
+            qr_token: regQrToken,
+            customer: {
+              id: customer.id,
+              name: customer.name,
+              total_visits: customer.total_visits,
+              total_points: welcomePoints.newBalance,
+            },
+            points_awarded: welcomePoints.pointsAwarded,
+            tiers: allTiers,
+          },
+          { status: 201 }
+        )
       }
 
       return NextResponse.json(

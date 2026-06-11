@@ -47,6 +47,7 @@ import type {
   CheckInStep,
   LookupResult,
   CheckInResult,
+  RegisterResult,
 } from './CheckInForm.types'
 
 export function CheckInForm({
@@ -268,10 +269,29 @@ export function CheckInForm({
         }),
       })
 
-      const data = await res.json()
+      const data = (await res.json()) as RegisterResult & { message?: string }
 
       if (!res.ok) {
         onError(data.message ?? 'Error registrando')
+        return
+      }
+
+      // Primera visita requiere validación del mesero: mostrar QR dinámico y dejar
+      // que el polling detecte el escaneo (mismo flujo que cliente frecuente).
+      if (data.message === 'registered_pending_scan') {
+        if (data.qr_token) {
+          const qrUrl = `${window.location.origin}/mesero/scan?token=${encodeURIComponent(data.qr_token)}`
+          setCustomerQR(qrUrl)
+          setLookupCustomer({
+            id: data.customer.id,
+            name: data.customer.name,
+            total_visits: data.customer.total_visits,
+            total_points: data.customer.total_points ?? 0,
+          })
+          setStep('customer_qr')
+        } else {
+          onError('Configura STAFF_QR_JWT_SECRET para habilitar el QR de mesero.')
+        }
         return
       }
 

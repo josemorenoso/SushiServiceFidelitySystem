@@ -6,85 +6,21 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { QrCode, Download, Copy, Check, ExternalLink, UtensilsCrossed, Plus, Minus, Upload, Trash2 } from 'lucide-react'
-import QRCode from 'qrcode'
+import { QrCode, Download, Copy, Check, ExternalLink, Plus, Minus, Upload, Trash2, Palette, Ruler } from 'lucide-react'
 import { BRAND_NAME, BRAND_SHORT } from '@/lib/branding'
+import { QR_THEMES, QR_SIZES, composeQrPoster } from '@/lib/utils/qr-poster'
 
 const STORAGE_KEYS = {
   color: 'qr_color',
   logo: 'qr_logo_dataurl',
+  theme: 'qr_theme',
+  size: 'qr_size',
+  headline: 'qr_headline',
+  subline: 'qr_subline',
 }
 
-async function composeQrWithLogoAndLabel(
-  url: string,
-  opts: { color: string; logoDataUrl: string | null; label: string; brandName: string }
-): Promise<string> {
-  const QR_SIZE = 600
-  const PADDING = 40
-  const HEADER_H = 80
-  const FOOTER_H = 80
-  const canvas = document.createElement('canvas')
-  canvas.width = QR_SIZE + PADDING * 2
-  canvas.height = QR_SIZE + PADDING * 2 + HEADER_H + FOOTER_H
-  const ctx = canvas.getContext('2d')
-  if (!ctx) throw new Error('Canvas no disponible')
-
-  // Fondo blanco
-  ctx.fillStyle = '#FFFFFF'
-  ctx.fillRect(0, 0, canvas.width, canvas.height)
-
-  // Header: nombre del negocio
-  ctx.fillStyle = opts.color
-  ctx.font = 'bold 32px system-ui, -apple-system, sans-serif'
-  ctx.textAlign = 'center'
-  ctx.fillText(opts.brandName, canvas.width / 2, 45)
-
-  ctx.fillStyle = '#6b7280'
-  ctx.font = '14px system-ui, -apple-system, sans-serif'
-  ctx.fillText('Escanea y registra tu visita', canvas.width / 2, 68)
-
-  // QR en el centro
-  const qrDataUrl = await QRCode.toDataURL(url, {
-    width: QR_SIZE,
-    margin: 2,
-    color: { dark: opts.color, light: '#FFFFFF' },
-    errorCorrectionLevel: 'H',
-  })
-
-  const qrImg = new Image()
-  await new Promise<void>((resolve, reject) => {
-    qrImg.onload = () => resolve()
-    qrImg.onerror = () => reject(new Error('No se pudo cargar el QR'))
-    qrImg.src = qrDataUrl
-  })
-  ctx.drawImage(qrImg, PADDING, HEADER_H + PADDING / 2, QR_SIZE, QR_SIZE)
-
-  // Logo overlay (transparente, centro del QR)
-  if (opts.logoDataUrl) {
-    const logoImg = new Image()
-    await new Promise<void>((resolve, reject) => {
-      logoImg.onload = () => resolve()
-      logoImg.onerror = () => reject(new Error('No se pudo cargar el logo'))
-      logoImg.src = opts.logoDataUrl!
-    })
-    const logoSize = QR_SIZE * 0.22 // 22% del QR (seguro con ecc H)
-    const logoX = PADDING + (QR_SIZE - logoSize) / 2
-    const logoY = HEADER_H + PADDING / 2 + (QR_SIZE - logoSize) / 2
-    // Fondo blanco redondeado detrás del logo para legibilidad
-    ctx.fillStyle = '#FFFFFF'
-    const bgPad = 8
-    ctx.fillRect(logoX - bgPad, logoY - bgPad, logoSize + bgPad * 2, logoSize + bgPad * 2)
-    ctx.drawImage(logoImg, logoX, logoY, logoSize, logoSize)
-  }
-
-  // Footer: número de mesa (prominente)
-  ctx.fillStyle = opts.color
-  ctx.font = 'bold 40px system-ui, -apple-system, sans-serif'
-  ctx.textAlign = 'center'
-  ctx.fillText(opts.label, canvas.width / 2, HEADER_H + QR_SIZE + PADDING + 50)
-
-  return canvas.toDataURL('image/png')
-}
+const DEFAULT_HEADLINE = '¡GANA PREMIOS GRATIS!'
+const DEFAULT_SUBLINE = 'Escanea, regístrate y suma puntos en cada visita'
 
 export default function QrPage() {
   const [baseUrl, setBaseUrl] = useState('')
@@ -93,8 +29,15 @@ export default function QrPage() {
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [generating, setGenerating] = useState(false)
-  const [color, setColor] = useState('#991B1B')
+  const [color, setColor] = useState('')
   const [logoDataUrl, setLogoDataUrl] = useState<string | null>(null)
+  const [themeId, setThemeId] = useState('restaurante')
+  const [sizeId, setSizeId] = useState('mesa')
+  const [headline, setHeadline] = useState(DEFAULT_HEADLINE)
+  const [subline, setSubline] = useState(DEFAULT_SUBLINE)
+
+  const theme = QR_THEMES.find((t) => t.id === themeId) ?? QR_THEMES[0]
+  const size = QR_SIZES.find((s) => s.id === sizeId) ?? QR_SIZES[0]
 
   // Cargar preferencias de localStorage
   useEffect(() => {
@@ -103,12 +46,26 @@ export default function QrPage() {
     if (savedColor) setColor(savedColor)
     const savedLogo = localStorage.getItem(STORAGE_KEYS.logo)
     if (savedLogo) setLogoDataUrl(savedLogo)
+    const savedTheme = localStorage.getItem(STORAGE_KEYS.theme)
+    if (savedTheme && QR_THEMES.some((t) => t.id === savedTheme)) setThemeId(savedTheme)
+    const savedSize = localStorage.getItem(STORAGE_KEYS.size)
+    if (savedSize && QR_SIZES.some((s) => s.id === savedSize)) setSizeId(savedSize)
+    const savedHeadline = localStorage.getItem(STORAGE_KEYS.headline)
+    if (savedHeadline !== null) setHeadline(savedHeadline)
+    const savedSubline = localStorage.getItem(STORAGE_KEYS.subline)
+    if (savedSubline !== null) setSubline(savedSubline)
   }, [])
 
-  // Persistir color
+  // Persistir preferencias
   useEffect(() => {
-    if (typeof window !== 'undefined') localStorage.setItem(STORAGE_KEYS.color, color)
-  }, [color])
+    if (typeof window === 'undefined') return
+    if (color) localStorage.setItem(STORAGE_KEYS.color, color)
+    else localStorage.removeItem(STORAGE_KEYS.color)
+    localStorage.setItem(STORAGE_KEYS.theme, themeId)
+    localStorage.setItem(STORAGE_KEYS.size, sizeId)
+    localStorage.setItem(STORAGE_KEYS.headline, headline)
+    localStorage.setItem(STORAGE_KEYS.subline, subline)
+  }, [color, themeId, sizeId, headline, subline])
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -152,18 +109,23 @@ export default function QrPage() {
     async (url: string, mesaLabel: string) => {
       if (!url) return null
       try {
-        return await composeQrWithLogoAndLabel(url, {
-          color,
-          logoDataUrl,
-          label: mesaLabel,
+        return await composeQrPoster({
+          url,
+          theme,
+          size,
           brandName: BRAND_NAME,
+          headline,
+          subline,
+          label: mesaLabel,
+          logoDataUrl,
+          accentOverride: color || null,
         })
       } catch (err) {
         console.error('Error generando QR:', err)
         return null
       }
     },
-    [color, logoDataUrl]
+    [theme, size, headline, subline, color, logoDataUrl]
   )
 
   useEffect(() => {
@@ -178,7 +140,7 @@ export default function QrPage() {
     if (!qrDataUrl) return
     const label = selectedTable ? `mesa-${selectedTable}` : 'general'
     const link = document.createElement('a')
-    link.download = `${slug}-qr-${label}.png`
+    link.download = `${slug}-qr-${label}-${sizeId}.png`
     link.href = qrDataUrl
     link.click()
   }
@@ -213,7 +175,7 @@ export default function QrPage() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold flex items-center gap-2">
         <QrCode className="h-6 w-6" />
-        Código QR por Mesa
+        QR Studio
       </h1>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -221,7 +183,7 @@ export default function QrPage() {
           <CardHeader>
             <CardTitle className="text-base">Configuración</CardTitle>
             <CardDescription>
-              Cada mesa tiene su propio QR. Esto permite rastrear qué mesas generan más visitas y detectar registros sospechosos.
+              Diseña tu material imprimible: elige tema, tamaño y textos. Cada mesa tiene su propio QR para rastrear rendimiento.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -262,23 +224,96 @@ export default function QrPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Color del QR</Label>
+              <Label className="flex items-center gap-1.5"><Palette className="h-3.5 w-3.5" /> Tema del negocio</Label>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {QR_THEMES.map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => setThemeId(t.id)}
+                    className={`flex flex-col items-center gap-1 rounded-lg border p-2 text-xs font-medium transition-all ${
+                      themeId === t.id
+                        ? 'border-primary ring-2 ring-primary/30'
+                        : 'border-input hover:bg-accent'
+                    }`}
+                  >
+                    <span
+                      className="flex h-9 w-9 items-center justify-center rounded-full text-lg"
+                      style={{ background: t.bg, border: `2px solid ${t.accent}` }}
+                    >
+                      {t.icon}
+                    </span>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                El tema define el patrón de fondo, los colores y el estilo del póster.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1.5"><Ruler className="h-3.5 w-3.5" /> Tamaño de impresión (300 DPI)</Label>
+              <div className="flex flex-wrap gap-2">
+                {QR_SIZES.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => setSizeId(s.id)}
+                    className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-all ${
+                      sizeId === s.id
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-background border-input hover:bg-accent'
+                    }`}
+                  >
+                    {s.label}
+                    <span className="ml-1 opacity-70">({s.physical})</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Titular gancho</Label>
+              <Input
+                value={headline}
+                onChange={(e) => setHeadline(e.target.value)}
+                placeholder={DEFAULT_HEADLINE}
+                maxLength={40}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Subtítulo</Label>
+              <Input
+                value={subline}
+                onChange={(e) => setSubline(e.target.value)}
+                placeholder={DEFAULT_SUBLINE}
+                maxLength={70}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Color de acento (opcional — sobreescribe el del tema)</Label>
               <div className="flex items-center gap-2">
                 <input
                   type="color"
-                  value={color}
+                  value={color || theme.accent}
                   onChange={(e) => setColor(e.target.value)}
                   className="h-10 w-16 cursor-pointer rounded border border-input bg-background"
                 />
                 <Input
                   value={color}
                   onChange={(e) => setColor(e.target.value)}
-                  placeholder="#991B1B"
+                  placeholder={theme.accent}
                   className="font-mono text-sm flex-1"
                 />
+                {color && (
+                  <Button variant="outline" size="sm" onClick={() => setColor('')}>
+                    Usar tema
+                  </Button>
+                )}
               </div>
               <p className="text-xs text-muted-foreground">
-                El color aplica al QR, al nombre del negocio y al número de mesa.
+                Aplica al QR, titular y número de mesa. Déjalo vacío para usar el color del tema.
               </p>
             </div>
 
@@ -388,8 +423,8 @@ export default function QrPage() {
             <div className="flex items-center justify-between">
               <CardTitle className="text-base">Vista Previa</CardTitle>
               <Badge variant="outline" className="gap-1">
-                <UtensilsCrossed className="h-3 w-3" />
-                {selectedTable ? `Mesa ${selectedTable}` : 'General'}
+                <span>{theme.icon}</span>
+                {selectedTable ? `Mesa ${selectedTable}` : 'General'} · {size.physical}
               </Badge>
             </div>
           </CardHeader>
@@ -412,7 +447,7 @@ export default function QrPage() {
               )}
 
               <p className="text-xs text-muted-foreground text-center">
-                Este PNG incluye el nombre del negocio, logo (si cargaste), y el número de mesa — listo para imprimir.
+                PNG a 300 DPI ({size.width}×{size.height}px · {size.physical}) con tema, textos, logo y mesa — listo para imprenta.
               </p>
             </div>
           </CardContent>

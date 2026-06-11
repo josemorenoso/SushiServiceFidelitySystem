@@ -32,8 +32,11 @@ export async function createCustomer(params: {
   city: string | null
   source?: 'qr' | 'delivery'
   accepts_marketing?: boolean
+  /** false cuando la primera visita debe validarla un mesero (checkin_first_visit_free='false') */
+  countFirstVisit?: boolean
 }): Promise<Customer> {
   const supabase = getServiceClient()
+  const countFirst = params.countFirstVisit ?? true
   const { data, error } = await supabase
     .from('customers')
     .insert({
@@ -41,8 +44,8 @@ export async function createCustomer(params: {
       name: params.name,
       birthday: params.birthday,
       city: params.city,
-      total_visits: 1,
-      last_visit_at: new Date().toISOString(),
+      total_visits: countFirst ? 1 : 0,
+      last_visit_at: countFirst ? new Date().toISOString() : null,
       source_channels: params.source ?? 'qr',
       accepts_marketing: params.accepts_marketing ?? true,
     })

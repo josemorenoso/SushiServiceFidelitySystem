@@ -173,8 +173,13 @@ Endpoint unificado con 3 acciones: `lookup`, `register`, `checkin`.
 { "message": "welcome", "customer": { "name": "Juan Pérez", "total_visits": 1, "total_points": 75 }, "points_awarded": 75, "tiers": [...] }
 ```
 
-**Response 403 (modo staff_verified + first_visit_free=false):**
-> Ocurre cuando `checkin_mode = 'staff_verified'` y `checkin_first_visit_free = false`. Requiere mesero.
+**Response 201 (modo staff_verified + first_visit_free=false, sin auth de mesero) — v1.6.0:**
+> El cliente queda registrado con `total_visits = 0` (sin visita), recibe su welcome bonus y debe mostrar el QR dinámico para que el mesero valide su primera visita.
+```json
+{ "message": "registered_pending_scan", "qr_token": "eyJhbG...", "customer": { "id": "uuid", "name": "Juan Pérez", "total_visits": 0, "total_points": 75 }, "points_awarded": 75, "tiers": [...] }
+```
+> Si el registro lo hace un mesero autenticado (`registered_by_staff_id` o `device_token` válidos), la visita se cuenta de inmediato y responde `message: "welcome"` con `source='staff_scan'`.
+> ⚠️ El response 403 "Validación requerida" en register fue **eliminado en v1.6.0** — reemplazado por el flujo `registered_pending_scan`.
 
 #### Check-in (cliente existente)
 **Request (auto QR):**

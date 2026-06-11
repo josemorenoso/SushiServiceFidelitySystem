@@ -47,8 +47,10 @@ export interface NextTierInfo {
 }
 
 export interface RegisterResult {
-  message: 'welcome'
+  message: 'welcome' | 'registered_pending_scan'
+  qr_token?: string | null
   customer: {
+    id?: string
     name: string
     total_visits: number
     total_points?: number

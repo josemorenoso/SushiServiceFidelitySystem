@@ -1,215 +1,164 @@
-# Estructura de Notion para RestaurantQR — CRM + Operaciones
+# 🧡 Cada1 — Centro de Mando (Notion) · Plano espejo
 
-> Copia exacta de bases de datos, propiedades y vistas. Puedes crear esto en Notion gratis en 30 minutos.
+> Este documento es el **plano** del workspace de Notion **Cada1 | Software de Fidelización**.
+> Todo lo que está aquí ya está **construido en Notion** (ver enlaces). Si cambias el sistema, actualiza este archivo.
+>
+> **Workspace:** Cada1 | Software de Fidelización
+> **Página raíz:** [🧡 Cada1 · Centro de Mando](https://app.notion.com/p/Cada1-Sistema-de-fidelizaci-n-36aaf9ebce0780818b17ff4a5609c0dd) · `36aaf9eb-ce07-8081-8b17-ff4a5609c0dd`
+> **Para quién:** Luis (dueño) + vendedores. Diseñado para **cero fricción mental**: abrir, ver qué toca, hacerlo.
 
 ---
 
-## Workspace: RestaurantQR Operaciones
+## 🗺️ Mapa del centro de mando
 
-Crear un workspace nuevo o usar tu workspace personal. Crear estas 4 bases de datos:
+```
+🧡 CADA1 · Centro de Mando   (página raíz = dashboard)
+│  ▸ Misión en 1 línea  +  🧭 "Empieza aquí"  +  🗂️ Secciones (navegación)
+│
+├── 🏛️ NEGOCIO
+│     ├─ 🧡 Identidad de marca   → Qué somos · Qué hacemos · Filosofía · Misión/Visión/Valores · Historia
+│     ├─ 💵 Precios y Paquetes
+│     └─ ⚙️ Funcionamiento del Sistema
+│
+├── ⚙️ OPERACIÓN
+│     ├─ 📋 Onboarding de Clientes  → Fases · Personalización (plantillas) · Manuales de uso · Capacitación del personal
+│     ├─ 🔧 Implementación          → QRs físicos · Estrategias de activación (presencial + redes) · Medición
+│     └─ 📝 Scripts y Templates     → Mensajes de venta, setup y reporte mensual
+│
+├── 📈 CRECIMIENTO E INFRA
+│     ├─ 🎬 Contenido               → Flujo · Ideas · Guiones · Tipos · Medición (orgánico + pautas)
+│     ├─ 🛠️ Plataformas y Herramientas
+│     └─ 📊 Costos del Negocio
+│
+├── 🏆 GESTIÓN DE CLIENTES (bases de datos vivas)
+│     ├─ 📞 Pipeline de Ventas      (Lead → Ganado/Perdido · Vendedor encargado)
+│     ├─ 🏆 Clientes Activos        (1 fila por restaurante · Plan · Estado · Vendedor)
+│     ├─ 🚀 Proyectos               (1 por cliente · % de avance)
+│     ├─ ✅ Tareas                  (pendientes / completadas · ligadas a cliente)
+│     └─ 💰 Seguimiento Mensual     (cobros y reportes)
+│
+├── 🎬 CONTENIDO (bases de datos vivas)
+│     ├─ 📅 Calendario Editorial
+│     └─ 🔗 Referencias de Contenido
+│
+└── ⏱️ Rutina de trabajo (diaria · semanal · mensual)  — al pie de la raíz
+```
 
 ---
 
-## Base de datos 1: "Leads y Clientes"
+## 📇 Bases de datos (esquemas reales)
 
-**Tipo:** Base de datos (tabla)
-**Ubicación:** Página principal del workspace
-
-### Propiedades:
+### 📞 Pipeline de Ventas · `36caf9eb-ce07-800e-8360-fa6107f7dedb`
+Embudo para **vender el QR a restaurantes**. Vista recomendada: **Kanban por Estado**.
 
 | Propiedad | Tipo | Opciones / Notas |
-|-----------|------|----------------|
-| **Nombre** | Título | Nombre del restaurante |
-| **Estado** | Select | `Lead nuevo`, `Reunión agendada`, `Cierre pendiente`, `Venta cerrada`, `En setup`, `Cliente activo`, `Atrasado`, `Cancelado` |
-| **Prioridad** | Select | `Alta`, `Media`, `Baja` |
-| **Nombre del dueño** | Texto | |
-| **Celular dueño** | Teléfono | |
+|-----------|------|------------------|
+| **Restaurante** | Título | Nombre del restaurante |
+| **Estado** | Select | `🆕 Lead nuevo`, `📞 Contactado`, `📅 Reunión agendada`, `💰 Propuesta enviada`, `✅ Ganado`, `❌ Perdido` |
+| **Vendedor** | Persona | Quién lo gestiona |
+| **Fuente** | Select | `Instagram`, `Referido`, `Frío`, `Presencial`, `Otro` |
+| **Plan tentativo** | Select | `Básico $89K`, `Pro $149K`, `Enterprise $249K` |
+| **Celular** | Teléfono | |
 | **Ciudad** | Texto | |
-| **Fuente** | Select | `Instagram`, `Referido`, `Frío`, `Evento`, `Otro` |
-| **Plan contratado** | Select | `250k` |
-| **Setup pagado** | Checkbox | |
-| **Mensualidad activa** | Checkbox | |
 | **Fecha de contacto** | Fecha | |
 | **Fecha de reunión** | Fecha | |
-| **Fecha de activación** | Fecha | Cuando quedó operativo |
-| **URL del proyecto** | URL | ej: `https://sushi-fidelity.vercel.app` |
-| **Notas** | Texto largo | |
-| **Asignado a** | Persona | Quien lo está gestionando (tú o asistente) |
+| **Próxima acción** | Texto | ⚠️ Mantener SIEMPRE llena |
+| **Notas** | Texto | |
 
-### Vistas recomendadas:
+### 🏆 Clientes Activos · `36caf9eb-ce07-8073-8cb9-d2e3c06c98a5`
+Un restaurante por fila. Entra aquí cuando paga. Vista recomendada: **Kanban por Estado**.
 
-1. **Vista "Pipeline"** (Tabla): Todas las entradas, ordenadas por Estado
-2. **Vista "Ventas"** (Kanban): Agrupado por Estado (Lead nuevo → Cliente activo)
-3. **Vista "Clientes Activos"** (Tabla): Filtro `Estado = Cliente activo`
-4. **Vista "Setup Pendiente"** (Tabla): Filtro `Estado = En setup`
-5. **Vista "Cobros"** (Tabla): Mostrar `Plan`, `Setup pagado`, `Mensualidad activa`
+| Propiedad | Tipo | Opciones / Notas |
+|-----------|------|------------------|
+| **Restaurante** | Título | |
+| **Estado** | Select | `🛠️ En setup`, `✅ Activo`, `⚠️ En riesgo`, `⏸️ Pausado`, `❌ Cancelado` |
+| **Plan** | Select | `Básico $89K`, `Pro $149K`, `Enterprise $249K` |
+| **Estado de pago** | Select | `Setup pagado`, `Mensualidad al día`, `Atrasado` |
+| **Vendedor encargado** | Persona | |
+| **Celular** | Teléfono | |
+| **Ciudad** | Texto | |
+| **Fecha de activación** | Fecha | |
+| **URL del sistema** | URL | Dashboard del cliente |
+| **Próxima acción** | Texto | |
+| **Notas** | Texto | |
 
----
+### 🚀 Proyectos · `36caf9eb-ce07-8080-b307-e8c539bb0cf4`
+Un proyecto de implementación por cliente, con **barra de progreso**. (Conserva datos previos.)
+Campos clave: `Nombre del Proyecto`, `Estado`, `Fase`, `Progreso %`, `Barra de progreso` (fórmula), `Responsable`, `Fecha de inicio`, `Fecha de entrega`, `Próxima acción`, `Notas`.
 
-## Base de datos 2: "Tareas de Implementación"
-
-**Tipo:** Base de datos
-**Ubicación:** Dentro de cada entrada de "Leads y Clientes" (como base enlazada) o página separada
-
-### Propiedades:
+### ✅ Tareas · `374af9eb-ce07-8130-b7fc-ebc15a81bc4b`
+Tareas sueltas del equipo (pendientes / completadas).
 
 | Propiedad | Tipo | Opciones |
 |-----------|------|----------|
-| **Tarea** | Título | ej: "Crear proyecto Supabase" |
-| **Cliente** | Relación → "Leads y Clientes" | |
-| **Fase** | Select | `Fase 1: Lead`, `Fase 2: Venta`, `Fase 3: Setup`, `Fase 4: Activo`, `Fase 5: Offboarding` |
+| **Tarea** | Título | |
 | **Estado** | Select | `Pendiente`, `En progreso`, `Bloqueado`, `Hecho` |
+| **Prioridad** | Select | `Alta`, `Media`, `Baja` |
+| **Cliente** | Texto | A qué restaurante pertenece |
 | **Responsable** | Persona | |
 | **Fecha límite** | Fecha | |
-| **Fecha de completado** | Fecha | |
-| **Notas / Bloqueo** | Texto largo | Si está bloqueado, explicar por qué |
-| **Checklist** | Checkbox | (opcional, para subtareas) |
+| **Notas** | Texto | |
 
-### Vistas recomendadas:
+### 💰 Seguimiento Mensual · `374af9eb-ce07-8115-9587-f6a570995f3f`
+Una fila por mes y cliente. Para cobros y reportes.
 
-1. **Vista "Hoy"** (Tabla): Filtro `Fecha límite = hoy`
-2. **Vista "Mi semana"** (Tabla): Filtro `Fecha límite = esta semana`
-3. **Vista "Bloqueados"** (Tabla): Filtro `Estado = Bloqueado` — REVISAR TODOS LOS DÍAS
-4. **Vista "Setup por cliente"** (Tabla): Agrupado por Cliente
-
-### Plantillas de tareas pre-creadas (para cada nuevo cliente):
-
-Al crear un nuevo cliente, duplicar este grupo de tareas:
-
-**Fase 2 — Venta:**
-- [ ] Primera llamada o mensaje al lead
-- [ ] Reunión de cierre agendada
-- [ ] Enviar propuesta / contrato
-- [ ] Recibir pago del setup
-
-**Fase 3 — Setup:**
-- [ ] Recolectar datos del cliente (logo, colores, mesas, WhatsApp)
-- [ ] Crear proyecto en Supabase
-- [ ] Ejecutar migraciones SQL
-- [ ] Crear usuario admin en Supabase Auth
-- [ ] Configurar Twilio (número + plantillas)
-- [ ] Fork del repo y personalizar branding
-- [ ] Deploy en Vercel
-- [ ] Configurar variables de entorno
-- [ ] Configurar recompensas en dashboard
-- [ ] Generar QRs (1 por mesa)
-- [ ] Imprimir QRs
-- [ ] Prueba end-to-end (registro + WhatsApp + visita)
-- [ ] Capacitación al admin del restaurante
-
-**Fase 4 — Activo:**
-- [ ] Enviar reporte de activación
-- [ ] Cobrar primera mensualidad
-
----
-
-## Base de datos 3: "Inventario de Clientes Activos" (Repositorio técnico)
-
-**Tipo:** Base de datos
-**Ubicación:** Página separada, acceso restringido (contiene datos sensibles)
-
-### Propiedades:
-
-| Propiedad | Tipo | Notas |
-|-----------|------|-------|
-| **Restaurante** | Título | Nombre |
-| **Relación** | Relación → "Leads y Clientes" | |
-| **Supabase URL** | URL | |
-| **Supabase Anon Key** | Texto | (sensible) |
-| **Supabase Service Key** | Texto | (sensible) |
-| **Twilio Account SID** | Texto | (sensible) |
-| **Twilio Auth Token** | Texto | (sensible) |
-| **Twilio WhatsApp From** | Teléfono | |
-| **Vercel URL** | URL | |
-| **Repo GitHub** | URL | |
-| **Estado Twilio** | Select | `Sandbox`, `Número aprobado`, `En revisión` |
-| **Plantillas aprobadas** | Checkbox | |
-| **Último deploy** | Fecha | |
-| **Notas técnicas** | Texto largo | Errores, workarounds, etc. |
-
-> ⚠️ Esta base debe estar en una página privada. NO compartir con asistentes que no necesiten acceso a credenciales.
-
----
-
-## Base de datos 4: "Seguimiento Mensual"
-
-**Tipo:** Base de datos
-**Ubicación:** Página separada
-
-### Propiedades:
-
-| Propiedad | Tipo | Notas |
-|-----------|------|-------|
-| **Título** | Título | ej: "Mayo 2026 — Sushi Service" |
-| **Cliente** | Relación → "Leads y Clientes" | |
-| **Mes** | Select | `Enero`, `Febrero`, etc. |
-| **Clientes registrados (nuevos)** | Número | Cuántos se inscribieron este mes |
-| **Visitas totales** | Número | |
-| **Mensajes enviados** | Número | |
-| **Saldo Twilio** | Número | En USD |
+| Propiedad | Tipo | Opciones |
+|-----------|------|----------|
+| **Mes** | Título | ej. "Junio 2026 — Sushi Service" |
+| **Cliente** | Texto | |
+| **Plan** | Select | `Básico $89K`, `Pro $149K`, `Enterprise $249K` |
+| **Monto COP** | Número | |
 | **Mensualidad cobrada** | Checkbox | |
-| **Llamada de check-in hecha** | Checkbox | |
-| **Notas** | Texto largo | Qué dijo el dueño, problemas, oportunidades |
+| **Fecha de cobro** | Fecha | |
+| **Notas** | Texto | |
 
-### Vistas recomendadas:
+### 📅 Calendario Editorial · `36baf9eb-ce07-80d5-b42a-e6884d73f9cb`
+Pipeline de contenido. Estados: `💡 Idea` → `✍️ Guión` → `🎬 En edición` → `📆 Programado` → `✅ Publicado`.
+Propiedades: `Título del post`, `Plataforma`, `Tipo de contenido`, `Pilar`, `Estado`, `Fecha de publicación`, `CTA`, `Hashtags`, `Estructura`, `Alcance`, `Interacciones`.
 
-1. **Vista "Este mes"** (Tabla): Filtro `Mes = [mes actual]`
-2. **Vista por cliente** (Tabla): Agrupado por Cliente
-
----
-
-## Páginas adicionales recomendadas en Notion
-
-### 1. "Scripts y Templates"
-- Texto de primera aproximación (copy-paste para WhatsApp)
-- Texto de seguimiento a 7 días
-- Texto de recordatorio de reunión
-- Texto de "estamos configurando tu sistema"
-- Texto de reporte mensual para enviar al cliente
-
-### 2. "Precios y Paquetes"
-- Tabla con los 3 planes
-- Qué incluye cada uno
-- Precio de setup
-- Formas de pago aceptadas
-
-### 3. "Conocimiento Base" (para delegar)
-- Cómo crear un proyecto en Supabase (con screenshots)
-- Cómo ejecutar migraciones SQL
-- Cómo usar Vercel
-- Cómo crear plantillas en Twilio
-- Qué hacer si una plantilla es rechazada por Meta
-- Qué hacer si el QR no escanea
-- Quién contactar si hay un bug (tú o developer)
+### 🔗 Referencias de Contenido · `36baf9eb-ce07-80f0-80c3-c24cfe10c239`
+Banco de inspiración: `Título`, `URL`, `Tipo`, `Plataforma`, `Tags`, `Por qué me gusta`.
 
 ---
 
-## Instrucciones para importar a Notion
+## 📄 Páginas (contenido)
 
-1. Ve a notion.so
-2. Crea un nuevo workspace o usa el tuyo
-3. Crea una página: "RestaurantQR Operaciones"
-4. Dentro, crea 4 bases de datos usando los tipos y propiedades de arriba
-5. Copia las vistas exactas (tabla, kanban, filtros)
-6. En "Tareas de Implementación", crea una plantilla con las tareas pre-cargadas
-7. Comparte el workspace con tu asistente (permiso de "Can edit" en las bases operativas, "Can view" en la base de inventario técnico)
+| Página | ID | Qué contiene |
+|--------|-----|--------------|
+| 🧡 [Identidad de marca](https://app.notion.com/p/36baf9ebce07804abf2bfd9f7f0faf3a) | `36baf9eb-ce07-804a-bf2b-fd9f7f0faf3a` | Qué somos · Qué hacemos · Filosofía · Misión/Visión/Valores · **Historia** |
+| 📋 [Onboarding de Clientes](https://app.notion.com/p/374af9ebce07814db662e95bf6e62107) | `374af9eb-ce07-814d-b662-e95bf6e62107` | Fases 1-4 · Personalización (plantillas) · Manuales de uso · Capacitación del personal |
+| 🔧 [Implementación](https://app.notion.com/p/Implementaci-n-37caf9ebce0781c3a51fc2ab19dfabd9) | `37caf9eb-ce07-81c3-a51f-c2ab19dfabd9` | QRs físicos paso a paso · Activación presencial + redes · Cómo medir |
+| 🎬 [Contenido](https://app.notion.com/p/Contenido-37caf9ebce078198b32bd6ff08febdb7) | `37caf9eb-ce07-8198-b32b-d6ff08febdb7` | Flujo · Ideas · Guiones · Tipos · Medición (orgánico + pautas) |
+| 💵 [Precios y Paquetes](https://app.notion.com/p/374af9ebce0781f48905d91c51a32efc) | `374af9eb-ce07-81f4-8905-d91c51a32efc` | Planes mensuales + setup único |
+| 🛠️ [Plataformas y Herramientas](https://app.notion.com/p/374af9ebce0781fb8df6ece038460a5c) | `374af9eb-ce07-81fb-8df6-ece038460a5c` | Vercel · Supabase · Twilio · n8n |
+| ⚙️ [Funcionamiento del Sistema](https://app.notion.com/p/374af9ebce0781d9913bc6ec7da66d66) | `374af9eb-ce07-81d9-913b-c6ec7da66d66` | Flujo del cliente · Tiers · Automatizaciones |
+| 📊 [Costos del Negocio](https://app.notion.com/p/374af9ebce0781678ae4d88b95a742aa) | `374af9eb-ce07-8167-8ae4-d88b95a742aa` | Costos por cliente · márgenes |
+| 📝 [Scripts y Templates](https://app.notion.com/p/374af9ebce0781f1a677ee0ec33ab4c4) | `374af9eb-ce07-81f1-a677-ee0ec33ab4c4` | Aproximación · setup · reporte mensual |
 
 ---
 
-## Flujo de trabajo diario (para ti o asistente)
+## ⏱️ Rutina de trabajo (sin fricción)
 
-**Cada mañana (10 min):**
-1. Abrir Notion → "Tareas de Implementación" → Vista "Hoy"
-2. Ver qué vence hoy, mover a `En progreso`
-3. Abrir vista "Bloqueados" — ¿hay algo atorado? ¿Necesitas ayuda?
+**🟢 Diaria · 5 min**
+1. Abrir **Pipeline de Ventas** → mover leads de etapa.
+2. Revisar **Próxima acción** y hacer la del día.
+3. Mirar **✅ Tareas** que vencen hoy.
 
-**Cada semana (30 min):**
-1. Revisar "Leads y Clientes" → Vista "Cierre pendiente"
-2. Llamar o escribir a los que están ahí hace más de 3 días
-3. Revisar "Seguimiento Mensual" → ver quién no ha pagado
+**🟡 Semanal · 30 min**
+1. Leads sin avance hace +3 días → contactar.
+2. Clientes **En riesgo** → llamar.
+3. Publicar 2-3 contenidos y **medir** los anteriores.
 
-**Cada mes (1 hora):**
-1. Crear entrada de "Seguimiento Mensual" para cada cliente activo
-2. Revisar saldos Twilio
-3. Enviar reportes
-4. Cobrar mensualidades
+**🔵 Mensual · 1 h**
+1. Llenar **💰 Seguimiento Mensual** por cliente.
+2. Cobrar mensualidades + revisar saldo Twilio.
+3. Enviar **reporte mensual** a cada restaurante (plantilla en Scripts).
+
+---
+
+## 🔧 Cómo editar Notion programáticamente (referencia técnica)
+
+- Token de integración de Notion guardado en `.notion_token` (gitignored; **NO** commitear).
+- Workspace de la integración: **Cada1 | Software de Fidelización**.
+- API REST: `https://api.notion.com/v1` con headers `Authorization: Bearer <token>` y `Notion-Version: 2022-06-28`.
+- La integración **solo ve** páginas compartidas con ella dentro de Cada1 (no toca el workspace «Molun Store» / Constelarys).

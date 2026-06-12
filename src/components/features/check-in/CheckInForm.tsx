@@ -169,6 +169,28 @@ export function CheckInForm({
         if (data.hasRecentVisit) {
           const tierUnlocked = data.tier_unlocked ?? null
           const awarded = data.points_awarded ?? 0
+          const isFirstVisit = data.customer.total_visits === 1
+
+          // Mostrar overlay de dopamina ~1.6s, luego continuar al éxito
+          setJustEarnedPoints(awarded)
+
+          // Cliente nuevo cuya primera visita acaba de validar el mesero →
+          // pantalla de BIENVENIDA (no "¡volviste!"), para que no parezca frecuente.
+          if (isFirstVisit && !tierUnlocked) {
+            const welcomeResult: RegisterResult = {
+              message: 'welcome',
+              customer: {
+                name: data.customer.name,
+                total_visits: data.customer.total_visits,
+                total_points: data.customer.total_points,
+              },
+              points_awarded: awarded,
+              tiers: data.tiers ?? [],
+            }
+            setTimeout(() => onRegisterSuccess(welcomeResult, phone), 1600)
+            return
+          }
+
           const result: CheckInResult = {
             message: tierUnlocked ? 'tier_unlocked' : 'points_earned',
             customer: {
@@ -181,8 +203,6 @@ export function CheckInForm({
             next_tier: data.next_tier ?? null,
             tiers: data.tiers ?? [],
           }
-          // Mostrar overlay de dopamina ~1.6s, luego continuar al éxito
-          setJustEarnedPoints(awarded)
           setTimeout(() => onCheckInSuccess(result, phone), 1600)
           return
         }
@@ -200,7 +220,7 @@ export function CheckInForm({
       cancelled = true
       clearInterval(interval)
     }
-  }, [step, phone, onCheckInSuccess])
+  }, [step, phone, onCheckInSuccess, onRegisterSuccess])
 
   const handlePhoneSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

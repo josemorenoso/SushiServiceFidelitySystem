@@ -5,6 +5,24 @@
 
 ---
 
+## [1.6.2] — 2026-06-11 — fix: doble conteo de puntos en primera visita verificada por mesero
+
+> Request: al activar "pedir QR desde el principio" (check-in verificado por mesero), un cliente nuevo terminaba con 138 pts en su primera visita (90 de bienvenida + 48 de la visita) cuando debía recibir solo ~90. Corregir sin alterar el funcionamiento del modo normal.
+
+### Fixed
+- `src/app/api/check-in/route.ts` — **register:** cuando la primera visita queda pendiente del escaneo del mesero (`pendingStaffScan=true`, modo `staff_verified` + `checkin_first_visit_free=false`), ya NO se otorga el bono de bienvenida ni se envía el WhatsApp en el registro. El bono previo + los puntos de la visita causaban doble conteo (90+48=138). Ahora los puntos se asignan una sola vez, en el escaneo del mesero.
+
+### Added
+- `src/app/api/check-in/route.ts` — **checkin:** en la primera visita verificada por el mesero (`isFirstVisit`, detectado por `total_visits === 0` antes del incremento) se envía la plantilla de **bienvenida** (`welcome_template_sid`) en lugar de la de "sumaste puntos", para que el cliente nuevo no parezca frecuente.
+- `src/components/features/check-in/CheckInForm.tsx` — el polling muestra la pantalla de **bienvenida** (no "¡volviste!") cuando detecta que la visita registrada es la primera (`total_visits === 1`).
+- `src/app/(public)/check-in/page.tsx` — `handleRegisterSuccess` envuelto en `useCallback` para estabilizar el efecto de polling (ahora también depende de él).
+
+### Notes
+- **Sin impacto en el modo `auto` (normal):** `pendingStaffScan` solo es `true` en `staff_verified` + primera visita no libre; en modo auto el cliente nuevo recibe su bono y WhatsApp en el registro exactamente como antes, e `isFirstVisit` nunca se activa en `checkin` (los clientes nuevos ya tienen `total_visits ≥ 1`).
+- Para que el WhatsApp de bienvenida salga en este flujo, debe estar configurado `welcome_template_sid` en Dashboard → Ajustes (sin fallback si falta).
+
+---
+
 ## [1.5.2] — 2026-06-10 — feat: desglose de fallos por motivo en Mensajería
 
 > Request: entender por qué hay 59 mensajes fallidos — el panel solo contaba los fallos sin explicar la causa.

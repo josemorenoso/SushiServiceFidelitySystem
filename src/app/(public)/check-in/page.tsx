@@ -16,7 +16,7 @@ type PageState =
 export default function CheckInPage() {
   const [state, setState] = useState<PageState>({ view: 'form' })
 
-  const handleRegisterSuccess = (result: RegisterResult, phone: string) => {
+  const handleRegisterSuccess = useCallback((result: RegisterResult, phone: string) => {
     setState({
       view: 'success',
       type: 'welcome',
@@ -27,7 +27,7 @@ export default function CheckInPage() {
       tiers: (result as unknown as CheckInResult).tiers,
       phone,
     })
-  }
+  }, [])
 
   const handleCheckInSuccess = useCallback((result: CheckInResult, phone: string) => {
     const resultType = result.message === 'tier_unlocked' ? 'tier_unlocked'

@@ -363,27 +363,34 @@ export async function POST(request: NextRequest) {
       }
 
       // Puntos de bienvenida (Endowed Progress Effect)
+      // Se omiten cuando la visita está pendiente del mesero (pendingStaffScan=true):
+      // el escaneo del mesero ya otorgará los puntos de la primera visita,
+      // y el bono de bienvenida previo causaría doble conteo.
       let welcomePoints = { pointsAwarded: 0, newBalance: 0 }
-      try {
-        welcomePoints = await awardWelcomeBonus(customer.id)
-      } catch (err) {
-        console.error('[CheckIn] Error otorgando puntos de bienvenida:', err)
+      if (!pendingStaffScan) {
+        try {
+          welcomePoints = await awardWelcomeBonus(customer.id)
+        } catch (err) {
+          console.error('[CheckIn] Error otorgando puntos de bienvenida:', err)
+        }
       }
 
-      // WhatsApp de bienvenida — DEBE usar await para que Vercel no mate el proceso
-      const settings = await getMultipleSettings(['welcome_template_sid'])
-      let tiersRoadmap = '🌟 ¡Seguí sumando puntos para desbloquear premios!'
-      try {
-        tiersRoadmap = await buildTiersRoadmap(welcomePoints.newBalance)
-      } catch (err) {
-        console.error('[CheckIn] Error generando tiers roadmap:', err)
+      // WhatsApp de bienvenida — solo cuando la visita se confirma de inmediato
+      if (!pendingStaffScan) {
+        const welcomeSettings = await getMultipleSettings(['welcome_template_sid'])
+        let tiersRoadmap = '🌟 ¡Seguí sumando puntos para desbloquear premios!'
+        try {
+          tiersRoadmap = await buildTiersRoadmap(welcomePoints.newBalance)
+        } catch (err) {
+          console.error('[CheckIn] Error generando tiers roadmap:', err)
+        }
+        await sendCheckinTemplate(
+          welcomeSettings.welcome_template_sid,
+          'welcome',
+          cleaned,
+          { '1': customer.name, '2': String(welcomePoints.newBalance), '3': tiersRoadmap }
+        )
       }
-      await sendCheckinTemplate(
-        settings.welcome_template_sid,
-        'welcome',
-        cleaned,
-        { '1': customer.name, '2': String(welcomePoints.newBalance), '3': tiersRoadmap }
-      )
 
       // Google Contacts sync (best-effort pero awaited para Vercel)
       try {
@@ -468,7 +475,13 @@ export async function POST(request: NextRequest) {
         'points_earned_far_template_sid',
         'points_earned_near_template_sid',
         'tier_unlocked_template_sid',
+        'welcome_template_sid',
       ])
+
+      // Primera visita verificada por el mesero (cliente nuevo en modo staff_verified):
+      // el welcome bonus/WhatsApp se omitió en el registro porque la visita estaba pendiente.
+      // Se detecta ANTES de incrementar la visita (total_visits aún en 0).
+      const isFirstVisit = (customer.total_visits ?? 0) === 0
 
       // ─── Solo mesero puede registrar visitas ───
       if (source !== 'staff_scan') {
@@ -587,6 +600,15 @@ export async function POST(request: NextRequest) {
           'tier_unlocked',
           cleaned,
           { '1': updated.name, '2': newTier.tier_name, '3': newTier.safe_reward_title, '4': tiersRoadmapText }
+        )
+      } else if (isFirstVisit) {
+        // Primera visita verificada por el mesero: mensaje de BIENVENIDA, no de "sumaste puntos",
+        // para que el cliente nuevo no parezca frecuente. {{1}}=nombre, {{2}}=saldo, {{3}}=roadmap.
+        whatsappStatus = await sendCheckinTemplate(
+          settings.welcome_template_sid,
+          'welcome',
+          cleaned,
+          { '1': updated.name, '2': String(pointsResult.newBalance), '3': tiersRoadmapText }
         )
       } else {
         // Sin tier nuevo: puntos sumados. Cada caso usa SU plantilla — sin fallback engañoso.

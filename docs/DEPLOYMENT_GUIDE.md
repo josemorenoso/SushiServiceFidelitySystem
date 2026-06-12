@@ -1,37 +1,83 @@
 # Constelarys Fidelity System — Guía de Despliegue (Clone-per-Client)
 
-> Última actualización: v0.23.0
+> Última actualización: v1.6.0 — 2026-06-11
 
-## Arquitectura
+## Arquitectura multi-cliente
 
 ```
-╔══════════════════════════════════════════════════════════════╗
-║                  TU INFRAESTRUCTURA                         ║
-║                                                              ║
-║  ┌─ VPS (n8n) ─────────────────────────────────┐            ║
-║  │  • n8n (workflow automation)                  │            ║
-║  │  • Crons de cumpleaños/reactivación           │            ║
-║  │  • Google Contacts sync                       │            ║
-║  │  • WhatsApp delivery webhook receiver         │            ║
-║  └───────────────────────────────────────────────┘            ║
-║                                                              ║
-║  ┌─ Vercel (por cliente) ────────────┐                       ║
-║  │  • Next.js App (dashboard + QR)    │ ← 1 repo GitHub     ║
-║  │  • API routes (check-in, crons)    │   por cliente        ║
-║  └────────────────────────────────────┘                       ║
-║                                                              ║
-║  ┌─ Supabase (por cliente) ──────────┐                       ║
-║  │  • PostgreSQL (datos cliente)      │ ← 1 proyecto         ║
-║  │  • Auth (admin login)              │   por cliente        ║
-║  │  • RLS (row-level security)        │                       ║
-║  └────────────────────────────────────┘                       ║
-║                                                              ║
-║  ┌─ Twilio (1 cuenta maestra) ───────┐                       ║
-║  │  • WhatsApp Business API           │ ← Subaccounts       ║
-║  │  • Número dedicado por cliente     │   o messaging        ║
-║  │  • Templates aprobados por Meta    │   services           ║
-║  └────────────────────────────────────┘                       ║
-╚══════════════════════════════════════════════════════════════╝
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  MENSAJES ENTRANTES (WhatsApp)                                               ║
+║                                                                              ║
+║  Cliente escribe al número Twilio del restaurante                            ║
+║             │                                                                ║
+║             ▼                                                                ║
+║  Twilio Console → "When a message comes in"                                  ║
+║  URL configurada: https://[cliente].vercel.app/api/webhook/twilio-incoming   ║
+║             │                                                                ║
+║             ├── ¿Es número de mesero autorizado? ──→ reenvía a n8n ──┐      ║
+║             │                                                          │      ║
+║             └── ¿Es cliente/desconocido?                              │      ║
+║                      │                                                │      ║
+║                      ▼                                                │      ║
+║             Auto-reply inteligente (Vercel)                           │      ║
+║             • Detecta intención (pedido/horario/ubicación)            │      ║
+║             • Redirige al WhatsApp humano del restaurante             │      ║
+║             • Cooldown 4h (tabla auto_reply_cooldown en Supabase)     │      ║
+║             • Config: NEXT_PUBLIC_BRAND_NAME + RESTAURANT_WHATSAPP_LINK│      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+                                                                        │
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  VPS n8n — https://n8n.almojabananet.me  (COMPARTIDO entre clientes)        ║
+║                                                                              ║
+║  Variables en Settings → Variables (prefijadas por cliente):                ║
+║                                                                              ║
+║  ┌─ Cliente 1 ──────────────────────────────────────────────────────────┐   ║
+║  │  SUSHI_APP_URL          = https://sushi-service.vercel.app           │   ║
+║  │  SUSHI_WEBHOOK_SECRET   = [mismo valor que Vercel WEBHOOK_DELIVERY_SECRET]│  ║
+║  │                                                                      │   ║
+║  │  Workflows: domicilios_sushi / google_contacts_sushi                 │   ║
+║  └──────────────────────────────────────────────────────────────────────┘   ║
+║                                                                              ║
+║  ┌─ Cliente 2 ──────────────────────────────────────────────────────────┐   ║
+║  │  CLIENTE2_APP_URL       = https://cliente2.vercel.app                │   ║
+║  │  CLIENTE2_WEBHOOK_SECRET= [secreto del cliente 2]                    │   ║
+║  └──────────────────────────────────────────────────────────────────────┘   ║
+║                                                                              ║
+║  ┌─ Cliente 3 ──────────────────────────────────────────────────────────┐   ║
+║  │  CLIENTE3_APP_URL       = https://cliente3.vercel.app                │   ║
+║  │  CLIENTE3_WEBHOOK_SECRET= [secreto del cliente 3]                    │   ║
+║  └──────────────────────────────────────────────────────────────────────┘   ║
+║                                                                              ║
+║  ⚠️  NUNCA usar nombres genéricos (APP_URL) — conflicto entre clientes      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+                        │
+                        ▼ POST a APP_URL/api/webhook/delivery
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  VERCEL — 1 proyecto por cliente (variables aisladas, no se mezclan)        ║
+║                                                                              ║
+║  ┌─ Proyecto: Sushi Service ─────────────────────────────────────────────┐  ║
+║  │  URL: https://sushi-service.vercel.app                                │  ║
+║  │  Variables de entorno (todas privadas al proyecto):                   │  ║
+║  │    TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_WHATSAPP_NUMBER    │  ║
+║  │    NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY           │  ║
+║  │    SUPABASE_SERVICE_ROLE_KEY                                          │  ║
+║  │    WEBHOOK_DELIVERY_SECRET   ← mismo valor que SUSHI_WEBHOOK_SECRET   │  ║
+║  │    N8N_DOMICILIOS_WEBHOOK_URL← URL del webhook n8n de domicilios      │  ║
+║  │    NEXT_PUBLIC_BRAND_NAME    ← texto del auto-reply y QR              │  ║
+║  │    RESTAURANT_WHATSAPP_LINK  ← wa.me/... del número humano            │  ║
+║  └───────────────────────────────────────────────────────────────────────┘  ║
+║                                                                              ║
+║  ┌─ Proyecto: Cliente 2 ─────────────────────────────────────────────────┐  ║
+║  │  Variables idénticas en nombre, diferentes en valor                   │  ║
+║  └───────────────────────────────────────────────────────────────────────┘  ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+                        │
+                        ▼
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SUPABASE — 1 proyecto por cliente                                           ║
+║    customers / visits / rewards / campaigns / authorized_numbers             ║
+║    auto_reply_cooldown  ← nueva tabla (throttle auto-reply 4h)               ║
+╚══════════════════════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -67,17 +113,33 @@ NEXT_PUBLIC_BRAND_TAGLINE=Programa de Fidelidad
 
 1. Ir a https://supabase.com → "New Project"
 2. Nombre: `fidelity-xyz` | Region: us-east-1
-3. Ejecutar migraciones SQL en orden:
-   - `supabase/migrations/00001_customers.sql`
-   - `supabase/migrations/00002_visits.sql`
-   - `supabase/migrations/00003_rewards.sql`
+3. Ejecutar migraciones SQL en orden (SQL Editor de Supabase):
+   - `supabase/migrations/00001_initial_schema.sql`
+   - `supabase/migrations/00002_authorized_numbers.sql`
+   - `supabase/migrations/00003_delivery_fields.sql`
    - `supabase/migrations/00004_campaigns.sql`
-   - `supabase/migrations/00005_admin_settings.sql`
-   - `supabase/migrations/00006_authorized_numbers.sql`
-   - `supabase/migrations/00007_campaign_messages.sql`
+   - `supabase/migrations/00005_add_city.sql`
+   - `supabase/migrations/00006_source_channels_frequency_cap.sql`
+   - `supabase/migrations/00007_admin_settings.sql`
    - `supabase/migrations/00008_accepts_marketing.sql`
    - `supabase/migrations/00009_table_number.sql`
    - `supabase/migrations/00010_rewards_optional_milestone.sql`
+   - `supabase/migrations/00011_rewards_black_tier.sql`
+   - `supabase/migrations/00012_calendar_events_and_media.sql`
+   - `supabase/migrations/00013_points_mystery_box.sql`
+   - `supabase/migrations/00014_geolocation.sql`
+   - `supabase/migrations/00015_service_role_policies.sql`
+   - `supabase/migrations/00016_ensure_default_tiers.sql`
+   - `supabase/migrations/00017_cleanup_legacy_tiers.sql`
+   - `supabase/migrations/00018_staff_qr_scan.sql`
+   - `supabase/migrations/00019_legacy_points_backfill.sql`
+   - Ejecutar manualmente:
+     ```sql
+     CREATE TABLE IF NOT EXISTS auto_reply_cooldown (
+       phone TEXT PRIMARY KEY,
+       last_sent_at TIMESTAMPTZ NOT NULL DEFAULT now()
+     );
+     ```
 4. Crear usuario admin en Auth → Users → "Invite user"
 5. Copiar `SUPABASE_URL` y `SUPABASE_ANON_KEY` de Settings → API
 
@@ -115,28 +177,64 @@ O desde el dashboard de Vercel:
 
 ### 6. Variables de entorno en Vercel
 
+> Cada proyecto Vercel es **completamente aislado**. Puedes usar los mismos nombres de variable en todos los clientes sin conflicto.
+
 | Variable | Descripción | Ejemplo |
 |----------|-------------|---------|
 | `NEXT_PUBLIC_SUPABASE_URL` | URL del proyecto Supabase | `https://xyz.supabase.co` |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Anon key pública | `eyJ...` |
 | `SUPABASE_SERVICE_ROLE_KEY` | Service role key (solo server) | `eyJ...` |
-| `TWILIO_ACCOUNT_SID` | Account SID de Twilio | `AC...` |
+| `TWILIO_ACCOUNT_SID` | Account SID de Twilio | `ACxxxxxxxx` |
 | `TWILIO_AUTH_TOKEN` | Auth token de Twilio | `abc...` |
-| `TWILIO_WHATSAPP_FROM` | Número WhatsApp sender | `whatsapp:+573001234567` |
+| `TWILIO_WHATSAPP_NUMBER` | Número WhatsApp sender | `whatsapp:+573001234567` |
 | `CRON_SECRET` | Secret para proteger crons | `random-32-chars` |
-| `WEBHOOK_DELIVERY_SECRET` | Secret para webhook delivery | `random-32-chars` |
-| `N8N_GOOGLE_CONTACTS_WEBHOOK_URL` | (Opcional) URL webhook n8n | `https://n8n.tudominio.me/webhook/...` |
+| `WEBHOOK_DELIVERY_SECRET` | Secret para webhook delivery (mismo valor que `[CLIENTE]_WEBHOOK_SECRET` en n8n) | `random-32-chars` |
+| `N8N_DOMICILIOS_WEBHOOK_URL` | URL del webhook de domicilios en n8n | `https://n8n.almojabananet.me/webhook/[nombre]` |
+| `N8N_GOOGLE_CONTACTS_WEBHOOK_URL` | (Opcional) URL webhook Google Contacts en n8n | `https://n8n.almojabananet.me/webhook/...` |
+| `NEXT_PUBLIC_BRAND_NAME` | Nombre del restaurante (aparece en auto-reply y QR) | `Sushi Service` |
+| `RESTAURANT_WHATSAPP_LINK` | Link wa.me al número humano del restaurante | `https://wa.me/573XXXXXXXXX` |
 | `NEXT_PUBLIC_GOOGLE_MAPS_REVIEW_URL` | (Opcional) Link Google Reviews | `https://g.page/r/...` |
+| `NEXT_PUBLIC_DEMO_EMAIL` | (Opcional) Email demo para login | `demo@restaurante.com` |
 
-### 7. Configurar Crons en n8n
+### 7. Variables en n8n (Settings → Variables)
 
-> **Importante:** Vercel free plan no tiene cron triggers nativos. Los crons los dispara **n8n** (Schedule → HTTP POST a Vercel). La lógica vive en Vercel, n8n es solo el reloj.
+> n8n es **compartido entre todos los clientes** — usar prefijos para evitar conflictos.
 
-Importar desde `n8n/`:
-- `cron_birthday.json` → ajustar `RESTAURANT_API_URL` y `CRON_SECRET` en las variables de entorno de n8n
-- `cron_reactivation.json` → igual
+| Variable n8n | Valor | Equivalencia en Vercel |
+|---|---|---|
+| `[CLIENTE]_APP_URL` | `https://[cliente].vercel.app` | — |
+| `[CLIENTE]_WEBHOOK_SECRET` | secreto único del cliente | = `WEBHOOK_DELIVERY_SECRET` del proyecto Vercel |
 
-Horarios recomendados: Birthday 8am (`0 13 * * *` UTC), Reactivation 10am (`0 15 * * *` UTC).
+**Ejemplo con 3 clientes:**
+```
+SUSHI_APP_URL             = https://sushi-service.vercel.app
+SUSHI_WEBHOOK_SECRET      = abc123...
+
+CLIENTE2_APP_URL          = https://cliente2.vercel.app
+CLIENTE2_WEBHOOK_SECRET   = xyz789...
+
+CLIENTE3_APP_URL          = https://cliente3.vercel.app
+CLIENTE3_WEBHOOK_SECRET   = def456...
+```
+
+En cada workflow, los nodos HTTP Request usan `{{$env.SUSHI_APP_URL}}` etc.
+
+### 8. Configurar Twilio → n8n
+
+En **Twilio Console → Messaging → Senders → WhatsApp Senders → [número] → "When a message comes in"**:
+- URL: `https://[cliente].vercel.app/api/webhook/twilio-incoming`
+- Método: HTTP POST
+
+El webhook de Vercel es el único punto de entrada. Él decide internamente si reenvía a n8n (meseros) o responde con auto-reply (clientes).
+
+### 9. Configurar Crons
+
+Vercel Crons ya están configurados en `vercel.json` — no requieren n8n.
+
+```json
+{ "path": "/api/cron/birthday",    "schedule": "0 13 * * *" }
+{ "path": "/api/cron/reactivation","schedule": "0 15 * * *" }
+```
 
 ### 8. Primer acceso
 
@@ -223,17 +321,46 @@ vercel deploy --prod
 
 ## Checklist pre-launch por cliente
 
-- [ ] Branding personalizado (`src/lib/branding.ts`)
-- [ ] Supabase proyecto creado + migraciones ejecutadas
-- [ ] Usuario admin creado en Supabase Auth
-- [ ] Vercel deploy exitoso + env vars configuradas
-- [ ] Twilio número asignado + 7 templates aprobados por Meta (3 UTILITY + 4 MARKETING)
-- [ ] Templates asignados en Dashboard > Ajustes (7 selectores: welcome, near, far, reward, birthday, reactivation_sin_regalo, reactivation_con_regalo)
-- [ ] Recompensas configuradas (milestones)
-- [ ] Beneficios Black definidos
+### Supabase
+- [ ] Proyecto creado (Region: us-east-1)
+- [ ] 19 migraciones ejecutadas en orden
+- [ ] Tabla `auto_reply_cooldown` creada (SQL manual)
+- [ ] Usuario admin creado en Auth → Users → Invite
+
+### Vercel
+- [ ] Repo clonado + deploy exitoso
+- [ ] Variables de entorno configuradas (ver tabla §6)
+  - [ ] `TWILIO_WHATSAPP_NUMBER` (con prefijo `whatsapp:`)
+  - [ ] `WEBHOOK_DELIVERY_SECRET` (mismo valor que n8n)
+  - [ ] `N8N_DOMICILIOS_WEBHOOK_URL` (URL del webhook de domicilios en n8n)
+  - [ ] `NEXT_PUBLIC_BRAND_NAME` (nombre del restaurante)
+  - [ ] `RESTAURANT_WHATSAPP_LINK` (wa.me del número humano)
+
+### Twilio
+- [ ] Número WhatsApp asignado al Messaging Service
+- [ ] Webhook configurado: `https://[cliente].vercel.app/api/webhook/twilio-incoming` (POST)
+- [ ] Opt-out keywords en español: `STOP,BAJA,CANCELAR,SALIR`
+- [ ] 6 templates creados y enviados a aprobación Meta (24-48h)
+- [ ] Templates asignados en Dashboard → Ajustes (una vez aprobados)
+
+### n8n
+- [ ] Variables prefijadas creadas: `[CLIENTE]_APP_URL` y `[CLIENTE]_WEBHOOK_SECRET`
+- [ ] Workflow de domicilios configurado con las variables del cliente
+- [ ] Workflow activado + URL del webhook copiada → pegada en `N8N_DOMICILIOS_WEBHOOK_URL` de Vercel
+
+### Dashboard del restaurante
+- [ ] Recompensas configuradas (milestones por visita)
+- [ ] Ticket promedio configurado en Ajustes
 - [ ] QRs generados con logo + color del cliente
-- [ ] Crons configurados en n8n (birthday + reactivation)
 - [ ] Google Reviews URL configurada (si aplica)
-- [ ] Ticket promedio configurado en Dashboard > Ajustes
-- [ ] Prueba end-to-end: escanear QR → registro → WhatsApp recibido
-- [ ] Capacitación al administrador del restaurante
+
+### Pruebas E2E
+- [ ] Escanear QR → registro → WhatsApp de bienvenida recibido
+- [ ] Escribir al número Twilio → auto-reply correcto + link al número humano
+- [ ] Escribir 3 veces seguidas → solo recibe 1 auto-reply (cooldown activo)
+- [ ] Mesero autorizado escribe → pedido procesado por n8n
+- [ ] Responder STOP → no llegan más mensajes
+
+### Operación
+- [ ] Capacitar al admin del restaurante (dashboard, campañas, QR)
+- [ ] Imprimir QRs por mesa

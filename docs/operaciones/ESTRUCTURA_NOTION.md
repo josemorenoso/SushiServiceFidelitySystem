@@ -73,7 +73,10 @@ Un restaurante por fila. Entra aquí cuando paga. Vista recomendada: **Kanban po
 | **Restaurante** | Título | |
 | **Estado** | Select | `🛠️ En setup`, `✅ Activo`, `⚠️ En riesgo`, `⏸️ Pausado`, `❌ Cancelado` |
 | **Plan** | Select | `Básico $89K`, `Pro $149K`, `Enterprise $249K` |
-| **Estado de pago** | Select | `Setup pagado`, `Mensualidad al día`, `Atrasado` |
+| **Estado de pago** | Select | `Setup pagado`, `Mensualidad al día`, `Atrasado` (manual, opcional) |
+| **Día de cobro** | Número | Día del mes en que paga (1–31). Normalmente = día de activación |
+| **Próximo pago** | Fecha | Fecha del próximo cobro. Al cobrar, avanzar +1 mes |
+| **Estado de cobro** | Fórmula | Semáforo automático (ver lógica abajo) |
 | **Vendedor encargado** | Persona | |
 | **Celular** | Teléfono | |
 | **Ciudad** | Texto | |
@@ -81,6 +84,9 @@ Un restaurante por fila. Entra aquí cuando paga. Vista recomendada: **Kanban po
 | **URL del sistema** | URL | Dashboard del cliente |
 | **Próxima acción** | Texto | |
 | **Notas** | Texto | |
+
+**Lógica de "Estado de cobro"** (basado en días hasta `Próximo pago`):
+`🟢 Al día` (faltan >3 d) · `🟠 Por vencer` (0–3 d) · `🟡 Toca pagar / ventana de gracia` (día de cobro hasta +5 d) · `🔴 Vencido` (>5 d sin pagar) · `⚪ Sin fecha de cobro` si `Próximo pago` está vacío.
 
 ### 🚀 Proyectos · `36caf9eb-ce07-8080-b307-e8c539bb0cf4`
 Un proyecto de implementación por cliente, con **barra de progreso**. (Conserva datos previos.)

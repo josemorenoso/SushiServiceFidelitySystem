@@ -126,6 +126,37 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
   }
 
+  // Cooldown de 4 horas: evita spam de auto-replies al mismo número
+  if (phone.length >= 8) {
+    try {
+      const db = getServiceClient()
+      const cooldownHours = 4
+      const cutoff = new Date(Date.now() - cooldownHours * 60 * 60 * 1000).toISOString()
+
+      const { data: cooldown } = await db
+        .from('auto_reply_cooldown')
+        .select('last_sent_at')
+        .eq('phone', phone)
+        .maybeSingle()
+
+      if (cooldown && cooldown.last_sent_at > cutoff) {
+        // Ya le enviamos hace menos de 4 horas — silencio
+        return new NextResponse(
+          '<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
+          { status: 200, headers: { 'Content-Type': 'text/xml' } }
+        )
+      }
+
+      // Actualizar timestamp (upsert)
+      await db
+        .from('auto_reply_cooldown')
+        .upsert({ phone, last_sent_at: new Date().toISOString() }, { onConflict: 'phone' })
+    } catch (err) {
+      console.error('[twilio-incoming] Error checking cooldown:', err)
+      // Si falla el check, igual responde (mejor responder que silencio)
+    }
+  }
+
   const intent = detectIntent(body)
   const message = buildMessage(intent)
 

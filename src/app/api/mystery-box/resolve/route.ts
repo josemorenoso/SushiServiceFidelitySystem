@@ -85,30 +85,63 @@ export async function POST(request: NextRequest) {
       'golden_box_result_template_sid',
     ])
 
-    if (choice === 'safe' && settings.reward_safe_template_sid) {
-      await sendTemplateMessage(customer.phone, settings.reward_safe_template_sid, {
-        '1': customer.name,
-        '2': tier.tier_name,
-        '3': result.prizeTitle,
-        '4': roadmap,
-      }).catch((err) => console.error('[MysteryBox] Error enviando WhatsApp safe:', err))
-    } else if (choice === 'mystery') {
-      const templateSid = result.wasGolden
-        ? settings.golden_box_result_template_sid
-        : settings.mystery_box_result_template_sid
+    // ─── ENVÍO DE WHATSAPP ───
+    // Auditoría 12-Julio: antes el .catch() silencioso ocultaba los fallos y la API
+    // respondía ok:true aunque el cliente nunca recibiera el mensaje. Ahora capturamos
+    // el resultado y lo reportamos al frontend en `whatsapp_sent` para que la UI muestre
+    // un fallback ("muestra esta pantalla al mesero"). El envío queda persistido en
+    // message_logs por sendTemplateMessage vía logContext.
+    let whatsappSent = false
+    let whatsappReason: string | undefined
 
-      if (templateSid) {
-        const vars: Record<string, string> = result.wasGolden
-          ? { '1': customer.name, '2': result.prizeTitle, '3': roadmap }
-          : { '1': customer.name, '2': tier.tier_name, '3': result.prizeTitle, '4': roadmap }
+    try {
+      if (choice === 'safe') {
+        if (settings.reward_safe_template_sid) {
+          const res = await sendTemplateMessage(
+            customer.phone,
+            settings.reward_safe_template_sid,
+            { '1': customer.name, '2': tier.tier_name, '3': result.prizeTitle, '4': roadmap },
+            undefined,
+            { customerId: customer.id, messageType: 'safe_reward' }
+          )
+          whatsappSent = res !== null
+          if (!whatsappSent) whatsappReason = 'twilio_error_or_unconfigured'
+        } else {
+          whatsappReason = 'no_template_configured'
+        }
+      } else {
+        const templateSid = result.wasGolden
+          ? settings.golden_box_result_template_sid
+          : settings.mystery_box_result_template_sid
 
-        await sendTemplateMessage(customer.phone, templateSid, vars)
-          .catch((err) => console.error('[MysteryBox] Error enviando WhatsApp mystery:', err))
+        if (templateSid) {
+          const vars: Record<string, string> = result.wasGolden
+            ? { '1': customer.name, '2': result.prizeTitle, '3': roadmap }
+            : { '1': customer.name, '2': tier.tier_name, '3': result.prizeTitle, '4': roadmap }
+
+          const res = await sendTemplateMessage(
+            customer.phone,
+            templateSid,
+            vars,
+            undefined,
+            { customerId: customer.id, messageType: result.wasGolden ? 'golden_box' : 'mystery_box' }
+          )
+          whatsappSent = res !== null
+          if (!whatsappSent) whatsappReason = 'twilio_error_or_unconfigured'
+        } else {
+          whatsappReason = 'no_template_configured'
+        }
       }
+    } catch (err) {
+      console.error('[MysteryBox] Error enviando WhatsApp:', err)
+      whatsappSent = false
+      whatsappReason = err instanceof Error ? err.message : 'unknown_error'
     }
 
     return NextResponse.json({
       ok: true,
+      whatsapp_sent: whatsappSent,
+      whatsapp_reason: whatsappReason,
       result: {
         choice: result.choice,
         prize_title: result.prizeTitle,

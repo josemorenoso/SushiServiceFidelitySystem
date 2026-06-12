@@ -11,6 +11,8 @@ interface MysteryBoxResultProps {
   wasGolden: boolean
   nearMiss: string | null
   allPrizes: MysteryPrizeDisplay[]
+  /** Auditoría 12-Julio: si el WhatsApp de confirmación falló, mostrar fallback visual. */
+  whatsappSent?: boolean
 }
 
 export function MysteryBoxResult({
@@ -19,6 +21,7 @@ export function MysteryBoxResult({
   wasGolden,
   nearMiss,
   allPrizes,
+  whatsappSent = true,
 }: MysteryBoxResultProps) {
   const [phase, setPhase] = useState<'rolling' | 'reveal' | 'done'>('rolling')
 
@@ -122,6 +125,15 @@ export function MysteryBoxResult({
                     Mostrále este mensaje al {STAFF_LABEL.toLowerCase()} para reclamar
                   </p>
                 </div>
+              )}
+
+              {phase === 'done' && !whatsappSent && (
+                <p
+                  className="mt-3 rounded-lg px-3 py-2 text-xs font-medium animate-fade-in-up"
+                  style={{ background: 'rgba(245,158,11,0.12)', color: '#b45309' }}
+                >
+                  ⚠️ No pudimos enviarte el WhatsApp. Esta pantalla es tu comprobante: mostrásela al {STAFF_LABEL.toLowerCase()} para reclamar tu premio.
+                </p>
               )}
             </div>
           )}

@@ -19,10 +19,22 @@
  */
 
 import { formatPhoneForWhatsApp } from '@/lib/validators/phone'
+import { recordMessageLog } from '@/services/message-log.service'
 
 export interface TwilioMessageResponse {
   sid: string
   status: string
+}
+
+/**
+ * Contexto opcional para persistir el envío en `message_logs`.
+ * Si se omite, el mensaje se envía sin registrar (comportamiento legacy).
+ * Auditoría 12-Julio: los callers transaccionales deben pasarlo siempre.
+ */
+export interface MessageLogContext {
+  customerId?: string | null
+  /** welcome | checkin | tier_unlocked | points_earned_near | points_earned_far | safe_reward | mystery_box | golden_box | delivery | ... */
+  messageType: string
 }
 
 function getTwilioClient() {
@@ -41,11 +53,23 @@ export async function sendTemplateMessage(
   phone: string,
   contentSid: string,
   variables: Record<string, string>,
-  mediaUrl?: string
+  mediaUrl?: string,
+  logContext?: MessageLogContext
 ): Promise<TwilioMessageResponse | null> {
   const config = getTwilioClient()
   if (!config) {
     console.warn('[WhatsApp] Twilio no configurado — mensaje no enviado')
+    if (logContext) {
+      await recordMessageLog({
+        ...logContext,
+        phone,
+        templateSid: contentSid,
+        variables,
+        status: 'failed',
+        errorCode: 'twilio_not_configured',
+        errorMessage: 'TWILIO_ACCOUNT_SID/AUTH_TOKEN/WHATSAPP_NUMBER ausente',
+      })
+    }
     return null
   }
 
@@ -84,6 +108,16 @@ export async function sendTemplateMessage(
       } else {
         console.log(`[WhatsApp] Template enviado: ${message.sid} (contentSid=${contentSid})`)
       }
+      if (logContext) {
+        await recordMessageLog({
+          ...logContext,
+          phone,
+          templateSid: contentSid,
+          variables: subset,
+          status: 'sent',
+          twilioSid: message.sid,
+        })
+      }
       return { sid: message.sid, status: message.status }
     } catch (error: unknown) {
       const errMsg = error instanceof Error ? error.message : String(error)
@@ -100,6 +134,17 @@ export async function sendTemplateMessage(
       console.error(
         `[WhatsApp] FALLO envío template contentSid=${contentSid} code=${twilioErr?.code ?? 'n/a'} status=${twilioErr?.status ?? 'n/a'} msg="${errMsg}"${twilioErr?.moreInfo ? ` info=${twilioErr.moreInfo}` : ''}`
       )
+      if (logContext) {
+        await recordMessageLog({
+          ...logContext,
+          phone,
+          templateSid: contentSid,
+          variables: subset,
+          status: 'failed',
+          errorCode: twilioErr?.code != null ? String(twilioErr.code) : null,
+          errorMessage: errMsg,
+        })
+      }
       return null
     }
   }

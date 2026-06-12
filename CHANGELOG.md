@@ -5,6 +5,73 @@
 
 ---
 
+## [1.7.0] — 2026-06-12 — feat: tracking de mensajes WhatsApp + fallback visible en Mystery Box (resuelve auditoría 12-Julio, bloque 1-4)
+
+> Request: resolver el bloque de tareas 1–4 de la auditoría 12-Julio — el caso del cliente que gana un premio en Mystery Box y nunca recibe el WhatsApp de confirmación, sin que nadie se entere del fallo.
+
+### Added
+- `supabase/migrations/00020_message_logs.sql` — **nueva tabla `message_logs`** que persiste TODOS los mensajes WhatsApp (transaccionales y de campaña): `customer_id`, `phone`, `message_type`, `template_sid`, `variables`, `status` (pending/sent/delivered/failed/undelivered), `twilio_sid`, `error_code`, `error_message`, `sent_at`, `delivered_at`. Incluye índices y RLS (admin lee, service inserta/actualiza). La columna `delivered_at` queda lista para el futuro webhook de status callback. _(Tarea 3)_
+- `src/services/message-log.service.ts` — servicio `recordMessageLog()` best-effort (un fallo de escritura nunca rompe el envío). _(Tarea 4)_
+- `src/types/database.types.ts` — interfaz `MessageLog`, tipos `MessageLogStatus`/`MessageLogType` y entrada `message_logs` en `Database`.
+
+### Fixed
+- `src/app/api/mystery-box/resolve/route.ts` — **eliminado el `.catch()` silencioso** que ocultaba los fallos de WhatsApp y respondía `ok:true` aunque el cliente no recibiera nada (causa principal del caso reportado). Ahora el envío se captura y la respuesta incluye `whatsapp_sent: boolean` y `whatsapp_reason`. _(Tarea 1)_
+
+### Changed
+- `src/services/whatsapp.service.ts` — `sendTemplateMessage` acepta un `logContext` opcional (`{ customerId, messageType }`) y persiste cada intento en `message_logs` con su estado y código de error de Twilio. Sin `logContext` el comportamiento es idéntico al anterior (retrocompatible). _(Tarea 4)_
+- `src/app/api/check-in/route.ts` — `sendCheckinTemplate` ahora propaga `customerId` al `logContext`, de modo que welcome / tier_unlocked / points_earned_near / points_earned_far quedan registrados en `message_logs`. _(Tarea 4)_
+- `src/components/features/check-in/CheckInSuccess.tsx` y `MysteryBoxResult.tsx` — **fallback visual**: si `whatsapp_sent=false`, se muestra "No pudimos enviarte el WhatsApp. Muestra esta pantalla al mesero para reclamar tu premio" y se oculta el texto que afirma que el WhatsApp fue enviado. _(Tarea 2)_
+
+### Docs
+- `docs/DB_SCHEMA.md` — tabla `message_logs` (índice, ER, sección, migración 00020, resumen RLS).
+- `docs/AUDIT-12-Julio/RESOLUCION.md` — documento de seguimiento: qué se resolvió (1-4) y qué queda pendiente (5-15).
+- `docs/features/points-mystery-box.md` — nota sobre `whatsapp_sent` y persistencia en `message_logs`.
+
+### Pendiente (siguientes bloques de la auditoría)
+- Webhook de status callback (`/api/webhook/twilio-status`) + `statusCallback` en `messages.create` para llenar `delivered_at`. _(Tarea 5)_
+- Endpoint `/api/health` + widget de plantillas sin configurar. _(Tareas 6-7)_
+- Opt-out persistente, retry con backoff, prechequeo de número, atomicidad en `awardPoints`. _(Tareas 8-12)_
+
+---
+
+## [AUDIT] — 2026-07-12 — audit: auditoria completa del sistema de mensajeria WhatsApp
+
+> Request: un cliente con 3 visitas recibio puntos, llego al premio, escogio mystery box, gano bebida gratis, pero nunca recibio el mensaje de WhatsApp. Auditar todo el sistema de mensajes sin hacer correcciones.
+
+### Audited (sin cambios de codigo)
+- `src/services/whatsapp.service.ts` — envio de plantillas Twilio, progressive retry, manejo de errores
+- `src/app/api/check-in/route.ts` — flujo completo de check-in, envio de WhatsApp de bienvenida/puntos/tier desbloqueado
+- `src/app/api/mystery-box/resolve/route.ts` — resolucion de premio y envio de WhatsApp de confirmacion (safe/mystery/golden)
+- `src/app/api/webhook/delivery/route.ts` — webhook de domicilios y envio de WhatsApp
+- `src/app/api/cron/birthday/route.ts` — cron de cumpleanos y tracking en campaign_messages
+- `src/app/api/cron/reactivation/route.ts` — cron de reactivacion suave/agresiva y tracking en campaign_messages
+- `src/app/api/dashboard/campaigns/manual/route.ts` — campanas manuales y tracking en campaign_messages
+- `src/services/campaign.service.ts` — tracking de mensajes de campana (campaign_messages)
+- `src/services/points.service.ts` — otorgamiento de puntos, transacciones, algoritmo inteligente
+- `src/services/mystery-box.service.ts` — pity timer, global caps, seleccion de premios
+- `src/services/reward-tiers.service.ts` — evaluacion de tiers y roadmaps
+- `src/app/api/webhook/twilio-incoming/route.ts` — manejo de mensajes entrantes, opt-out, forwarding a n8n
+- `src/app/api/dashboard/twilio-metrics/route.ts` — consulta pasiva de metricas desde Twilio API
+- `src/lib/rate-limit.ts` — rate limiting en memoria
+- `docs/PLANTILLAS.md` — documentacion de plantillas v1.0.2
+- `docs/features/flujo-plantillas-recompensas-campanas.md` — documentacion legacy v0.23.0
+- `docs/DB_SCHEMA.md` — esquema de tablas relevantes a mensajeria
+
+### Hallazgos criticos (documentados)
+- **Sin webhook de status callback de Twilio:** no se recibe notificacion de entrega/fallo real. La tabla campaign_messages nunca se actualiza a `delivered`.
+- **Mensajes transaccionales no se persisten:** check-in, welcome, tier_unlocked, mystery_box, safe, golden — ninguno se guarda en DB. Si falla, solo queda log efimero de Vercel.
+- **`.catch()` silencioso en mystery-box/resolve:** si el envio de WhatsApp falla, la API responde `ok: true` al frontend. El cliente nunca sabe que no le llegara el mensaje.
+- **No hay retry automatico:** cualquier fallo es definitivo.
+- **Opt-out no persistente:** el webhook entrante maneja keywords pero no marca al cliente en la base de datos.
+- **Race condition en puntos:** `awardPoints` hace SELECT -> UPDATE no atomico.
+- **Rate limit en memoria:** en Vercel serverless no comparte estado entre instancias.
+
+### Added (docs)
+- `docs/AUDIT-12-Julio/AUDIT_WHATSAPP_MENSAJERIA.md` — informe tecnico completo de auditoria (severidad, lineas exactas, recomendaciones).
+- `docs/AUDIT-12-Julio/RESUMEN_VISUAL.md` — resumen ejecutivo visual con mapa de calor, checklist de diagnostico y proximos pasos.
+
+---
+
 ## [1.6.2] — 2026-06-11 — fix: doble conteo de puntos en primera visita verificada por mesero
 
 > Request: al activar "pedir QR desde el principio" (check-in verificado por mesero), un cliente nuevo terminaba con 138 pts en su primera visita (90 de bienvenida + 48 de la visita) cuando debía recibir solo ~90. Corregir sin alterar el funcionamiento del modo normal.

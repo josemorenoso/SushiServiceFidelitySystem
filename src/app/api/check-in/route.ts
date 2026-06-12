@@ -94,14 +94,18 @@ async function sendCheckinTemplate(
   templateSid: string | undefined,
   templateType: string,
   phone: string,
-  variables: Record<string, string>
+  variables: Record<string, string>,
+  customerId?: string | null
 ): Promise<WhatsAppSendStatus> {
   if (!templateSid) {
     console.warn(`[CheckIn] No hay plantilla configurada para "${templateType}" — mensaje NO enviado. Configúrala en Dashboard > Ajustes.`)
     return { sent: false, templateType, reason: 'no_template_configured' }
   }
   try {
-    const res = await sendTemplateMessage(phone, templateSid, variables)
+    const res = await sendTemplateMessage(phone, templateSid, variables, undefined, {
+      customerId: customerId ?? null,
+      messageType: templateType,
+    })
     if (!res) {
       // sendTemplateMessage devuelve null cuando Twilio no está configurado o el envío falló
       console.warn(`[CheckIn] Plantilla "${templateType}" NO enviada (Twilio sin config o rechazó el envío). Revisa logs [WhatsApp].`)
@@ -388,7 +392,8 @@ export async function POST(request: NextRequest) {
           welcomeSettings.welcome_template_sid,
           'welcome',
           cleaned,
-          { '1': customer.name, '2': String(welcomePoints.newBalance), '3': tiersRoadmap }
+          { '1': customer.name, '2': String(welcomePoints.newBalance), '3': tiersRoadmap },
+          customer.id
         )
       }
 
@@ -599,7 +604,8 @@ export async function POST(request: NextRequest) {
           settings.tier_unlocked_template_sid,
           'tier_unlocked',
           cleaned,
-          { '1': updated.name, '2': newTier.tier_name, '3': newTier.safe_reward_title, '4': tiersRoadmapText }
+          { '1': updated.name, '2': newTier.tier_name, '3': newTier.safe_reward_title, '4': tiersRoadmapText },
+          customer.id
         )
       } else if (isFirstVisit) {
         // Primera visita verificada por el mesero: mensaje de BIENVENIDA, no de "sumaste puntos",
@@ -608,7 +614,8 @@ export async function POST(request: NextRequest) {
           settings.welcome_template_sid,
           'welcome',
           cleaned,
-          { '1': updated.name, '2': String(pointsResult.newBalance), '3': tiersRoadmapText }
+          { '1': updated.name, '2': String(pointsResult.newBalance), '3': tiersRoadmapText },
+          customer.id
         )
       } else {
         // Sin tier nuevo: puntos sumados. Cada caso usa SU plantilla — sin fallback engañoso.
@@ -623,7 +630,8 @@ export async function POST(request: NextRequest) {
               '2': String(pointsResult.pointsAwarded),
               '3': String(pointsResult.newBalance),
               '4': nextTierInfo!.tier.safe_reward_title,
-            }
+            },
+            customer.id
           )
         } else {
           whatsappStatus = await sendCheckinTemplate(
@@ -635,7 +643,8 @@ export async function POST(request: NextRequest) {
               '2': String(pointsResult.pointsAwarded),
               '3': String(pointsResult.newBalance),
               '4': tiersRoadmapText,
-            }
+            },
+            customer.id
           )
         }
       }

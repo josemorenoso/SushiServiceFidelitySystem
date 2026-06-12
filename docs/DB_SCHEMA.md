@@ -1,7 +1,7 @@
 # Esquema de Base de Datos
 
 **Base de datos:** Supabase (PostgreSQL)
-**Última actualización:** 2026-05-30
+**Última actualización:** 2026-06-12
 
 ---
 
@@ -77,8 +77,23 @@ erDiagram
         timestamp updated_at
     }
 
+    message_logs {
+        uuid id PK
+        uuid customer_id FK
+        string phone
+        string message_type
+        string template_sid
+        string status
+        string twilio_sid
+        string error_code
+        timestamp sent_at
+        timestamp delivered_at
+        timestamp created_at
+    }
+
     customers ||--o{ visits : "has many"
     customers ||--o{ campaign_messages : "receives"
+    customers ||--o{ message_logs : "receives"
     campaigns ||--o{ campaign_messages : "sends"
     staff_users ||--o{ visits : "registers"
     staff_users ||--o{ staff_devices : "owns"
@@ -101,6 +116,7 @@ erDiagram
 | 9 | [restaurant_locations](#restaurant_locations) | Ubicación del restaurante para validación de geolocalización | SI | Admin: ALL, Service: SELECT |
 | 10 | [staff_users](#staff_users) | Cuentas de meseros (login con PIN) | SI | Service: ALL (backend maneja auth) |
 | 11 | [staff_devices](#staff_devices) | Dispositivos de confianza registrados por supervisor | SI | Service: ALL |
+| 12 | [message_logs](#message_logs) | Tracking de TODOS los mensajes WhatsApp (transaccionales + campañas) | SI | Admin: lectura; Service: INSERT/UPDATE |
 
 ---
 
@@ -495,6 +511,56 @@ CREATE POLICY "admin_delete_staff_devices" ON staff_devices FOR DELETE USING (au
 
 ---
 
+### message_logs
+
+> Registro de **todos** los mensajes WhatsApp enviados por el sistema (transaccionales y de campaña). Creada por la auditoría 12-Julio para resolver el hueco de observabilidad: antes los mensajes de welcome/check-in/tier/mystery box se enviaban sin dejar rastro en la base de datos. Lo escribe `sendTemplateMessage` (vía `logContext`) en `src/services/message-log.service.ts`.
+
+| Columna | Tipo | Nullable | Default | Descripción |
+|---------|------|----------|---------|-------------|
+| `id` | `uuid` | NO | `gen_random_uuid()` | PK |
+| `customer_id` | `uuid` | SI | `NULL` | FK a customers (ON DELETE SET NULL). NULL si el envío ocurrió antes de crear el cliente. |
+| `phone` | `text` | NO | - | Número destino (siempre disponible, aunque no haya customer). |
+| `message_type` | `text` | NO | - | `welcome` \| `checkin` \| `tier_unlocked` \| `points_earned_near` \| `points_earned_far` \| `safe_reward` \| `mystery_box` \| `golden_box` \| `birthday` \| `reactivation` \| `manual` \| `event` \| `delivery` |
+| `template_sid` | `text` | SI | `NULL` | Twilio Content SID usado. |
+| `variables` | `jsonb` | SI | `NULL` | Variables enviadas a la plantilla. |
+| `status` | `text` | NO | `'pending'` | `pending` \| `sent` \| `delivered` \| `failed` \| `undelivered` |
+| `twilio_sid` | `text` | SI | `NULL` | SID del mensaje en Twilio (cuando se envió). |
+| `error_code` | `text` | SI | `NULL` | Código de error Twilio (21610 opt-out, 21656 formato, 21665 count, 63003/63015 sin WhatsApp, `twilio_not_configured`). |
+| `error_message` | `text` | SI | `NULL` | Detalle del error. |
+| `sent_at` | `timestamptz` | SI | `NULL` | Cuándo se aceptó el envío en Twilio. |
+| `delivered_at` | `timestamptz` | SI | `NULL` | Se llenará desde el webhook de status callback (tarea futura). |
+| `created_at` | `timestamptz` | NO | `now()` | Fecha de creación del registro. |
+
+**Foreign Keys:**
+
+| Columna | Referencia | On Delete |
+|---------|------------|-----------|
+| `customer_id` | `customers(id)` | SET NULL |
+
+**Índices:**
+
+| Nombre | Columnas | Tipo |
+|--------|----------|------|
+| `message_logs_pkey` | `id` | PRIMARY KEY |
+| `idx_message_logs_customer` | `customer_id` | BTREE |
+| `idx_message_logs_status` | `status` | BTREE |
+| `idx_message_logs_type` | `message_type` | BTREE |
+| `idx_message_logs_created` | `created_at DESC` | BTREE |
+| `idx_message_logs_twilio_sid` | `twilio_sid` (parcial: WHERE NOT NULL) | BTREE |
+
+**Políticas RLS:**
+
+```sql
+CREATE POLICY "admin_select_message_logs" ON message_logs
+    FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "service_insert_message_logs" ON message_logs
+    FOR INSERT WITH CHECK (true);
+CREATE POLICY "service_update_message_logs" ON message_logs
+    FOR UPDATE USING (true);
+```
+
+---
+
 ## Storage Buckets
 
 ### event-media
@@ -536,6 +602,7 @@ CREATE POLICY "admin_delete_staff_devices" ON staff_devices FOR DELETE USING (au
 | 14 | `00014_geolocation.sql` | 2026-05-25 | Tabla `restaurant_locations`, columnas `checkin_lat/checkin_lon/checkin_distance_meters` en `customers`, función `calculate_distance()` Haversine | Pendiente |
 | 15 | `00015_staff_qr_scan.sql` | 2026-05-30 | Tablas `staff_users`, `staff_devices`, FK `visits.registered_by_staff_id`, settings `checkin_mode`/`checkin_first_visit_free`, RLS staff + trigger updated_at | Pendiente |
 | 19 | `00019_legacy_points_backfill.sql` | 2026-06-01 | Backfill de puntos para clientes con visitas previas al sistema de puntos: 1 visita → 75 pts, 2 visitas → 125 pts. Inserta `point_transactions` con source `admin_adjustment`. | Pendiente |
+| 20 | `00020_message_logs.sql` | 2026-06-12 | Tabla `message_logs` para tracking de TODOS los mensajes WhatsApp (transaccionales + campañas) + índices + RLS. Resuelve hallazgos CRÍTICOS de la auditoría 12-Julio. | Pendiente |
 
 ---
 
@@ -571,3 +638,4 @@ $$ LANGUAGE plpgsql;
 | restaurant_locations | Admin + Service | Admin | Admin | Admin |
 | staff_users | Admin + Service | Admin + Service | Admin + Service | Admin |
 | staff_devices | Admin + Service | Admin + Service | Admin + Service | Admin |
+| message_logs | Admin | Service | Service | NO |

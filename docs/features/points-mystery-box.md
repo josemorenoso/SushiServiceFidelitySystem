@@ -486,6 +486,8 @@ La tabla `rewards` actual se mantiene por compatibilidad pero se marca como **le
    f. Actualiza `mystery_box_global_caps` si aplica
    g. Envía plantilla WhatsApp con resultado
 
+> **Actualización v1.7.0 (auditoría 12-Julio):** el envío de WhatsApp ya **no** usa `.catch()` silencioso. El resultado del envío se captura y la respuesta incluye `whatsapp_sent: boolean` (+ `whatsapp_reason`). Cada intento se persiste en `message_logs` (vía `logContext` de `sendTemplateMessage`, `messageType` = `safe_reward` / `mystery_box` / `golden_box`). Si `whatsapp_sent=false`, la UI (`MysteryBoxResult` / `CheckInSuccess`) muestra un aviso para que el cliente reclame el premio mostrando la pantalla al mesero.
+
 ### 8.3 Cron reactivation (modificar)
 
 **Niveles:**

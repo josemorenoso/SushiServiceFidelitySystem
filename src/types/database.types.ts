@@ -181,6 +181,43 @@ export interface MysteryBoxResult {
   created_at: string
 }
 
+// ═══════════════════════════════════════════════════════════════
+// Message Logs (Auditoría 12-Julio — tracking de mensajes WhatsApp)
+// ═══════════════════════════════════════════════════════════════
+
+export type MessageLogStatus = 'pending' | 'sent' | 'delivered' | 'failed' | 'undelivered'
+
+export type MessageLogType =
+  | 'welcome'
+  | 'checkin'
+  | 'tier_unlocked'
+  | 'points_earned_near'
+  | 'points_earned_far'
+  | 'safe_reward'
+  | 'mystery_box'
+  | 'golden_box'
+  | 'birthday'
+  | 'reactivation'
+  | 'manual'
+  | 'event'
+  | 'delivery'
+
+export interface MessageLog {
+  id: string
+  customer_id: string | null
+  phone: string
+  message_type: MessageLogType | string
+  template_sid: string | null
+  variables: Record<string, string> | null
+  status: MessageLogStatus
+  twilio_sid: string | null
+  error_code: string | null
+  error_message: string | null
+  sent_at: string | null
+  delivered_at: string | null
+  created_at: string
+}
+
 export type GlobalCapPeriod = 'week' | 'month' | 'total'
 
 export interface MysteryBoxGlobalCap {
@@ -263,6 +300,15 @@ export interface Database {
           id?: string
         }
         Update: Partial<Omit<CampaignMessage, 'id'>>
+      }
+      message_logs: {
+        Row: MessageLog
+        Insert: Omit<MessageLog, 'id' | 'created_at'> & {
+          id?: string
+          created_at?: string
+          status?: MessageLogStatus
+        }
+        Update: Partial<Omit<MessageLog, 'id' | 'created_at'>>
       }
       authorized_numbers: {
         Row: AuthorizedNumber

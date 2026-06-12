@@ -14,6 +14,8 @@ import type { CheckInSuccessProps } from './CheckInSuccess.types'
 interface MysteryBoxResponse {
   ok: boolean
   message?: string
+  whatsapp_sent?: boolean
+  whatsapp_reason?: string
   result: {
     choice: 'safe' | 'mystery'
     prize_title: string
@@ -42,6 +44,10 @@ export function CheckInSuccess({
   const [showReview, setShowReview] = useState(false)
   const [choicePhase, setChoicePhase] = useState<'choosing' | 'resolving' | 'result'>('choosing')
   const [mysteryResult, setMysteryResult] = useState<MysteryBoxResponse['result'] | null>(null)
+  // Auditoría 12-Julio: si el WhatsApp falló, el premio igual es válido. La UI debe
+  // avisar al cliente para que muestre la pantalla al mesero. true por defecto para no
+  // alarmar cuando la respuesta no trae el campo (compatibilidad).
+  const [mysteryWhatsappSent, setMysteryWhatsappSent] = useState(true)
   const [choiceLoading, setChoiceLoading] = useState(false)
 
   useEffect(() => {
@@ -71,6 +77,7 @@ export function CheckInSuccess({
       const data = (await res.json()) as MysteryBoxResponse
       if (data.ok) {
         setMysteryResult(data.result)
+        setMysteryWhatsappSent(data.whatsapp_sent ?? true)
         setChoicePhase('result')
       } else {
         toast.error(data.message ?? 'Error reclamando el premio. Intenta de nuevo.')
@@ -190,6 +197,7 @@ export function CheckInSuccess({
             wasGolden={mysteryResult.was_golden}
             nearMiss={mysteryResult.near_miss}
             allPrizes={mysteryResult.all_prizes}
+            whatsappSent={mysteryWhatsappSent}
           />
         ) : (
           <div
@@ -216,6 +224,14 @@ export function CheckInSuccess({
             <p className="mt-1.5 text-sm" style={{ color: '#059669' }}>
               Mostrále este mensaje al {STAFF_LABEL.toLowerCase()} para reclamar tu premio 🎁
             </p>
+            {!mysteryWhatsappSent && (
+              <p
+                className="mt-3 rounded-lg px-3 py-2 text-xs font-medium"
+                style={{ background: 'rgba(245,158,11,0.12)', color: '#b45309' }}
+              >
+                ⚠️ No pudimos enviarte el WhatsApp. Muestra esta pantalla al {STAFF_LABEL.toLowerCase()} para reclamar tu premio.
+              </p>
+            )}
           </div>
         )
       )}
@@ -299,9 +315,11 @@ export function CheckInSuccess({
         </div>
       )}
 
-      <p className="text-center text-xs" style={{ color: "#d1d5db" }}>
-        Te hemos enviado un mensaje por WhatsApp con los detalles.
-      </p>
+      {!(choicePhase === 'result' && !mysteryWhatsappSent) && (
+        <p className="text-center text-xs" style={{ color: "#d1d5db" }}>
+          Te hemos enviado un mensaje por WhatsApp con los detalles.
+        </p>
+      )}
 
       {/* Solicitud de reseña — card inline, no modal (Req P1.2) */}
       <GoogleReviewCard

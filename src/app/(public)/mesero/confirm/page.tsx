@@ -4,6 +4,7 @@ import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useStaffAuth } from '@/hooks/useStaffAuth'
 import { decodeCustomerQRTokenUnsafe } from '@/lib/utils/qrcode'
+import { RewardAlert } from '@/components/features/staff/RewardAlert'
 import { Loader2, ArrowLeft, User, Hash, CheckCircle2 } from 'lucide-react'
 
 export default function MeseroConfirmPage() {
@@ -132,18 +133,22 @@ function MeseroConfirmContent() {
     }
   }, [token, decoded, error])
 
+  // Headers de auth del mesero (Bearer JWT o X-Device-Token) — reutilizados por
+  // el registro de visita y por la alerta de premio pendiente.
+  const staffAuthHeaders = (): Record<string, string> => {
+    if (session?.type === 'staff' && session.token) {
+      return { Authorization: `Bearer ${session.token}` }
+    }
+    const deviceToken = typeof window !== 'undefined' ? localStorage.getItem('staff_device_token') : null
+    return deviceToken ? { 'X-Device-Token': deviceToken } : {}
+  }
+
   const handleRegister = async () => {
     if (!customerPhone) return
     setLoading(true)
     setError(null)
 
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-    if (session?.type === 'staff' && session.token) {
-      headers.Authorization = `Bearer ${session.token}`
-    } else {
-      const deviceToken = localStorage.getItem('staff_device_token')
-      if (deviceToken) headers['X-Device-Token'] = deviceToken
-    }
+    const headers: Record<string, string> = { 'Content-Type': 'application/json', ...staffAuthHeaders() }
 
     try {
       const res = await fetch('/api/check-in', {
@@ -213,6 +218,16 @@ function MeseroConfirmContent() {
               <p><span className="font-medium text-gray-700">Tier:</span> {success.tier}</p>
             )}
           </div>
+
+          {/* Alerta de premio pendiente: si el cliente ya eligió un premio que aún no
+              le han entregado, el mesero lo entrega y lo registra aquí mismo. */}
+          {customerPhone && (
+            <RewardAlert
+              phone={customerPhone}
+              authHeaders={staffAuthHeaders()}
+              tableNumber={tableNumber ? parseInt(tableNumber, 10) : null}
+            />
+          )}
 
           <button
             onClick={() => {

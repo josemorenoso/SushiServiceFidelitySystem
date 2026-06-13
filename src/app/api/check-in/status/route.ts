@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { validatePhone } from '@/lib/validators/phone'
 import { findCustomerByPhone } from '@/services/customer.service'
 import { getNextTier, getAllTiers } from '@/services/reward-tiers.service'
+import { getPendingReward } from '@/services/redemption.service'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 
 function getServiceClient() {
@@ -111,16 +112,24 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // ─── Premio pendiente de entrega física (Feature A — redemption tracking) ───
+    // Si el cliente ya eligió premio (mystery_box_results) pero el mesero aún no lo
+    // entregó (redeemed=false), lo exponemos para que la pantalla del mesero muestre
+    // la alerta "CLIENTE TIENE PREMIO PENDIENTE".
+    const pendingReward = await getPendingReward(customer.id)
+
     return NextResponse.json({
       found: true,
       hasRecentVisit: !!recentVisit,
       customer: {
+        id: customer.id,
         name: customer.name || 'Cliente',
         total_visits: customer.total_visits ?? 0,
         total_points: totalPoints,
       },
       points_awarded: pointsAwarded,
       tier_unlocked: tierUnlocked,
+      pending_reward: pendingReward,
       next_tier: nextTierInfo ? {
         name: nextTierInfo.tier.tier_name,
         points_remaining: nextTierInfo.pointsRemaining,

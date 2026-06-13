@@ -213,6 +213,8 @@ export function applyGoldenBox(prizes: MysteryPrize[]): MysteryPrize[] {
 }
 
 export interface MysteryBoxResolveResult {
+  /** id del registro en mystery_box_results — necesario para vincular la redención física */
+  resultId: string | null
   choice: MysteryBoxChoice
   prizeTitle: string
   prizeEmoji: string
@@ -236,7 +238,22 @@ export async function resolveMysteryBox(params: {
 
   // Si eligió safe
   if (choice === 'safe') {
-    const result: MysteryBoxResolveResult = {
+    // Registrar en mystery_box_results
+    const { data: inserted } = await supabase
+      .from('mystery_box_results')
+      .insert({
+        customer_id: customerId,
+        tier_id: tier.id,
+        choice: 'safe',
+        prize_title: tier.safe_reward_title,
+        prize_tier_index: -1,
+        was_golden: false,
+      })
+      .select('id')
+      .single()
+
+    return {
+      resultId: inserted?.id ?? null,
       choice: 'safe',
       prizeTitle: tier.safe_reward_title,
       prizeEmoji: '🎁',
@@ -245,18 +262,6 @@ export async function resolveMysteryBox(params: {
       allPrizes: tier.mystery_prizes,
       effectivePrizes: tier.mystery_prizes,
     }
-
-    // Registrar en mystery_box_results
-    await supabase.from('mystery_box_results').insert({
-      customer_id: customerId,
-      tier_id: tier.id,
-      choice: 'safe',
-      prize_title: tier.safe_reward_title,
-      prize_tier_index: -1,
-      was_golden: false,
-    })
-
-    return result
   }
 
   // Mystery box flow
@@ -281,14 +286,18 @@ export async function resolveMysteryBox(params: {
   const originalIndex = tier.mystery_prizes.findIndex((p) => p.title === prize.title)
 
   // Registrar resultado
-  await supabase.from('mystery_box_results').insert({
-    customer_id: customerId,
-    tier_id: tier.id,
-    choice: 'mystery',
-    prize_title: prize.title,
-    prize_tier_index: originalIndex,
-    was_golden: isGolden,
-  })
+  const { data: insertedMystery } = await supabase
+    .from('mystery_box_results')
+    .insert({
+      customer_id: customerId,
+      tier_id: tier.id,
+      choice: 'mystery',
+      prize_title: prize.title,
+      prize_tier_index: originalIndex,
+      was_golden: isGolden,
+    })
+    .select('id')
+    .single()
 
   // Actualizar pity timer streak
   await updateLowStreak(customerId, originalIndex)
@@ -305,6 +314,7 @@ export async function resolveMysteryBox(params: {
   await incrementGlobalCap(tier.id, prize.title)
 
   return {
+    resultId: insertedMystery?.id ?? null,
     choice: 'mystery',
     prizeTitle: prize.title,
     prizeEmoji: prize.emoji,

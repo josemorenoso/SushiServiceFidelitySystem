@@ -15,6 +15,8 @@ import {
   ShieldCheck,
   CalendarDays,
   UserCog,
+  Crosshair,
+  Ticket,
 } from 'lucide-react'
 import { BRAND_NAME, STAFF_LABEL_PLURAL } from '@/lib/branding'
 
@@ -22,7 +24,9 @@ const navItems = [
   { href: '/dashboard', label: 'Métricas', icon: LayoutDashboard },
   { href: '/dashboard/customers', label: 'Clientes', icon: Users },
   { href: '/dashboard/rewards', label: 'Recompensas', icon: Gift },
+  { href: '/dashboard/redemptions', label: 'Redenciones', icon: Ticket },
   { href: '/dashboard/campaigns', label: 'Campañas', icon: Megaphone },
+  { href: '/dashboard/imported-contacts', label: 'Golden Bullet', icon: Crosshair },
   { href: '/dashboard/calendar', label: 'Calendario', icon: CalendarDays },
   { href: '/dashboard/qr', label: 'Código QR', icon: QrCode },
   { href: '/dashboard/templates', label: 'Plantillas', icon: FileText },

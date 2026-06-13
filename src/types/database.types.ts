@@ -14,6 +14,8 @@ export interface Customer {
   current_tier: string | null
   mystery_box_low_streak: number
   last_points_awarded_at: string | null
+  /** Si el cliente vino de un contacto importado (Golden Bullet, migración 00023) */
+  imported_contact_id: string | null
   created_at: string
   updated_at: string
 }
@@ -179,6 +181,60 @@ export interface MysteryBoxResult {
   prize_title: string
   prize_tier_index: number
   was_golden: boolean
+  /** true cuando el premio ya fue entregado físicamente en el local (migración 00022) */
+  redeemed: boolean
+  redeemed_at: string | null
+  created_at: string
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Reward Redemptions — tracking de entrega física (v2.0.0, migración 00022)
+// ═══════════════════════════════════════════════════════════════
+
+export type RedemptionSource = 'mystery_box' | 'safe_choice' | 'staff_override' | 'campaign_reward'
+
+export interface RewardRedemption {
+  id: string
+  customer_id: string
+  mystery_box_result_id: string | null
+  tier_id: string
+  prize_title: string
+  source: RedemptionSource
+  redeemed_at: string
+  redeemed_by_staff_id: string | null
+  table_number: number | null
+  notes: string | null
+  pos_reference: string | null
+  created_at: string
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Imported Contacts — Golden Bullet (v2.0.0, migración 00023)
+// ═══════════════════════════════════════════════════════════════
+
+export type ImportedContactStatus =
+  | 'pending'
+  | 'valid'
+  | 'invalid'
+  | 'sent'
+  | 'delivered'
+  | 'bounced'
+  | 'converted'
+  | 'blocked'
+
+export interface ImportedContact {
+  id: string
+  phone: string
+  name: string | null
+  email: string | null
+  source_file: string
+  source_batch: string
+  status: ImportedContactStatus
+  validation_error: string | null
+  message_sent_at: string | null
+  twilio_sid: string | null
+  converted_to_customer_id: string | null
+  campaign_id: string | null
   created_at: string
 }
 
@@ -237,7 +293,7 @@ export interface Database {
     Tables: {
       customers: {
         Row: Customer
-        Insert: Omit<Customer, 'id' | 'created_at' | 'updated_at' | 'total_visits' | 'last_visit_at' | 'source_channels' | 'last_campaign_at' | 'total_points' | 'current_tier' | 'mystery_box_low_streak' | 'last_points_awarded_at' | 'whatsapp_opt_out_at'> & {
+        Insert: Omit<Customer, 'id' | 'created_at' | 'updated_at' | 'total_visits' | 'last_visit_at' | 'source_channels' | 'last_campaign_at' | 'total_points' | 'current_tier' | 'mystery_box_low_streak' | 'last_points_awarded_at' | 'whatsapp_opt_out_at' | 'imported_contact_id'> & {
           id?: string
           created_at?: string
           updated_at?: string
@@ -251,6 +307,7 @@ export interface Database {
           current_tier?: string | null
           mystery_box_low_streak?: number
           last_points_awarded_at?: string | null
+          imported_contact_id?: string | null
         }
         Update: Partial<Omit<Customer, 'id' | 'created_at'>>
       }
@@ -320,6 +377,25 @@ export interface Database {
           is_active?: boolean
         }
         Update: Partial<Omit<AuthorizedNumber, 'id' | 'created_at'>>
+      }
+      reward_redemptions: {
+        Row: RewardRedemption
+        Insert: Omit<RewardRedemption, 'id' | 'created_at' | 'redeemed_at' | 'source'> & {
+          id?: string
+          created_at?: string
+          redeemed_at?: string
+          source?: RedemptionSource
+        }
+        Update: Partial<Omit<RewardRedemption, 'id' | 'created_at'>>
+      }
+      imported_contacts: {
+        Row: ImportedContact
+        Insert: Omit<ImportedContact, 'id' | 'created_at' | 'status'> & {
+          id?: string
+          created_at?: string
+          status?: ImportedContactStatus
+        }
+        Update: Partial<Omit<ImportedContact, 'id' | 'created_at'>>
       }
     }
   }

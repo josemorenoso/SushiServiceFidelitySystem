@@ -143,6 +143,7 @@ export async function POST(request: NextRequest) {
       whatsapp_sent: whatsappSent,
       whatsapp_reason: whatsappReason,
       result: {
+        result_id: result.resultId,
         choice: result.choice,
         prize_title: result.prizeTitle,
         prize_emoji: result.prizeEmoji,

@@ -9,6 +9,7 @@ import { rateLimit, getClientIp } from '@/lib/rate-limit'
 import { awardVisitPoints, awardWelcomeBonus } from '@/services/points.service'
 import { evaluateNewTier, getNextTier, buildTiersRoadmap, updateCustomerTier, getAllTiers } from '@/services/reward-tiers.service'
 import { verifyCustomerQRToken, generateCustomerQRToken } from '@/lib/utils/qrcode'
+import { markConverted } from '@/services/imported-contacts.service'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { jwtVerify } from 'jose'
 
@@ -347,6 +348,22 @@ export async function POST(request: NextRequest) {
         accepts_marketing: body.accepts_marketing ?? true,
         countFirstVisit: !pendingStaffScan,
       })
+
+      // ─── Conversión Golden Bullet ───
+      // Si este teléfono provino de un contacto importado al que ya se le envió
+      // el mensaje, lo marcamos como 'converted' y dejamos trazabilidad en
+      // customers.imported_contact_id (activa el ROI automático del lote).
+      try {
+        const importedContactId = await markConverted(cleaned, customer.id)
+        if (importedContactId) {
+          await getServiceClient()
+            .from('customers')
+            .update({ imported_contact_id: importedContactId })
+            .eq('id', customer.id)
+        }
+      } catch (err) {
+        console.error('[CheckIn] Error marcando conversión Golden Bullet:', err)
+      }
 
       // Visita (best-effort — no debe bloquear el registro)
       // Usa source staff_scan si fue validado por mesero, sino qr.

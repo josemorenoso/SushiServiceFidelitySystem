@@ -5,6 +5,47 @@
 
 ---
 
+## [2.0.0] — 2026-06-12 — feat: tracking de redención física de premios + Golden Bullet (importación masiva)
+
+> Request: desarrollar el requerimiento `docs/features/REQUIREMENT_AUDIT_redemptions_bulk_import.md` — (A) trazabilidad de la entrega física de premios para cuadrar con el POS, y (B) importación masiva de contactos externos con envío de un solo disparo, bloqueo anti-reenvío y ROI automático.
+
+### Added — Feature A: Redención física de premios
+- `supabase/migrations/00022_reward_redemptions.sql` — tabla `reward_redemptions` (cliente, premio, mesero, mesa, ref. POS, origen) + índices + RLS + índice único anti-duplicado por `mystery_box_result_id` + trigger `mark_mystery_box_redeemed`. Añade `redeemed`/`redeemed_at` a `mystery_box_results`.
+- `src/services/redemption.service.ts` — `recordRedemption()`, `getRedemptions()`, `getRedemptionSummary()`, `getPendingReward()`/`hasPendingReward()`, `getCustomerRedemptions()`.
+- `src/app/api/reward-redeem/route.ts` — POST staff (Bearer JWT / X-Device-Token) para registrar la entrega física.
+- `src/app/api/dashboard/redemptions/route.ts` + `/summary/route.ts` — listado con filtros y resumen agrupado (por premio/hora/mesero) para cuadrar con POS.
+- `src/app/(dashboard)/dashboard/redemptions/page.tsx`, `src/components/dashboard/RedemptionsTable.tsx`, `RedemptionSummaryCards.tsx` — dashboard con filtros de fecha, heatmap de turnos y export CSV.
+- `src/components/features/staff/RewardAlert.tsx` — alerta "Cliente tiene premio pendiente" + botón "Registrar Entrega" en la pantalla del mesero (integrada en `/mesero/confirm`).
+
+### Added — Feature B: Golden Bullet (importación masiva)
+- `supabase/migrations/00023_imported_contacts.sql` — tabla `imported_contacts` (separada de `customers`) + columna `customers.imported_contact_id` para trazabilidad + RLS + seed feature flag `golden_bullet_enabled` y `twilio_cost_per_message_usd`.
+- `src/services/imported-contacts.service.ts` — `validateCSV()` (sin insertar), `confirmImport()` (envío en batches de 10), `listBatches()`, `getBatchStats()`, `getBatchRoi()`, `markConverted()`, bloqueo anti-reenvío vía `getExistingPhones()`.
+- `src/app/api/dashboard/imported-contacts/{validate,confirm,stats,roi}/route.ts` + `route.ts` — validar CSV, confirmar/enviar, listar lotes, estadísticas y ROI por lote (todos Admin Cookie + feature flag en los mutantes).
+- `src/app/(dashboard)/dashboard/imported-contacts/page.tsx` + `ImportedContactsUploader.tsx`, `ImportedContactsCostEstimator.tsx`, `ImportedContactsHistory.tsx` — wizard de 5 pasos (subir → validar → costo → plantilla → confirmar) e historial con ROI.
+- `public/plantilla_golden_bullet.csv` — plantilla descargable.
+
+### Changed
+- `src/app/api/check-in/status/route.ts` — añade `pending_reward` y `customer.id` a la respuesta para alimentar la alerta del mesero.
+- `src/app/api/check-in/route.ts` — en `action:'register'`, detecta si el teléfono provino de un contacto importado y lo marca como `converted`, guardando `customers.imported_contact_id` (activa el ROI).
+- `src/app/api/mystery-box/resolve/route.ts` + `src/services/mystery-box.service.ts` — el resultado incluye `result_id`/`resultId` para vincular la redención física.
+- `src/components/layout/DashboardSidebar.tsx` — nuevos ítems "Redenciones" y "Golden Bullet".
+- `src/types/database.types.ts` — interfaces `RewardRedemption`, `ImportedContact`, campos `redeemed`/`redeemed_at` en `MysteryBoxResult`, `imported_contact_id` en `Customer`, entradas en `Database['public']['Tables']`.
+
+### Fixed
+- Las migraciones 00022/00023 originales usaban `CREATE POLICY IF NOT EXISTS` (sintaxis NO soportada por Postgres) → reescritas con patrón `DROP POLICY IF EXISTS` + `CREATE POLICY`. La 00023 referenciaba `imported_contacts` en una FK de `customers` antes de crear la tabla → reordenado.
+
+### Docs
+- `docs/features/redemption-tracking.md` y `docs/features/golden-bullet.md` — nuevos documentos de feature.
+- `docs/DB_SCHEMA.md` — tablas `reward_redemptions`, `imported_contacts`, columnas nuevas, migraciones 00022/00023.
+- `docs/API_DOCS.md` — nuevos endpoints documentados.
+
+### Notes
+- **Acción manual:** ejecutar las migraciones `00022` y `00023` en Supabase.
+- **Feature flag:** Golden Bullet viene **desactivado** (`golden_bullet_enabled='false'`); actívalo en `admin_settings` para usarlo.
+- La plantilla de Golden Bullet debe ser `MARKETING` aprobada por Meta y SIN link de registro.
+
+---
+
 ## [1.8.0] — 2026-06-12 — feat: opt-out persistente de WhatsApp (resuelve auditoría 12-Julio, tarea 8)
 
 > Request: resolver la primera tarea pendiente prioritaria (opt-out persistente) y registrar el resto del pendiente. El sistema detectaba opt-outs pero no los bloqueaba: seguía enviando a quien respondió SALIR, generando errores 21610/63016.

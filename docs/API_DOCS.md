@@ -40,8 +40,9 @@ Webhooks validan origen por número autorizado o `x-webhook-secret`. Cron jobs v
 |--------|------|-------------|------|
 | GET | /api/health | Estado del servidor | NO |
 | GET | /api/health/twilio | Test conexión Twilio (saldo) | NO |
-| POST | /api/check-in | Registrar visita (QR) | NO (público) |
-| GET | /api/check-in/status | Estado del cliente + visita reciente | NO (público) |
+| POST | /api/check-in | Registrar visita (QR) + conversión Golden Bullet | NO (público) |
+| GET | /api/check-in/status | Estado del cliente + visita reciente + `pending_reward` | NO (público) |
+| POST | /api/reward-redeem | Registrar entrega física de un premio | Staff (Bearer/X-Device-Token) |
 | POST | /api/webhook/delivery | Recibir datos de domicilio (n8n/Twilio) | x-webhook-secret |
 | POST | /api/webhook/twilio-incoming | Auto-responder mensajes entrantes al número | Twilio Signature |
 | GET/POST | /api/cron/birthday | Enviar felicitaciones de cumpleaños | CRON_SECRET |
@@ -53,6 +54,13 @@ Webhooks validan origen por número autorizado o `x-webhook-secret`. Cron jobs v
 | GET | /api/dashboard/campaigns/estimate | Estimar audiencia con filtros | Admin Cookie |
 | POST | /api/dashboard/campaigns/manual | Crear y ejecutar campaña manual | Admin Cookie |
 | GET | /api/dashboard/twilio-balance | Saldo Twilio + costo por mensaje | Admin Cookie |
+| GET | /api/dashboard/redemptions | Listar redenciones con filtros | Admin Cookie |
+| GET | /api/dashboard/redemptions/summary | Resumen de redenciones (premio/hora/mesero) | Admin Cookie |
+| POST | /api/dashboard/imported-contacts/validate | Validar CSV de contactos (sin insertar) | Admin Cookie + flag |
+| POST | /api/dashboard/imported-contacts/confirm | Confirmar e importar/enviar Golden Bullet | Admin Cookie + flag |
+| GET | /api/dashboard/imported-contacts | Listar lotes o contactos de un lote | Admin Cookie |
+| GET | /api/dashboard/imported-contacts/stats | Estadísticas por lote | Admin Cookie |
+| GET | /api/dashboard/imported-contacts/roi | ROI por lote | Admin Cookie |
 | GET | /api/dashboard/twilio-metrics | Métricas de entrega/lectura/opt-outs WhatsApp | Admin Cookie |
 | GET | /api/dashboard/analytics | Analytics completos del dashboard | Admin Cookie |
 | GET | /api/dashboard/templates | Listar plantillas Twilio Content API | Admin Cookie |

@@ -142,6 +142,7 @@ erDiagram
 | `checkin_lat` | `numeric(10,8)` | SI | `NULL` | Última latitud de check-in |
 | `checkin_lon` | `numeric(11,8)` | SI | `NULL` | Última longitud de check-in |
 | `checkin_distance_meters` | `integer` | SI | `NULL` | Distancia al local en el último check-in (metros) |
+| `imported_contact_id` | `uuid` | SI | `NULL` | FK → imported_contacts(id) ON DELETE SET NULL. Trazabilidad si el cliente vino de un contacto importado (Golden Bullet, migración 00023) |
 | `created_at` | `timestamptz` | NO | `now()` | Fecha de creación |
 | `updated_at` | `timestamptz` | NO | `now()` | Última actualización |
 
@@ -563,6 +564,63 @@ CREATE POLICY "service_update_message_logs" ON message_logs
 
 ---
 
+### reward_redemptions
+
+> Tracking de la **entrega física** de un premio en el local (v2.0.0, migración 00022). Una fila por premio entregado. Ver `docs/features/redemption-tracking.md`.
+
+| Columna | Tipo | Nullable | Default | Descripción |
+|---------|------|----------|---------|-------------|
+| `id` | `uuid` | NO | `gen_random_uuid()` | PK |
+| `customer_id` | `uuid` | NO | - | FK → customers(id) ON DELETE CASCADE |
+| `mystery_box_result_id` | `uuid` | SI | `NULL` | FK → mystery_box_results(id) ON DELETE SET NULL. Link al premio elegido |
+| `tier_id` | `uuid` | NO | - | FK → reward_tiers(id) ON DELETE RESTRICT |
+| `prize_title` | `text` | NO | - | Snapshot del premio entregado |
+| `source` | `text` | NO | `'mystery_box'` | `mystery_box` \| `safe_choice` \| `staff_override` \| `campaign_reward` (CHECK) |
+| `redeemed_at` | `timestamptz` | NO | `now()` | Momento de la entrega física |
+| `redeemed_by_staff_id` | `uuid` | SI | `NULL` | FK → staff_users(id) ON DELETE SET NULL. Mesero que entregó |
+| `table_number` | `integer` | SI | `NULL` | Mesa |
+| `notes` | `text` | SI | `NULL` | Notas |
+| `pos_reference` | `text` | SI | `NULL` | Ticket/factura del POS para conciliación |
+| `created_at` | `timestamptz` | NO | `now()` | - |
+
+**Índices:** `idx_reward_redemptions_customer (customer_id, redeemed_at DESC)`, `idx_reward_redemptions_staff`, `idx_reward_redemptions_date`, `idx_reward_redemptions_pos`, índice único parcial `idx_reward_redemptions_unique_mystery_box (mystery_box_result_id) WHERE NOT NULL` (anti-duplicado).
+
+**Trigger:** `trg_reward_redemptions_insert` AFTER INSERT → `mark_mystery_box_redeemed()` marca `mystery_box_results.redeemed = true`.
+
+**RLS:** admin SELECT/UPDATE (`auth.role()='authenticated'`); service SELECT/INSERT (`true`).
+
+**Columnas añadidas a `mystery_box_results` (00022):** `redeemed boolean DEFAULT false`, `redeemed_at timestamptz NULL`.
+
+---
+
+### imported_contacts
+
+> Contactos importados desde CSV externos (Golden Bullet, v2.0.0, migración 00023). Separados de `customers` porque NO han dado consentimiento de marketing. Ver `docs/features/golden-bullet.md`.
+
+| Columna | Tipo | Nullable | Default | Descripción |
+|---------|------|----------|---------|-------------|
+| `id` | `uuid` | NO | `gen_random_uuid()` | PK |
+| `phone` | `text` | NO | - | Número (único) |
+| `name` | `text` | SI | `NULL` | Nombre si viene en el CSV |
+| `email` | `text` | SI | `NULL` | Email si viene |
+| `source_file` | `text` | NO | - | Nombre del CSV |
+| `source_batch` | `text` | NO | - | UUID del lote de importación |
+| `status` | `text` | NO | `'pending'` | `pending`\|`valid`\|`invalid`\|`sent`\|`delivered`\|`bounced`\|`converted`\|`blocked` (CHECK) |
+| `validation_error` | `text` | SI | `NULL` | Motivo de invalidez |
+| `message_sent_at` | `timestamptz` | SI | `NULL` | Cuándo se envió |
+| `twilio_sid` | `text` | SI | `NULL` | SID del mensaje Twilio |
+| `converted_to_customer_id` | `uuid` | SI | `NULL` | FK → customers(id) ON DELETE SET NULL. Si el contacto se registra |
+| `campaign_id` | `uuid` | SI | `NULL` | FK → campaigns(id) ON DELETE SET NULL |
+| `created_at` | `timestamptz` | NO | `now()` | - |
+
+**Índices:** único `idx_imported_contacts_phone (phone)`, `idx_imported_contacts_batch (source_batch, status)`, `idx_imported_contacts_status`, `idx_imported_contacts_converted`.
+
+**RLS:** admin ALL (`auth.role()='authenticated'`); service SELECT/INSERT/UPDATE (`true`).
+
+**Seed `admin_settings` (00023):** `golden_bullet_enabled='false'` (feature flag), `twilio_cost_per_message_usd='0.0175'`.
+
+---
+
 ## Storage Buckets
 
 ### event-media
@@ -606,6 +664,8 @@ CREATE POLICY "service_update_message_logs" ON message_logs
 | 19 | `00019_legacy_points_backfill.sql` | 2026-06-01 | Backfill de puntos para clientes con visitas previas al sistema de puntos: 1 visita → 75 pts, 2 visitas → 125 pts. Inserta `point_transactions` con source `admin_adjustment`. | Pendiente |
 | 20 | `00020_message_logs.sql` | 2026-06-12 | Tabla `message_logs` para tracking de TODOS los mensajes WhatsApp (transaccionales + campañas) + índices + RLS. Resuelve hallazgos CRÍTICOS de la auditoría 12-Julio. | Pendiente |
 | 21 | `00021_customer_whatsapp_opt_out.sql` | 2026-06-12 | Columna `customers.whatsapp_opt_out_at` + índice parcial. Opt-out persistente de WhatsApp (auditoría 12-Julio, tarea 8). | Pendiente |
+| 22 | `00022_reward_redemptions.sql` | 2026-06-12 | Tabla `reward_redemptions` + índices + RLS + trigger anti-duplicado; columnas `redeemed`/`redeemed_at` en `mystery_box_results`. Tracking de entrega física de premios (v2.0.0). | Pendiente |
+| 23 | `00023_imported_contacts.sql` | 2026-06-12 | Tabla `imported_contacts` + columna `customers.imported_contact_id` + RLS + seed `golden_bullet_enabled`/`twilio_cost_per_message_usd`. Golden Bullet (v2.0.0). | Pendiente |
 
 ---
 
@@ -642,3 +702,5 @@ $$ LANGUAGE plpgsql;
 | staff_users | Admin + Service | Admin + Service | Admin + Service | Admin |
 | staff_devices | Admin + Service | Admin + Service | Admin + Service | Admin |
 | message_logs | Admin | Service | Service | NO |
+| reward_redemptions | Admin + Service | Service | Admin | NO |
+| imported_contacts | Admin + Service | Admin + Service | Admin + Service | NO |

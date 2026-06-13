@@ -9,6 +9,7 @@ export interface Customer {
   source_channels: 'qr' | 'delivery' | 'both'
   last_campaign_at: string | null
   accepts_marketing: boolean
+  whatsapp_opt_out_at: string | null
   total_points: number
   current_tier: string | null
   mystery_box_low_streak: number
@@ -236,7 +237,7 @@ export interface Database {
     Tables: {
       customers: {
         Row: Customer
-        Insert: Omit<Customer, 'id' | 'created_at' | 'updated_at' | 'total_visits' | 'last_visit_at' | 'source_channels' | 'last_campaign_at' | 'total_points' | 'current_tier' | 'mystery_box_low_streak' | 'last_points_awarded_at'> & {
+        Insert: Omit<Customer, 'id' | 'created_at' | 'updated_at' | 'total_visits' | 'last_visit_at' | 'source_channels' | 'last_campaign_at' | 'total_points' | 'current_tier' | 'mystery_box_low_streak' | 'last_points_awarded_at' | 'whatsapp_opt_out_at'> & {
           id?: string
           created_at?: string
           updated_at?: string
@@ -245,6 +246,7 @@ export interface Database {
           source_channels?: 'qr' | 'delivery' | 'both'
           last_campaign_at?: string | null
           accepts_marketing?: boolean
+          whatsapp_opt_out_at?: string | null
           total_points?: number
           current_tier?: string | null
           mystery_box_low_streak?: number

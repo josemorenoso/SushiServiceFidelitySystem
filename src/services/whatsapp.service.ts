@@ -20,6 +20,7 @@
 
 import { formatPhoneForWhatsApp } from '@/lib/validators/phone'
 import { recordMessageLog } from '@/services/message-log.service'
+import { isPhoneOptedOut } from '@/services/customer.service'
 
 export interface TwilioMessageResponse {
   sid: string
@@ -68,6 +69,24 @@ export async function sendTemplateMessage(
         status: 'failed',
         errorCode: 'twilio_not_configured',
         errorMessage: 'TWILIO_ACCOUNT_SID/AUTH_TOKEN/WHATSAPP_NUMBER ausente',
+      })
+    }
+    return null
+  }
+
+  // Opt-out persistente (auditoría 12-Julio, tarea 8): si el cliente respondió
+  // SALIR/STOP/BAJA, no malgastamos el envío ni generamos un error 21610.
+  if (await isPhoneOptedOut(phone)) {
+    console.warn(`[WhatsApp] Envío omitido: el cliente está en opt-out (contentSid=${contentSid})`)
+    if (logContext) {
+      await recordMessageLog({
+        ...logContext,
+        phone,
+        templateSid: contentSid,
+        variables,
+        status: 'failed',
+        errorCode: 'opted_out_local',
+        errorMessage: 'Cliente con opt-out activo (whatsapp_opt_out_at)',
       })
     }
     return null

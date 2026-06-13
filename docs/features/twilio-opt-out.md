@@ -117,14 +117,17 @@ Cuando un cliente responde cualquier keyword de opt-out (ej: `SALIR`):
 
 ### Manejo en el código
 
-En `src/services/whatsapp.service.ts` el envío de WhatsApp atrapa el error 21610:
+En `src/services/whatsapp.service.ts` el envío de WhatsApp atrapa el error 21610 y lo registra en `message_logs` con su código.
 
-```typescript
-if (error.code === 21610 || error.code === "21610") {
-  // Cliente opt-out — no reintentar, no loguear como crítico
-  console.warn(`[Twilio] Cliente ${to} está opt-out. Saltando envío.`);
-}
-```
+### Opt-out persistente (v1.8.0 — auditoría 12-Julio, tarea 8)
+
+Antes, el webhook entrante detectaba las keywords de opt-out pero **no marcaba al cliente en la base de datos**, así que el sistema seguía intentando enviarle. Ahora el estado se persiste:
+
+1. **Columna `customers.whatsapp_opt_out_at`** (migración `00021`). NULL = puede recibir.
+2. **`src/app/api/webhook/twilio-incoming/route.ts`** — al recibir un keyword de opt-out (`SALIR`, `STOP`, `BAJA`, `CANCELAR`, `FUERA`…) llama a `setWhatsappOptOut(phone)` (marca `whatsapp_opt_out_at = now()` y `accepts_marketing = false`). Un keyword de opt-in (`ALTA`, `START`, `ACEPTO`…) llama a `clearWhatsappOptOut(phone)`.
+3. **Verificación antes de enviar** — `sendTemplateMessage` consulta `isPhoneOptedOut(phone)` y, si está en opt-out, **omite el envío** (no malgasta el mensaje ni genera el error 21610) y lo registra en `message_logs` con `error_code = 'opted_out_local'`.
+
+> Funciones en `src/services/customer.service.ts`: `setWhatsappOptOut`, `clearWhatsappOptOut`, `isPhoneOptedOut`. Todas best-effort (no rompen el flujo si la DB falla; `isPhoneOptedOut` devuelve `false` ante error para no bloquear envíos legítimos).
 
 ---
 

@@ -138,6 +138,7 @@ erDiagram
 | `source_channels` | `text` | NO | `'qr'` | Origen del cliente: 'qr', 'delivery' o 'both' |
 | `last_campaign_at` | `timestamptz` | SI | `NULL` | Fecha de última campaña recibida (frequency cap) |
 | `accepts_marketing` | `boolean` | NO | `true` | Si el cliente acepta comunicaciones de marketing |
+| `whatsapp_opt_out_at` | `timestamptz` | SI | `NULL` | Último opt-out de WhatsApp (respondió SALIR/STOP/BAJA o Twilio rechazó por 21610/63016). NULL = puede recibir. Se limpia con opt-in (ALTA/START). |
 | `checkin_lat` | `numeric(10,8)` | SI | `NULL` | Última latitud de check-in |
 | `checkin_lon` | `numeric(11,8)` | SI | `NULL` | Última longitud de check-in |
 | `checkin_distance_meters` | `integer` | SI | `NULL` | Distancia al local en el último check-in (metros) |
@@ -151,6 +152,7 @@ erDiagram
 | `customers_pkey` | `id` | PRIMARY KEY |
 | `customers_phone_key` | `phone` | UNIQUE |
 | `idx_customers_checkin_location` | `(checkin_lat, checkin_lon)` | BTREE (parcial: WHERE checkin_lat IS NOT NULL) |
+| `idx_customers_whatsapp_opt_out` | `whatsapp_opt_out_at` | BTREE (parcial: WHERE whatsapp_opt_out_at IS NOT NULL) |
 
 **Políticas RLS:**
 
@@ -603,6 +605,7 @@ CREATE POLICY "service_update_message_logs" ON message_logs
 | 15 | `00015_staff_qr_scan.sql` | 2026-05-30 | Tablas `staff_users`, `staff_devices`, FK `visits.registered_by_staff_id`, settings `checkin_mode`/`checkin_first_visit_free`, RLS staff + trigger updated_at | Pendiente |
 | 19 | `00019_legacy_points_backfill.sql` | 2026-06-01 | Backfill de puntos para clientes con visitas previas al sistema de puntos: 1 visita → 75 pts, 2 visitas → 125 pts. Inserta `point_transactions` con source `admin_adjustment`. | Pendiente |
 | 20 | `00020_message_logs.sql` | 2026-06-12 | Tabla `message_logs` para tracking de TODOS los mensajes WhatsApp (transaccionales + campañas) + índices + RLS. Resuelve hallazgos CRÍTICOS de la auditoría 12-Julio. | Pendiente |
+| 21 | `00021_customer_whatsapp_opt_out.sql` | 2026-06-12 | Columna `customers.whatsapp_opt_out_at` + índice parcial. Opt-out persistente de WhatsApp (auditoría 12-Julio, tarea 8). | Pendiente |
 
 ---
 

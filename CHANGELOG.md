@@ -5,6 +5,30 @@
 
 ---
 
+## [1.8.0] — 2026-06-12 — feat: opt-out persistente de WhatsApp (resuelve auditoría 12-Julio, tarea 8)
+
+> Request: resolver la primera tarea pendiente prioritaria (opt-out persistente) y registrar el resto del pendiente. El sistema detectaba opt-outs pero no los bloqueaba: seguía enviando a quien respondió SALIR, generando errores 21610/63016.
+
+### Added
+- `supabase/migrations/00021_customer_whatsapp_opt_out.sql` — columna `customers.whatsapp_opt_out_at` (timestamptz, nullable) + índice parcial `WHERE whatsapp_opt_out_at IS NOT NULL`.
+- `src/services/customer.service.ts` — `setWhatsappOptOut(phone)`, `clearWhatsappOptOut(phone)`, `isPhoneOptedOut(phone)`. Todas best-effort (no rompen el flujo; `isPhoneOptedOut` devuelve `false` ante error de DB para no bloquear envíos legítimos).
+
+### Changed
+- `src/app/api/webhook/twilio-incoming/route.ts` — al recibir un keyword de **opt-out** (SALIR/STOP/BAJA/CANCELAR/FUERA…) persiste `whatsapp_opt_out_at = now()` y `accepts_marketing = false`; un keyword de **opt-in** (ALTA/START/ACEPTO…) limpia el opt-out y reactiva marketing. Antes solo devolvía 200 sin tocar la base de datos.
+- `src/services/whatsapp.service.ts` — `sendTemplateMessage` verifica `isPhoneOptedOut(phone)` **antes de enviar**; si el cliente está en opt-out, omite el envío (no gasta el mensaje ni genera 21610) y lo registra en `message_logs` con `error_code='opted_out_local'`.
+- `src/types/database.types.ts` — `whatsapp_opt_out_at` en `Customer` + `Insert`.
+
+### Docs
+- `docs/DB_SCHEMA.md` — columna en `customers`, índice y migración 00021.
+- `docs/features/twilio-opt-out.md` — sección "Opt-out persistente (v1.8.0)".
+- `docs/AUDIT-12-Julio/RESOLUCION.md` — tarea 8 marcada como resuelta; pendiente reordenado por valor neto (tareas 6-7 marcadas como cubiertas por el panel `twilio-metrics`).
+
+### Notes
+- **Acción manual:** ejecutar las migraciones `00020` y `00021` en Supabase.
+- El opt-out bloquea **todos** los envíos (transaccionales y campañas), coherente con el bloqueo a nivel de cuenta de Twilio. Los premios siguen siendo reclamables vía el fallback visual de la UI (v1.7.0).
+
+---
+
 ## [1.7.0] — 2026-06-12 — feat: tracking de mensajes WhatsApp + fallback visible en Mystery Box (resuelve auditoría 12-Julio, bloque 1-4)
 
 > Request: resolver el bloque de tareas 1–4 de la auditoría 12-Julio — el caso del cliente que gana un premio en Mystery Box y nunca recibe el WhatsApp de confirmación, sin que nadie se entere del fallo.

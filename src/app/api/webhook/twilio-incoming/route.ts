@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { validateTwilioSignature } from '@/lib/validators/twilio'
 import { createClient } from '@supabase/supabase-js'
+import { setWhatsappOptOut, clearWhatsappOptOut } from '@/services/customer.service'
+
+// Keywords de opt-out/in alineados con el Messaging Service de Twilio
+// (ver docs/features/twilio-opt-out.md). Twilio normalmente los intercepta
+// antes de llegar aquí, pero los persistimos por si acaso y para mantener
+// nuestra base de datos sincronizada (auditoría 12-Julio, tarea 8).
+const OPT_OUT_KEYWORDS = ['STOP', 'STOPALL', 'UNSUBSCRIBE', 'CANCEL', 'CANCELAR', 'END', 'QUIT', 'BAJA', 'SALIR', 'SAL', 'SALI', 'FUERA', 'OPTOUT', 'NO']
+const OPT_IN_KEYWORDS = ['START', 'UNSTOP', 'YES', 'SI', 'ALTA', 'ACEPTO']
 
 const BRAND_NAME = process.env.NEXT_PUBLIC_BRAND_NAME ?? 'el restaurante'
 const RESTAURANT_LINK =
@@ -79,14 +87,26 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const body = (params['Body'] ?? '').trim()
   const upper = body.toUpperCase()
 
-  // Twilio intercepts STOP/START before hitting this webhook in most cases,
-  // but handle defensively just in case.
-  if (['STOP', 'UNSTOP', 'START', 'BAJA', 'ALTA', 'SALIR', 'NO'].includes(upper)) {
-    return new NextResponse(null, { status: 200 })
-  }
-
   const from = params['From'] ?? ''
   const phone = normalizePhone(from)
+
+  // Opt-out / opt-in: Twilio intercepta STOP/START antes de llegar aquí en la
+  // mayoría de casos, pero persistimos el estado para mantener NUESTRA base de
+  // datos sincronizada y dejar de intentar enviarle (auditoría 12-Julio, tarea 8).
+  if (OPT_OUT_KEYWORDS.includes(upper)) {
+    if (phone.length === 10) {
+      await setWhatsappOptOut(phone)
+      console.log(`[twilio-incoming] opt-out persistido para ${phone} (keyword="${upper}")`)
+    }
+    return new NextResponse(null, { status: 200 })
+  }
+  if (OPT_IN_KEYWORDS.includes(upper)) {
+    if (phone.length === 10) {
+      await clearWhatsappOptOut(phone)
+      console.log(`[twilio-incoming] opt-in: opt-out limpiado para ${phone} (keyword="${upper}")`)
+    }
+    return new NextResponse(null, { status: 200 })
+  }
 
   // Si el remitente es un mesero autorizado, redirigir a n8n para procesar el pedido
   if (phone.length === 10) {

@@ -44,12 +44,21 @@ export default function RedemptionsPage() {
         fetch(`/api/dashboard/redemptions/summary?${summaryParams}`),
         fetch(`/api/dashboard/redemptions?${listParams}`),
       ])
-      const summaryData = await summaryRes.json()
-      const listData = await listRes.json()
-      setSummary(summaryData)
-      setRows(listData.redemptions ?? [])
-      setTotal(listData.total ?? 0)
+      const summaryData = summaryRes.ok ? await summaryRes.json() : null
+      const listData = listRes.ok ? await listRes.json() : null
+
+      // Solo aceptamos un summary con la forma esperada (arrays). Si la API falló
+      // (p.ej. falta correr la migración 00022) degradamos a null/vacío sin reventar.
+      setSummary(summaryData && Array.isArray(summaryData.by_prize) ? summaryData : null)
+      setRows(Array.isArray(listData?.redemptions) ? listData.redemptions : [])
+      setTotal(typeof listData?.total === 'number' ? listData.total : 0)
+
+      if (!summaryRes.ok || !listRes.ok) {
+        toast.error('No se pudieron cargar las redenciones (¿falta correr la migración 00022?)')
+      }
     } catch {
+      setSummary(null)
+      setRows([])
       toast.error('Error cargando redenciones')
     } finally {
       setLoading(false)

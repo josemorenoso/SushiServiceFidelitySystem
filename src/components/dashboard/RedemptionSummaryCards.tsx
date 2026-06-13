@@ -27,10 +27,18 @@ export function RedemptionSummaryCards({ summary, loading }: Props) {
     )
   }
 
+  // Blindaje: si la API respondió con error (p.ej. la tabla aún no existe porque
+  // falta correr la migración 00022), `summary` puede no traer los arrays. Nunca
+  // debemos reventar el render — degradamos a vacío.
+  const byPrize = summary?.by_prize ?? []
+  const byHour = summary?.by_hour ?? []
+  const byStaff = summary?.by_staff ?? []
+  const totalRedemptions = summary?.total_redemptions ?? 0
+
   if (!summary) return null
 
-  const topPrize = summary.by_prize[0]
-  const maxHourCount = Math.max(1, ...summary.by_hour.map((h) => h.count))
+  const topPrize = byPrize[0]
+  const maxHourCount = Math.max(1, ...byHour.map((h) => h.count))
 
   return (
     <div className="grid gap-4 lg:grid-cols-3">
@@ -42,14 +50,14 @@ export function RedemptionSummaryCards({ summary, loading }: Props) {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-3xl font-bold">{summary.total_redemptions}</p>
+          <p className="text-3xl font-bold">{totalRedemptions}</p>
           {topPrize && (
             <p className="mt-1 text-xs text-muted-foreground">
               Más entregado: <span className="font-medium text-foreground">{topPrize.prize_title}</span> ({topPrize.count})
             </p>
           )}
           <div className="mt-3 space-y-1">
-            {summary.by_prize.slice(0, 4).map((p) => (
+            {byPrize.slice(0, 4).map((p) => (
               <div key={p.prize_title} className="flex items-center justify-between text-xs">
                 <span className="truncate text-muted-foreground">{p.prize_title}</span>
                 <span className="font-mono font-medium">{p.count}</span>
@@ -67,11 +75,11 @@ export function RedemptionSummaryCards({ summary, loading }: Props) {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {summary.by_hour.length === 0 ? (
+          {byHour.length === 0 ? (
             <p className="py-6 text-center text-xs text-muted-foreground">Sin datos en el rango</p>
           ) : (
             <div className="flex items-end gap-1 h-24">
-              {summary.by_hour.map((h) => (
+              {byHour.map((h) => (
                 <div key={h.hour} className="flex flex-1 flex-col items-center gap-1" title={`${h.hour}:00 — ${h.count}`}>
                   <div
                     className="w-full rounded-t bg-[#E63946]/80"
@@ -93,11 +101,11 @@ export function RedemptionSummaryCards({ summary, loading }: Props) {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {summary.by_staff.length === 0 ? (
+          {byStaff.length === 0 ? (
             <p className="py-6 text-center text-xs text-muted-foreground">Sin datos en el rango</p>
           ) : (
             <div className="space-y-1.5">
-              {summary.by_staff.slice(0, 6).map((s) => (
+              {byStaff.slice(0, 6).map((s) => (
                 <div key={s.staff_id ?? 'unassigned'} className="flex items-center justify-between text-xs">
                   <span className="truncate text-muted-foreground">{s.staff_name ?? 'Sin asignar'}</span>
                   <span className="font-mono font-medium">{s.count}</span>

@@ -42,6 +42,7 @@ Webhooks validan origen por número autorizado o `x-webhook-secret`. Cron jobs v
 | GET | /api/health/twilio | Test conexión Twilio (saldo) | NO |
 | POST | /api/check-in | Registrar visita (QR) + conversión Golden Bullet | NO (público) |
 | GET | /api/check-in/status | Estado del cliente + visita reciente + `pending_reward` | NO (público) |
+| GET | /api/public/customer-card | Datos de tarjeta del cliente (puntos, tiers) por teléfono | NO (público) |
 | POST | /api/reward-redeem | Registrar entrega física de un premio | Staff (Bearer/X-Device-Token) |
 | POST | /api/webhook/delivery | Recibir datos de domicilio (n8n/Twilio) | x-webhook-secret |
 | POST | /api/webhook/twilio-incoming | Auto-responder mensajes entrantes al número | Twilio Signature |

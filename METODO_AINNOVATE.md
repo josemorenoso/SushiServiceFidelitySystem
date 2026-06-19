@@ -1594,6 +1594,33 @@ El Método AInnovate convierte a la IA en un **verdadero par de programación** 
 
 Esta sección documenta los cambios recientes aplicados a este proyecto siguiendo el Método AInnovate.
 
+## [2026-06-17] Feat: Activación del auto-envío del calendario (v2.1.0)
+
+### Resumen
+Se activó el auto-envío de eventos del calendario operativo, que estaba implementado en backend pero nunca corría. El cron `calendar-dispatch` no estaba registrado en ningún scheduler, la UI mostraba un mensaje obsoleto ("el path de envío no está cableado"), no existía forma de disparar/reintentar un evento a mano, y no se advertía si faltaban las plantillas Twilio. Decisión de infraestructura: disparar el cron desde **n8n self-hosted** (cada 15 min) en lugar de Vercel cron, para no pagar plan Pro (`*/15` + ser el 3er cron supera el límite de Hobby).
+
+### Archivos creados/modificados
+- `src/app/api/dashboard/calendar/events/[id]/dispatch/route.ts` — NUEVO endpoint POST (auth admin) para disparar/reintentar el auto-envío manualmente.
+- `src/components/dashboard/Calendar/EventDetailDrawer.tsx` — eliminado mensaje obsoleto; botón "Enviar ahora"/"Reintentar"; alerta si falta la plantilla Twilio requerida.
+- `src/app/api/dashboard/calendar/events/[id]/route.ts` — corregido comentario obsoleto del PATCH.
+- `vercel.json` — sin cambios netos: se revirtió la entrada del cron porque se ejecuta vía n8n (Hobby solo permite 2 crons diarios).
+
+### Cambios en base de datos
+- Ninguno (sin migración).
+
+### Documentación actualizada
+- [x] `CHANGELOG.md` — entrada v2.1.0
+- [x] `docs/features/calendar.md` — estado, tabla de archivos, sección de dispatch manual
+- [x] `docs/API_DOCS.md` — endpoint dispatch + cron `calendar-dispatch` + índice; quitada nota obsoleta
+- [x] `docs/SKILLS.md` — n8n self-hosted registrado como scheduler externo
+- [x] `.windsurfrules` — entradas de calendario añadidas a la tabla de lookup (faltaban)
+- [ ] `DB_SCHEMA.md` (no aplica — sin cambios de schema)
+
+### Lección aprendida
+Tener el backend completo no sirve si nada dispara el cron: el "registro del scheduler" (Vercel cron / n8n / etc.) es parte de la feature, no un detalle de deploy. Cuando un límite de plan (Vercel Hobby: 2 crons diarios) choca con la necesidad (`*/15`), un scheduler externo self-hosted como n8n resuelve sin costo, reutilizando la misma autenticación `CRON_SECRET` del endpoint.
+
+---
+
 ## [2026-05-25] Fix: Flujo check-in + gamificación (v1.0.2)
 
 ### Resumen

@@ -41,9 +41,8 @@ export async function GET(
  * PATCH /api/dashboard/calendar/events/[id]
  * Actualiza campos del evento. Body: UpdateEventInput.
  *
- * NOTA: La acción de "ejecutar envío inmediato" no está disponible en esta versión
- * porque depende del path de envío (plantillas Twilio aprobadas).
- * Se cableará en una iteración separada.
+ * Para disparar el envío inmediato de un evento auto, usa
+ * POST /api/dashboard/calendar/events/[id]/dispatch.
  */
 export async function PATCH(
   request: NextRequest,

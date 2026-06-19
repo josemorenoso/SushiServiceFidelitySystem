@@ -41,8 +41,8 @@
 3. **Mostrar el mensaje de WhatsApp:** "Así se siente para el cliente"
 4. **Mostrar el dashboard:** "Así ves tú quién vino, cuándo, y qué premios ganaron"
 5. **Mencionar lo que NO necesitan:** No app, no tarjetas, no hardware
-6. **Precios:** Plan Básico $89K / Pro $149K / Enterprise $249K COP/mes
-7. **Setup:** Cobro único $200K-$500K COP (2-4 horas de trabajo)
+6. **Precio único:** $250.000 COP/mes — clientes ilimitados, campañas ilimitadas, soporte incluido
+7. **Setup:** Pago único $1.200.000 COP (implementación completa en 2-4 horas)
 8. **Cierre:** "¿Empezamos esta semana? Te mando el contrato y el pago del setup, y en 48h estás operando."
 
 ### Paso 2.3 — Después de la reunión

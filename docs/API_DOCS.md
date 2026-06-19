@@ -47,6 +47,7 @@ Webhooks validan origen por número autorizado o `x-webhook-secret`. Cron jobs v
 | POST | /api/webhook/twilio-incoming | Auto-responder mensajes entrantes al número | Twilio Signature |
 | GET/POST | /api/cron/birthday | Enviar felicitaciones de cumpleaños | CRON_SECRET |
 | GET/POST | /api/cron/reactivation | Enviar reactivaciones (días configurables, default 21/25) | CRON_SECRET |
+| GET/POST | /api/cron/calendar-dispatch | Auto-enviar eventos del calendario vencidos (disparado por n8n) | CRON_SECRET |
 | GET | /api/dashboard/metrics | Métricas generales | Admin Cookie |
 | GET | /api/dashboard/customers | Lista de clientes | Admin Cookie |
 | POST | /api/dashboard/campaigns | Crear campaña manual | Admin Cookie |
@@ -77,6 +78,7 @@ Webhooks validan origen por número autorizado o `x-webhook-secret`. Cron jobs v
 | POST | /api/dashboard/calendar/events | Crear evento del calendario | Admin Cookie |
 | GET | /api/dashboard/calendar/events/:id | Detalle de un evento | Admin Cookie |
 | PATCH | /api/dashboard/calendar/events/:id | Actualizar evento | Admin Cookie |
+| POST | /api/dashboard/calendar/events/:id/dispatch | Disparar/reintentar auto-envío del evento (manual) | Admin Cookie |
 | DELETE | /api/dashboard/calendar/events/:id | Cancelar evento (soft-delete) | Admin Cookie |
 | POST | /api/dashboard/calendar/media-upload | Subir imagen/video a `event-media` | Admin Cookie |
 | DELETE | /api/dashboard/calendar/media-upload?path=X | Borrar asset del bucket | Admin Cookie |
@@ -408,6 +410,41 @@ Si ninguno está configurado, retorna `{ ok: false, error: "..." }` sin enviar.
 
 ---
 
+### Cron: Calendar Dispatch
+
+**`POST /api/cron/calendar-dispatch`** — Protegido por `CRON_SECRET`
+
+**Headers:** `Authorization: Bearer {CRON_SECRET}`
+
+Busca eventos con `send_mode='auto'`, `status='scheduled'` y `scheduled_send_at <= now()` y ejecuta su auto-envío (`executeAutoEvent`).
+
+> **Quién lo dispara:** NO está en `vercel.json`. Lo dispara **n8n self-hosted** (Schedule Trigger cada 15 min → HTTP POST con el header `Authorization: Bearer CRON_SECRET`). Decisión tomada para no exigir plan Vercel Pro (`*/15` + ser el 3er cron superaría el límite de Hobby). `birthday` y `reactivation` siguen como crons de Vercel (2 diarios, caben en Hobby).
+
+**Response 200:**
+```json
+{
+  "ok": true,
+  "processed": 1,
+  "total_sent": 42,
+  "total_failed": 1,
+  "results": [
+    {
+      "event_id": "uuid",
+      "title": "Festival del Sushi",
+      "ok": true,
+      "sent": 42,
+      "failed": 1,
+      "excluded_monthly_cap": 7,
+      "campaign_id": "uuid"
+    }
+  ]
+}
+```
+
+**Response 401:** `{ "error": "No autorizado" }` (CRON_SECRET ausente o no coincide)
+
+---
+
 ### Dashboard: Twilio Metrics
 
 **`GET /api/dashboard/twilio-metrics?days={7|30|90}`** — Admin Cookie (Supabase session)
@@ -633,8 +670,8 @@ Actualiza una configuración por clave.
 
 ## Calendar — Eventos del calendario operativo
 
-> Capa de datos del calendario. Los eventos se crean y persisten con o sin media (imagen/video).
-> **El path de envío (disparo del WhatsApp) no está implementado en esta iteración** — está pausado hasta que las plantillas Twilio tipo `twilio/media` estén aprobadas por Meta. Hoy los eventos solo se almacenan y se listan; cuando se cablee el envío, los eventos con `send_mode='auto'` y `status='scheduled'` se dispararán vía cron.
+> Capa de datos + auto-envío del calendario. Los eventos se crean y persisten con o sin media (imagen/video).
+> **El auto-envío está activo:** los eventos con `send_mode='auto'` y `status='scheduled'` se disparan vía `POST /api/cron/calendar-dispatch` (programado en n8n self-hosted) o manualmente con `POST .../events/:id/dispatch`. El envío real con media sigue dependiendo de que Meta apruebe las plantillas `twilio/media`.
 
 ### Listar eventos del rango
 
@@ -726,6 +763,27 @@ Devuelve los eventos cuyo `event_date` cae en el rango (inclusive en ambos extre
 Si se actualiza `scheduled_send_at` (o `send_mode='auto'` + `scheduled_send_at`), el `status` se alinea a `'scheduled'` automáticamente.
 
 **Response 200:** `{ "event": { ... } }`
+
+---
+
+### Disparar / reintentar auto-envío (manual)
+
+**`POST /api/dashboard/calendar/events/:id/dispatch`** — Admin JWT
+
+Ejecuta `executeAutoEvent` bajo demanda. Red de seguridad si el cron de n8n falla o aún no corre.
+
+**Reglas:**
+- Solo eventos con `send_mode='auto'`.
+- Acepta `status='scheduled'` (envío anticipado) o `status='failed'` (reintento — se rearma a `scheduled` antes de ejecutar para pasar el guard de idempotencia).
+- `sent`, `cancelled` y `planned` → 400.
+- Requiere `event_template_image_sid` / `event_template_video_sid` en `admin_settings` según `media_type`; si falta, devuelve el error de `executeAutoEvent`.
+
+**Response 200:**
+```json
+{ "ok": true, "sent": 42, "failed": 1, "excluded_monthly_cap": 7, "campaign_id": "uuid" }
+```
+
+**Response 400:** `{ "error": "El evento no se puede enviar en estado 'sent'." }`
 
 ---
 

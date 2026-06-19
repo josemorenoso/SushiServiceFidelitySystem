@@ -286,11 +286,12 @@ En Sushi Service siempre hay algo nuevo esperándote 🎯
 
 ## PRICING SUGERIDO (Colombia)
 
-| Plan | Precio/mes COP | Incluye |
-|------|:--------------:|---------|
-| **Básico** | $89.000 | Hasta 200 clientes, 500 WhatsApp/mes, soporte email |
-| **Pro** | $149.000 | Clientes ilimitados, campañas manuales segmentadas, soporte prioritario |
-| **Enterprise** | $249.000 | Multi-sede, analytics avanzados, soporte 24/7, onboarding presencial |
+| Concepto | Precio COP | Detalle |
+|----------|:----------:|---------|
+| **Setup (pago único)** | $1.200.000 | Implementación completa: Supabase, Vercel, Twilio, plantillas WhatsApp, QR impresos |
+| **Mensualidad** | $250.000 | Clientes ilimitados, campañas ilimitadas, soporte WhatsApp, actualizaciones |
+
+> **Frase de venta:** *"Desde $250K/mes — menos que un día de ventas de un restaurante pequeño."*
 
 **Costo operativo real del sistema por restaurante (~USD/mes):**
 - Vercel Hobby: $0
@@ -371,13 +372,13 @@ Margen alto especialmente en planes Pro y Enterprise.
 
 | Característica | Este sistema | Apps de sellos típicas | CRMs genéricos |
 |----------------|:------------:|:---------------------:|:--------------:|
-| Sin app para el cliente | ✅ | ❌ (requieren descarga) | ❌ |
+| Sin app / Sin Wallet para el cliente | ✅ Solo QR + WhatsApp | ❌ (requieren Wallet/app) | ❌ |
 | WhatsApp automatizado | ✅ | ❌ | Costoso |
 | Captura de domicilios automática | ✅ | ❌ | ❌ |
 | Dashboard con analytics reales | ✅ | Básico | ✅ pero complejo |
 | Personalizado por restaurante | ✅ | ❌ genérico | ❌ genérico |
-| Precio accesible Colombia | ✅ desde $89K | Variable | $300K+ |
-| Implementación en horas | ✅ | Días/semanas | Semanas/meses |
+| Precio accesible Colombia | ✅ $250K/mes + $1.2M setup | Variable | $300K+ |
+| Implementación en horas | ✅ (2-4 horas) | Días/semanas | Semanas/meses |
 
 ---
 

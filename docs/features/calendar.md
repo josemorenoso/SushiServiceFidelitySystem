@@ -1,8 +1,8 @@
 # Calendario Operativo de Eventos
 
-> Estado: 🟡 En implementación (DB lista, backend/frontend pendientes)
+> Estado: 🟢 Auto-envío activo (cron registrado + dispatch manual). Pendiente solo aprobación Meta de plantillas media.
 > Migración: `supabase/migrations/00012_calendar_events_and_media.sql`
-> Última actualización: 2026-05-23
+> Última actualización: 2026-06-17
 
 ---
 
@@ -113,8 +113,8 @@ El admin puede hacer override con `force: true` si entiende el trade-off.
 | Service (a crear) | `src/services/calendar.service.ts` |
 | Service extendido (a modificar) | `src/services/campaign.service.ts` — añade `filterByMonthlyCap`, `filterByBlackout`, `getActiveBlackouts` |
 | Twilio service (a modificar) | `src/services/whatsapp.service.ts` — soporte `mediaUrl` |
-| Endpoints (a crear) | `src/app/api/dashboard/calendar/{events,events/[id],media-upload}/route.ts` |
-| Cron (a crear) | `src/app/api/cron/calendar-dispatch/route.ts` (cadencia `*/15 * * * *`) |
+| Endpoints | `src/app/api/dashboard/calendar/{events,events/[id],events/[id]/dispatch,media-upload}/route.ts` |
+| Cron | `src/app/api/cron/calendar-dispatch/route.ts` — disparado por n8n self-hosted (Schedule cada 15 min → HTTP POST con Bearer `CRON_SECRET`). No está en `vercel.json`. |
 | UI (a crear) | `src/app/(dashboard)/dashboard/calendar/page.tsx` + `src/components/dashboard/Calendar/*` |
 | Constantes (a modificar) | `src/constants/rewards.ts` — añadir `MONTHLY_MARKETING_CAP=3`, `DEFAULT_PRE_EVENT_BLACKOUT_DAYS=5` |
 | Setup Twilio (a modificar) | `scripts/twilio-setup.mjs` — crear las 2 plantillas `twilio/media` |
@@ -141,7 +141,9 @@ Estos componentes están implementados pero dependen de que Meta apruebe las pla
 - [x] Plantillas Twilio `event_template_image` y `event_template_video` vía `scripts/twilio-create-media-templates.mjs`
 - [x] Soporte `mediaUrl` en `sendTemplateMessage` ([src/services/whatsapp.service.ts](../../src/services/whatsapp.service.ts))
 - [x] `executeAutoEvent` en `calendar.service.ts` (el path de envío)
-- [x] Cron `/api/cron/calendar-dispatch` + registro en `vercel.json` (pendiente: agregar a vercel.json)
+- [x] Cron `/api/cron/calendar-dispatch` disparado por **n8n self-hosted** (Schedule cada 15 min → HTTP POST con `Authorization: Bearer CRON_SECRET`). NO está en `vercel.json` a propósito: `*/15` + ser el 3er cron exigiría plan Vercel Pro. birthday/reactivation siguen en Vercel cron (2 crons diarios → caben en Hobby).
+- [x] Dispatch manual `POST /api/dashboard/calendar/events/[id]/dispatch` + botón "Enviar ahora"/"Reintentar" en `EventDetailDrawer`
+- [x] Alerta en `EventDetailDrawer` cuando falta `event_template_image_sid` / `event_template_video_sid`
 - [ ] Modificaciones a crons existentes:
   - `reactivation/route.ts`: aplicar `filterByMonthlyCap` + marcar `source='reactivation'`
   - `birthday/route.ts`: marcar `source='birthday'` (NO aplicar cap)
@@ -170,5 +172,11 @@ El pipeline de envío está implementado. Las plantillas `twilio/media` se crean
 - Planificar eventos con metadata y media en el calendario
 - Listar/editar/cancelar desde el dashboard
 - Calcular cap mensual y blackouts sobre la audiencia
-- Pipeline de envío automático vía cron `calendar-dispatch`
+- Pipeline de envío automático vía `calendar-dispatch`, disparado por n8n self-hosted (Schedule cada 15 min → HTTP POST con Bearer `CRON_SECRET`)
+- Envío/reintento manual desde el dashboard (`POST .../events/[id]/dispatch`, botón "Enviar ahora")
+- Alerta visual si falta la plantilla Twilio requerida según `media_type`
 - Reemplazo dinámico de media URL al enviar (Twilio usa `mediaUrl` para sobreescribir la URL de ejemplo de la plantilla aprobada)
+
+### Disparo manual / reintento
+
+`POST /api/dashboard/calendar/events/[id]/dispatch` (auth admin) ejecuta `executeAutoEvent` bajo demanda. Solo eventos `send_mode='auto'` en estado `scheduled` (envío anticipado) o `failed` (reintento — se rearma a `scheduled` antes de ejecutar para pasar el guard de idempotencia). Es la red de seguridad si el cron falla o aún no corre.

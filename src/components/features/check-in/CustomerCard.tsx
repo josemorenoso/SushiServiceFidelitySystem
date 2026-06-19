@@ -19,6 +19,7 @@ interface TierItem {
 interface CustomerCardProps {
   name: string
   totalPoints: number
+  totalVisits: number
   qrUrl: string
   tiers: TierItem[]
   checkingStatus: boolean
@@ -26,11 +27,13 @@ interface CustomerCardProps {
   onBack: () => void
 }
 
-const WALLET_BG = 'linear-gradient(160deg, #7B0D1E 0%, #C1121F 35%, #E63946 70%, #FF6B6B 100%)'
+const CARD_BG = 'linear-gradient(160deg, #7B0D1E 0%, #C1121F 35%, #E63946 75%, #FF6B6B 100%)'
+const PAGE_BG = 'linear-gradient(160deg, #2D0000 0%, #5A0A15 50%, #8B1A2A 100%)'
 
 export function CustomerCard({
   name,
   totalPoints,
+  totalVisits,
   qrUrl,
   tiers,
   checkingStatus,
@@ -40,18 +43,22 @@ export function CustomerCard({
   const sorted = [...tiers].sort((a, b) => a.point_threshold - b.point_threshold)
   const nextTier = sorted.find((t) => totalPoints < t.point_threshold) ?? null
   const nextIndex = nextTier ? sorted.indexOf(nextTier) : -1
-  const remaining = nextTier ? Math.max(nextTier.point_threshold - totalPoints, 0) : 0
+  const nextThreshold = nextTier?.point_threshold ?? totalPoints
+  const remaining = nextTier ? Math.max(nextThreshold - totalPoints, 0) : 0
+  const progressPercent = nextTier
+    ? Math.min((totalPoints / nextThreshold) * 100, 100)
+    : 100
 
-  const [visible, setVisible] = useState(false)
+  const [barWidth, setBarWidth] = useState(0)
   useEffect(() => {
-    const t = setTimeout(() => setVisible(true), 50)
+    const t = setTimeout(() => setBarWidth(progressPercent), 200)
     return () => clearTimeout(t)
-  }, [])
+  }, [progressPercent])
 
   return (
     <div
-      className="fixed inset-0 z-50 overflow-y-auto"
-      style={{ background: WALLET_BG }}
+      className="fixed inset-0 z-50 overflow-y-auto flex items-start justify-center py-6 px-4"
+      style={{ background: PAGE_BG }}
     >
       {/* Overlay de dopamina */}
       {justEarnedPoints != null && (
@@ -68,89 +75,126 @@ export function CustomerCard({
         </div>
       )}
 
+      {/* Card */}
       <div
-        className={`min-h-full flex flex-col items-center px-5 pt-8 pb-10 max-w-sm mx-auto transition-opacity duration-500 ${visible ? 'opacity-100' : 'opacity-0'}`}
+        className="w-full max-w-sm animate-fade-in-up"
+        style={{
+          background: CARD_BG,
+          borderRadius: '2rem',
+          border: '1.5px solid rgba(255,255,255,0.22)',
+          boxShadow: '0 25px 60px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.15)',
+          overflow: 'hidden',
+        }}
       >
-        {/* Brand */}
-        <p className="text-xs font-bold tracking-[0.2em] uppercase text-white/50">
-          {BRAND_NAME}
-        </p>
+        <div className="px-5 pt-7 pb-8 flex flex-col items-center">
+          {/* Brand */}
+          <p className="text-xs font-bold tracking-[0.2em] uppercase text-white/50">
+            {BRAND_NAME}
+          </p>
 
-        {/* Name */}
-        <h1 className="mt-1 font-playfair text-3xl font-bold text-white text-center">
-          ¡Hola, {name}!
-        </h1>
+          {/* Name */}
+          <h1 className="mt-1 font-playfair text-3xl font-bold text-white text-center">
+            ¡Hola, {name}!
+          </h1>
 
-        {/* Points */}
-        <div className="mt-3 text-center">
-          <div className="flex items-end justify-center gap-2">
+          {/* Points big */}
+          <div className="mt-3 flex items-end justify-center gap-2">
             <span className="text-5xl font-bold text-white leading-none">{totalPoints}</span>
             <span className="text-white/60 text-xl mb-0.5">pts</span>
           </div>
-          {nextTier ? (
-            <p className="text-sm text-white/55 mt-1">
-              {getTierEmoji(nextIndex, nextTier.is_black)}{' '}
-              Faltan <span className="text-white font-semibold">{remaining}</span> para{' '}
-              {nextTier.safe_reward_title}
-            </p>
-          ) : (
-            tiers.length > 0 && (
-              <p className="text-sm text-white/70 mt-1">🎉 ¡Nivel máximo alcanzado!</p>
-            )
-          )}
-        </div>
 
-        {/* Stamps */}
-        {tiers.length > 0 && (
+          {/* Stamps */}
           <div className="mt-5 w-full">
-            <StampsGrid totalPoints={totalPoints} tiers={tiers} />
+            <StampsGrid totalVisits={totalVisits} />
           </div>
-        )}
 
-        {/* Banner de acción */}
-        <div
-          className="mt-5 w-full rounded-2xl px-4 py-3"
-          style={{
-            background: 'rgba(255,255,255,0.15)',
-            backdropFilter: 'blur(12px)',
-            WebkitBackdropFilter: 'blur(12px)',
-            border: '1px solid rgba(255,255,255,0.25)',
-          }}
-        >
-          <div className="flex items-center gap-3">
-            <ScanLine className="h-6 w-6 text-white animate-pulse shrink-0" strokeWidth={2} />
-            <div>
-              <p className="text-sm font-bold text-white leading-tight">
-                DILE AL {STAFF_LABEL.toUpperCase()} QUE TE ESCANEE
+          {/* Points progress bar */}
+          <div className="mt-4 w-full">
+            <div
+              className="relative h-7 rounded-full overflow-hidden"
+              style={{ background: 'rgba(0,0,0,0.25)' }}
+            >
+              <div
+                className="absolute inset-y-0 left-0 rounded-full transition-all duration-1000 ease-out"
+                style={{
+                  width: `${barWidth}%`,
+                  background: 'rgba(255,255,255,0.5)',
+                }}
+              />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span
+                  className="text-xs font-bold text-white"
+                  style={{ textShadow: '0 1px 3px rgba(0,0,0,0.35)' }}
+                >
+                  {totalPoints}{nextTier ? ` / ${nextThreshold}` : ''} pts
+                </span>
+              </div>
+            </div>
+            {nextTier && (
+              <p className="text-[11px] text-white/50 mt-1.5 text-center">
+                {getTierEmoji(nextIndex, nextTier.is_black)} Faltan{' '}
+                <span className="text-white/75 font-semibold">{remaining} pts</span>{' '}
+                para {nextTier.safe_reward_title}
               </p>
-              <p className="text-xs text-white/65">Si no, NO sumás puntos</p>
+            )}
+            {!nextTier && tiers.length > 0 && (
+              <p className="text-[11px] text-white/60 mt-1.5 text-center">
+                🎉 ¡Nivel máximo alcanzado!
+              </p>
+            )}
+          </div>
+
+          {/* Divider */}
+          <div
+            className="w-full mt-5 mb-4"
+            style={{ height: '1px', background: 'rgba(255,255,255,0.12)' }}
+          />
+
+          {/* Banner de acción */}
+          <div
+            className="w-full rounded-2xl px-4 py-3"
+            style={{
+              background: 'rgba(255,255,255,0.12)',
+              backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)',
+              border: '1px solid rgba(255,255,255,0.2)',
+            }}
+          >
+            <div className="flex items-center gap-3">
+              <ScanLine className="h-6 w-6 text-white animate-pulse shrink-0" strokeWidth={2} />
+              <div>
+                <p className="text-sm font-bold text-white leading-tight">
+                  DILE AL {STAFF_LABEL.toUpperCase()} QUE TE ESCANEE
+                </p>
+                <p className="text-xs text-white/60">Si no, NO sumás puntos</p>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* QR */}
-        <div className="mt-5 rounded-2xl bg-white p-4 shadow-2xl">
-          <QRCodeSVG value={qrUrl} size={220} level="M" />
-        </div>
-
-        {/* Estado de polling */}
-        {checkingStatus && justEarnedPoints == null && (
-          <div className="mt-4 flex items-center gap-2 text-xs text-white/45">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            Esperando que el {STAFF_LABEL.toLowerCase()} te escanee...
+          {/* QR */}
+          <div className="mt-5 rounded-2xl bg-white p-4 shadow-2xl">
+            <QRCodeSVG value={qrUrl} size={210} level="M" />
           </div>
-        )}
 
-        <p className="mt-3 text-xs text-white/30">Este código expira en 30 minutos</p>
+          {/* Estado de polling */}
+          {checkingStatus && justEarnedPoints == null && (
+            <div className="mt-4 flex items-center gap-2 text-xs text-white/40">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Esperando que el {STAFF_LABEL.toLowerCase()} te escanee...
+            </div>
+          )}
 
-        <button
-          type="button"
-          className="mt-5 flex items-center gap-1.5 text-sm text-white/45 transition-colors hover:text-white/70"
-          onClick={onBack}
-        >
-          <ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.5} />
-          Volver
-        </button>
+          <p className="mt-3 text-[11px] text-white/25">Este código expira en 30 minutos</p>
+
+          <button
+            type="button"
+            className="mt-4 flex items-center gap-1.5 text-sm text-white/40 transition-colors hover:text-white/65"
+            onClick={onBack}
+          >
+            <ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.5} />
+            Volver
+          </button>
+        </div>
       </div>
     </div>
   )

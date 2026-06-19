@@ -42,6 +42,7 @@ export default async function TarjetaPage({
     <WalletCard
       name={customer.name}
       totalPoints={customer.total_points ?? 0}
+      totalVisits={customer.total_visits ?? 0}
       tiers={tiers}
     />
   )

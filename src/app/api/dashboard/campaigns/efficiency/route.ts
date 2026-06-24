@@ -30,13 +30,16 @@ export async function GET(request: Request) {
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const url = new URL(request.url)
-  const lookbackDays = Math.min(
+  const allTime = url.searchParams.get('all') === 'true'
+  const lookbackDays = allTime ? 0 : Math.min(
     parseInt(url.searchParams.get('days') || String(LOOKBACK_DAYS_DEFAULT)) || LOOKBACK_DAYS_DEFAULT,
-    365
+    3650
   )
 
   const db = getServiceClient()
-  const since = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000).toISOString()
+  const since = allTime
+    ? '2000-01-01T00:00:00.000Z'
+    : new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000).toISOString()
 
   // 1) Campañas ejecutadas en el rango
   const { data: campaigns, error: campErr } = await db
@@ -155,7 +158,8 @@ export async function GET(request: Request) {
     total_revenue: totalRevAll,
     avg_ticket: avgTicket,
     attribution_window_days: ATTRIBUTION_WINDOW_DAYS,
-    lookback_days: lookbackDays,
+    lookback_days: allTime ? null : lookbackDays,
+    all_time: allTime,
   }
 
   return NextResponse.json({ campaigns: results, summary })

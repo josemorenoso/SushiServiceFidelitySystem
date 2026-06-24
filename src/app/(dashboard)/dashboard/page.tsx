@@ -71,7 +71,7 @@ export default function DashboardPage() {
 
       <div className="grid gap-8 lg:grid-cols-2">
         <CustomerTiers tiers={data?.customerTiers ?? []} loading={loading} />
-        <ROICard data={data?.roiEstimate ?? null} loading={loading} />
+        <ROICard />
       </div>
 
       <BlackTierSection customers={data?.topCustomers ?? []} loading={loading} benefits={blackBenefits} onCustomerClick={handleCustomerClick} />

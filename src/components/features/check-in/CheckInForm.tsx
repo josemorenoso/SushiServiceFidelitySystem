@@ -607,6 +607,7 @@ export function CheckInForm({
       <CustomerCard
         name={lookupCustomer.name}
         totalPoints={lookupCustomer.total_points ?? 0}
+        totalVisits={lookupCustomer.total_visits ?? 0}
         qrUrl={customerQR}
         tiers={previewTiers}
         checkingStatus={checkingStatus}

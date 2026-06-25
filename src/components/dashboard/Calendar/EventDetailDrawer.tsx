@@ -28,6 +28,8 @@ import {
   Pencil,
   Save,
   X,
+  Send,
+  CheckCircle2,
 } from 'lucide-react'
 
 interface EventDetailDrawerProps {
@@ -85,7 +87,10 @@ export function EventDetailDrawer({ open, onOpenChange, event, onUpdated }: Even
   const [draftTitle, setDraftTitle] = useState('')
   const [draftDescription, setDraftDescription] = useState('')
   const [busy, setBusy] = useState(false)
+  const [dispatching, setDispatching] = useState(false)
+  const [dispatchResult, setDispatchResult] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [settings, setSettings] = useState<Record<string, string> | null>(null)
 
   useEffect(() => {
     if (event) {
@@ -93,10 +98,60 @@ export function EventDetailDrawer({ open, onOpenChange, event, onUpdated }: Even
       setDraftDescription(event.description ?? '')
       setEditing(false)
       setError(null)
+      setDispatchResult(null)
     }
   }, [event])
 
+  // Carga las plantillas Twilio para advertir si falta la requerida por el evento.
+  useEffect(() => {
+    if (!open || event?.send_mode !== 'auto') return
+    let active = true
+    fetch('/api/dashboard/settings')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (active && data) setSettings(data as Record<string, string>)
+      })
+      .catch(() => { /* la alerta de plantilla es best-effort */ })
+    return () => { active = false }
+  }, [open, event?.send_mode])
+
   if (!event) return null
+
+  // El path de envío resuelve la plantilla por media_type: 'video' usa el SID
+  // de video; imagen y texto-plano usan el SID de imagen.
+  const requiredTemplateKey = event.media_type === 'video'
+    ? 'event_template_video_sid'
+    : 'event_template_image_sid'
+  const templateMissing = settings !== null && !settings[requiredTemplateKey]
+  const canDispatch = event.send_mode === 'auto'
+    && (event.status === 'scheduled' || event.status === 'failed')
+
+  async function dispatchNow() {
+    if (!event) return
+    const verb = event.status === 'failed' ? 'reintentar el envío de' : 'enviar ahora'
+    if (!confirm(`¿Confirmas ${verb} "${event.title}"? Se enviará el WhatsApp a la audiencia objetivo.`)) return
+    setDispatching(true)
+    setError(null)
+    setDispatchResult(null)
+    try {
+      const res = await fetch(`/api/dashboard/calendar/events/${event.id}/dispatch`, {
+        method: 'POST',
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data.error || 'Error enviando el evento')
+        return
+      }
+      setDispatchResult(
+        `Enviados: ${data.sent} · Fallidos: ${data.failed} · Excluidos por cap mensual: ${data.excluded_monthly_cap}`
+      )
+      onUpdated?.()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error desconocido')
+    } finally {
+      setDispatching(false)
+    }
+  }
 
   async function saveEdit() {
     if (!event) return
@@ -239,9 +294,20 @@ export function EventDetailDrawer({ open, onOpenChange, event, onUpdated }: Even
                   Programado para auto-enviar
                 </div>
                 <div className="text-amber-800">{formatScheduledAt(event.scheduled_send_at)}</div>
-                <div className="text-amber-700 text-[11px] flex items-start gap-1.5">
-                  <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0 mt-px" />
-                  El path de envío todavía no está cableado en esta versión. El evento queda registrado para cuando se active.
+                <div className="text-amber-700 text-[11px]">
+                  El cron <code className="font-mono">calendar-dispatch</code> lo enviará automáticamente al llegar esta fecha. También puedes dispararlo manualmente con &ldquo;Enviar ahora&rdquo;.
+                </div>
+              </div>
+            )}
+
+            {templateMissing && (
+              <div className="rounded-lg bg-destructive/10 border border-destructive/30 p-2.5 text-xs space-y-1">
+                <div className="font-medium text-destructive flex items-center gap-1.5">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  Falta la plantilla de Twilio
+                </div>
+                <div className="text-destructive/90 text-[11px]">
+                  No hay <code className="font-mono">{requiredTemplateKey}</code> configurada en Ajustes. El envío fallará hasta que la agregues en Dashboard → Ajustes.
                 </div>
               </div>
             )}
@@ -287,6 +353,13 @@ export function EventDetailDrawer({ open, onOpenChange, event, onUpdated }: Even
             <div className="font-mono opacity-60">ID: {event.id.slice(0, 8)}…</div>
           </section>
 
+          {dispatchResult && (
+            <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-2.5 text-sm text-emerald-800 flex items-start gap-1.5">
+              <CheckCircle2 className="h-4 w-4 flex-shrink-0 mt-0.5" />
+              <span>{dispatchResult}</span>
+            </div>
+          )}
+
           {error && (
             <div className="rounded-lg bg-destructive/10 border border-destructive/30 p-2.5 text-sm text-destructive">
               {error}
@@ -308,8 +381,20 @@ export function EventDetailDrawer({ open, onOpenChange, event, onUpdated }: Even
             </>
           ) : (
             <>
+              {canDispatch && (
+                <Button
+                  size="sm"
+                  onClick={dispatchNow}
+                  disabled={dispatching || busy}
+                >
+                  <Send className="h-3.5 w-3.5 mr-1" />
+                  {dispatching
+                    ? 'Enviando…'
+                    : event.status === 'failed' ? 'Reintentar envío' : 'Enviar ahora'}
+                </Button>
+              )}
               {event.status !== 'cancelled' && event.status !== 'sent' && (
-                <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
+                <Button variant="outline" size="sm" onClick={() => setEditing(true)} disabled={dispatching}>
                   <Pencil className="h-3.5 w-3.5 mr-1" />
                   Editar
                 </Button>
@@ -319,7 +404,7 @@ export function EventDetailDrawer({ open, onOpenChange, event, onUpdated }: Even
                   variant="destructive"
                   size="sm"
                   onClick={cancelEvent}
-                  disabled={busy}
+                  disabled={busy || dispatching}
                 >
                   <Trash2 className="h-3.5 w-3.5 mr-1" />
                   Cancelar evento

@@ -5,6 +5,137 @@
 
 ---
 
+## [v2.1.0] — 2026-06-18 — feat: rediseño wallet card + tarjeta digital permanente
+
+> Request: transformar la experiencia del cliente de un formulario web a una tarjeta de fidelización estilo Apple/Google Wallet con sellos visuales y ruta permanente.
+
+### Added
+- `src/components/features/wallet/StampsGrid.tsx` — Grid 5×2 de sellos circulares. Fórmula: `ptsPerStamp = nextTier.threshold / 10`, `filledStamps = floor(totalPoints / ptsPerStamp)`. Animación `stamp-pop` con delay escalonado por sello.
+- `src/components/features/wallet/WalletCard.tsx` — Tarjeta wallet visual pura para vista `/tarjeta` (sin QR). Muestra nombre, puntos grandes, stamps, roadmap de tiers, CTA al check-in.
+- `src/components/features/wallet/index.ts` — Barrel export del módulo wallet.
+- `src/app/(public)/tarjeta/page.tsx` — Ruta permanente `/tarjeta?phone=XXXX`. Server Component que llama directamente a servicios Supabase (sin auth, datos públicos). Muestra formulario si no hay phone en URL.
+- `src/app/api/public/customer-card/route.ts` — `GET /api/public/customer-card?phone=XXX`. Rate-limited (30 req/min/IP). Retorna `{ found, customer, tiers, next_tier }`.
+- `docs/features/wallet-card.md` — Feature doc completo con decisiones de diseño, fórmulas, seguridad y limitaciones.
+- `docs/superpowers/plans/2026-06-18-wallet-card.md` — Plan de implementación paso a paso.
+- `src/app/globals.css` — Keyframe `stamp-pop` + utility `animate-stamp-pop`.
+
+### Changed
+- `src/components/features/check-in/CustomerCard.tsx` — Rediseño completo:
+  - ❌ Eliminado: `premium-card` blanca flotante, `TiersRoadmap`, barra de progreso numérica
+  - ✅ Nuevo: overlay full-screen `fixed inset-0 z-50` con gradient rojo brand (`#7B0D1E → #FF6B6B`)
+  - ✅ Nuevo: `StampsGrid` bajo los puntos
+  - ✅ Nuevo: banner de acción con `backdrop-blur` (glass effect)
+  - ✅ Nuevo: QR sobre card blanca autónoma (sin border pulsante rojo)
+  - Dopamina overlay actualizado a `z-[60]` para quedar sobre el wallet
+
+---
+
+## [DOCS] — 2026-07-12 — docs: auditoria completa de código backend (servicios + API + DB)
+
+> Request: auditoria exhaustiva del backend para identificar bugs, race conditions, inconsistencias de seguridad y deuda técnica antes del próximo ciclo de desarrollo.
+
+### Added
+- `docs/AUDIT-12-Julio/AUDIT_CODIGO_COMPLETO.md` — Documento maestro con:
+  - 2 hallazgos CRÍTICOS (`executeAutoEvent` ignora media_url + no loguea; `points_system_enabled` no se respeta).
+  - 5 hallazgos ALTO (race conditions en puntos/mystery box, rate-limiter inefectivo en serverless, filtros de opt-out faltantes).
+  - 8 hallazgos MEDIO (feature flags, observabilidad, enumeración de clientes, caps hardcodeados).
+  - 3 hallazgos BAJO (zonas horarias, validaciones estrictas, content-type XML).
+  - Roadmap de fixes priorizado: inmediato → corto plazo → mediano plazo.
+
+---
+
+## [DOCS] — 2026-06-17 — docs: auditoria completa de ventas, competencia y actualización de pricing
+
+> Request: auditura como dueño de negocio, analizar competencia directa, definir prioridades y actualizar precios a modelo único antes de invertir en pauta publicitaria.
+
+### Added
+- `docs/AUDITORIA_VENTAS_COMPETENCIA_JUNIO_2026.md` — Documento maestro con:
+  - Estado actual de marca (crisis de identidad RestaurantQR/Constelarys/Cada1).
+  - Auditoria de Instagram (@cada_1_: 3 publicaciones, 2 seguidores, link caído).
+  - Auditoria de landing page (diseño excelente pero precio desactualizado, sin demo QR, sin sección "Sin apps").
+  - Análisis competitivo detallado de 4 rivales: Clubify, TrackingTable, Loyalz Club, Dardo.
+  - Matriz comparativa 8×5 con ventajas y debilidades.
+  - 4 diferenciadores inimitables de Cada1.
+  - Plan de acción en 4 fases (Fundamentos → Instagram → Material de ventas → Autoridad → Pauta).
+  - Checklist "Listo para pauta" con 13 items bloqueantes.
+  - Mensaje de ventas recomendado con headlines y sección de diferenciadores.
+
+### Changed
+- `CONTEXTO_PAGINA_WEB.md` — pricing actualizado de 3 planes ($89K/$149K/$249K) a modelo único: setup $1.200.000 + mensualidad $250.000.
+- `docs/operaciones/PROCESO_VENTAS_IMPLEMENTACION.md` — precio de cierre actualizado a $250K/mes + $1.2M setup.
+- Tabla comparativa de diferenciadores en `CONTEXTO_PAGINA_WEB.md` — fila "Sin app" fusionada con "Sin Wallet" para enfatizar ventaja sobre Clubify/Loyalz/Dardo.
+
+### Decisiones de negocio documentadas
+- Nombre comercial unificado: **Cada1**. `RestaurantQR` y `Constelarys` quedan como técnicos/internos.
+- Precio único sin planes: setup $1.200.000 COP + $250.000 COP/mes. Margen operativo alto (costo real ~$8-20 USD/mes por cliente).
+- No invertir en pauta hasta completar Fase 0 (5 items bloqueantes) + Fase 1 (Instagram mínimo viable).
+- Diferenciador principal a comunicar: **"Sin app, sin wallet, sin depender de Apple ni Google"** — ninguna competencia lo dice.
+
+---
+
+## [2.1.0] — 2026-06-17 — feat: activación del auto-envío del calendario (scheduler n8n + dispatch manual)
+
+> Request: resolver los bloqueantes del calendario de eventos — el cron `calendar-dispatch` nunca corría, la UI mostraba un mensaje obsoleto ("el path de envío no está cableado"), no había forma de disparar/reintentar un evento manualmente, y no se advertía si faltaban las plantillas Twilio. Decisión: disparar el cron desde n8n self-hosted (no Vercel) para no pagar plan Pro.
+
+### Fixed
+- `src/components/dashboard/Calendar/EventDetailDrawer.tsx` — eliminado el mensaje obsoleto "El path de envío todavía no está cableado…"; ahora explica que el envío es automático y ofrece envío manual.
+- `src/app/api/dashboard/calendar/events/[id]/route.ts` — corregido comentario obsoleto del PATCH que afirmaba que el envío inmediato no estaba disponible.
+
+### Added
+- `src/app/api/dashboard/calendar/events/[id]/dispatch/route.ts` — endpoint POST (auth admin) para disparar manualmente el auto-envío de un evento. Acepta status `scheduled` (envío anticipado) y `failed` (reintento, rearmando a `scheduled` antes de ejecutar `executeAutoEvent`).
+- `EventDetailDrawer` — botón "Enviar ahora" / "Reintentar envío" para eventos auto en estado `scheduled`/`failed`, con resumen de resultado (enviados/fallidos/excluidos por cap).
+- `EventDetailDrawer` — alerta proactiva cuando falta la plantilla Twilio requerida (`event_template_image_sid` / `event_template_video_sid` según `media_type`), leída desde `/api/dashboard/settings`.
+
+### Infra
+- El auto-envío del calendario se dispara desde **n8n self-hosted** (Schedule cada 15 min → HTTP POST a `/api/cron/calendar-dispatch` con `Authorization: Bearer CRON_SECRET`). NO se agregó a `vercel.json` a propósito: `*/15` + ser el 3er cron exigiría plan Vercel Pro. `birthday` y `reactivation` siguen en Vercel cron (2 crons diarios → caben en Hobby).
+- Requiere `CRON_SECRET` configurado igual en Vercel (prod) y en la credencial Header Auth de n8n.
+
+### Notes
+- El envío real con media sigue dependiendo de que Meta apruebe las plantillas `twilio/media`.
+
+---
+
+## [DOCS] — 2026-06-17 — docs: consolidación de documentación de infraestructura en un solo doc central
+
+> Request: purgar y unificar todos los archivos de implementación/despliegue en un único doc central organizado por plataforma (Vercel, Supabase, Twilio, n8n).
+
+### Added
+- `docs/04-deployment.md` — doc central único que reemplaza los 4 archivos archivados. Secciones: arquitectura, Vercel (env vars, crons), Supabase (23 migraciones), Twilio (números, Messaging Service, webhooks, opt-out API), n8n (W1 delivery, W2 calendar-dispatch con JSON importable, W3 google-contacts-sync), onboarding paso a paso, checklist, costos y riesgos.
+
+### Removed (archivados en `docs/archive/`)
+- `docs/INFRAESTRUCTURA.md` → `docs/archive/INFRAESTRUCTURA-obsolete.md`
+- `docs/DEPLOYMENT_GUIDE.md` → `docs/archive/DEPLOYMENT_GUIDE-obsolete.md`
+- `docs/CONFIGURACIONES_TWILIO_SISTEMA.md` → `docs/archive/CONFIGURACIONES_TWILIO_SISTEMA-obsolete.md`
+- `docs/n8n-workflows/README.md` → `docs/archive/n8n-workflows-README-obsolete.md`
+
+### Changed
+- `docs/features/calendar.md` — scheduler actualizado a n8n self-hosted; endpoint dispatch añadido.
+- `docs/API_DOCS.md` — añadido `POST .../dispatch`, sección "Cron: Calendar Dispatch".
+- `docs/SKILLS.md` — sección "Infraestructura externa" con n8n self-hosted.
+- `CLAUDE.md` — lookup table: `src/lib/twilio/*` y `scripts/twilio-setup.mjs` apuntan a `docs/04-deployment.md` (antes apuntaban al doc archivado).
+- `.windsurfrules` — mismas correcciones de lookup + entrada nueva para `scripts/twilio-setup.mjs`.
+- `METODO_AINNOVATE.md` — nuevo registro en "Historial de Aplicación".
+
+---
+
+## [DOCS] — 2026-06-15 — docs: documento recopilatorio para presentación al cliente (Sushi Service)
+
+> Request: recopilar toda la información del proyecto para que otra IA arme un documento/PDF de presentación al cliente, incluyendo lo logrado en 2 semanas, cómo funciona, características principales y transformación del negocio.
+
+### Added
+- `docs/PRESENTACION_CLIENTE_SushiService.md` — Documento recopilatorio completo con:
+  - Métricas reales del sistema en producción (193 clientes, 7 visitas hoy, ROI $272.000 COP).
+  - Timeline de versiones v1.0.0 a v2.0.0 (hitos en ~2 semanas).
+  - Flujo del ecosistema (cliente presencial, domicilio, dashboard admin).
+  - Características principales: campañas automáticas, sistema de puntos + Mystery Box, verificación QR por mesero, campañas masivas, control total de clientes, métricas en tiempo real.
+  - Sección de transformación del negocio (antes vs. después).
+  - Stack técnico y datos clave para la presentación.
+
+### Notes
+- Sin cambios de código del sistema. Solo documentación recopilatoria para uso comercial/presentación.
+
+---
+
 ## [2.0.0] — 2026-06-12 — feat: tracking de redención física de premios + Golden Bullet (importación masiva)
 
 > Request: desarrollar el requerimiento `docs/features/REQUIREMENT_AUDIT_redemptions_bulk_import.md` — (A) trazabilidad de la entrega física de premios para cuadrar con el POS, y (B) importación masiva de contactos externos con envío de un solo disparo, bloqueo anti-reenvío y ROI automático.

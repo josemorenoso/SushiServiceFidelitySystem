@@ -1,6 +1,6 @@
 # Skills Instaladas
 
-> Última actualización: 2026-04-07
+> Última actualización: 2026-06-17
 > Este archivo registra todas las skills, extensiones, MCP servers y herramientas
 > especializadas disponibles en el entorno de desarrollo.
 
@@ -37,8 +37,17 @@ relevante.
 
 ---
 
+## Infraestructura externa (no-IDE)
+
+| Herramienta | Rol en el proyecto | Detalle |
+|-------------|--------------------|---------|
+| n8n (self-hosted) | Scheduler externo del cron `calendar-dispatch` | Schedule Trigger cada 15 min → HTTP POST a `/api/cron/calendar-dispatch` con `Authorization: Bearer CRON_SECRET`. Evita el plan Vercel Pro. Ver `docs/features/calendar.md`. Para editar estos workflows, usar las skills `n8n-*`. |
+
+---
+
 ## Historial de Skills
 
 | Fecha | Acción | Skill | Motivo |
 |-------|--------|-------|--------|
 | 2026-04-07 | Registradas | n8n-* (7 skills) | Skills disponibles en el entorno IDE |
+| 2026-06-17 | Adoptada | n8n self-hosted (infra) | Disparar el cron `calendar-dispatch` cada 15 min sin pagar Vercel Pro |

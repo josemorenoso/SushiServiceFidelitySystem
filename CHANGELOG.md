@@ -5,6 +5,68 @@
 
 ---
 
+## [v2.1.1] — 2026-06-25 — fix: bugs wallet card + rate-limit SSR + centralizar gradientes
+
+> Request: corregir bugs detectados en code review de la rama 2.0-qrs-feature antes de merge a main.
+
+### Fixed
+- `src/app/(public)/tarjeta/page.tsx` — Rate-limit aplicado al Server Component (30 req/min/IP usando `rateLimit()` + `headers()` de next/headers). Antes el límite solo existía en el API JSON pero no en el path SSR.
+- `src/components/features/wallet/WalletCard.tsx` — `remaining` protegido con `Math.max(..., 0)` para evitar puntos negativos si hay inconsistencia de datos.
+- `src/components/features/check-in/CustomerCard.tsx` — Overlay dopamina solo se muestra cuando `justEarnedPoints > 0` (antes se activaba con 0, mostrando "+0 puntos ¡Listo!").
+- `src/components/features/wallet/StampsGrid.tsx` — `cycleNumber` corregido: `floor((totalVisits - 1) / 10) + 1`. Antes con 10 visitas exactas mostraba "Tarjeta #2" en lugar de "Tarjeta #1".
+
+### Changed
+- `src/lib/branding.ts` — Agregadas `BRAND_CARD_BG` y `BRAND_PAGE_BG` como fuente única de los gradientes de la tarjeta wallet.
+- `src/components/features/wallet/WalletCard.tsx` — Usa `BRAND_CARD_BG`/`BRAND_PAGE_BG` desde branding (eliminadas constantes locales duplicadas).
+- `src/components/features/check-in/CustomerCard.tsx` — Usa `BRAND_CARD_BG`/`BRAND_PAGE_BG` desde branding (eliminadas constantes locales duplicadas).
+- `src/app/(public)/tarjeta/page.tsx` — Usa `BRAND_CARD_BG` desde branding (eliminado `WALLET_BG` local con stop position inconsistente).
+
+### Docs
+- `docs/features/wallet-card.md` — StampsGrid: fórmula actualizada a visits-based (1 visita = 1 sello), ejemplos de ciclos, cycleNumber correcto documentado.
+- `docs/03-security.md` — `/tarjeta` agregada a rutas públicas + sección Rate Limiting con los 3 endpoints y su mecanismo.
+- `docs/API_DOCS.md` — Sección completa `GET /api/public/customer-card`: query params, responses (200/400/429/500), rate limit.
+
+---
+
+## [v2.1.0] — 2026-06-18 — feat: rediseño wallet card + tarjeta digital permanente
+
+> Request: transformar la experiencia del cliente de un formulario web a una tarjeta de fidelización estilo Apple/Google Wallet con sellos visuales y ruta permanente.
+
+### Added
+- `src/components/features/wallet/StampsGrid.tsx` — Grid 5×2 de sellos circulares. Fórmula: `ptsPerStamp = nextTier.threshold / 10`, `filledStamps = floor(totalPoints / ptsPerStamp)`. Animación `stamp-pop` con delay escalonado por sello.
+- `src/components/features/wallet/WalletCard.tsx` — Tarjeta wallet visual pura para vista `/tarjeta` (sin QR). Muestra nombre, puntos grandes, stamps, roadmap de tiers, CTA al check-in.
+- `src/components/features/wallet/index.ts` — Barrel export del módulo wallet.
+- `src/app/(public)/tarjeta/page.tsx` — Ruta permanente `/tarjeta?phone=XXXX`. Server Component que llama directamente a servicios Supabase (sin auth, datos públicos). Muestra formulario si no hay phone en URL.
+- `src/app/api/public/customer-card/route.ts` — `GET /api/public/customer-card?phone=XXX`. Rate-limited (30 req/min/IP). Retorna `{ found, customer, tiers, next_tier }`.
+- `docs/features/wallet-card.md` — Feature doc completo con decisiones de diseño, fórmulas, seguridad y limitaciones.
+- `docs/superpowers/plans/2026-06-18-wallet-card.md` — Plan de implementación paso a paso.
+- `src/app/globals.css` — Keyframe `stamp-pop` + utility `animate-stamp-pop`.
+
+### Changed
+- `src/components/features/check-in/CustomerCard.tsx` — Rediseño completo:
+  - ❌ Eliminado: `premium-card` blanca flotante, `TiersRoadmap`, barra de progreso numérica
+  - ✅ Nuevo: overlay full-screen `fixed inset-0 z-50` con gradient rojo brand (`#7B0D1E → #FF6B6B`)
+  - ✅ Nuevo: `StampsGrid` bajo los puntos
+  - ✅ Nuevo: banner de acción con `backdrop-blur` (glass effect)
+  - ✅ Nuevo: QR sobre card blanca autónoma (sin border pulsante rojo)
+  - Dopamina overlay actualizado a `z-[60]` para quedar sobre el wallet
+
+---
+
+## [DOCS] — 2026-07-12 — docs: auditoria completa de código backend (servicios + API + DB)
+
+> Request: auditoria exhaustiva del backend para identificar bugs, race conditions, inconsistencias de seguridad y deuda técnica antes del próximo ciclo de desarrollo.
+
+### Added
+- `docs/AUDIT-12-Julio/AUDIT_CODIGO_COMPLETO.md` — Documento maestro con:
+  - 2 hallazgos CRÍTICOS (`executeAutoEvent` ignora media_url + no loguea; `points_system_enabled` no se respeta).
+  - 5 hallazgos ALTO (race conditions en puntos/mystery box, rate-limiter inefectivo en serverless, filtros de opt-out faltantes).
+  - 8 hallazgos MEDIO (feature flags, observabilidad, enumeración de clientes, caps hardcodeados).
+  - 3 hallazgos BAJO (zonas horarias, validaciones estrictas, content-type XML).
+  - Roadmap de fixes priorizado: inmediato → corto plazo → mediano plazo.
+
+---
+
 ## [DOCS] — 2026-06-17 — docs: auditoria completa de ventas, competencia y actualización de pricing
 
 > Request: auditura como dueño de negocio, analizar competencia directa, definir prioridades y actualizar precios a modelo único antes de invertir en pauta publicitaria.

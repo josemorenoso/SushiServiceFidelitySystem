@@ -1,13 +1,16 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { Skeleton } from '@/components/ui/skeleton'
-import { DollarSign, TrendingUp, Users, Megaphone, Settings, RotateCcw } from 'lucide-react'
+import { DollarSign, TrendingUp, Settings } from 'lucide-react'
 import Link from 'next/link'
-import type { ROIEstimate } from '@/types/analytics.types'
 
-interface ROICardProps {
-  data: ROIEstimate | null
-  loading: boolean
+interface EfficiencySummary {
+  campaigns_count: number
+  total_revenue: number
+  avg_ticket: number
+  all_time: boolean
+  lookback_days: number | null
 }
 
 function formatCOP(value: number): string {
@@ -18,8 +21,38 @@ function formatCOP(value: number): string {
   }).format(value)
 }
 
-export function ROICard({ data, loading }: ROICardProps) {
-  const isDetailed = data?.campaignAttractionRate !== undefined
+type FilterMode = 'all' | 'month'
+
+export function ROICard() {
+  const [filter, setFilter] = useState<FilterMode>('all')
+  const [summary, setSummary] = useState<EfficiencySummary | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+
+    const params =
+      filter === 'all'
+        ? '?all=true'
+        : `?days=${new Date().getDate()}`
+
+    fetch(`/api/dashboard/campaigns/efficiency${params}`)
+      .then((r) => r.json())
+      .then((json) => {
+        if (!cancelled) setSummary(json.summary ?? null)
+      })
+      .catch(() => {
+        if (!cancelled) setSummary(null)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [filter])
 
   return (
     <div className="metric-card rounded-2xl p-6 relative overflow-hidden">
@@ -40,9 +73,9 @@ export function ROICard({ data, loading }: ROICardProps) {
             </div>
             <div>
               <h3 className="font-playfair text-base font-bold" style={{ color: '#1a1c1d' }}>
-                ROI Estimado
+                Revenue Atribuido
               </h3>
-              <p className="text-xs" style={{ color: '#9ca3af' }}>Este mes</p>
+              <p className="text-xs" style={{ color: '#9ca3af' }}>Por campañas enviadas</p>
             </div>
           </div>
           <Link
@@ -55,9 +88,35 @@ export function ROICard({ data, loading }: ROICardProps) {
           </Link>
         </div>
 
-        {/* Total ROI */}
+        {/* Filtros */}
+        <div className="flex gap-2 mb-5">
+          <button
+            onClick={() => setFilter('all')}
+            className="rounded-full px-3 py-1 text-xs font-medium transition-colors"
+            style={
+              filter === 'all'
+                ? { background: '#10b981', color: '#fff' }
+                : { background: 'rgba(0,0,0,0.05)', color: '#6b7280' }
+            }
+          >
+            Todo el tiempo
+          </button>
+          <button
+            onClick={() => setFilter('month')}
+            className="rounded-full px-3 py-1 text-xs font-medium transition-colors"
+            style={
+              filter === 'month'
+                ? { background: '#10b981', color: '#fff' }
+                : { background: 'rgba(0,0,0,0.05)', color: '#6b7280' }
+            }
+          >
+            Este mes
+          </button>
+        </div>
+
+        {/* Número grande */}
         {loading ? (
-          <Skeleton className="h-12 w-40 mb-4" />
+          <Skeleton className="h-12 w-48 mb-4" />
         ) : (
           <p
             className="tabular-nums leading-none mb-4"
@@ -69,77 +128,24 @@ export function ROICard({ data, loading }: ROICardProps) {
               fontFamily: 'var(--font-inter)',
             }}
           >
-            {formatCOP(data?.estimatedROI ?? 0)}
+            {formatCOP(summary?.total_revenue ?? 0)}
           </p>
         )}
 
-        {/* Desglose detallado (solo en demo) */}
-        {isDetailed && !loading && data ? (
-          <div className="space-y-3 mb-3">
-            {/* Retención */}
-            <div
-              className="flex items-center justify-between rounded-xl px-3 py-2.5"
-              style={{ background: 'rgba(16, 185, 129, 0.08)' }}
-            >
-              <div className="flex items-center gap-2">
-                <RotateCcw className="h-3.5 w-3.5" strokeWidth={1.5} style={{ color: '#10b981' }} />
-                <div>
-                  <p className="text-xs font-semibold" style={{ color: '#1a1c1d' }}>
-                    {data.reactivatedThisMonth} clientes regresaron
-                  </p>
-                  <p className="text-[11px]" style={{ color: '#6b7280' }}>Fidelización y reactivación</p>
-                </div>
-              </div>
-              <span className="text-sm font-bold tabular-nums" style={{ color: '#10b981' }}>
-                {formatCOP(data.retentionROI ?? 0)}
-              </span>
-            </div>
-
-            {/* Campaña */}
-            <div
-              className="flex items-center justify-between rounded-xl px-3 py-2.5"
-              style={{ background: 'rgba(99, 102, 241, 0.08)' }}
-            >
-              <div className="flex items-center gap-2">
-                <Megaphone className="h-3.5 w-3.5" strokeWidth={1.5} style={{ color: '#6366f1' }} />
-                <div>
-                  <p className="text-xs font-semibold" style={{ color: '#1a1c1d' }}>
-                    {data.campaignAttractionRate}% tasa de atracción
-                  </p>
-                  <p className="text-[11px]" style={{ color: '#6b7280' }}>
-                    {data.newFromCampaigns} nuevos por campaña
-                  </p>
-                </div>
-              </div>
-              <span className="text-sm font-bold tabular-nums" style={{ color: '#6366f1' }}>
-                {formatCOP(data.campaignROI ?? 0)}
-              </span>
-            </div>
-          </div>
+        {/* Campañas */}
+        {loading ? (
+          <Skeleton className="h-4 w-32" />
         ) : (
-          /* Vista simple (modo real) */
-          !loading && (
-            <div className="flex items-center gap-6 mb-3">
-              <div className="flex items-center gap-1.5">
-                <Users className="h-3.5 w-3.5" strokeWidth={1.5} style={{ color: '#6b7280' }} />
-                <span className="text-xs" style={{ color: '#6b7280' }}>
-                  <strong style={{ color: '#1a1c1d' }}>{data?.reactivatedThisMonth ?? 0}</strong> reactivados
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <TrendingUp className="h-3.5 w-3.5" strokeWidth={1.5} style={{ color: '#6b7280' }} />
-                <span className="text-xs" style={{ color: '#6b7280' }}>
-                  Ticket: <strong style={{ color: '#1a1c1d' }}>{formatCOP(data?.avgTicket ?? 0)}</strong>
-                </span>
-              </div>
-            </div>
-          )
+          <div className="flex items-center gap-1.5">
+            <TrendingUp className="h-3.5 w-3.5" strokeWidth={1.5} style={{ color: '#6b7280' }} />
+            <span className="text-xs" style={{ color: '#6b7280' }}>
+              <strong style={{ color: '#1a1c1d' }}>{summary?.campaigns_count ?? 0}</strong> campañas ejecutadas
+            </span>
+          </div>
         )}
 
-        <p className="text-xs italic" style={{ color: '#9ca3af' }}>
-          {isDetailed
-            ? 'Retorno = fidelización + nuevos atraídos por campaña'
-            : 'Retorno estimado = clientes reactivados × ticket promedio'}
+        <p className="text-xs italic mt-3" style={{ color: '#9ca3af' }}>
+          Visitas post-campaña × ticket promedio
         </p>
       </div>
     </div>

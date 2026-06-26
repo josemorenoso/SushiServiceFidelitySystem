@@ -42,6 +42,7 @@ Webhooks validan origen por número autorizado o `x-webhook-secret`. Cron jobs v
 | GET | /api/health/twilio | Test conexión Twilio (saldo) | NO |
 | POST | /api/check-in | Registrar visita (QR) + conversión Golden Bullet | NO (público) |
 | GET | /api/check-in/status | Estado del cliente + visita reciente + `pending_reward` | NO (público) |
+| GET | /api/public/customer-card | Datos de tarjeta del cliente (puntos, tiers) por teléfono | NO (público) |
 | POST | /api/reward-redeem | Registrar entrega física de un premio | Staff (Bearer/X-Device-Token) |
 | POST | /api/webhook/delivery | Recibir datos de domicilio (n8n/Twilio) | x-webhook-secret |
 | POST | /api/webhook/twilio-incoming | Auto-responder mensajes entrantes al número | Twilio Signature |
@@ -242,6 +243,59 @@ X-Device-Token: {device_fingerprint}
 ```
 
 > **Nota:** Ya no existe cap de 24h entre check-ins. Los clientes pueden acumular visitas ilimitadas por día.
+
+---
+
+### Tarjeta Pública del Cliente
+
+**`GET /api/public/customer-card?phone=XXXX`** — Sin autenticación (ruta pública)
+
+Retorna los datos de fidelización de un cliente por número de celular. Usado por integraciones externas; la página `/tarjeta` usa SSR directo en lugar de este endpoint.
+
+**Rate limit:** 30 req/min por IP
+
+**Query params:**
+
+| Param | Tipo | Requerido | Descripción |
+| ----- | ---- | --------- | ----------- |
+| `phone` | `string` | Sí | Número de celular (formato colombiano, 10 dígitos) |
+
+**Response 200 (encontrado):**
+```json
+{
+  "found": true,
+  "customer": {
+    "name": "Juan García",
+    "total_points": 340,
+    "total_visits": 8
+  },
+  "tiers": [
+    {
+      "tier_name": "Bronce",
+      "point_threshold": 200,
+      "safe_reward_title": "Rollo gratis",
+      "mystery_box_enabled": true,
+      "is_black": false
+    }
+  ],
+  "next_tier": {
+    "name": "Plata",
+    "threshold": 500,
+    "points_remaining": 160
+  }
+}
+```
+
+**Response 200 (no encontrado):**
+```json
+{ "found": false }
+```
+
+**Response 400:** `{ "error": "Se requiere phone" }` / `{ "error": "Teléfono inválido" }`
+
+**Response 429:** `{ "error": "Too many requests", "Retry-After": "N" }` (rate limit excedido)
+
+**Response 500:** `{ "error": "Error del servidor" }`
 
 ---
 

@@ -9,7 +9,7 @@ interface StampsGridProps {
 export function StampsGrid({ totalVisits }: StampsGridProps) {
   const mod = totalVisits % STAMPS_COUNT
   const filledStamps = mod === 0 && totalVisits > 0 ? STAMPS_COUNT : mod
-  const cycleNumber = Math.floor(totalVisits / STAMPS_COUNT) + 1
+  const cycleNumber = totalVisits > 0 ? Math.floor((totalVisits - 1) / STAMPS_COUNT) + 1 : 1
 
   return (
     <div>

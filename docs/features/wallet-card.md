@@ -34,17 +34,21 @@ Resuelve tres problemas de engagement:
 
 Grid 5×2 de círculos que representan progreso hacia el siguiente tier.
 
+**Lógica:** 1 visita = 1 sello. Cada 10 visitas se reinicia la tarjeta (nuevo ciclo). Los sellos son visualización del conteo de visitas; los puntos siguen siendo la lógica de negocio para tiers, recompensas y campañas.
+
 **Fórmula de mapeo:**
-```
+
+```text
 STAMPS_COUNT = 10
-nextThreshold = nextTier.point_threshold  (o max tier si ya alcanzó todo)
-ptsPerStamp = nextThreshold / STAMPS_COUNT
-filledStamps = min(STAMPS_COUNT, floor(totalPoints / ptsPerStamp))
+mod = totalVisits % STAMPS_COUNT
+filledStamps = (mod === 0 && totalVisits > 0) ? STAMPS_COUNT : mod
+cycleNumber  = (totalVisits > 0) ? floor((totalVisits - 1) / STAMPS_COUNT) + 1 : 1
 ```
+
+Ejemplos: 0 visitas → 0/10 #1 · 7 visitas → 7/10 #1 · 10 visitas → 10/10 #1 · 11 visitas → 1/10 #2 · 20 visitas → 10/10 #2
 
 - **Círculo lleno**: fondo blanco, check rojo `✓`, sombra
 - **Círculo vacío**: fondo blanco/20, borde blanco/40
-- Si el cliente superó todos los tiers: 10/10 llenos
 
 ### WalletCard (`src/components/features/wallet/WalletCard.tsx`)
 

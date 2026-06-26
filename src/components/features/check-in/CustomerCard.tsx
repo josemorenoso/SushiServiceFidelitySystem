@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { ArrowLeft, ScanLine, Loader2, PartyPopper } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
-import { BRAND_NAME, STAFF_LABEL } from '@/lib/branding'
+import { BRAND_NAME, STAFF_LABEL, BRAND_CARD_BG, BRAND_PAGE_BG } from '@/lib/branding'
 import { getTierEmoji } from '@/lib/tier-emojis'
 import { StampsGrid } from '@/components/features/wallet'
 
@@ -26,9 +26,6 @@ interface CustomerCardProps {
   justEarnedPoints: number | null
   onBack: () => void
 }
-
-const CARD_BG = 'linear-gradient(160deg, #7B0D1E 0%, #C1121F 35%, #E63946 75%, #FF6B6B 100%)'
-const PAGE_BG = 'linear-gradient(160deg, #2D0000 0%, #5A0A15 50%, #8B1A2A 100%)'
 
 export function CustomerCard({
   name,
@@ -58,10 +55,10 @@ export function CustomerCard({
   return (
     <div
       className="fixed inset-0 z-50 overflow-y-auto flex items-start justify-center py-6 px-4"
-      style={{ background: PAGE_BG }}
+      style={{ background: BRAND_PAGE_BG }}
     >
       {/* Overlay de dopamina */}
-      {justEarnedPoints != null && (
+      {justEarnedPoints != null && justEarnedPoints > 0 && (
         <div
           className="fixed inset-0 z-[60] flex flex-col items-center justify-center"
           style={{ background: 'linear-gradient(135deg, #34d399 0%, #059669 100%)' }}
@@ -79,7 +76,7 @@ export function CustomerCard({
       <div
         className="w-full max-w-sm animate-fade-in-up"
         style={{
-          background: CARD_BG,
+          background: BRAND_CARD_BG,
           borderRadius: '2rem',
           border: '1.5px solid rgba(255,255,255,0.22)',
           boxShadow: '0 25px 60px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.15)',

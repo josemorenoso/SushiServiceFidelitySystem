@@ -1,16 +1,25 @@
+import { headers } from 'next/headers'
 import { findCustomerByPhone } from '@/services/customer.service'
 import { getAllTiers } from '@/services/reward-tiers.service'
 import { validatePhone } from '@/lib/validators/phone'
+import { rateLimit } from '@/lib/rate-limit'
 import { WalletCard } from '@/components/features/wallet'
-import { BRAND_NAME } from '@/lib/branding'
-
-const WALLET_BG = 'linear-gradient(160deg, #7B0D1E 0%, #C1121F 35%, #E63946 70%, #FF6B6B 100%)'
+import { BRAND_NAME, BRAND_CARD_BG } from '@/lib/branding'
 
 export default async function TarjetaPage({
   searchParams,
 }: {
   searchParams: Promise<{ phone?: string }>
 }) {
+  const headersList = await headers()
+  const forwarded = headersList.get('x-forwarded-for')
+  const realIp = headersList.get('x-real-ip')
+  const ip = (forwarded ? forwarded.split(',')[0].trim() : realIp) ?? 'unknown'
+  const rl = rateLimit(`public-tarjeta:${ip}`, 30, 60_000)
+  if (!rl.allowed) {
+    return <TarjetaInput error="Demasiadas solicitudes. Intenta de nuevo en un momento." />
+  }
+
   const { phone } = await searchParams
 
   if (!phone) {
@@ -52,7 +61,7 @@ function TarjetaInput({ error }: { error?: string }) {
   return (
     <div
       className="min-h-screen flex flex-col items-center justify-center px-5"
-      style={{ background: WALLET_BG }}
+      style={{ background: BRAND_CARD_BG }}
     >
       <div className="w-full max-w-sm">
         <p className="text-xs font-bold tracking-[0.2em] uppercase text-white/50 text-center mb-1">

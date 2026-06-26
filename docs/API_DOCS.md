@@ -246,6 +246,59 @@ X-Device-Token: {device_fingerprint}
 
 ---
 
+### Tarjeta Pública del Cliente
+
+**`GET /api/public/customer-card?phone=XXXX`** — Sin autenticación (ruta pública)
+
+Retorna los datos de fidelización de un cliente por número de celular. Usado por integraciones externas; la página `/tarjeta` usa SSR directo en lugar de este endpoint.
+
+**Rate limit:** 30 req/min por IP
+
+**Query params:**
+
+| Param | Tipo | Requerido | Descripción |
+| ----- | ---- | --------- | ----------- |
+| `phone` | `string` | Sí | Número de celular (formato colombiano, 10 dígitos) |
+
+**Response 200 (encontrado):**
+```json
+{
+  "found": true,
+  "customer": {
+    "name": "Juan García",
+    "total_points": 340,
+    "total_visits": 8
+  },
+  "tiers": [
+    {
+      "tier_name": "Bronce",
+      "point_threshold": 200,
+      "safe_reward_title": "Rollo gratis",
+      "mystery_box_enabled": true,
+      "is_black": false
+    }
+  ],
+  "next_tier": {
+    "name": "Plata",
+    "threshold": 500,
+    "points_remaining": 160
+  }
+}
+```
+
+**Response 200 (no encontrado):**
+```json
+{ "found": false }
+```
+
+**Response 400:** `{ "error": "Se requiere phone" }` / `{ "error": "Teléfono inválido" }`
+
+**Response 429:** `{ "error": "Too many requests", "Retry-After": "N" }` (rate limit excedido)
+
+**Response 500:** `{ "error": "Error del servidor" }`
+
+---
+
 ### Check-in Status (Polling del cliente)
 
 **`GET /api/check-in/status?phone=3001234567`** — Sin autenticación (ruta pública)

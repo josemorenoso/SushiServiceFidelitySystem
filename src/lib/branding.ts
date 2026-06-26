@@ -26,3 +26,7 @@ export const STAFF_LABEL =
   process.env.NEXT_PUBLIC_STAFF_ROLE_LABEL ?? 'Mesero'
 
 export const STAFF_LABEL_PLURAL = `${STAFF_LABEL}s`
+
+// Gradientes de marca para la tarjeta digital wallet
+export const BRAND_CARD_BG = 'linear-gradient(160deg, #7B0D1E 0%, #C1121F 35%, #E63946 75%, #FF6B6B 100%)'
+export const BRAND_PAGE_BG = 'linear-gradient(160deg, #2D0000 0%, #5A0A15 50%, #8B1A2A 100%)'

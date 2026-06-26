@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { BRAND_NAME } from '@/lib/branding'
+import { BRAND_NAME, BRAND_CARD_BG, BRAND_PAGE_BG } from '@/lib/branding'
 import { StampsGrid } from './StampsGrid'
 
 interface TierItem {
@@ -19,14 +19,11 @@ interface WalletCardProps {
   tiers: TierItem[]
 }
 
-const CARD_BG = 'linear-gradient(160deg, #7B0D1E 0%, #C1121F 35%, #E63946 75%, #FF6B6B 100%)'
-const PAGE_BG = 'linear-gradient(160deg, #2D0000 0%, #5A0A15 50%, #8B1A2A 100%)'
-
 export function WalletCard({ name, totalPoints, totalVisits, tiers }: WalletCardProps) {
   const sorted = [...tiers].sort((a, b) => a.point_threshold - b.point_threshold)
   const nextTier = sorted.find((t) => totalPoints < t.point_threshold)
   const nextThreshold = nextTier?.point_threshold ?? totalPoints
-  const remaining = nextTier ? nextTier.point_threshold - totalPoints : 0
+  const remaining = nextTier ? Math.max(nextTier.point_threshold - totalPoints, 0) : 0
   const progressPercent = nextTier
     ? Math.min((totalPoints / nextThreshold) * 100, 100)
     : 100
@@ -40,12 +37,12 @@ export function WalletCard({ name, totalPoints, totalVisits, tiers }: WalletCard
   return (
     <div
       className="min-h-screen flex flex-col items-center justify-start py-8 px-4"
-      style={{ background: PAGE_BG }}
+      style={{ background: BRAND_PAGE_BG }}
     >
       <div
         className="w-full max-w-sm animate-fade-in-up"
         style={{
-          background: CARD_BG,
+          background: BRAND_CARD_BG,
           borderRadius: '2rem',
           border: '1.5px solid rgba(255,255,255,0.22)',
           boxShadow: '0 25px 60px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.15)',

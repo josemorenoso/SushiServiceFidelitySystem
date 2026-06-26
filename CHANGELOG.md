@@ -5,6 +5,29 @@
 
 ---
 
+## [v2.1.1] — 2026-06-25 — fix: bugs wallet card + rate-limit SSR + centralizar gradientes
+
+> Request: corregir bugs detectados en code review de la rama 2.0-qrs-feature antes de merge a main.
+
+### Fixed
+- `src/app/(public)/tarjeta/page.tsx` — Rate-limit aplicado al Server Component (30 req/min/IP usando `rateLimit()` + `headers()` de next/headers). Antes el límite solo existía en el API JSON pero no en el path SSR.
+- `src/components/features/wallet/WalletCard.tsx` — `remaining` protegido con `Math.max(..., 0)` para evitar puntos negativos si hay inconsistencia de datos.
+- `src/components/features/check-in/CustomerCard.tsx` — Overlay dopamina solo se muestra cuando `justEarnedPoints > 0` (antes se activaba con 0, mostrando "+0 puntos ¡Listo!").
+- `src/components/features/wallet/StampsGrid.tsx` — `cycleNumber` corregido: `floor((totalVisits - 1) / 10) + 1`. Antes con 10 visitas exactas mostraba "Tarjeta #2" en lugar de "Tarjeta #1".
+
+### Changed
+- `src/lib/branding.ts` — Agregadas `BRAND_CARD_BG` y `BRAND_PAGE_BG` como fuente única de los gradientes de la tarjeta wallet.
+- `src/components/features/wallet/WalletCard.tsx` — Usa `BRAND_CARD_BG`/`BRAND_PAGE_BG` desde branding (eliminadas constantes locales duplicadas).
+- `src/components/features/check-in/CustomerCard.tsx` — Usa `BRAND_CARD_BG`/`BRAND_PAGE_BG` desde branding (eliminadas constantes locales duplicadas).
+- `src/app/(public)/tarjeta/page.tsx` — Usa `BRAND_CARD_BG` desde branding (eliminado `WALLET_BG` local con stop position inconsistente).
+
+### Docs
+- `docs/features/wallet-card.md` — StampsGrid: fórmula actualizada a visits-based (1 visita = 1 sello), ejemplos de ciclos, cycleNumber correcto documentado.
+- `docs/03-security.md` — `/tarjeta` agregada a rutas públicas + sección Rate Limiting con los 3 endpoints y su mecanismo.
+- `docs/API_DOCS.md` — Sección completa `GET /api/public/customer-card`: query params, responses (200/400/429/500), rate limit.
+
+---
+
 ## [v2.1.0] — 2026-06-18 — feat: rediseño wallet card + tarjeta digital permanente
 
 > Request: transformar la experiencia del cliente de un formulario web a una tarjeta de fidelización estilo Apple/Google Wallet con sellos visuales y ruta permanente.

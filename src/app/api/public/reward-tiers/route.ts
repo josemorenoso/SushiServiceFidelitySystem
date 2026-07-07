@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAllTiers } from '@/services/reward-tiers.service'
 import { rateLimit, getClientIp } from '@/lib/rate-limit'
+import { getTenantByDomain } from '@/lib/tenant'
 
 export async function GET(request: NextRequest) {
   const ip = getClientIp(request)
@@ -13,7 +14,11 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const tiers = await getAllTiers()
+    const tenant = await getTenantByDomain(request.headers.get('host'))
+    if (!tenant) {
+      return NextResponse.json([], { status: 200 })
+    }
+    const tiers = await getAllTiers(tenant.id)
     const publicTiers = tiers.map(({ tier_name, point_threshold, safe_reward_title, mystery_box_enabled, is_black, sort_order }) => ({
       tier_name,
       point_threshold,

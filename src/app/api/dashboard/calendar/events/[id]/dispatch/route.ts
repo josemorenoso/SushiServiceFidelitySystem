@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { requireTenantId } from '@/lib/tenant'
 import {
   getEvent,
   updateEvent,
@@ -36,8 +37,9 @@ export async function POST(
     }
 
     const { id } = await params
+    const tenantId = await requireTenantId()
     const event = await getEvent(id)
-    if (!event) {
+    if (!event || event.tenant_id !== tenantId) {
       return NextResponse.json({ error: 'Evento no encontrado' }, { status: 404 })
     }
 
@@ -57,7 +59,7 @@ export async function POST(
 
     // Rearma un evento fallido para que pase el guard de executeAutoEvent.
     if (event.status === 'failed') {
-      await updateEvent(id, { status: 'scheduled' })
+      await updateEvent(id, { status: 'scheduled' }, tenantId)
     }
 
     const result = await executeAutoEvent(id)

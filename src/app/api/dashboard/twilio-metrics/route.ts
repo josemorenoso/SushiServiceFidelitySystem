@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { requireTenantId } from '@/lib/tenant'
 
 export const dynamic = 'force-dynamic'
 
@@ -129,6 +130,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
     }
 
+    const tenantId = await requireTenantId()
     const accountSid = process.env.TWILIO_ACCOUNT_SID
     const authToken = process.env.TWILIO_AUTH_TOKEN
     if (!accountSid || !authToken) {
@@ -210,7 +212,7 @@ export async function GET(request: NextRequest) {
 
     // Mapear nombres de clientes por teléfono
     if (optOutMap.size > 0) {
-      const { data: customers } = await supabase.from('customers').select('name, phone')
+      const { data: customers } = await supabase.from('customers').select('name, phone').eq('tenant_id', tenantId)
       const byKey = new Map<string, string>()
       for (const c of customers ?? []) {
         byKey.set(phoneKey(c.phone), c.name)

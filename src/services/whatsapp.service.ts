@@ -38,10 +38,23 @@ export interface MessageLogContext {
   messageType: string
 }
 
-function getTwilioClient() {
-  const accountSid = process.env.TWILIO_ACCOUNT_SID
-  const authToken = process.env.TWILIO_AUTH_TOKEN
-  const whatsappNumber = process.env.TWILIO_WHATSAPP_NUMBER
+/**
+ * Credenciales Twilio + identidad del tenant para enviar mensajes.
+ * Se pasa el tenant resuelto (por dominio/slug/JWT). Si el tenant no tiene
+ * subaccount propio, se usa la cuenta master via env (TWILIO_*) — que apunta a
+ * Sushi Service (la cuenta master de Cada1).
+ */
+export interface TenantMessagingContext {
+  id: string
+  twilio_subaccount_sid: string | null
+  twilio_subaccount_auth_token: string | null
+  twilio_whatsapp_number: string | null
+}
+
+function getTwilioClient(tenant: TenantMessagingContext) {
+  const accountSid = tenant.twilio_subaccount_sid ?? process.env.TWILIO_ACCOUNT_SID
+  const authToken = tenant.twilio_subaccount_auth_token ?? process.env.TWILIO_AUTH_TOKEN
+  const whatsappNumber = tenant.twilio_whatsapp_number ?? process.env.TWILIO_WHATSAPP_NUMBER
 
   if (!accountSid || !authToken || !whatsappNumber) {
     return null
@@ -54,21 +67,23 @@ export async function sendTemplateMessage(
   phone: string,
   contentSid: string,
   variables: Record<string, string>,
+  tenant: TenantMessagingContext,
   mediaUrl?: string,
   logContext?: MessageLogContext
 ): Promise<TwilioMessageResponse | null> {
-  const config = getTwilioClient()
+  const config = getTwilioClient(tenant)
   if (!config) {
     console.warn('[WhatsApp] Twilio no configurado — mensaje no enviado')
     if (logContext) {
       await recordMessageLog({
         ...logContext,
+        tenantId: tenant.id,
         phone,
         templateSid: contentSid,
         variables,
         status: 'failed',
         errorCode: 'twilio_not_configured',
-        errorMessage: 'TWILIO_ACCOUNT_SID/AUTH_TOKEN/WHATSAPP_NUMBER ausente',
+        errorMessage: 'Credenciales Twilio del tenant/master ausentes',
       })
     }
     return null
@@ -76,11 +91,12 @@ export async function sendTemplateMessage(
 
   // Opt-out persistente (auditoría 12-Julio, tarea 8): si el cliente respondió
   // SALIR/STOP/BAJA, no malgastamos el envío ni generamos un error 21610.
-  if (await isPhoneOptedOut(phone)) {
+  if (await isPhoneOptedOut(phone, tenant.id)) {
     console.warn(`[WhatsApp] Envío omitido: el cliente está en opt-out (contentSid=${contentSid})`)
     if (logContext) {
       await recordMessageLog({
         ...logContext,
+        tenantId: tenant.id,
         phone,
         templateSid: contentSid,
         variables,
@@ -130,6 +146,7 @@ export async function sendTemplateMessage(
       if (logContext) {
         await recordMessageLog({
           ...logContext,
+          tenantId: tenant.id,
           phone,
           templateSid: contentSid,
           variables: subset,
@@ -156,6 +173,7 @@ export async function sendTemplateMessage(
       if (logContext) {
         await recordMessageLog({
           ...logContext,
+          tenantId: tenant.id,
           phone,
           templateSid: contentSid,
           variables: subset,

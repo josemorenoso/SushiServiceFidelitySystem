@@ -16,6 +16,7 @@ import { randomUUID } from 'crypto'
 import { createClient } from '@supabase/supabase-js'
 import { sendTemplateMessage } from '@/services/whatsapp.service'
 import { getSettingValue } from '@/services/settings.service'
+import type { Tenant } from '@/types/tenant.types'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -30,8 +31,8 @@ const USD_TO_COP = 4200
 const SEND_BATCH_SIZE = 10
 
 /** Tarifa de mensajería leída de admin_settings (fallback a la constante). */
-export async function getCostPerMessageUsd(): Promise<number> {
-  const raw = await getSettingValue('twilio_cost_per_message_usd')
+export async function getCostPerMessageUsd(tenantId: string): Promise<number> {
+  const raw = await getSettingValue('twilio_cost_per_message_usd', tenantId)
   const n = raw ? Number(raw) : NaN
   return Number.isFinite(n) && n > 0 ? n : DEFAULT_COST_PER_MESSAGE_USD
 }
@@ -86,8 +87,8 @@ export interface CSVValidationResult {
  * Detecta formato inválido, no-móviles colombianos, duplicados internos y
  * números ya contactados previamente (excluidos para evitar bloqueos).
  */
-export async function validateCSV(fileText: string, fileName: string): Promise<CSVValidationResult> {
-  const costPerMsg = await getCostPerMessageUsd()
+export async function validateCSV(fileText: string, fileName: string, tenantId: string): Promise<CSVValidationResult> {
+  const costPerMsg = await getCostPerMessageUsd(tenantId)
   const lines = fileText.split('\n').filter((l) => l.trim())
 
   const result: CSVValidationResult = {
@@ -159,7 +160,7 @@ export async function validateCSV(fileText: string, fileName: string): Promise<C
   }
 
   // Excluir números ya contactados previamente (regla anti-reenvío).
-  const existing = await getExistingPhones([...seen])
+  const existing = await getExistingPhones([...seen], tenantId)
   for (const c of candidates) {
     if (existing.has(c.phone)) {
       result.already_contacted++
@@ -179,14 +180,14 @@ export async function validateCSV(fileText: string, fileName: string): Promise<C
 }
 
 /** Devuelve el subconjunto de teléfonos que ya existen en imported_contacts. */
-export async function getExistingPhones(phones: string[]): Promise<Set<string>> {
+export async function getExistingPhones(phones: string[], tenantId: string): Promise<Set<string>> {
   if (phones.length === 0) return new Set()
   const supabase = getServiceClient()
   const found = new Set<string>()
   // Consultar en chunks para no exceder límites de la query .in()
   for (let i = 0; i < phones.length; i += 500) {
     const chunk = phones.slice(i, i + 500)
-    const { data } = await supabase.from('imported_contacts').select('phone').in('phone', chunk)
+    const { data } = await supabase.from('imported_contacts').select('phone').eq('tenant_id', tenantId).in('phone', chunk)
     for (const row of data ?? []) found.add(row.phone)
   }
   return found
@@ -203,6 +204,7 @@ export interface ConfirmImportParams {
   /** Nombre genérico para {{1}} cuando el contacto no trae nombre */
   fallbackName?: string
   contacts: ParsedContact[]
+  tenant: Tenant
 }
 
 export interface ConfirmImportResult {
@@ -216,12 +218,13 @@ export interface ConfirmImportResult {
 
 export async function confirmImport(params: ConfirmImportParams): Promise<ConfirmImportResult> {
   const supabase = getServiceClient()
-  const costPerMsg = await getCostPerMessageUsd()
+  const tenantId = params.tenant.id
+  const costPerMsg = await getCostPerMessageUsd(tenantId)
   const fallbackName = params.fallbackName?.trim() || 'cliente'
 
   // Re-filtrar contra DB por seguridad (carrera entre dos importaciones).
   const phones = params.contacts.map((c) => c.phone)
-  const existing = await getExistingPhones(phones)
+  const existing = await getExistingPhones(phones, tenantId)
   const toImport = params.contacts.filter((c) => !existing.has(c.phone))
   const blockedAuto = params.contacts.length - toImport.length
 
@@ -236,6 +239,7 @@ export async function confirmImport(params: ConfirmImportParams): Promise<Confir
       message_template: params.promoText,
       filters: { golden_bullet: true, source_file: params.sourceFile, batch_id: params.batchId },
       executed_at: new Date().toISOString(),
+      tenant_id: tenantId,
     })
     .select()
     .single()
@@ -255,6 +259,7 @@ export async function confirmImport(params: ConfirmImportParams): Promise<Confir
       source_batch: params.batchId,
       status: 'valid' as const,
       campaign_id: campaign.id,
+      tenant_id: tenantId,
     }))
     // Insertar en chunks
     for (let i = 0; i < rows.length; i += 500) {
@@ -281,7 +286,7 @@ export async function confirmImport(params: ConfirmImportParams): Promise<Confir
           '1': c.name || fallbackName,
           '2': params.promoText,
         }
-        const res = await sendTemplateMessage(c.phone, params.templateSid, variables, undefined, {
+        const res = await sendTemplateMessage(c.phone, params.templateSid, variables, params.tenant, undefined, {
           customerId: null,
           messageType: 'manual',
         })
@@ -297,6 +302,7 @@ export async function confirmImport(params: ConfirmImportParams): Promise<Confir
           .update({ status: 'sent', message_sent_at: now, twilio_sid: res.sid })
           .eq('phone', phone)
           .eq('source_batch', params.batchId)
+          .eq('tenant_id', tenantId)
       } else {
         failed++
         await supabase
@@ -304,6 +310,7 @@ export async function confirmImport(params: ConfirmImportParams): Promise<Confir
           .update({ status: 'bounced', validation_error: 'envio_fallido' })
           .eq('phone', phone)
           .eq('source_batch', params.batchId)
+          .eq('tenant_id', tenantId)
       }
     }
   }
@@ -333,11 +340,12 @@ export interface ImportedBatchSummary {
 }
 
 /** Lista los lotes importados agrupados (resumen por batch). */
-export async function listBatches(): Promise<ImportedBatchSummary[]> {
+export async function listBatches(tenantId: string): Promise<ImportedBatchSummary[]> {
   const supabase = getServiceClient()
   const { data, error } = await supabase
     .from('imported_contacts')
     .select('source_batch, source_file, status, created_at')
+    .eq('tenant_id', tenantId)
     .order('created_at', { ascending: false })
 
   if (error || !data) return []
@@ -374,12 +382,13 @@ export interface BatchStats {
   blocked: number
 }
 
-export async function getBatchStats(batchId: string): Promise<BatchStats> {
+export async function getBatchStats(batchId: string, tenantId: string): Promise<BatchStats> {
   const supabase = getServiceClient()
   const { data } = await supabase
     .from('imported_contacts')
     .select('status')
     .eq('source_batch', batchId)
+    .eq('tenant_id', tenantId)
 
   const rows = data ?? []
   const sent = rows.filter((r) => ['sent', 'delivered', 'converted'].includes(r.status)).length
@@ -411,7 +420,7 @@ export interface BatchRoi {
   multiplo_retorno: number
 }
 
-export async function getBatchRoi(batchId: string): Promise<BatchRoi> {
+export async function getBatchRoi(batchId: string, tenantId: string): Promise<BatchRoi> {
   const supabase = getServiceClient()
 
   // Contactos del lote + visitas de los convertidos (join customers)
@@ -419,6 +428,7 @@ export async function getBatchRoi(batchId: string): Promise<BatchRoi> {
     .from('imported_contacts')
     .select('status, converted_to_customer_id, customers:converted_to_customer_id(total_visits)')
     .eq('source_batch', batchId)
+    .eq('tenant_id', tenantId)
 
   const rows = contacts ?? []
   const enviados = rows.filter((r) => ['sent', 'delivered', 'converted'].includes(r.status)).length
@@ -430,9 +440,9 @@ export async function getBatchRoi(batchId: string): Promise<BatchRoi> {
     if (cust?.total_visits) visitasGeneradas += cust.total_visits
   }
 
-  const avgTicketRaw = await getSettingValue('avg_ticket')
+  const avgTicketRaw = await getSettingValue('avg_ticket', tenantId)
   const avgTicket = avgTicketRaw ? Number(avgTicketRaw) : 35000
-  const costPerMsg = await getCostPerMessageUsd()
+  const costPerMsg = await getCostPerMessageUsd(tenantId)
 
   const ingresoEstimado = visitasGeneradas * avgTicket
   const costoCampana = Math.round(enviados * costPerMsg * USD_TO_COP)
@@ -461,7 +471,7 @@ export async function getBatchRoi(batchId: string): Promise<BatchRoi> {
  * imported_contact_id (para guardarlo en customers.imported_contact_id) o null.
  * Best-effort: no lanza.
  */
-export async function markConverted(phone: string, customerId: string): Promise<string | null> {
+export async function markConverted(phone: string, customerId: string, tenantId: string): Promise<string | null> {
   try {
     const supabase = getServiceClient()
     const normalized = normalizePhone(phone) ?? phone.replace(/\D/g, '').slice(-10)
@@ -470,6 +480,7 @@ export async function markConverted(phone: string, customerId: string): Promise<
       .from('imported_contacts')
       .select('id, status')
       .eq('phone', normalized)
+      .eq('tenant_id', tenantId)
       .maybeSingle()
 
     if (!contact) return null

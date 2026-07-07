@@ -38,14 +38,16 @@
 │  /api/check-in              → Registro QR + WhatsApp bienvenida          │
 │  /api/webhook/delivery      → Registro domicilio + WhatsApp cliente      │
 │  /api/webhook/twilio-incoming → Auto-responder (redirige al humano)      │
-│  /api/cron/birthday         → Felicitaciones cumpleaños (8AM Colombia)   │
-│  /api/cron/reactivation     → Re-engagement inactivos 21/25d (10AM Col) │
+│  /api/cron/birthday         → Felicitaciones cumpleaños (disparado por n8n) │
+│  /api/cron/reactivation     → Re-engagement inactivos (disparado por n8n)  │
 │  /api/dashboard/*           → Dashboard admin (auth requerida)           │
 │  /api/staff/*               → App mesero (auth staff)                   │
 │                                                                          │
-│  Vercel Crons (vercel.json — plan Hobby, máx 2 diarios):                │
-│    birthday     → 0 8 * * *   (⚠️ ver nota UTC abajo)                  │
-│    reactivation → 0 10 * * *  (⚠️ ver nota UTC abajo)                  │
+│  vercel.json → "crons": [] (VACÍO desde 2026-07-05). birthday y         │
+│  reactivation se disparan SOLO desde n8n — ver §5. Antes corrían         │
+│  duplicados (Vercel nativo + n8n a la vez); el propio código los         │
+│  des-duplicaba vía hasRecentCampaignMessage(), pero gastaba recursos     │
+│  doble y tenía un riesgo latente de carrera si coincidían al segundo.    │
 └────────────────────┬────────────────────┬────────────────────────────────┘
                      │                    │
           ┌──────────┘                    └──────────┐
@@ -76,11 +78,13 @@
 └─────────────────────────────────────────────────────────────┘
 ```
 
-> **⚠️ Nota UTC / Colombia:** Colombia es UTC-5. Los crons de Vercel corren en UTC.
-> `0 8 * * *` = 3:00 AM Colombia | `0 13 * * *` = 8:00 AM Colombia.
-> El `vercel.json` actual tiene `0 8 * * *` y `0 10 * * *` (8AM y 10AM UTC = 3AM y 5AM Colombia).
-> Si se quieren a las 8AM y 10AM Colombia, cambiar a `0 13 * * *` y `0 15 * * *`.
-> **No modificar vercel.json sin confirmar con el equipo** — puede haber un motivo.
+> **⚠️ Nota UTC / Colombia:** Colombia es UTC-5. Si el Schedule Trigger de n8n usa UTC,
+> `0 8 * * *` = 3:00 AM Colombia | `0 13 * * *` = 8:00 AM Colombia. Verificar la zona
+> horaria configurada en cada workflow de n8n ("Cron Birthday" / "Cron Reactivación")
+> para confirmar a qué hora Colombia realmente disparan.
+> **`vercel.json` ya NO dispara estos 2 crons (desde 2026-07-05) — el disparo real
+> vive 100% en n8n.** No agregar de vuelta esas entradas sin apagar antes las de n8n
+> (evitar volver al doble disparo).
 
 ---
 
@@ -128,14 +132,17 @@ O desde Vercel Dashboard: Import Git Repository → Framework: Next.js → confi
 
 ```json
 {
-  "crons": [
-    { "path": "/api/cron/birthday",    "schedule": "0 8 * * *"  },
-    { "path": "/api/cron/reactivation","schedule": "0 10 * * *" }
-  ]
+  "crons": []
 }
 ```
 
-> `calendar-dispatch` NO está en `vercel.json` — lo dispara n8n (ver [§5 W2](#w2--calendar-dispatch)). Agregar un 3er cron con cadencia `*/15` exigiría plan Vercel Pro.
+> **Vacío a propósito desde 2026-07-05.** `birthday` y `reactivation` se disparaban
+> ANTES desde aquí (Vercel nativo) Y desde n8n al mismo tiempo — doble disparo diario.
+> El código los des-duplicaba (`hasRecentCampaignMessage()`), así que el cliente final
+> nunca recibió mensajes repetidos, pero se gastaba el trabajo dos veces y existía un
+> riesgo de carrera si ambos disparos coincidían al segundo. Se decidió dejar **solo
+> n8n** como disparador único — ver [§5](#crons-de-birthdayreactivacion-via-n8n).
+> `calendar-dispatch` tampoco está aquí — lo dispara n8n (ver [§5 W2](#w2--calendar-dispatch)). Agregar un 3er cron con cadencia `*/15` exigiría plan Vercel Pro.
 
 ---
 
@@ -447,11 +454,14 @@ Fire-and-forget — si falla, el check-in/delivery NO se rompe (timeout 10s, log
 
 ---
 
-### Crons de birthday/reactivation vía n8n (opcional)
+### Crons de birthday/reactivation vía n8n
 
-Si en algún momento se migran los crons de Vercel a n8n (para tener todo centralizado):
+> **Mecanismo oficial desde 2026-07-05** (antes corría en paralelo con Vercel nativo,
+> causando doble disparo — ver nota en §2). `vercel.json` tiene `"crons": []`: n8n es
+> ahora el ÚNICO disparador de estos dos. Confirmar en cada workflow ("Cron Birthday",
+> "Cron Reactivación") la zona horaria real del Schedule Trigger — puede no ser UTC.
 
-**Birthday** — 8:00 AM Colombia = 13:00 UTC:
+**Birthday** — 8:00 AM Colombia = 13:00 UTC (si el Schedule Trigger usa UTC):
 - Schedule Trigger: todos los días a las 13:00 UTC
 - HTTP Request: `POST {{$env.[CLIENTE]_APP_URL}}/api/cron/birthday`
 - Header: `Authorization: Bearer {{$env.CRON_SECRET}}`

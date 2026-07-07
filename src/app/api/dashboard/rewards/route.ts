@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { requireTenantId } from '@/lib/tenant'
 import { getRewards } from '@/services/dashboard.service'
 
 function getServiceClient() {
@@ -19,7 +20,8 @@ export async function GET() {
   }
 
   try {
-    const rewards = await getRewards()
+    const tenantId = await requireTenantId()
+    const rewards = await getRewards(tenantId)
     return NextResponse.json(rewards)
   } catch (error) {
     console.error('[Dashboard] Error recompensas:', error)
@@ -55,6 +57,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const tenantId = await requireTenantId()
     const db = getServiceClient()
 
     // Check for duplicate milestone s\u00f3lo cuando milestone NO es null
@@ -63,6 +66,7 @@ export async function POST(request: NextRequest) {
         .from('rewards')
         .select('id')
         .eq('visit_milestone', milestone)
+        .eq('tenant_id', tenantId)
         .single()
 
       if (existing) {
@@ -86,6 +90,7 @@ export async function POST(request: NextRequest) {
         .select('id, visit_milestone')
         .eq('is_black', true)
         .eq('is_active', true)
+        .eq('tenant_id', tenantId)
         .limit(1)
         .single()
 
@@ -104,6 +109,7 @@ export async function POST(request: NextRequest) {
         title: title.trim(),
         message_template: template,
         is_active: true,
+        tenant_id: tenantId,
         ...(blackFlag ? { is_black: true } : {}),
       })
       .select()
@@ -128,8 +134,9 @@ export async function DELETE(request: NextRequest) {
     const id = searchParams.get('id')
     if (!id) return NextResponse.json({ error: 'id requerido' }, { status: 400 })
 
+    const tenantId = await requireTenantId()
     const db = getServiceClient()
-    const { error } = await db.from('rewards').delete().eq('id', id)
+    const { error } = await db.from('rewards').delete().eq('id', id).eq('tenant_id', tenantId)
     if (error) throw error
 
     return NextResponse.json({ ok: true })
@@ -181,11 +188,13 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Nada que actualizar' }, { status: 400 })
     }
 
+    const tenantId = await requireTenantId()
     const db = getServiceClient()
     const { data: reward, error } = await db
       .from('rewards')
       .update(updates)
       .eq('id', id)
+      .eq('tenant_id', tenantId)
       .select()
       .single()
 

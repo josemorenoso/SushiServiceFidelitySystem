@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getTenantByDomain } from '@/lib/tenant'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -10,6 +11,11 @@ function getServiceClient() {
 
 export async function POST(request: NextRequest) {
   try {
+    const tenant = await getTenantByDomain(request.headers.get('host'))
+    if (!tenant) {
+      return NextResponse.json({ error: 'Restaurante no reconocido' }, { status: 404 })
+    }
+
     const body = await request.json()
     const { device_fingerprint } = body
 
@@ -25,6 +31,7 @@ export async function POST(request: NextRequest) {
       .from('staff_devices')
       .select('id, device_name, is_trusted, expires_at')
       .eq('device_fingerprint', device_fingerprint)
+      .eq('tenant_id', tenant.id)
       .eq('is_trusted', true)
       .single()
 

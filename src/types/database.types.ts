@@ -111,6 +111,7 @@ export type EventMediaType = 'image' | 'video'
 
 export interface RestaurantEvent {
   id: string
+  tenant_id: string
   title: string
   description: string | null
   event_date: string                   // YYYY-MM-DD

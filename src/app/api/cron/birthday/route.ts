@@ -11,10 +11,20 @@ import {
 import { sendTemplateMessage } from '@/services/whatsapp.service'
 import { getSettingValue } from '@/services/settings.service'
 import { buildTiersRoadmap } from '@/services/reward-tiers.service'
+import { getTenantBySlug } from '@/lib/tenant'
 
-async function handleCron() {
+async function handleCron(request: NextRequest) {
   try {
-    const templateSid = await getSettingValue('birthday_template_sid')
+    const slug = new URL(request.url).searchParams.get('tenant')
+    if (!slug) {
+      return NextResponse.json({ error: 'Falta ?tenant=' }, { status: 400 })
+    }
+    const tenant = await getTenantBySlug(slug)
+    if (!tenant) {
+      return NextResponse.json({ error: 'Tenant no encontrado' }, { status: 400 })
+    }
+
+    const templateSid = await getSettingValue('birthday_template_sid', tenant.id)
 
     if (!templateSid) {
       console.warn('[Cron Birthday] No hay plantilla configurada para cumpleaños. Configúrala en Dashboard > Ajustes.')
@@ -25,7 +35,7 @@ async function handleCron() {
       })
     }
 
-    const customers = await findBirthdayCustomers()
+    const customers = await findBirthdayCustomers(tenant.id)
 
     if (customers.length === 0) {
       return NextResponse.json({
@@ -37,7 +47,7 @@ async function handleCron() {
       })
     }
 
-    const campaign = await getOrCreateTodayCampaign('birthday', `template:${templateSid}`)
+    const campaign = await getOrCreateTodayCampaign('birthday', `template:${templateSid}`, tenant.id)
     let sent = 0
     let failed = 0
     const sentCustomerIds: string[] = []
@@ -47,13 +57,14 @@ async function handleCron() {
       if (alreadySent) continue
 
       try {
-        const tiersRoadmap = await buildTiersRoadmap(customer.total_points ?? 0)
-        const result = await sendTemplateMessage(customer.phone, templateSid, { '1': customer.name, '2': tiersRoadmap })
+        const tiersRoadmap = await buildTiersRoadmap(customer.total_points ?? 0, tenant.id)
+        const result = await sendTemplateMessage(customer.phone, templateSid, { '1': customer.name, '2': tiersRoadmap }, tenant, undefined, { customerId: customer.id, messageType: 'birthday' })
 
         await recordCampaignMessage({
           campaignId: campaign.id,
           customerId: customer.id,
           status: result ? 'sent' : 'failed',
+          tenantId: tenant.id,
           twilioSid: result?.sid ?? null,
           errorMessage: result ? null : 'Twilio no configurado o error de envío',
         })
@@ -70,6 +81,7 @@ async function handleCron() {
           campaignId: campaign.id,
           customerId: customer.id,
           status: 'failed',
+          tenantId: tenant.id,
           errorMessage: error instanceof Error ? error.message : 'Error desconocido',
         })
       }
@@ -98,12 +110,12 @@ export async function GET(request: NextRequest) {
   if (!validateCronSecret(request)) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
-  return handleCron()
+  return handleCron(request)
 }
 
 export async function POST(request: NextRequest) {
   if (!validateCronSecret(request)) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
-  return handleCron()
+  return handleCron(request)
 }

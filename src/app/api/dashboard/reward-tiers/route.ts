@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { requireTenantId } from '@/lib/tenant'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -16,10 +17,12 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   try {
+    const tenantId = await requireTenantId()
     const db = getServiceClient()
     const { data, error } = await db
       .from('reward_tiers')
       .select('*')
+      .eq('tenant_id', tenantId)
       .order('sort_order', { ascending: true })
 
     if (error) throw error
@@ -60,6 +63,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'safe_reward_title es requerido' }, { status: 400 })
     }
 
+    const tenantId = await requireTenantId()
     const db = getServiceClient()
 
     // Verificar que no exista un tier con el mismo umbral
@@ -67,6 +71,7 @@ export async function POST(request: NextRequest) {
       .from('reward_tiers')
       .select('id')
       .eq('point_threshold', threshold)
+      .eq('tenant_id', tenantId)
       .single()
 
     if (existingThreshold) {
@@ -100,6 +105,7 @@ export async function POST(request: NextRequest) {
     const { data: allTiers } = await db
       .from('reward_tiers')
       .select('sort_order')
+      .eq('tenant_id', tenantId)
       .order('sort_order', { ascending: false })
       .limit(1)
 
@@ -114,6 +120,7 @@ export async function POST(request: NextRequest) {
         .select('id')
         .eq('is_black', true)
         .eq('is_active', true)
+        .eq('tenant_id', tenantId)
         .single()
 
       if (existingBlack) {
@@ -135,6 +142,7 @@ export async function POST(request: NextRequest) {
         is_black: blackFlag,
         sort_order: nextOrder,
         is_active: true,
+        tenant_id: tenantId,
       })
       .select()
       .single()
@@ -158,6 +166,7 @@ export async function PATCH(request: NextRequest) {
     const { id } = body
     if (!id) return NextResponse.json({ error: 'id requerido' }, { status: 400 })
 
+    const tenantId = await requireTenantId()
     const db = getServiceClient()
     const updates: Record<string, unknown> = {}
 
@@ -178,6 +187,7 @@ export async function PATCH(request: NextRequest) {
         .from('reward_tiers')
         .select('id')
         .eq('point_threshold', threshold)
+        .eq('tenant_id', tenantId)
         .neq('id', id)
         .single()
 
@@ -230,6 +240,7 @@ export async function PATCH(request: NextRequest) {
       .from('reward_tiers')
       .update(updates)
       .eq('id', id)
+      .eq('tenant_id', tenantId)
       .select()
       .single()
 
@@ -254,6 +265,7 @@ export async function DELETE(request: NextRequest) {
 
     if (!id) return NextResponse.json({ error: 'id requerido' }, { status: 400 })
 
+    const tenantId = await requireTenantId()
     const db = getServiceClient()
 
     // Verificar si hay clientes con este tier
@@ -261,6 +273,7 @@ export async function DELETE(request: NextRequest) {
       .from('reward_tiers')
       .select('tier_name')
       .eq('id', id)
+      .eq('tenant_id', tenantId)
       .single()
 
     if (!tier) {
@@ -271,6 +284,7 @@ export async function DELETE(request: NextRequest) {
       .from('customers')
       .select('id', { count: 'exact', head: true })
       .eq('current_tier', tier.tier_name)
+      .eq('tenant_id', tenantId)
 
     if ((count ?? 0) > 0 || !hard) {
       // Soft delete: desactivar
@@ -278,13 +292,14 @@ export async function DELETE(request: NextRequest) {
         .from('reward_tiers')
         .update({ is_active: false })
         .eq('id', id)
+        .eq('tenant_id', tenantId)
 
       if (error) throw error
       return NextResponse.json({ ok: true, action: 'deactivated', customers_affected: count ?? 0 })
     }
 
     // Hard delete solo si no hay clientes
-    const { error } = await db.from('reward_tiers').delete().eq('id', id)
+    const { error } = await db.from('reward_tiers').delete().eq('id', id).eq('tenant_id', tenantId)
     if (error) throw error
     return NextResponse.json({ ok: true, action: 'deleted' })
   } catch (error) {

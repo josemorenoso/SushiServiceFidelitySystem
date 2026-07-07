@@ -14,7 +14,7 @@ function getServiceClient() {
  * Checks if a phone number is an authorized sender (mesero).
  * The phone comes from Twilio in format "whatsapp:+573001234567".
  */
-export async function isAuthorizedNumber(twilioFrom: string): Promise<boolean> {
+export async function isAuthorizedNumber(twilioFrom: string, tenantId: string): Promise<boolean> {
   const cleaned = extractPhoneFromTwilio(twilioFrom)
   if (!cleaned) return false
 
@@ -23,6 +23,7 @@ export async function isAuthorizedNumber(twilioFrom: string): Promise<boolean> {
     .from('authorized_numbers')
     .select('id')
     .eq('phone', cleaned)
+    .eq('tenant_id', tenantId)
     .eq('is_active', true)
     .single()
 

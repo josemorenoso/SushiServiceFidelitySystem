@@ -8,6 +8,8 @@ import { sendTemplateMessage } from '@/services/whatsapp.service'
 import { getMultipleSettings } from '@/services/settings.service'
 import { syncGoogleContact } from '@/services/google-contacts-sync.service'
 import { rateLimit, getClientIp } from '@/lib/rate-limit'
+import { getTenantBySlug } from '@/lib/tenant'
+import type { Tenant } from '@/types/tenant.types'
 
 interface DeliveryRequestBody {
   nombre_cliente: string
@@ -18,6 +20,7 @@ interface DeliveryRequestBody {
   raw_message?: string | null
   ciudad?: string | null
   birthday?: string | null
+  tenant_slug: string
 }
 
 function parseBirthday(raw: string | null | undefined): string | null {
@@ -35,14 +38,20 @@ async function sendDeliveryTemplate(
   templateSid: string | undefined,
   templateType: string,
   phone: string,
-  variables: Record<string, string>
+  variables: Record<string, string>,
+  customerId: string | null,
+  tenant: Tenant
 ): Promise<void> {
   if (!templateSid) {
     console.warn(`[Delivery] No hay plantilla configurada para "${templateType}" — mensaje NO enviado.`)
     return
   }
   try {
-    await sendTemplateMessage(phone, templateSid, variables)
+    // logContext para que el envío quede trazado en message_logs (auditoría 18-Junio, CR-03).
+    await sendTemplateMessage(phone, templateSid, variables, tenant, undefined, {
+      customerId,
+      messageType: templateType,
+    })
   } catch (err) {
     console.error(`[Delivery] Error enviando plantilla ${templateType}:`, err)
   }
@@ -76,6 +85,11 @@ export async function POST(request: NextRequest) {
     const body = (await request.json()) as DeliveryRequestBody
     const { nombre_cliente, celular, direccion, metodo_pago, monto_total, raw_message, ciudad, birthday } = body
 
+    const tenant = await getTenantBySlug(body.tenant_slug)
+    if (!tenant) {
+      return NextResponse.json({ error: 'Tenant no encontrado' }, { status: 404 })
+    }
+
     if (!celular) {
       return NextResponse.json(
         { ok: false, error: 'Falta celular del cliente' },
@@ -93,7 +107,7 @@ export async function POST(request: NextRequest) {
 
     const customerName = nombre_cliente?.trim() || 'Cliente Domicilio'
 
-    let customer = await findCustomerByPhone(cleaned)
+    let customer = await findCustomerByPhone(cleaned, tenant.id)
     let isNew = false
     let action: 'created' | 'updated' = 'updated'
 
@@ -105,6 +119,7 @@ export async function POST(request: NextRequest) {
         name: customerName,
         birthday: parsedBirthday,
         city: ciudad ?? null,
+        tenantId: tenant.id,
         source: 'delivery',
       })
       isNew = true
@@ -122,6 +137,7 @@ export async function POST(request: NextRequest) {
     const visit = await createVisit({
       customerId: customer.id,
       source: 'delivery',
+      tenantId: tenant.id,
       notes: metodo_pago ? `Pago: ${metodo_pago}` : undefined,
       address: direccion ?? undefined,
       paymentMethod: metodo_pago ?? undefined,
@@ -134,13 +150,13 @@ export async function POST(request: NextRequest) {
       'points_earned_far_template_sid',
       'points_earned_near_template_sid',
       'tier_unlocked_template_sid',
-    ])
+    ], tenant.id)
 
     // Puntos de bienvenida para nuevos clientes
     let welcomePoints = { pointsAwarded: 0, newBalance: 0 }
     if (isNew) {
       try {
-        welcomePoints = await awardWelcomeBonus(customer.id)
+        welcomePoints = await awardWelcomeBonus(customer.id, tenant.id)
       } catch (err) {
         console.error('[Delivery] Error otorgando puntos de bienvenida:', err)
       }
@@ -155,7 +171,7 @@ export async function POST(request: NextRequest) {
     if (!isNew) {
       const previousPoints = customer.total_points ?? 0
       try {
-        pointsResult = await awardVisitPoints(customer.id, visit.id, 'delivery')
+        pointsResult = await awardVisitPoints(customer.id, visit.id, 'delivery', tenant.id)
         console.log(`[Delivery] Puntos otorgados: +${pointsResult.pointsAwarded} → balance=${pointsResult.newBalance} (prev=${previousPoints})`)
       } catch (err) {
         console.error('[Delivery] ERROR otorgando puntos (se usa fallback 0):', err)
@@ -163,18 +179,18 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        newTier = await evaluateNewTier(previousPoints, pointsResult.newBalance)
+        newTier = await evaluateNewTier(previousPoints, pointsResult.newBalance, tenant.id)
         if (newTier) {
           await updateCustomerTier(customer.id, newTier.tier_name)
         }
-        nextTierInfo = await getNextTier(pointsResult.newBalance)
+        nextTierInfo = await getNextTier(pointsResult.newBalance, tenant.id)
       } catch (err) {
         console.error('[Delivery] ERROR evaluando tiers (se continúa sin tiers):', err)
       }
     }
 
     try {
-      tiersRoadmapText = await buildTiersRoadmap(pointsResult.newBalance)
+      tiersRoadmapText = await buildTiersRoadmap(pointsResult.newBalance, tenant.id)
     } catch (err) {
       console.error('[Delivery] Error generando tiers roadmap:', err)
     }
@@ -184,14 +200,14 @@ export async function POST(request: NextRequest) {
         '1': customer.name,
         '2': String(pointsResult.newBalance),
         '3': tiersRoadmapText,
-      })
+      }, customer.id, tenant)
     } else if (newTier) {
       await sendDeliveryTemplate(settings.tier_unlocked_template_sid, 'tier_unlocked', cleaned, {
         '1': customer.name,
         '2': newTier.tier_name,
         '3': newTier.safe_reward_title,
         '4': tiersRoadmapText,
-      })
+      }, customer.id, tenant)
     } else {
       const isNearTier = nextTierInfo && nextTierInfo.pointsRemaining <= 30
       const targetSid = isNearTier
@@ -203,7 +219,7 @@ export async function POST(request: NextRequest) {
           '2': String(pointsResult.pointsAwarded),
           '3': String(pointsResult.newBalance),
           '4': isNearTier ? nextTierInfo!.tier.safe_reward_title : tiersRoadmapText,
-        })
+        }, customer.id, tenant)
       } else {
         console.warn('[Delivery] No hay plantilla de puntos configurada (points_earned_near/far_template_sid). Mensaje WhatsApp NO enviado.')
       }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { requireTenantId } from '@/lib/tenant'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -23,11 +24,13 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Se requiere device_id' }, { status: 400 })
     }
 
+    const tenantId = await requireTenantId()
     const db = getServiceClient()
     const { data, error } = await db
       .from('staff_devices')
       .update({ is_trusted: false })
       .eq('id', device_id)
+      .eq('tenant_id', tenantId)
       .select('id')
       .single()
 
@@ -57,11 +60,13 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Se requiere id' }, { status: 400 })
     }
 
+    const tenantId = await requireTenantId()
     const db = getServiceClient()
     const { data: device } = await db
       .from('staff_devices')
       .select('id, is_trusted')
       .eq('id', id)
+      .eq('tenant_id', tenantId)
       .single()
 
     if (!device) {
@@ -74,7 +79,7 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    const { error } = await db.from('staff_devices').delete().eq('id', id)
+    const { error } = await db.from('staff_devices').delete().eq('id', id).eq('tenant_id', tenantId)
     if (error) {
       return NextResponse.json({ error: 'No se pudo eliminar' }, { status: 500 })
     }

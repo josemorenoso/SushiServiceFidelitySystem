@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { requireTenantId, getTenantById } from '@/lib/tenant'
 import { confirmImport, type ParsedContact } from '@/services/imported-contacts.service'
 import { getSettingValue } from '@/services/settings.service'
 
@@ -23,7 +24,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
 
-  const enabled = await getSettingValue('golden_bullet_enabled')
+  const tenantId = await requireTenantId()
+  const enabled = await getSettingValue('golden_bullet_enabled', tenantId)
   if (enabled !== 'true') {
     return NextResponse.json(
       { error: 'Función desactivada', message: 'Golden Bullet no está habilitado.' },
@@ -32,6 +34,11 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const tenant = await getTenantById(tenantId)
+    if (!tenant) {
+      return NextResponse.json({ error: 'Tenant no encontrado' }, { status: 404 })
+    }
+
     const body = (await request.json()) as ConfirmBody
     if (!body.batch_id || !body.template_sid || !Array.isArray(body.contacts) || body.contacts.length === 0) {
       return NextResponse.json(
@@ -53,6 +60,7 @@ export async function POST(request: NextRequest) {
       promoText: body.promo_text,
       fallbackName: body.fallback_name,
       contacts: body.contacts,
+      tenant,
     })
 
     return NextResponse.json(result)

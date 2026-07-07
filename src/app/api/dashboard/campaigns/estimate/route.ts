@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { requireTenantId } from '@/lib/tenant'
 import { FREQUENCY_CAP_DAYS, RECOVERY_ZONE_START_DAYS, RECOVERY_ZONE_END_DAYS } from '@/constants/rewards'
 
 function getServiceClient() {
@@ -26,9 +27,12 @@ export async function GET(request: NextRequest) {
     const maxAge = searchParams.get('maxAge')
     const source = searchParams.get('source')
 
+    const tenantId = await requireTenantId()
     const db = getServiceClient()
     let query = db.from('customers').select('id', { count: 'exact', head: true })
+    query = query.eq('tenant_id', tenantId)
     query = query.eq('accepts_marketing', true)
+    query = query.is('whatsapp_opt_out_at', null)
 
     if (city) {
       query = query.ilike('city', `%${city}%`)

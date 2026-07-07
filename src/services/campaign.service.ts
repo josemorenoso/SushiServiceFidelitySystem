@@ -14,7 +14,7 @@ function getServiceClient() {
 /**
  * Finds customers whose birthday is today (matching day and month).
  */
-export async function findBirthdayCustomers(): Promise<Customer[]> {
+export async function findBirthdayCustomers(tenantId: string): Promise<Customer[]> {
   const supabase = getServiceClient()
   const today = new Date()
   const month = String(today.getMonth() + 1).padStart(2, '0')
@@ -23,8 +23,10 @@ export async function findBirthdayCustomers(): Promise<Customer[]> {
   const { data, error } = await supabase
     .from('customers')
     .select('*')
+    .eq('tenant_id', tenantId)
     .not('birthday', 'is', null)
     .eq('accepts_marketing', true)
+    .is('whatsapp_opt_out_at', null)
 
   if (error) {
     throw new Error(`Error buscando cumpleañeros: ${error.message}`)
@@ -43,7 +45,7 @@ export async function findBirthdayCustomers(): Promise<Customer[]> {
  * respecting the global frequency cap (last_campaign_at).
  * El valor configurable viene de admin_settings via getReactivationDaysConfig().
  */
-export async function findInactiveCustomers(reactivationDays: number = REACTIVATION_DAYS): Promise<Customer[]> {
+export async function findInactiveCustomers(tenantId: string, reactivationDays: number = REACTIVATION_DAYS): Promise<Customer[]> {
   const supabase = getServiceClient()
   const cutoffDate = new Date(Date.now() - reactivationDays * 24 * 60 * 60 * 1000).toISOString()
   const campaignCapDate = new Date(Date.now() - FREQUENCY_CAP_DAYS * 24 * 60 * 60 * 1000).toISOString()
@@ -51,9 +53,11 @@ export async function findInactiveCustomers(reactivationDays: number = REACTIVAT
   const { data, error } = await supabase
     .from('customers')
     .select('*')
+    .eq('tenant_id', tenantId)
     .lt('last_visit_at', cutoffDate)
     .not('last_visit_at', 'is', null)
     .eq('accepts_marketing', true)
+    .is('whatsapp_opt_out_at', null)
     .or(`last_campaign_at.is.null,last_campaign_at.lt.${campaignCapDate}`)
 
   if (error) {
@@ -112,7 +116,8 @@ export async function hasRecentCampaignMessage(
  */
 export async function getOrCreateTodayCampaign(
   type: 'birthday' | 'reactivation',
-  messageTemplate: string
+  messageTemplate: string,
+  tenantId: string
 ): Promise<Campaign> {
   const supabase = getServiceClient()
   const today = new Date()
@@ -123,6 +128,7 @@ export async function getOrCreateTodayCampaign(
     .from('campaigns')
     .select('*')
     .eq('name', name)
+    .eq('tenant_id', tenantId)
     .single()
 
   if (existing) return existing
@@ -136,6 +142,7 @@ export async function getOrCreateTodayCampaign(
       status: 'running',
       message_template: messageTemplate,
       executed_at: today.toISOString(),
+      tenant_id: tenantId,
     })
     .select()
     .single()
@@ -154,6 +161,7 @@ export async function recordCampaignMessage(params: {
   campaignId: string
   customerId: string
   status: 'sent' | 'failed'
+  tenantId: string
   twilioSid?: string | null
   errorMessage?: string | null
 }): Promise<CampaignMessage> {
@@ -165,6 +173,7 @@ export async function recordCampaignMessage(params: {
       campaign_id: params.campaignId,
       customer_id: params.customerId,
       status: params.status,
+      tenant_id: params.tenantId,
       twilio_sid: params.twilioSid ?? null,
       sent_at: new Date().toISOString(),
       error_message: params.errorMessage ?? null,
@@ -283,7 +292,7 @@ export async function filterByMonthlyCap<T extends { id: string }>(
  * Returns active blackouts: events whose blackout window contains `refDate`.
  * Blackout window: [event_date - blackout_days, event_date).
  */
-export async function getActiveBlackouts(refDate: Date = new Date()): Promise<RestaurantEvent[]> {
+export async function getActiveBlackouts(tenantId: string, refDate: Date = new Date()): Promise<RestaurantEvent[]> {
   const supabase = getServiceClient()
   const today = refDate.toISOString().split('T')[0]
 
@@ -291,6 +300,7 @@ export async function getActiveBlackouts(refDate: Date = new Date()): Promise<Re
   const { data, error } = await supabase
     .from('restaurant_events')
     .select('*')
+    .eq('tenant_id', tenantId)
     .gte('event_date', today)
     .in('status', ['planned', 'scheduled'])
 
@@ -319,6 +329,7 @@ export async function getActiveBlackouts(refDate: Date = new Date()): Promise<Re
 export async function createCalendarCampaign(params: {
   name: string
   templateSid: string
+  tenantId: string
   mediaUrl?: string | null
   mediaType?: 'image' | 'video' | null
   filters?: Record<string, unknown>
@@ -336,6 +347,7 @@ export async function createCalendarCampaign(params: {
       media_url: params.mediaUrl ?? null,
       media_type: params.mediaType ?? null,
       executed_at: new Date().toISOString(),
+      tenant_id: params.tenantId,
     })
     .select()
     .single()

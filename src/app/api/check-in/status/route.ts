@@ -3,7 +3,9 @@ import { validatePhone } from '@/lib/validators/phone'
 import { findCustomerByPhone } from '@/services/customer.service'
 import { getNextTier, getAllTiers } from '@/services/reward-tiers.service'
 import { getPendingReward } from '@/services/redemption.service'
+import { rateLimit } from '@/lib/rate-limit'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { getTenantByDomain } from '@/lib/tenant'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -32,7 +34,31 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const customer = await findCustomerByPhone(cleaned)
+    // ─── RESOLVER TENANT POR DOMINIO ───
+    const host = request.headers.get('host')
+    const tenant = await getTenantByDomain(host)
+    if (!tenant) {
+      return NextResponse.json(
+        { error: 'Restaurante no reconocido' },
+        { status: 404 }
+      )
+    }
+
+    // ─── RATE LIMITING por TELÉFONO (anti-enumeración) ───
+    // Endpoint público que devuelve nombre/puntos/visitas por número. El celular
+    // del cliente lo consulta cada 5s (~12/min) esperando al mesero, así que 40/min
+    // le sobra. Limitamos por teléfono (no por IP) para NO afectar a varios clientes
+    // que comparten el WiFi del local o el NAT del operador móvil.
+    // (auditoría 18-Junio, ME-05/AL-08).
+    const rl = rateLimit(`checkin-status:${cleaned}`, 40, 60_000)
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: 'Demasiadas solicitudes', retryAfter: rl.retryAfterSeconds },
+        { status: 429, headers: { 'Retry-After': String(rl.retryAfterSeconds) } }
+      )
+    }
+
+    const customer = await findCustomerByPhone(cleaned, tenant.id)
     if (!customer) {
       return NextResponse.json({ found: false })
     }
@@ -70,10 +96,10 @@ export async function GET(request: NextRequest) {
 
     // Evaluar tier
     const totalPoints = customer.total_points ?? 0
-    const nextTierInfo = await getNextTier(totalPoints)
+    const nextTierInfo = await getNextTier(totalPoints, tenant.id)
 
     // Obtener todos los tiers (activos, ordenados asc) para el roadmap
-    const allTiers = await getAllTiers()
+    const allTiers = await getAllTiers(tenant.id)
 
     // ─── Detectar tier desbloqueado NO reclamado ───
     // El cruce de tier ocurre en el request del mesero (POST /api/check-in), pero la
@@ -116,7 +142,7 @@ export async function GET(request: NextRequest) {
     // Si el cliente ya eligió premio (mystery_box_results) pero el mesero aún no lo
     // entregó (redeemed=false), lo exponemos para que la pantalla del mesero muestre
     // la alerta "CLIENTE TIENE PREMIO PENDIENTE".
-    const pendingReward = await getPendingReward(customer.id)
+    const pendingReward = await getPendingReward(customer.id, tenant.id)
 
     return NextResponse.json({
       found: true,

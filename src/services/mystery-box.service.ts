@@ -24,7 +24,7 @@ function getServiceClient() {
  * Determina si el cliente tiene el Pity Timer activo (Golden Box).
  * Se activa cuando ha recibido N veces seguidas el premio del tier más bajo.
  */
-export async function isPityTimerActive(customerId: string): Promise<boolean> {
+export async function isPityTimerActive(customerId: string, tenantId: string): Promise<boolean> {
   const supabase = getServiceClient()
 
   const { data: customer } = await supabase
@@ -35,7 +35,7 @@ export async function isPityTimerActive(customerId: string): Promise<boolean> {
 
   if (!customer) return false
 
-  const settings = await getMultipleSettings(['pity_timer_threshold'])
+  const settings = await getMultipleSettings(['pity_timer_threshold'], tenantId)
   const threshold = parseInt(
     settings.pity_timer_threshold ?? String(DEFAULT_PITY_TIMER_THRESHOLD),
     10
@@ -232,9 +232,10 @@ export async function resolveMysteryBox(params: {
   customerId: string
   tier: RewardTier
   choice: MysteryBoxChoice
+  tenantId: string
 }): Promise<MysteryBoxResolveResult> {
   const supabase = getServiceClient()
-  const { customerId, tier, choice } = params
+  const { customerId, tier, choice, tenantId } = params
 
   // Si eligió safe
   if (choice === 'safe') {
@@ -244,6 +245,7 @@ export async function resolveMysteryBox(params: {
       .insert({
         customer_id: customerId,
         tier_id: tier.id,
+        tenant_id: tenantId,
         choice: 'safe',
         prize_title: tier.safe_reward_title,
         prize_tier_index: -1,
@@ -265,7 +267,7 @@ export async function resolveMysteryBox(params: {
   }
 
   // Mystery box flow
-  const isGolden = await isPityTimerActive(customerId)
+  const isGolden = await isPityTimerActive(customerId, tenantId)
   let effectivePrizes = [...tier.mystery_prizes]
 
   // Aplicar Golden Box si corresponde
@@ -291,6 +293,7 @@ export async function resolveMysteryBox(params: {
     .insert({
       customer_id: customerId,
       tier_id: tier.id,
+      tenant_id: tenantId,
       choice: 'mystery',
       prize_title: prize.title,
       prize_tier_index: originalIndex,

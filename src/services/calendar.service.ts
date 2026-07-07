@@ -29,6 +29,7 @@ import {
   filterByMonthlyCap,
 } from '@/services/campaign.service'
 import { sendTemplateMessage } from '@/services/whatsapp.service'
+import { getTenantById } from '@/lib/tenant'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -83,7 +84,7 @@ export interface UpdateEventInput {
 // CRUD básico
 // ═══════════════════════════════════════════════════════════
 
-export async function createEvent(input: CreateEventInput): Promise<RestaurantEvent> {
+export async function createEvent(input: CreateEventInput, tenantId: string): Promise<RestaurantEvent> {
   const supabase = getServiceClient()
 
   // Validaciones mínimas que la DB no captura
@@ -121,6 +122,7 @@ export async function createEvent(input: CreateEventInput): Promise<RestaurantEv
       content_sid: null,
       blackout_days: input.blackout_days ?? 5,
       status: initialStatus,
+      tenant_id: tenantId,
     })
     .select()
     .single()
@@ -131,12 +133,14 @@ export async function createEvent(input: CreateEventInput): Promise<RestaurantEv
 
 export async function listEvents(
   fromDate: string,
-  toDate: string
+  toDate: string,
+  tenantId: string
 ): Promise<RestaurantEvent[]> {
   const supabase = getServiceClient()
   const { data, error } = await supabase
     .from('restaurant_events')
     .select('*')
+    .eq('tenant_id', tenantId)
     .gte('event_date', fromDate)
     .lte('event_date', toDate)
     .order('event_date', { ascending: true })
@@ -158,7 +162,8 @@ export async function getEvent(id: string): Promise<RestaurantEvent | null> {
 
 export async function updateEvent(
   id: string,
-  patch: UpdateEventInput
+  patch: UpdateEventInput,
+  tenantId: string
 ): Promise<RestaurantEvent> {
   const supabase = getServiceClient()
 
@@ -179,6 +184,7 @@ export async function updateEvent(
     .from('restaurant_events')
     .update(updatePayload)
     .eq('id', id)
+    .eq('tenant_id', tenantId)
     .select()
     .single()
 
@@ -186,8 +192,8 @@ export async function updateEvent(
   return data as RestaurantEvent
 }
 
-export async function cancelEvent(id: string): Promise<RestaurantEvent> {
-  return updateEvent(id, { status: 'cancelled' })
+export async function cancelEvent(id: string, tenantId: string): Promise<RestaurantEvent> {
+  return updateEvent(id, { status: 'cancelled' }, tenantId)
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -199,13 +205,15 @@ export async function cancelEvent(id: string): Promise<RestaurantEvent> {
  * los candidatos que aceptan marketing. Útil para previsualizar audiencia
  * antes de programar un envío.
  */
-export async function findCustomersForEvent(filters: EventFilters): Promise<Customer[]> {
+export async function findCustomersForEvent(filters: EventFilters, tenantId: string): Promise<Customer[]> {
   const supabase = getServiceClient()
 
   let query = supabase
     .from('customers')
     .select('*')
+    .eq('tenant_id', tenantId)
     .eq('accepts_marketing', true)
+    .is('whatsapp_opt_out_at', null)
 
   if (filters.city) query = query.ilike('city', `%${filters.city}%`)
   if (typeof filters.minVisits === 'number') query = query.gte('total_visits', filters.minVisits)
@@ -285,6 +293,9 @@ export async function executeAutoEvent(eventId: string): Promise<ExecuteAutoEven
     throw new Error(`Evento ${eventId} no está en estado scheduled (actual: ${event.status})`)
   }
 
+  const tenant = await getTenantById(event.tenant_id)
+  if (!tenant) throw new Error(`Tenant ${event.tenant_id} no encontrado para evento ${eventId}`)
+
   // Idempotency: claim the event before doing any work
   const { error: claimError } = await supabase
     .from('restaurant_events')
@@ -298,7 +309,7 @@ export async function executeAutoEvent(eventId: string): Promise<ExecuteAutoEven
     const settings = await getMultipleSettings([
       'event_template_image_sid',
       'event_template_video_sid',
-    ])
+    ], tenant.id)
     const templateSid = event.media_type === 'video'
       ? (settings.event_template_video_sid ?? null)
       : (settings.event_template_image_sid ?? null)
@@ -311,19 +322,20 @@ export async function executeAutoEvent(eventId: string): Promise<ExecuteAutoEven
     }
 
     // Build audience
-    const candidates = await findCustomersForEvent(event.filters as EventFilters)
+    const candidates = await findCustomersForEvent(event.filters as EventFilters, tenant.id)
     const { eligible, excluded } = await filterByMonthlyCap(candidates)
 
     // Create campaign record
     const campaign = await createCalendarCampaign({
       name: `calendar_${eventId}_${new Date().toISOString().split('T')[0]}`,
       templateSid,
+      tenantId: tenant.id,
       mediaUrl: event.media_url,
       mediaType: event.media_type,
       filters: event.filters as Record<string, unknown>,
     })
 
-    const brandName = process.env.NEXT_PUBLIC_BRAND_NAME ?? 'El Restaurante'
+    const brandName = tenant.config?.brand_name ?? 'El Restaurante'
     const eventDate = formatEventDate(event.event_date)
     const cta = event.description?.trim() || '¡Te esperamos!'
     const mediaUrl = event.media_url ?? ''
@@ -342,11 +354,12 @@ export async function executeAutoEvent(eventId: string): Promise<ExecuteAutoEven
         '6': mediaUrl,
       }
 
-      const result = await sendTemplateMessage(customer.phone, templateSid, variables, mediaUrl)
+      const result = await sendTemplateMessage(customer.phone, templateSid, variables, tenant, mediaUrl, { customerId: customer.id, messageType: 'calendar_event' })
       await recordCampaignMessage({
         campaignId: campaign.id,
         customerId: customer.id,
         status: result ? 'sent' : 'failed',
+        tenantId: tenant.id,
         twilioSid: result?.sid ?? null,
         errorMessage: result ? null : 'Twilio error o número no configurado',
       })

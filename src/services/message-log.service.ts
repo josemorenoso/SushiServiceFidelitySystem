@@ -23,6 +23,7 @@ export type MessageLogStatus = 'pending' | 'sent' | 'delivered' | 'failed' | 'un
 
 export interface RecordMessageLogParams {
   customerId?: string | null
+  tenantId: string
   phone: string
   /** welcome | checkin | tier_unlocked | points_earned_near | points_earned_far | safe_reward | mystery_box | golden_box | birthday | reactivation | manual | event | delivery */
   messageType: string
@@ -43,6 +44,7 @@ export async function recordMessageLog(params: RecordMessageLogParams): Promise<
     const supabase = getServiceClient()
     const { error } = await supabase.from('message_logs').insert({
       customer_id: params.customerId ?? null,
+      tenant_id: params.tenantId,
       phone: params.phone,
       message_type: params.messageType,
       template_sid: params.templateSid ?? null,

@@ -32,7 +32,7 @@ export interface DashboardMetrics {
   recentCustomers: Customer[]
 }
 
-export async function getDashboardMetrics(): Promise<DashboardMetrics> {
+export async function getDashboardMetrics(tenantId: string): Promise<DashboardMetrics> {
   const supabase = getServiceClient()
   const now = new Date()
   const todayStr = now.toISOString().split('T')[0]
@@ -49,12 +49,12 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
     { count: inactiveCustomers },
     { data: recentCustomers },
   ] = await Promise.all([
-    supabase.from('customers').select('*', { count: 'exact', head: true }),
-    supabase.from('visits').select('*', { count: 'exact', head: true }).gte('created_at', todayStr),
-    supabase.from('visits').select('*', { count: 'exact', head: true }).gte('created_at', weekAgo),
-    supabase.from('customers').select('id').not('birthday', 'is', null).like('birthday', `%-${month}-${day}`),
-    supabase.from('customers').select('*', { count: 'exact', head: true }).lt('last_visit_at', inactiveCutoff).not('last_visit_at', 'is', null),
-    supabase.from('customers').select('*').order('created_at', { ascending: false }).limit(5),
+    supabase.from('customers').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId),
+    supabase.from('visits').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId).gte('created_at', todayStr),
+    supabase.from('visits').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId).gte('created_at', weekAgo),
+    supabase.from('customers').select('id').eq('tenant_id', tenantId).not('birthday', 'is', null).like('birthday', `%-${month}-${day}`),
+    supabase.from('customers').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId).lt('last_visit_at', inactiveCutoff).not('last_visit_at', 'is', null),
+    supabase.from('customers').select('*').eq('tenant_id', tenantId).order('created_at', { ascending: false }).limit(5),
   ])
 
   return {
@@ -74,7 +74,7 @@ export async function getCustomers(params: {
   source?: string
   tier?: string
   status?: string
-}): Promise<{ customers: Customer[]; total: number }> {
+}, tenantId: string): Promise<{ customers: Customer[]; total: number }> {
   const supabase = getServiceClient()
   const page = params.page ?? 1
   const limit = params.limit ?? 20
@@ -82,7 +82,7 @@ export async function getCustomers(params: {
   const to = from + limit - 1
   const now = new Date()
 
-  let query = supabase.from('customers').select('*', { count: 'exact' })
+  let query = supabase.from('customers').select('*', { count: 'exact' }).eq('tenant_id', tenantId)
 
   if (params.search) {
     query = query.or(`name.ilike.%${params.search}%,phone.ilike.%${params.search}%`)
@@ -129,12 +129,13 @@ export async function getCustomers(params: {
   return { customers: data ?? [], total: count ?? 0 }
 }
 
-export async function getRewards(): Promise<Reward[]> {
+export async function getRewards(tenantId: string): Promise<Reward[]> {
   const supabase = getServiceClient()
 
   const { data, error } = await supabase
     .from('rewards')
     .select('*')
+    .eq('tenant_id', tenantId)
     .order('visit_milestone', { ascending: true })
 
   if (error) {
@@ -152,7 +153,7 @@ function daysBetween(d1: Date, d2: Date): number {
   return Math.floor((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24))
 }
 
-export async function getFullAnalytics(): Promise<DashboardAnalytics> {
+export async function getFullAnalytics(tenantId: string): Promise<DashboardAnalytics> {
   const supabase = getServiceClient()
   const now = new Date()
   const todayStr = formatDate(now)
@@ -177,13 +178,13 @@ export async function getFullAnalytics(): Promise<DashboardAnalytics> {
     { data: reactivationMessages },
     { data: settingsData },
   ] = await Promise.all([
-    supabase.from('customers').select('*').order('total_visits', { ascending: false }),
-    supabase.from('visits').select('id, customer_id, source, created_at').gte('created_at', thirtyDaysAgoStr),
-    supabase.from('customers').select('id').not('birthday', 'is', null).like('birthday', `%-${month}-${day}`),
-    supabase.from('visits').select('id, customer_id, source, created_at').gte('created_at', sixMonthsAgoStr),
-    supabase.from('campaigns').select('id, type, executed_at').eq('type', 'reactivation').not('executed_at', 'is', null),
-    supabase.from('campaign_messages').select('id, campaign_id, customer_id, sent_at, status'),
-    supabase.from('admin_settings').select('key, value').eq('key', 'avg_ticket'),
+    supabase.from('customers').select('*').eq('tenant_id', tenantId).order('total_visits', { ascending: false }),
+    supabase.from('visits').select('id, customer_id, source, created_at').eq('tenant_id', tenantId).gte('created_at', thirtyDaysAgoStr),
+    supabase.from('customers').select('id').eq('tenant_id', tenantId).not('birthday', 'is', null).like('birthday', `%-${month}-${day}`),
+    supabase.from('visits').select('id, customer_id, source, created_at').eq('tenant_id', tenantId).gte('created_at', sixMonthsAgoStr),
+    supabase.from('campaigns').select('id, type, executed_at').eq('tenant_id', tenantId).eq('type', 'reactivation').not('executed_at', 'is', null),
+    supabase.from('campaign_messages').select('id, campaign_id, customer_id, sent_at, status').eq('tenant_id', tenantId),
+    supabase.from('admin_settings').select('key, value').eq('tenant_id', tenantId).eq('key', 'avg_ticket'),
   ])
 
   const customers: Customer[] = allCustomers ?? []

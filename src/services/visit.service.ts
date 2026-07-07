@@ -13,6 +13,7 @@ function getServiceClient() {
 export async function createVisit(params: {
   customerId: string
   source: 'qr' | 'delivery' | 'staff_scan'
+  tenantId: string
   notes?: string
   address?: string
   paymentMethod?: string
@@ -25,6 +26,7 @@ export async function createVisit(params: {
   const insertPayload: Record<string, unknown> = {
     customer_id: params.customerId,
     source: params.source,
+    tenant_id: params.tenantId,
     notes: params.notes ?? null,
     address: params.address ?? null,
     payment_method: params.paymentMethod ?? null,

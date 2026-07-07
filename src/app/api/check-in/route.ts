@@ -12,6 +12,8 @@ import { verifyCustomerQRToken, generateCustomerQRToken } from '@/lib/utils/qrco
 import { markConverted } from '@/services/imported-contacts.service'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { jwtVerify } from 'jose'
+import { getTenantByDomain } from '@/lib/tenant'
+import type { Tenant } from '@/types/tenant.types'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -96,6 +98,7 @@ async function sendCheckinTemplate(
   templateType: string,
   phone: string,
   variables: Record<string, string>,
+  tenant: Tenant,
   customerId?: string | null
 ): Promise<WhatsAppSendStatus> {
   if (!templateSid) {
@@ -103,7 +106,7 @@ async function sendCheckinTemplate(
     return { sent: false, templateType, reason: 'no_template_configured' }
   }
   try {
-    const res = await sendTemplateMessage(phone, templateSid, variables, undefined, {
+    const res = await sendTemplateMessage(phone, templateSid, variables, tenant, undefined, {
       customerId: customerId ?? null,
       messageType: templateType,
     })
@@ -136,6 +139,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Teléfono inválido', message: 'Ingresa un número colombiano válido (10 dígitos, empieza con 3)' },
         { status: 400 }
+      )
+    }
+
+    // ─── RESOLVER TENANT POR DOMINIO ───
+    const host = request.headers.get('host')
+    const tenant = await getTenantByDomain(host)
+    if (!tenant) {
+      return NextResponse.json(
+        { error: 'Restaurante no reconocido', message: 'No se pudo identificar el restaurante para este dominio' },
+        { status: 404 }
       )
     }
 
@@ -232,11 +245,11 @@ export async function POST(request: NextRequest) {
 
     // ─── LOOKUP: buscar si el cliente existe ───
     if (action === 'lookup') {
-      const customer = await findCustomerByPhone(cleaned)
+      const customer = await findCustomerByPhone(cleaned, tenant.id)
       const settings = await getMultipleSettings([
         'checkin_mode',
         'checkin_first_visit_free',
-      ])
+      ], tenant.id)
       const checkinMode = settings.checkin_mode ?? 'auto'
       const firstVisitFree = settings.checkin_first_visit_free !== 'false'
 
@@ -287,7 +300,7 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      const existing = await findCustomerByPhone(cleaned)
+      const existing = await findCustomerByPhone(cleaned, tenant.id)
       if (existing) {
         return NextResponse.json(
           { error: 'Ya registrado', message: 'Este número ya está registrado' },
@@ -299,7 +312,7 @@ export async function POST(request: NextRequest) {
       const regSettings = await getMultipleSettings([
         'checkin_mode',
         'checkin_first_visit_free',
-      ])
+      ], tenant.id)
       const checkinMode = regSettings.checkin_mode ?? 'auto'
       const firstVisitFree = regSettings.checkin_first_visit_free !== 'false'
 
@@ -316,6 +329,7 @@ export async function POST(request: NextRequest) {
             .from('staff_users')
             .select('id, is_active')
             .eq('id', registered_by_staff_id)
+            .eq('tenant_id', tenant.id)
             .single()
           if (staff && staff.is_active) {
             regStaffAuthValid = true
@@ -327,6 +341,7 @@ export async function POST(request: NextRequest) {
             .select('id, is_trusted, expires_at')
             .eq('device_fingerprint', device_token)
             .eq('is_trusted', true)
+            .eq('tenant_id', tenant.id)
             .single()
           if (device) {
             if (!device.expires_at || new Date(device.expires_at) >= new Date()) {
@@ -345,6 +360,7 @@ export async function POST(request: NextRequest) {
         name: name.trim(),
         birthday: birthday ?? null,
         city: city?.trim() || null,
+        tenantId: tenant.id,
         accepts_marketing: body.accepts_marketing ?? true,
         countFirstVisit: !pendingStaffScan,
       })
@@ -354,7 +370,7 @@ export async function POST(request: NextRequest) {
       // el mensaje, lo marcamos como 'converted' y dejamos trazabilidad en
       // customers.imported_contact_id (activa el ROI automático del lote).
       try {
-        const importedContactId = await markConverted(cleaned, customer.id)
+        const importedContactId = await markConverted(cleaned, customer.id, tenant.id)
         if (importedContactId) {
           await getServiceClient()
             .from('customers')
@@ -375,6 +391,7 @@ export async function POST(request: NextRequest) {
           visitRecord = await createVisit({
             customerId: customer.id,
             source: regSource,
+            tenantId: tenant.id,
             tableNumber: body.table_number ?? null,
             registeredByStaffId: regResolvedStaffId,
           })
@@ -390,7 +407,7 @@ export async function POST(request: NextRequest) {
       let welcomePoints = { pointsAwarded: 0, newBalance: 0 }
       if (!pendingStaffScan) {
         try {
-          welcomePoints = await awardWelcomeBonus(customer.id)
+          welcomePoints = await awardWelcomeBonus(customer.id, tenant.id)
         } catch (err) {
           console.error('[CheckIn] Error otorgando puntos de bienvenida:', err)
         }
@@ -398,10 +415,10 @@ export async function POST(request: NextRequest) {
 
       // WhatsApp de bienvenida — solo cuando la visita se confirma de inmediato
       if (!pendingStaffScan) {
-        const welcomeSettings = await getMultipleSettings(['welcome_template_sid'])
+        const welcomeSettings = await getMultipleSettings(['welcome_template_sid'], tenant.id)
         let tiersRoadmap = '🌟 ¡Seguí sumando puntos para desbloquear premios!'
         try {
-          tiersRoadmap = await buildTiersRoadmap(welcomePoints.newBalance)
+          tiersRoadmap = await buildTiersRoadmap(welcomePoints.newBalance, tenant.id)
         } catch (err) {
           console.error('[CheckIn] Error generando tiers roadmap:', err)
         }
@@ -410,6 +427,7 @@ export async function POST(request: NextRequest) {
           'welcome',
           cleaned,
           { '1': customer.name, '2': String(welcomePoints.newBalance), '3': tiersRoadmap },
+          tenant,
           customer.id
         )
       }
@@ -431,7 +449,7 @@ export async function POST(request: NextRequest) {
 
       let allTiers: unknown[] = []
       try {
-        allTiers = await getAllTiers()
+        allTiers = await getAllTiers(tenant.id)
       } catch (err) {
         console.error('[CheckIn] Error obteniendo tiers:', err)
       }
@@ -484,7 +502,7 @@ export async function POST(request: NextRequest) {
     // ─── CHECKIN: cliente existente + registrar visita ───
     if (action === 'checkin') {
       const { token: qrToken } = body
-      const customer = await findCustomerByPhone(cleaned)
+      const customer = await findCustomerByPhone(cleaned, tenant.id)
       if (!customer) {
         return NextResponse.json(
           { error: 'No encontrado', message: 'Cliente no encontrado' },
@@ -498,7 +516,7 @@ export async function POST(request: NextRequest) {
         'points_earned_near_template_sid',
         'tier_unlocked_template_sid',
         'welcome_template_sid',
-      ])
+      ], tenant.id)
 
       // Primera visita verificada por el mesero (cliente nuevo en modo staff_verified):
       // el welcome bonus/WhatsApp se omitió en el registro porque la visita estaba pendiente.
@@ -538,6 +556,7 @@ export async function POST(request: NextRequest) {
           .from('staff_users')
           .select('id, is_active')
           .eq('id', registered_by_staff_id)
+          .eq('tenant_id', tenant.id)
           .single()
         if (staff && staff.is_active) {
           staffAuthValid = true
@@ -549,6 +568,7 @@ export async function POST(request: NextRequest) {
           .select('id, is_trusted, expires_at')
           .eq('device_fingerprint', device_token)
           .eq('is_trusted', true)
+          .eq('tenant_id', tenant.id)
           .single()
         if (device) {
           if (!device.expires_at || new Date(device.expires_at) >= new Date()) {
@@ -576,6 +596,7 @@ export async function POST(request: NextRequest) {
       const visit = await createVisit({
         customerId: customer.id,
         source,
+        tenantId: tenant.id,
         tableNumber: body.table_number ?? null,
         registeredByStaffId: resolvedStaffId,
       })
@@ -584,7 +605,7 @@ export async function POST(request: NextRequest) {
       const previousPoints = customer.total_points ?? 0
       let pointsResult = { pointsAwarded: 0, newBalance: previousPoints }
       try {
-        pointsResult = await awardVisitPoints(customer.id, visit.id, source)
+        pointsResult = await awardVisitPoints(customer.id, visit.id, source, tenant.id)
         console.log(`[CheckIn] Puntos otorgados: +${pointsResult.pointsAwarded} → balance=${pointsResult.newBalance} (prev=${previousPoints})`)
       } catch (err) {
         console.error('[CheckIn] ERROR otorgando puntos (se usa fallback 0):', err)
@@ -594,18 +615,18 @@ export async function POST(request: NextRequest) {
       let newTier = null
       let nextTierInfo = null
       try {
-        newTier = await evaluateNewTier(previousPoints, pointsResult.newBalance)
+        newTier = await evaluateNewTier(previousPoints, pointsResult.newBalance, tenant.id)
         if (newTier) {
           await updateCustomerTier(customer.id, newTier.tier_name)
         }
-        nextTierInfo = await getNextTier(pointsResult.newBalance)
+        nextTierInfo = await getNextTier(pointsResult.newBalance, tenant.id)
       } catch (err) {
         console.error('[CheckIn] ERROR evaluando tiers (se continúa sin tiers):', err)
       }
 
       let tiersRoadmapText = '🌟 ¡Seguí sumando puntos para desbloquear premios!'
       try {
-        tiersRoadmapText = await buildTiersRoadmap(pointsResult.newBalance)
+        tiersRoadmapText = await buildTiersRoadmap(pointsResult.newBalance, tenant.id)
       } catch (err) {
         console.error('[CheckIn] Error generando tiers roadmap:', err)
       }
@@ -622,6 +643,7 @@ export async function POST(request: NextRequest) {
           'tier_unlocked',
           cleaned,
           { '1': updated.name, '2': newTier.tier_name, '3': newTier.safe_reward_title, '4': tiersRoadmapText },
+          tenant,
           customer.id
         )
       } else if (isFirstVisit) {
@@ -632,6 +654,7 @@ export async function POST(request: NextRequest) {
           'welcome',
           cleaned,
           { '1': updated.name, '2': String(pointsResult.newBalance), '3': tiersRoadmapText },
+          tenant,
           customer.id
         )
       } else {
@@ -648,6 +671,7 @@ export async function POST(request: NextRequest) {
               '3': String(pointsResult.newBalance),
               '4': nextTierInfo!.tier.safe_reward_title,
             },
+            tenant,
             customer.id
           )
         } else {
@@ -661,6 +685,7 @@ export async function POST(request: NextRequest) {
               '3': String(pointsResult.newBalance),
               '4': tiersRoadmapText,
             },
+            tenant,
             customer.id
           )
         }
@@ -708,7 +733,7 @@ export async function POST(request: NextRequest) {
         })
       }
 
-      const allTiersForResponse = await getAllTiers()
+      const allTiersForResponse = await getAllTiers(tenant.id)
       return NextResponse.json({
         message: 'points_earned',
         customer: {

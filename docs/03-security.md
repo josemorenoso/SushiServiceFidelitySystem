@@ -35,9 +35,13 @@
 
 | Ruta | Límite | Mecanismo |
 | ---- | ------ | --------- |
-| `POST /api/check-in` | Heredado por servicio | Supabase |
+| `POST /api/check-in` | lookup 30/min, register 5/h, checkin 20/min por IP | `rateLimit()` en-memoria |
+| `GET /api/check-in/status` | 40/min por **teléfono** | `rateLimit()` en-memoria (anti-enumeración) |
 | `GET /api/public/customer-card` | 30 req/min por IP | `rateLimit()` en-memoria |
 | `GET /tarjeta` (SSR) | 30 req/min por IP | `rateLimit()` al inicio del Server Component |
+| `POST /api/webhook/delivery` | 60/min por IP | `rateLimit()` en-memoria |
+
+> **`/api/check-in/status` se limita por teléfono, no por IP**, a propósito: el celular del cliente hace polling cada 5s (~12/min) mientras espera al mesero, y varios clientes comparten el WiFi del local o el NAT del operador móvil. Limitar por IP rompería el polling legítimo; limitar por teléfono bloquea la enumeración de la base (probar números secuenciales para extraer nombre/puntos/visitas) sin afectar el uso real.
 
 > El rate-limit en memoria no se comparte entre instancias de Vercel (serverless). Para producción a escala real, migrar a Upstash Redis. Para el MVP (3 restaurantes, ~100 check-ins/día) es suficiente como barrera anti-abuse.
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { validatePhone } from '@/lib/validators/phone'
+import { requireTenantId, getTenantById } from '@/lib/tenant'
 import { findCustomerByPhone, incrementVisit } from '@/services/customer.service'
 import { createVisit } from '@/services/visit.service'
 import { awardVisitPoints } from '@/services/points.service'
@@ -41,7 +42,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Teléfono inválido' }, { status: 400 })
     }
 
-    const customer = await findCustomerByPhone(cleaned)
+    const tenantId = await requireTenantId()
+    const tenant = await getTenantById(tenantId)
+    if (!tenant) {
+      return NextResponse.json({ error: 'Tenant no encontrado' }, { status: 404 })
+    }
+
+    const customer = await findCustomerByPhone(cleaned, tenantId)
     if (!customer) {
       return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 })
     }
@@ -50,6 +57,7 @@ export async function POST(request: NextRequest) {
     const visit = await createVisit({
       customerId: customer.id,
       source: 'qr',
+      tenantId,
       notes: `Override admin: ${reason || 'visita adicional autorizada'}`,
     })
 
@@ -61,7 +69,7 @@ export async function POST(request: NextRequest) {
     let tiersRoadmapText = '🌟 ¡Seguí sumando puntos para desbloquear premios!'
 
     try {
-      pointsResult = await awardVisitPoints(customer.id, visit.id, 'qr')
+      pointsResult = await awardVisitPoints(customer.id, visit.id, 'qr', tenantId)
       console.log(`[CheckIn Override] Puntos otorgados: +${pointsResult.pointsAwarded} → balance=${pointsResult.newBalance} (prev=${previousPoints})`)
     } catch (err) {
       console.error('[CheckIn Override] ERROR otorgando puntos (se usa fallback 0):', err)
@@ -69,17 +77,17 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-      newTier = await evaluateNewTier(previousPoints, pointsResult.newBalance)
+      newTier = await evaluateNewTier(previousPoints, pointsResult.newBalance, tenantId)
       if (newTier) {
         await updateCustomerTier(customer.id, newTier.tier_name)
       }
-      nextTierInfo = await getNextTier(pointsResult.newBalance)
+      nextTierInfo = await getNextTier(pointsResult.newBalance, tenantId)
     } catch (err) {
       console.error('[CheckIn Override] ERROR evaluando tiers (se continúa sin tiers):', err)
     }
 
     try {
-      tiersRoadmapText = await buildTiersRoadmap(pointsResult.newBalance)
+      tiersRoadmapText = await buildTiersRoadmap(pointsResult.newBalance, tenantId)
     } catch (err) {
       console.error('[CheckIn Override] Error generando tiers roadmap:', err)
     }
@@ -89,7 +97,7 @@ export async function POST(request: NextRequest) {
       'points_earned_far_template_sid',
       'points_earned_near_template_sid',
       'tier_unlocked_template_sid',
-    ])
+    ], tenantId)
 
     try {
       if (newTier && settings.tier_unlocked_template_sid) {
@@ -102,6 +110,7 @@ export async function POST(request: NextRequest) {
             '3': newTier.safe_reward_title,
             '4': tiersRoadmapText,
           },
+          tenant,
         )
       } else {
         const isNearTier = nextTierInfo && nextTierInfo.pointsRemaining <= 30
@@ -118,6 +127,7 @@ export async function POST(request: NextRequest) {
               '3': String(pointsResult.newBalance),
               '4': isNearTier ? nextTierInfo!.tier.safe_reward_title : tiersRoadmapText,
             },
+            tenant,
           )
         } else {
           console.warn('[CheckIn Override] No hay plantilla de puntos configurada. Mensaje WhatsApp NO enviado.')

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { requireTenantId } from '@/lib/tenant'
 import { getDashboardMetrics } from '@/services/dashboard.service'
 
 export async function GET() {
@@ -11,7 +12,8 @@ export async function GET() {
   }
 
   try {
-    const metrics = await getDashboardMetrics()
+    const tenantId = await requireTenantId()
+    const metrics = await getDashboardMetrics(tenantId)
     return NextResponse.json(metrics)
   } catch (error) {
     console.error('[Dashboard] Error métricas:', error)

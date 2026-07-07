@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { requireTenantId } from '@/lib/tenant'
 
 /**
  * Devuelve la eficiencia de cada campaña ejecutada en los últimos N días
@@ -36,6 +37,7 @@ export async function GET(request: Request) {
     3650
   )
 
+  const tenantId = await requireTenantId()
   const db = getServiceClient()
   const since = allTime
     ? '2000-01-01T00:00:00.000Z'
@@ -45,6 +47,7 @@ export async function GET(request: Request) {
   const { data: campaigns, error: campErr } = await db
     .from('campaigns')
     .select('id, name, type, executed_at, total_sent, status')
+    .eq('tenant_id', tenantId)
     .not('executed_at', 'is', null)
     .gte('executed_at', since)
     .order('executed_at', { ascending: false })
@@ -64,6 +67,7 @@ export async function GET(request: Request) {
     .from('campaign_messages')
     .select('campaign_id, customer_id, sent_at, status')
     .in('campaign_id', campaignIds)
+    .eq('tenant_id', tenantId)
     .eq('status', 'sent')
     .not('sent_at', 'is', null)
 
@@ -75,6 +79,7 @@ export async function GET(request: Request) {
   const { data: visits } = await db
     .from('visits')
     .select('customer_id, created_at, amount')
+    .eq('tenant_id', tenantId)
     .gte('created_at', visitsSince)
 
   // 4) Ticket promedio para estimación de revenue
@@ -82,6 +87,7 @@ export async function GET(request: Request) {
     .from('admin_settings')
     .select('value')
     .eq('key', 'avg_ticket')
+    .eq('tenant_id', tenantId)
     .single()
   const avgTicket = parseFloat(settingsRow?.value || '35000') || 35000
 

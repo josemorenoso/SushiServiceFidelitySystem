@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { SignJWT } from 'jose'
 import bcrypt from 'bcryptjs'
 import { createClient } from '@supabase/supabase-js'
+import { getTenantByDomain } from '@/lib/tenant'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -18,6 +19,11 @@ function getStaffSecret() {
 
 export async function POST(request: NextRequest) {
   try {
+    const tenant = await getTenantByDomain(request.headers.get('host'))
+    if (!tenant) {
+      return NextResponse.json({ error: 'Restaurante no reconocido' }, { status: 404 })
+    }
+
     const body = await request.json()
     const { phone, pin } = body
 
@@ -33,6 +39,7 @@ export async function POST(request: NextRequest) {
       .from('staff_users')
       .select('id, name, phone, pin, role, is_active')
       .eq('phone', phone)
+      .eq('tenant_id', tenant.id)
       .single()
 
     if (!staff || !staff.is_active) {

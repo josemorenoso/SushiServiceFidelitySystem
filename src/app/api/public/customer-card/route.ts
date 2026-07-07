@@ -3,6 +3,7 @@ import { validatePhone } from '@/lib/validators/phone'
 import { findCustomerByPhone } from '@/services/customer.service'
 import { getNextTier, getAllTiers } from '@/services/reward-tiers.service'
 import { rateLimit, getClientIp } from '@/lib/rate-limit'
+import { getTenantByDomain } from '@/lib/tenant'
 
 export async function GET(request: NextRequest) {
   const ip = getClientIp(request)
@@ -26,16 +27,21 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Teléfono inválido' }, { status: 400 })
   }
 
+  const tenant = await getTenantByDomain(request.headers.get('host'))
+  if (!tenant) {
+    return NextResponse.json({ error: 'Restaurante no reconocido' }, { status: 404 })
+  }
+
   try {
-    const customer = await findCustomerByPhone(cleaned)
+    const customer = await findCustomerByPhone(cleaned, tenant.id)
     if (!customer) {
       return NextResponse.json({ found: false })
     }
 
     const totalPoints = customer.total_points ?? 0
     const [tiers, nextTierInfo] = await Promise.all([
-      getAllTiers(),
-      getNextTier(totalPoints),
+      getAllTiers(tenant.id),
+      getNextTier(totalPoints, tenant.id),
     ])
 
     const publicTiers = tiers.map(({ tier_name, point_threshold, safe_reward_title, mystery_box_enabled, is_black }) => ({

@@ -5,6 +5,7 @@ import { resolveMysteryBox, generateNearMissText } from '@/services/mystery-box.
 import { buildTiersRoadmap } from '@/services/reward-tiers.service'
 import { sendTemplateMessage } from '@/services/whatsapp.service'
 import { getMultipleSettings } from '@/services/settings.service'
+import { getTenantByDomain } from '@/lib/tenant'
 import type { MysteryBoxChoice } from '@/types/database.types'
 
 interface ResolveRequestBody {
@@ -32,8 +33,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Resolver tenant por dominio
+    const host = request.headers.get('host')
+    const tenant = await getTenantByDomain(host)
+    if (!tenant) {
+      return NextResponse.json(
+        { error: 'Restaurante no reconocido', message: 'No se pudo identificar el restaurante para este dominio' },
+        { status: 404 }
+      )
+    }
+
     // Buscar cliente
-    const customer = await findCustomerByPhone(phone)
+    const customer = await findCustomerByPhone(phone, tenant.id)
     if (!customer) {
       return NextResponse.json(
         { error: 'No encontrado', message: 'Cliente no encontrado' },
@@ -66,6 +77,7 @@ export async function POST(request: NextRequest) {
       customerId: customer.id,
       tier,
       choice,
+      tenantId: tenant.id,
     })
 
     // Near-miss text (solo para mystery box)
@@ -77,13 +89,13 @@ export async function POST(request: NextRequest) {
       : null
 
     // Enviar WhatsApp con resultado
-    const roadmap = await buildTiersRoadmap(customer.total_points)
+    const roadmap = await buildTiersRoadmap(customer.total_points, tenant.id)
 
     const settings = await getMultipleSettings([
       'reward_safe_template_sid',
       'mystery_box_result_template_sid',
       'golden_box_result_template_sid',
-    ])
+    ], tenant.id)
 
     // ─── ENVÍO DE WHATSAPP ───
     // Auditoría 12-Julio: antes el .catch() silencioso ocultaba los fallos y la API
@@ -101,6 +113,7 @@ export async function POST(request: NextRequest) {
             customer.phone,
             settings.reward_safe_template_sid,
             { '1': customer.name, '2': tier.tier_name, '3': result.prizeTitle, '4': roadmap },
+            tenant,
             undefined,
             { customerId: customer.id, messageType: 'safe_reward' }
           )
@@ -123,6 +136,7 @@ export async function POST(request: NextRequest) {
             customer.phone,
             templateSid,
             vars,
+            tenant,
             undefined,
             { customerId: customer.id, messageType: result.wasGolden ? 'golden_box' : 'mystery_box' }
           )

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { requireTenantId } from '@/lib/tenant'
 import bcrypt from 'bcryptjs'
 
 function getServiceClient() {
@@ -19,10 +20,12 @@ export async function GET() {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
     }
 
+    const tenantId = await requireTenantId()
     const db = getServiceClient()
     const { data: staffList, error } = await db
       .from('staff_users')
       .select('id, name, phone, role, is_active, last_login_at, created_at')
+      .eq('tenant_id', tenantId)
       .order('created_at', { ascending: false })
 
     if (error) {
@@ -32,6 +35,7 @@ export async function GET() {
     const { data: devices } = await db
       .from('staff_devices')
       .select('id, staff_user_id, device_name, is_trusted, trusted_at, expires_at, last_used_at')
+      .eq('tenant_id', tenantId)
       .order('trusted_at', { ascending: false })
 
     return NextResponse.json({ staff: staffList ?? [], devices: devices ?? [] })
@@ -68,6 +72,7 @@ export async function POST(request: NextRequest) {
     }
 
     const hashedPin = await bcrypt.hash(pin, 10)
+    const tenantId = await requireTenantId()
     const db = getServiceClient()
 
     const { data, error } = await db
@@ -77,6 +82,7 @@ export async function POST(request: NextRequest) {
         phone,
         pin: hashedPin,
         role,
+        tenant_id: tenantId,
       })
       .select('id, name, phone, role, is_active, created_at')
       .single()
@@ -134,11 +140,13 @@ export async function PATCH(request: NextRequest) {
       updateData.pin = await bcrypt.hash(pin, 10)
     }
 
+    const tenantId = await requireTenantId()
     const db = getServiceClient()
     const { data, error } = await db
       .from('staff_users')
       .update(updateData)
       .eq('id', id)
+      .eq('tenant_id', tenantId)
       .select('id, name, phone, role, is_active, updated_at')
       .single()
 
@@ -174,8 +182,9 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
+    const tenantId = await requireTenantId()
     const db = getServiceClient()
-    await db.from('staff_users').delete().eq('id', id)
+    await db.from('staff_users').delete().eq('id', id).eq('tenant_id', tenantId)
 
     return NextResponse.json({ success: true })
   } catch (error) {

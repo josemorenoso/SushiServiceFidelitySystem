@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { jwtVerify } from 'jose'
 import { createClient } from '@supabase/supabase-js'
+import { getTenantByDomain } from '@/lib/tenant'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -17,6 +18,11 @@ function getStaffSecret() {
 
 export async function GET(request: NextRequest) {
   try {
+    const tenant = await getTenantByDomain(request.headers.get('host'))
+    if (!tenant) {
+      return NextResponse.json({ error: 'Restaurante no reconocido' }, { status: 404 })
+    }
+
     const authHeader = request.headers.get('authorization')
     const token = authHeader?.replace('Bearer ', '')
     const deviceToken = request.headers.get('x-device-token')
@@ -33,6 +39,7 @@ export async function GET(request: NextRequest) {
         .from('staff_users')
         .select('id, is_active')
         .eq('id', sid)
+        .eq('tenant_id', tenant.id)
         .single()
       if (!staff || !staff.is_active) {
         return NextResponse.json({ error: 'No autorizado', message: 'Sesión inválida' }, { status: 401 })
@@ -46,6 +53,7 @@ export async function GET(request: NextRequest) {
         .from('staff_devices')
         .select('id, is_trusted, expires_at')
         .eq('device_fingerprint', deviceToken)
+        .eq('tenant_id', tenant.id)
         .eq('is_trusted', true)
         .single()
       if (!device) {
@@ -69,6 +77,7 @@ export async function GET(request: NextRequest) {
       .from('visits')
       .select('id', { count: 'exact', head: true })
       .eq('source', 'staff_scan')
+      .eq('tenant_id', tenant.id)
       .gte('created_at', startOfDay.toISOString())
 
     if (staffId) {

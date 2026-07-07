@@ -5,6 +5,103 @@
 
 ---
 
+## [v2.2.0] — 2026-07-05 — fix: auditoría de scoping multitenant (docs/superpowers/plans/2026-07-05-multitenant-AUDIT-DELEGABLE.md)
+
+> Request: ejecutar el encargo de auditoría que verifica que CADA query a una tabla con `tenant_id`
+> filtre/inserte por el tenant correcto. El 95% del acceso usa `getServiceClient()` (service-role),
+> que ignora RLS — sin el filtro explícito en código, un restaurante podía ver/escribir datos de otro.
+
+### Fixed
+- **Servicios** (`calendar`, `imported-contacts`, `reward`, `redemption`, `dashboard`, `delivery`) — cada
+  función exportada ahora exige `tenantId` (o el objeto `tenant` completo donde se necesitan credenciales
+  Twilio) y lo aplica a sus queries. `dashboard.service.ts` era el caso más crítico (15 queries que
+  alimentan el dashboard, incluyendo `admin_settings` con PK compuesto `(key, tenant_id)`).
+- **Rutas `src/app/api/dashboard/**`** — ~25 rutas resuelven `tenantId` vía `requireTenantId()` (JWT del
+  admin) y lo aplican. Varias hacían queries directas a Supabase sin pasar por los servicios (p. ej.
+  `settings`, `authorized-numbers`, `staff`, `reward-tiers`, `campaigns/segments`) y no tenían NINGÚN
+  filtro de tenant — fuga silenciosa sin error de compilación.
+- **Rutas públicas** (`check-in`, `check-in/status`, `(public)/tarjeta`, `public/customer-card`,
+  `public/points-range`, `public/reward-tiers`, `mystery-box/resolve`, `reward-redeem`) — resuelven el
+  tenant por dominio (`getTenantByDomain(host)`).
+- **Webhooks y crons** (`webhook/delivery` por `tenant_slug`, `webhook/twilio-incoming` por el número
+  `To` de Twilio, `cron/birthday`/`cron/reactivation` por `?tenant=slug`).
+- **Rutas de mesero** (`staff/login`, `staff/me`, `staff/stats`, `staff/device/register`,
+  `staff/device/verify`) — resuelven tenant por dominio. **Hallazgo crítico:** `staff_users.phone` dejó
+  de ser único global con la migración multitenant; el login por teléfono+PIN ahora filtra también por
+  `tenant_id` (antes un mesero de un restaurante podía autenticarse en el dashboard/check-in de otro si
+  compartían número).
+- `src/app/api/dashboard/calendar/events/[id]/dispatch/route.ts` y `.../[id]/route.ts` (GET) —
+  añadida verificación explícita de propiedad (`event.tenant_id === tenantId`) antes de despachar o
+  devolver un evento: `getEvent()` es por PK y sin este check un admin podía disparar (y facturar) el
+  envío de campaña de OTRO restaurante conociendo el UUID del evento.
+- `src/types/database.types.ts` — agregado `tenant_id` a la interfaz `RestaurantEvent` (necesario para
+  que `executeAutoEvent` resuelva el tenant del evento).
+
+### Notas / pendientes para revisión (Opus)
+- `dashboard/twilio-metrics` y `dashboard/twilio-balance` consultan la API de Twilio con las
+  credenciales MAESTRAS (`TWILIO_ACCOUNT_SID`/`AUTH_TOKEN`), no con la subcuenta del tenant — el query
+  a `customers` ya quedó filtrado por tenant, pero las métricas/balance en sí reflejan siempre la cuenta
+  maestra. Requiere resolver credenciales Twilio por tenant si se quiere métricas realmente aisladas.
+- El JWT de mesero (`STAFF_JWT_SECRET`) no lleva `tenant_id` en el payload; la protección actual depende
+  de que `staff_users.id` es un UUID globalmente único, por lo que `.eq('id', sub).eq('tenant_id', ...)`
+  no puede matchear la fila de otro tenant. Correcto, pero embeber `tenant_id` en el JWT sería defensa
+  adicional (falla rápido sin tocar la DB, protege contra un futuro endpoint que olvide el filtro).
+- `mystery-box.service.ts` → `getRecentResults(customerId, limit)` no filtra por `tenant_id` (solo
+  `customer_id`). Es parte de los servicios "ya hechos" (no tocado), queda para revisión.
+- `src/app/api/check-in/route.ts` conserva un bloque de geolocalización comentado (desactivado desde
+  v1.0.5-3) que referencia `restaurant_locations`/`admin_settings` sin filtro — si se reactiva, necesita
+  `tenant_id`.
+- Verificación: `npx tsc --noEmit` sin errores; grep de control sobre las 18 tablas confirma que cada
+  `.from(...)` tiene `.eq('tenant_id', ...)` o es acceso por PK `id`.
+
+---
+
+## [v2.1.3] — 2026-07-05 — fix: elimina doble disparo de crons birthday/reactivation (Vercel + n8n)
+
+> Request: el usuario notó que n8n tenía workflows "Cron Birthday" y "Cron Reactivación" publicados
+> apuntando a los mismos endpoints que `vercel.json`. Se confirmó el doble disparo diario; el propio
+> código lo neutralizaba (`hasRecentCampaignMessage`) sin que el cliente final notara nada, pero se
+> decidió dejar un solo disparador (n8n) para simplificar operación y eliminar el riesgo latente de carrera.
+
+### Fixed
+- `vercel.json` — `"crons"` vaciado. Antes disparaba `/api/cron/birthday` (0 8 UTC) y
+  `/api/cron/reactivation` (0 10 UTC) EN PARALELO con los workflows ya activos de n8n del mismo nombre.
+- `docs/04-deployment.md` — Diagrama de arquitectura, sección "Crons en vercel.json" y sección
+  "Crons de birthday/reactivation vía n8n" actualizadas: n8n queda documentado como el único
+  disparador; se quita la nota "(opcional)" porque ya está en producción, no es hipotético.
+
+### Notas
+- No se tocó código de `src/app/api/cron/*` — los endpoints siguen funcionando igual, solo cambia
+  quién los llama.
+- Pendiente de verificar: la zona horaria real configurada en el Schedule Trigger de cada workflow
+  de n8n (puede no ser UTC), para confirmar a qué hora Colombia disparan de verdad.
+
+---
+
+## [v2.1.2] — 2026-07-04 — fix: cierre de hallazgos auditoría 18-Junio (CR-07, CR-03/04, AL-04/05/07/09/10, ME-05)
+
+> Request: solucionar los hallazgos abiertos de la auditoría de código antes de la migración multitenant.
+
+### Fixed
+- `src/services/settings.service.ts` — Nuevo `isPointsSystemEnabled()`. Lee `admin_settings.points_system_enabled`, encendido por defecto (solo `'false'` lo apaga).
+- `src/services/points.service.ts` — `awardPoints()` respeta el feature flag: si el sistema de puntos está apagado, devuelve balance actual sin otorgar ni registrar transacción. Cierra **CR-07/CR-02** (el toggle "Sistema de Puntos" de Ajustes ahora sí funciona; antes era decorativo).
+- `src/app/api/check-in/status/route.ts` — Rate-limit **por teléfono** (40/min) anti-enumeración. El polling del cliente (~12/min) no se ve afectado; no se usa IP para no romper WiFi del local / NAT móvil. Cierra **ME-05/AL-08**.
+- `src/app/api/webhook/delivery/route.ts` — `sendDeliveryTemplate` ahora pasa `logContext` (customerId + messageType). Los WhatsApp de domicilio (welcome/tier/puntos) quedan trazados en `message_logs`. Cierra **CR-03**.
+- `src/app/api/cron/birthday/route.ts`, `src/app/api/cron/reactivation/route.ts` — `sendTemplateMessage` con `logContext` (`birthday` / `reactivation`). Cierra **CR-04**.
+- `src/services/calendar.service.ts` — `executeAutoEvent` pasa `logContext` (`calendar_event`) al enviar. Cierra el remanente de **CR-01**.
+- `src/app/api/dashboard/campaigns/manual/route.ts` — Envío manual con `logContext` (`manual`).
+
+### Changed
+- `src/services/campaign.service.ts` — `findBirthdayCustomers` y `findInactiveCustomers` excluyen `whatsapp_opt_out_at IS NOT NULL`. Cierra **AL-07**.
+- `src/services/calendar.service.ts` — `findCustomersForEvent` excluye opt-out. Cierra **AL-04/AL-10**.
+- `src/app/api/dashboard/campaigns/estimate/route.ts` — Estimador de audiencia excluye opt-out (número más fiel al real). Cierra **AL-05/AL-09**.
+
+### Notas
+- **Firma Twilio:** verificada — `validateTwilioSignature` (HMAC-SHA1) ya protege `webhook/twilio-incoming`. El webhook de domicilios usa `WEBHOOK_DELIVERY_SECRET` (n8n), diseño correcto. Sin cambios.
+- **Pendiente (se agrupa con la migración multitenant):** race condition de `awardPoints` (AL-01) vía RPC atómica; atomicidad de Mystery Box (AL-02); rate-limiter a Redis (AL-03).
+
+---
+
 ## [v2.1.1] — 2026-06-25 — fix: bugs wallet card + rate-limit SSR + centralizar gradientes
 
 > Request: corregir bugs detectados en code review de la rama 2.0-qrs-feature antes de merge a main.

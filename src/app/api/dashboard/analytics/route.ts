@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { requireTenantId } from '@/lib/tenant'
 import { getFullAnalytics } from '@/services/dashboard.service'
 
 export async function GET() {
@@ -11,7 +12,8 @@ export async function GET() {
   }
 
   try {
-    const analytics = await getFullAnalytics()
+    const tenantId = await requireTenantId()
+    const analytics = await getFullAnalytics(tenantId)
     return NextResponse.json(analytics)
   } catch (error) {
     console.error('[Dashboard] Error analytics:', error)

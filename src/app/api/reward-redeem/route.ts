@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { jwtVerify } from 'jose'
 import { createClient } from '@supabase/supabase-js'
 import { recordRedemption } from '@/services/redemption.service'
+import { getTenantByDomain } from '@/lib/tenant'
 import type { RedemptionSource } from '@/types/database.types'
+import type { Tenant } from '@/types/tenant.types'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -23,7 +25,8 @@ function getStaffSecret(): Uint8Array | null {
  * sesión es válida (para atribuir la entrega) y si la auth es válida en absoluto.
  */
 async function resolveStaffAuth(
-  request: NextRequest
+  request: NextRequest,
+  tenant: Tenant
 ): Promise<{ valid: boolean; staffId: string | null }> {
   const authHeader = request.headers.get('authorization')
   const bearer = authHeader?.toLowerCase().startsWith('bearer ')
@@ -44,6 +47,7 @@ async function resolveStaffAuth(
             .from('staff_users')
             .select('id, is_active')
             .eq('id', sid)
+            .eq('tenant_id', tenant.id)
             .single()
           if (staff && staff.is_active) {
             return { valid: true, staffId: staff.id }
@@ -62,6 +66,7 @@ async function resolveStaffAuth(
       .select('id, staff_user_id, is_trusted, expires_at')
       .eq('device_fingerprint', deviceToken)
       .eq('is_trusted', true)
+      .eq('tenant_id', tenant.id)
       .single()
     if (device && (!device.expires_at || new Date(device.expires_at) >= new Date())) {
       await supabase.from('staff_devices').update({ last_used_at: new Date().toISOString() }).eq('id', device.id)
@@ -85,7 +90,16 @@ interface RedeemBody {
 
 export async function POST(request: NextRequest) {
   try {
-    const auth = await resolveStaffAuth(request)
+    const host = request.headers.get('host')
+    const tenant = await getTenantByDomain(host)
+    if (!tenant) {
+      return NextResponse.json(
+        { error: 'Restaurante no reconocido', message: 'No se pudo identificar el restaurante para este dominio' },
+        { status: 404 }
+      )
+    }
+
+    const auth = await resolveStaffAuth(request, tenant)
     if (!auth.valid) {
       return NextResponse.json(
         { error: 'No autorizado', message: 'Mesero o dispositivo no válido.' },
@@ -103,12 +117,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validar que el cliente existe
+    // Validar que el cliente existe (defensa en profundidad: customer_id viene del body,
+    // así que también verificamos que pertenezca a este tenant — evita IDOR entre restaurantes)
     const supabase = getServiceClient()
     const { data: customer } = await supabase
       .from('customers')
       .select('id')
       .eq('id', customer_id)
+      .eq('tenant_id', tenant.id)
       .maybeSingle()
     if (!customer) {
       return NextResponse.json(
@@ -127,7 +143,7 @@ export async function POST(request: NextRequest) {
       tableNumber: body.table_number ?? null,
       notes: body.notes ?? null,
       posReference: body.pos_reference ?? null,
-    })
+    }, tenant.id)
 
     if (!result.ok) {
       const status = result.code === 'already_redeemed' ? 409 : result.code === 'invalid_result' ? 400 : 500

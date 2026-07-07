@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { requireTenantId } from '@/lib/tenant'
 import { validateCSV } from '@/services/imported-contacts.service'
 import { getSettingValue } from '@/services/settings.service'
 
@@ -12,8 +13,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
 
+  const tenantId = await requireTenantId()
+
   // Feature flag
-  const enabled = await getSettingValue('golden_bullet_enabled')
+  const enabled = await getSettingValue('golden_bullet_enabled', tenantId)
   if (enabled !== 'true') {
     return NextResponse.json(
       { error: 'Función desactivada', message: 'Golden Bullet no está habilitado. Actívalo en Ajustes.' },
@@ -29,7 +32,7 @@ export async function POST(request: NextRequest) {
     }
 
     const text = await file.text()
-    const result = await validateCSV(text, file.name)
+    const result = await validateCSV(text, file.name, tenantId)
     return NextResponse.json(result)
   } catch (error) {
     console.error('[GoldenBullet] Error validando CSV:', error)

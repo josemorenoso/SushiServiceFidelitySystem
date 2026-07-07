@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { requireTenantId } from '@/lib/tenant'
 import {
   FREQUENCY_CAP_DAYS,
   RECOVERY_ZONE_START_DAYS,
@@ -24,6 +25,7 @@ export async function GET() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
+    const tenantId = await requireTenantId()
     const db = getServiceClient()
 
     const capCutoff = daysAgo(FREQUENCY_CAP_DAYS)
@@ -32,7 +34,7 @@ export async function GET() {
     const recoveryStart = daysAgo(RECOVERY_ZONE_END_DAYS)       // 25d ago
     const lostCutoff = daysAgo(RECOVERY_ZONE_END_DAYS)          // 25d ago
 
-    const getBase = () => db.from('customers').select('id', { count: 'exact', head: true }).or('accepts_marketing.is.null,accepts_marketing.eq.true')
+    const getBase = () => db.from('customers').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId).or('accepts_marketing.is.null,accepts_marketing.eq.true')
 
     // Activos: visitaron hace menos de 18d (fuera de recovery zone)
     const [{ count: activeCount }, { count: recoveryCount }, { count: lostCount }, { count: capCount }] =

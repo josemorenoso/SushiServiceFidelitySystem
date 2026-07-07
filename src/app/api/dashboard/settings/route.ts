@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { requireTenantId } from '@/lib/tenant'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -14,10 +15,12 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
+  const tenantId = await requireTenantId()
   const service = getServiceClient()
   const { data, error } = await service
     .from('admin_settings')
     .select('key, value')
+    .eq('tenant_id', tenantId)
 
   if (error) {
     console.error('[Settings] Error:', error)
@@ -44,6 +47,7 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: 'key y value son requeridos' }, { status: 400 })
   }
 
+  const tenantId = await requireTenantId()
   const service = getServiceClient()
 
   // Try update first, then insert if not exists
@@ -51,6 +55,7 @@ export async function PUT(req: NextRequest) {
     .from('admin_settings')
     .select('key')
     .eq('key', key)
+    .eq('tenant_id', tenantId)
     .single()
 
   let error
@@ -59,11 +64,12 @@ export async function PUT(req: NextRequest) {
       .from('admin_settings')
       .update({ value, updated_at: new Date().toISOString() })
       .eq('key', key)
+      .eq('tenant_id', tenantId)
     error = result.error
   } else {
     const result = await service
       .from('admin_settings')
-      .insert({ key, value, updated_at: new Date().toISOString() })
+      .insert({ key, value, updated_at: new Date().toISOString(), tenant_id: tenantId })
     error = result.error
   }
 

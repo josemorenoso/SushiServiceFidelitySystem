@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { requireTenantId } from '@/lib/tenant'
 import {
   getEvent,
   updateEvent,
@@ -23,8 +24,9 @@ export async function GET(
     }
 
     const { id } = await params
+    const tenantId = await requireTenantId()
     const event = await getEvent(id)
-    if (!event) {
+    if (!event || event.tenant_id !== tenantId) {
       return NextResponse.json({ error: 'Evento no encontrado' }, { status: 404 })
     }
     return NextResponse.json({ event })
@@ -100,7 +102,8 @@ export async function PATCH(
       )
     }
 
-    const event = await updateEvent(id, body)
+    const tenantId = await requireTenantId()
+    const event = await updateEvent(id, body, tenantId)
     return NextResponse.json({ event })
   } catch (error) {
     console.error('[Calendar Event PATCH]', error)
@@ -128,7 +131,8 @@ export async function DELETE(
     }
 
     const { id } = await params
-    const event = await cancelEvent(id)
+    const tenantId = await requireTenantId()
+    const event = await cancelEvent(id, tenantId)
     return NextResponse.json({ event })
   } catch (error) {
     console.error('[Calendar Event DELETE]', error)

@@ -5,6 +5,7 @@ import { validatePhone } from '@/lib/validators/phone'
 import { rateLimit } from '@/lib/rate-limit'
 import { WalletCard } from '@/components/features/wallet'
 import { BRAND_NAME, BRAND_CARD_BG } from '@/lib/branding'
+import { getTenantByDomain } from '@/lib/tenant'
 
 export default async function TarjetaPage({
   searchParams,
@@ -31,13 +32,18 @@ export default async function TarjetaPage({
     return <TarjetaInput error="Número de celular inválido" />
   }
 
+  const tenant = await getTenantByDomain(headersList.get('host'))
+  if (!tenant) {
+    return <TarjetaInput error="Restaurante no reconocido" />
+  }
+
   let customer: Awaited<ReturnType<typeof findCustomerByPhone>> = null
   let tiers: Awaited<ReturnType<typeof getAllTiers>> = []
 
   try {
     ;[customer, tiers] = await Promise.all([
-      findCustomerByPhone(cleaned),
-      getAllTiers(),
+      findCustomerByPhone(cleaned, tenant.id),
+      getAllTiers(tenant.id),
     ])
   } catch {
     return <TarjetaInput error="Error cargando tu tarjeta. Intenta de nuevo." />

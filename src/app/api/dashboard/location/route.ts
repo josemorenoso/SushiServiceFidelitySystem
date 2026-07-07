@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { requireTenantId } from '@/lib/tenant'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -14,11 +15,13 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
+  const tenantId = await requireTenantId()
   const service = getServiceClient()
   const { data, error } = await service
     .from('restaurant_locations')
     .select('id, name, address, lat, lon, radius_meters, is_active')
     .eq('is_active', true)
+    .eq('tenant_id', tenantId)
     .single()
 
   if (error) {
@@ -50,12 +53,14 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: 'Coordenadas inválidas' }, { status: 400 })
   }
 
+  const tenantId = await requireTenantId()
   const service = getServiceClient()
 
   const { data: existing } = await service
     .from('restaurant_locations')
     .select('id')
     .eq('is_active', true)
+    .eq('tenant_id', tenantId)
     .single()
 
   const updatePayload: Record<string, unknown> = {
@@ -72,11 +77,12 @@ export async function PUT(req: NextRequest) {
       .from('restaurant_locations')
       .update(updatePayload)
       .eq('id', existing.id)
+      .eq('tenant_id', tenantId)
     error = result.error
   } else {
     const result = await service
       .from('restaurant_locations')
-      .insert({ ...updatePayload, name: 'Sede principal' })
+      .insert({ ...updatePayload, name: 'Sede principal', tenant_id: tenantId })
     error = result.error
   }
 

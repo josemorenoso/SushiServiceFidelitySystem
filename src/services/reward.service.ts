@@ -10,7 +10,7 @@ function getServiceClient() {
   return createClient(url, key)
 }
 
-export async function checkRewardForVisit(totalVisits: number): Promise<Reward | null> {
+export async function checkRewardForVisit(totalVisits: number, tenantId: string): Promise<Reward | null> {
   const supabase = getServiceClient()
 
   const { data, error } = await supabase
@@ -18,6 +18,7 @@ export async function checkRewardForVisit(totalVisits: number): Promise<Reward |
     .select('*')
     .eq('visit_milestone', totalVisits)
     .eq('is_active', true)
+    .eq('tenant_id', tenantId)
     .single()
 
   if (error && error.code !== 'PGRST116') {
@@ -27,13 +28,14 @@ export async function checkRewardForVisit(totalVisits: number): Promise<Reward |
   return data
 }
 
-export async function getNextReward(currentVisits: number): Promise<{ milestone: number; title: string } | null> {
+export async function getNextReward(currentVisits: number, tenantId: string): Promise<{ milestone: number; title: string } | null> {
   const supabase = getServiceClient()
 
   const { data, error } = await supabase
     .from('rewards')
     .select('visit_milestone, title')
     .eq('is_active', true)
+    .eq('tenant_id', tenantId)
     .gt('visit_milestone', currentVisits)
     .order('visit_milestone', { ascending: true })
     .limit(1)
@@ -81,12 +83,13 @@ export function buildRewardHint(currentVisits: number, nextReward: { milestone: 
 /**
  * Fetch a single reward by id (para reactivación con regalo fijo o campañas manuales).
  */
-export async function getUpcomingRewards(currentVisits: number, limit: number = 4): Promise<{ milestone: number; title: string; is_black: boolean }[]> {
+export async function getUpcomingRewards(currentVisits: number, tenantId: string, limit: number = 4): Promise<{ milestone: number; title: string; is_black: boolean }[]> {
   const supabase = getServiceClient()
   const { data, error } = await supabase
     .from('rewards')
     .select('visit_milestone, title, is_black')
     .eq('is_active', true)
+    .eq('tenant_id', tenantId)
     .not('visit_milestone', 'is', null)
     .gt('visit_milestone', currentVisits)
     .order('visit_milestone', { ascending: true })
@@ -104,8 +107,8 @@ export async function getUpcomingRewards(currentVisits: number, limit: number = 
   }))
 }
 
-export async function buildRewardsRoadmap(currentVisits: number): Promise<string> {
-  const upcoming = await getUpcomingRewards(currentVisits, 5)
+export async function buildRewardsRoadmap(currentVisits: number, tenantId: string): Promise<string> {
+  const upcoming = await getUpcomingRewards(currentVisits, tenantId, 5)
 
   if (upcoming.length === 0) return '\uD83C\uDF1F \u00a1Sigue acumulando visitas para m\u00e1s premios!'
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { requireTenantId, getTenantById } from '@/lib/tenant'
 import { sendTemplateMessage } from '@/services/whatsapp.service'
 import { getNextReward, getRewardTitle, getRewardById } from '@/services/reward.service'
 import { FREQUENCY_CAP_DAYS, RECOVERY_ZONE_START_DAYS, RECOVERY_ZONE_END_DAYS } from '@/constants/rewards'
@@ -50,6 +51,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Plantilla requerida' }, { status: 400 })
     }
 
+    const tenantId = await requireTenantId()
+    const tenant = await getTenantById(tenantId)
+    if (!tenant) {
+      return NextResponse.json({ error: 'Tenant no encontrado' }, { status: 404 })
+    }
+
     const db = getServiceClient()
 
     // Create campaign record
@@ -63,6 +70,7 @@ export async function POST(request: NextRequest) {
         message_template: messageTemplate || templateSid,
         filters: filters as Record<string, unknown>,
         executed_at: new Date().toISOString(),
+        tenant_id: tenantId,
       })
       .select()
       .single()
@@ -74,6 +82,7 @@ export async function POST(request: NextRequest) {
 
     // Fetch matching customers
     let query = db.from('customers').select('id, phone, name, total_visits, total_points, last_campaign_at, last_visit_at, source_channels, accepts_marketing')
+    query = query.eq('tenant_id', tenantId)
     query = query.eq('accepts_marketing', true)
     if (filters.city) query = query.ilike('city', `%${filters.city}%`)
     if (filters.minVisits) query = query.gte('total_visits', parseInt(filters.minVisits))
@@ -117,7 +126,7 @@ export async function POST(request: NextRequest) {
     const skippedRecoveryZone = afterFrequencyCap.length - afterRecoveryZone.length
 
     // Pre-event blackout: excluir clientes que están en ventana de blackout de un evento próximo
-    const blackouts = await getActiveBlackouts()
+    const blackouts = await getActiveBlackouts(tenantId)
     const blackoutEventIds = new Set(blackouts.map((ev) => ev.id))
     const eligible = afterRecoveryZone.filter((c) => {
       // Si hay blackouts activos, excluir clientes que ya recibieron mensaje de ese evento
@@ -148,7 +157,7 @@ export async function POST(request: NextRequest) {
       const uniqueVisitCounts = [...new Set(eligible.map((c) => c.total_visits))]
       await Promise.all(
         uniqueVisitCounts.map(async (v) => {
-          const next = await getNextReward(v)
+          const next = await getNextReward(v, tenantId)
           titleByVisits[v] = getRewardTitle(next)
         })
       )
@@ -159,7 +168,7 @@ export async function POST(request: NextRequest) {
     const now = new Date().toISOString()
     let sent = 0
     let failed = 0
-    const messageRecords: { campaign_id: string; customer_id: string; status: string; twilio_sid: string | null; sent_at: string | null; error_message: string | null }[] = []
+    const messageRecords: { campaign_id: string; customer_id: string; status: string; tenant_id: string; twilio_sid: string | null; sent_at: string | null; error_message: string | null }[] = []
     const sentCustomerIds: string[] = []
 
     for (let i = 0; i < finalEligible.length; i += BATCH_SIZE) {
@@ -174,7 +183,7 @@ export async function POST(request: NextRequest) {
             if (useReward3) {
               variables['3'] = fixedRewardTitle ?? titleByVisits[customer.total_visits] ?? 'más beneficios'
             }
-            const result = await sendTemplateMessage(customer.phone, templateSid, variables)
+            const result = await sendTemplateMessage(customer.phone, templateSid, variables, tenant, undefined, { customerId: customer.id, messageType: 'manual' })
             return { customer, result, error: null as string | null }
           } catch (err) {
             return {
@@ -194,6 +203,7 @@ export async function POST(request: NextRequest) {
             campaign_id: campaign.id,
             customer_id: customer.id,
             status: 'sent',
+            tenant_id: tenantId,
             twilio_sid: result.sid,
             sent_at: now,
             error_message: null,
@@ -204,6 +214,7 @@ export async function POST(request: NextRequest) {
             campaign_id: campaign.id,
             customer_id: customer.id,
             status: 'failed',
+            tenant_id: tenantId,
             twilio_sid: null,
             sent_at: null,
             error_message: error || 'Twilio no configurado o error de envío',

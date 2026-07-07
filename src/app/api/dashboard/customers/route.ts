@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { requireTenantId } from '@/lib/tenant'
 import { getCustomers } from '@/services/dashboard.service'
 
 export async function GET(request: NextRequest) {
@@ -19,7 +20,8 @@ export async function GET(request: NextRequest) {
     const tier = searchParams.get('tier') ?? undefined
     const status = searchParams.get('status') ?? undefined
 
-    const result = await getCustomers({ page, limit, search, source, tier, status })
+    const tenantId = await requireTenantId()
+    const result = await getCustomers({ page, limit, search, source, tier, status }, tenantId)
     return NextResponse.json(result)
   } catch (error) {
     console.error('[Dashboard] Error clientes:', error)

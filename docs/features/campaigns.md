@@ -1,6 +1,17 @@
 # Feature: Campañas — Control de Tráfico Centralizado
 
-**Última actualización:** 2026-06-10 (v1.4.0 — días de reactivación configurables + rediseño UI)
+**Última actualización:** 2026-07-05 (v1.4.1 — disparo unificado en n8n para birthday/reactivation)
+
+---
+
+## Nota de infraestructura (v1.4.1 — 2026-07-05)
+
+`/api/cron/birthday` y `/api/cron/reactivation` (lógica de negocio sin cambios, ver más abajo)
+eran invocados EN PARALELO por dos disparadores: el cron nativo de Vercel (`vercel.json`) y un
+workflow n8n del mismo nombre. El código ya los des-duplicaba vía `hasRecentCampaignMessage()`
+(el cliente final nunca recibió mensajes repetidos), pero se decidió dejar **n8n como único
+disparador** para simplificar operación y eliminar el riesgo latente de carrera. `vercel.json`
+quedó con `"crons": []`. Detalle completo → `docs/04-deployment.md` §2 y §5.
 
 ---
 

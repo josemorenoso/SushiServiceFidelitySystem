@@ -43,7 +43,8 @@ export type RecordRedemptionResult =
  * como `redeemed=true`. El índice único parcial previene duplicados a nivel de DB.
  */
 export async function recordRedemption(
-  params: RecordRedemptionParams
+  params: RecordRedemptionParams,
+  tenantId: string
 ): Promise<RecordRedemptionResult> {
   const supabase = getServiceClient()
 
@@ -78,6 +79,7 @@ export async function recordRedemption(
       table_number: params.tableNumber ?? null,
       notes: params.notes ?? null,
       pos_reference: params.posReference ?? null,
+      tenant_id: tenantId,
     })
     .select()
     .single()
@@ -109,12 +111,13 @@ export interface PendingReward {
  * Devuelve el premio NO redimido más reciente del cliente (si existe).
  * Se usa para alertar al mesero y para el polling del cliente.
  */
-export async function getPendingReward(customerId: string): Promise<PendingReward | null> {
+export async function getPendingReward(customerId: string, tenantId: string): Promise<PendingReward | null> {
   const supabase = getServiceClient()
   const { data, error } = await supabase
     .from('mystery_box_results')
     .select('id, tier_id, prize_title, choice, created_at')
     .eq('customer_id', customerId)
+    .eq('tenant_id', tenantId)
     .eq('redeemed', false)
     .order('created_at', { ascending: false })
     .limit(1)
@@ -131,8 +134,8 @@ export async function getPendingReward(customerId: string): Promise<PendingRewar
   }
 }
 
-export async function hasPendingReward(customerId: string): Promise<boolean> {
-  return (await getPendingReward(customerId)) !== null
+export async function hasPendingReward(customerId: string, tenantId: string): Promise<boolean> {
+  return (await getPendingReward(customerId, tenantId)) !== null
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -162,7 +165,7 @@ export interface RedemptionListResult {
   limit: number
 }
 
-export async function getRedemptions(filters: RedemptionFilters): Promise<RedemptionListResult> {
+export async function getRedemptions(filters: RedemptionFilters, tenantId: string): Promise<RedemptionListResult> {
   const supabase = getServiceClient()
   const page = filters.page && filters.page > 0 ? filters.page : 1
   const limit = filters.limit && filters.limit > 0 ? Math.min(filters.limit, 200) : 25
@@ -175,6 +178,7 @@ export async function getRedemptions(filters: RedemptionFilters): Promise<Redemp
       'id, customer_id, mystery_box_result_id, tier_id, prize_title, source, redeemed_at, redeemed_by_staff_id, table_number, notes, pos_reference, created_at, customers(name, phone), staff_users(name)',
       { count: 'exact' }
     )
+    .eq('tenant_id', tenantId)
     .order('redeemed_at', { ascending: false })
 
   if (filters.from) query = query.gte('redeemed_at', filters.from)
@@ -218,12 +222,13 @@ export async function getRedemptions(filters: RedemptionFilters): Promise<Redemp
 /**
  * Historial de redenciones de un cliente (para el Customer Detail Dialog).
  */
-export async function getCustomerRedemptions(customerId: string): Promise<RewardRedemption[]> {
+export async function getCustomerRedemptions(customerId: string, tenantId: string): Promise<RewardRedemption[]> {
   const supabase = getServiceClient()
   const { data, error } = await supabase
     .from('reward_redemptions')
     .select('*')
     .eq('customer_id', customerId)
+    .eq('tenant_id', tenantId)
     .order('redeemed_at', { ascending: false })
 
   if (error) {
@@ -247,12 +252,13 @@ export interface RedemptionSummary {
 export async function getRedemptionSummary(params: {
   from?: string
   to?: string
-}): Promise<RedemptionSummary> {
+}, tenantId: string): Promise<RedemptionSummary> {
   const supabase = getServiceClient()
 
   let query = supabase
     .from('reward_redemptions')
     .select('prize_title, redeemed_at, redeemed_by_staff_id, staff_users(name)')
+    .eq('tenant_id', tenantId)
 
   if (params.from) query = query.gte('redeemed_at', params.from)
   if (params.to) query = query.lte('redeemed_at', params.to)

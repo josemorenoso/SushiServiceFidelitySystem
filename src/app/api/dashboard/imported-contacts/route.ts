@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { requireTenantId } from '@/lib/tenant'
 import { listBatches } from '@/services/imported-contacts.service'
 
 export const dynamic = 'force-dynamic'
@@ -12,6 +13,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const tenantId = await requireTenantId()
     const { searchParams } = new URL(request.url)
     const batchId = searchParams.get('batch_id')
 
@@ -29,6 +31,7 @@ export async function GET(request: NextRequest) {
         .from('imported_contacts')
         .select('id, phone, name, email, status, message_sent_at, twilio_sid, converted_to_customer_id, created_at', { count: 'exact' })
         .eq('source_batch', batchId)
+        .eq('tenant_id', tenantId)
         .order('created_at', { ascending: false })
       if (status) query = query.eq('status', status)
 
@@ -37,7 +40,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Listado de lotes (resumen)
-    const batches = await listBatches()
+    const batches = await listBatches(tenantId)
     return NextResponse.json({ batches })
   } catch (error) {
     console.error('[GoldenBullet] Error listando:', error)

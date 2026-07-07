@@ -1,7 +1,7 @@
 # Esquema de Base de Datos
 
 **Base de datos:** Supabase (PostgreSQL)
-**Última actualización:** 2026-06-12
+**Última actualización:** 2026-07-05
 
 ---
 
@@ -666,6 +666,27 @@ CREATE POLICY "service_update_message_logs" ON message_logs
 | 21 | `00021_customer_whatsapp_opt_out.sql` | 2026-06-12 | Columna `customers.whatsapp_opt_out_at` + índice parcial. Opt-out persistente de WhatsApp (auditoría 12-Julio, tarea 8). | Pendiente |
 | 22 | `00022_reward_redemptions.sql` | 2026-06-12 | Tabla `reward_redemptions` + índices + RLS + trigger anti-duplicado; columnas `redeemed`/`redeemed_at` en `mystery_box_results`. Tracking de entrega física de premios (v2.0.0). | Pendiente |
 | 23 | `00023_imported_contacts.sql` | 2026-06-12 | Tabla `imported_contacts` + columna `customers.imported_contact_id` + RLS + seed `golden_bullet_enabled`/`twilio_cost_per_message_usd`. Golden Bullet (v2.0.0). | Pendiente |
+| 24 | `00024_tenants.sql` | 2026-07-04 | Fundación multitenant: tabla `tenants` + funciones helper RLS que leen tenant/rol del JWT (`app_metadata`). | Pendiente |
+| 25 | `00025_add_tenant_id.sql` | 2026-07-04 | Agrega `tenant_id uuid NULL REFERENCES tenants(id)` + índice a las 18 tablas de negocio (ver sección siguiente); dropea los uniques globales sobre `phone` que dejan de ser válidos. | Pendiente |
+| 26 | `00026_multitenant_rls.sql` | 2026-07-04 | Reescribe las políticas RLS: el usuario autenticado ve solo su tenant; el service role sigue bypaseando RLS (por eso el scoping real vive en el código, ver más abajo). | Pendiente |
+| 27 | `00027_wallet.sql` | 2026-07-04 | Tabla `tenant_wallet_transactions` — billetera prepagada COP por tenant (recargas/ajustes/reembolsos). NO tiene `tenant_id` propio de las 18 tablas de negocio (es la tabla de facturación). | Pendiente |
+| 28 | `00028_seed_sushi_service.sql` | 2026-07-04 | Backfill de `tenant_id` en todos los datos existentes (tenant puente "Sushi Service"), activa `NOT NULL`, crea los uniques compuestos `(campo, tenant_id)` que reemplazan a los globales dropeados en 00025. | Pendiente |
+| 29 | `00029_tenant_domain.sql` | 2026-07-05 | Columna `tenants.domain` + índice único parcial — resuelve el tenant por host header (subdominios existentes de cada restaurante) en vez de por slug en la URL. | Pendiente |
+
+### `tenant_id` en las 18 tablas de negocio
+
+Las migraciones 00025/00028 agregan `tenant_id uuid NOT NULL REFERENCES tenants(id)` a: `customers,
+visits, rewards, authorized_numbers, campaigns, campaign_messages, admin_settings, restaurant_events,
+restaurant_locations, reward_tiers, point_transactions, mystery_box_results, mystery_box_global_caps,
+staff_users, staff_devices, message_logs, reward_redemptions, imported_contacts`. `admin_settings` pasa
+a tener PK compuesta `(key, tenant_id)`; `customers.phone`/`authorized_numbers.phone`/`staff_users.phone`
+dejan de ser únicos globales (pasan a únicos compuestos con `tenant_id`).
+
+**El 95% del acceso usa `getServiceClient()` (service-role), que ignora RLS por diseño** (crons,
+webhooks, servicios). Por eso el filtro por tenant es **responsabilidad explícita del código**, no de
+RLS — ver `docs/superpowers/plans/2026-07-05-multitenant-AUDIT-DELEGABLE.md` para el detalle de cómo
+cada tipo de ruta resuelve su `tenantId` y el CHANGELOG `[v2.2.0]` para el resultado de la auditoría
+que verificó esto en las ~48 rutas/servicios que tocan estas tablas.
 
 ---
 

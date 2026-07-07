@@ -13,9 +13,19 @@ import { getMultipleSettings, getReactivationDaysConfig } from '@/services/setti
 import { getRewardById, getNextReward, getRewardTitle, buildRewardsRoadmap } from '@/services/reward.service'
 import { filterByMonthlyCap } from '@/services/campaign.service'
 import { getNextTier, buildTiersRoadmap } from '@/services/reward-tiers.service'
+import { getTenantBySlug } from '@/lib/tenant'
 
-async function handleCron() {
+async function handleCron(request: NextRequest) {
   try {
+    const slug = new URL(request.url).searchParams.get('tenant')
+    if (!slug) {
+      return NextResponse.json({ error: 'Falta ?tenant=' }, { status: 400 })
+    }
+    const tenant = await getTenantBySlug(slug)
+    if (!tenant) {
+      return NextResponse.json({ error: 'Tenant no encontrado' }, { status: 400 })
+    }
+
     // Tres modos:
     //   - reactivation_with_reward_template_sid + reactivation_reward_id → 6b "vuelve y gana X"
     //   - reactivation_no_reward_template_sid → 6a "te echamos de menos"
@@ -26,7 +36,8 @@ async function handleCron() {
       'reactivation_reward_id',
       'reactivation_template_sid', // legacy
       'reactivation_aggressive_template_sid', // 25d+ agresiva con puntos
-    ])
+      'reactivation_aggressive_reward_id',    // recompensa especial opcional para {{4}}
+    ], tenant.id)
 
     const withRewardSid = settings.reactivation_with_reward_template_sid
     const noRewardSid = settings.reactivation_no_reward_template_sid
@@ -73,9 +84,9 @@ async function handleCron() {
     }
 
     // Días de reactivación configurables (Settings > Reactivación)
-    const { softDays, aggressiveDays } = await getReactivationDaysConfig()
+    const { softDays, aggressiveDays } = await getReactivationDaysConfig(tenant.id)
 
-    const customers = await findInactiveCustomers(softDays)
+    const customers = await findInactiveCustomers(tenant.id, softDays)
 
     if (customers.length === 0) {
       return NextResponse.json({
@@ -102,7 +113,7 @@ async function handleCron() {
     // Plantilla agresiva (aggressiveDays+)
     const aggressiveSid = settings.reactivation_aggressive_template_sid
 
-    const campaign = await getOrCreateTodayCampaign('reactivation', `template:${templateSid}|mode:${mode}`)
+    const campaign = await getOrCreateTodayCampaign('reactivation', `template:${templateSid}|mode:${mode}`, tenant.id)
     let sent = 0
     let failed = 0
     let aggressiveSent = 0
@@ -121,8 +132,8 @@ async function handleCron() {
         //   with_reward: {{1}}=name, {{2}}=fixedRewardTitle, {{3}}=roadmap
         //   no_reward:   {{1}}=name, {{2}}=puntos actuales, {{3}}=premio próximo
         //   legacy:      {{1}}=name, {{2}}=visits, {{3}}=rewardTitle (compat)
-        const tiersRoadmap = await buildTiersRoadmap(customer.total_points ?? 0)
-        const nextTier = await getNextTier(customer.total_points ?? 0)
+        const tiersRoadmap = await buildTiersRoadmap(customer.total_points ?? 0, tenant.id)
+        const nextTier = await getNextTier(customer.total_points ?? 0, tenant.id)
         let variables: Record<string, string>
         if (mode === 'with_reward') {
           variables = { '1': customer.name, '2': fixedRewardTitle ?? 'más beneficios', '3': tiersRoadmap }
@@ -134,7 +145,7 @@ async function handleCron() {
           }
         } else {
           // legacy: replica el comportamiento previo con título del próximo premio del cliente
-          const next = await getNextReward(customer.total_visits)
+          const next = await getNextReward(customer.total_visits, tenant.id)
           variables = {
             '1': customer.name,
             '2': String(customer.total_visits),
@@ -142,12 +153,13 @@ async function handleCron() {
           }
         }
 
-        const result = await sendTemplateMessage(customer.phone, templateSid, variables)
+        const result = await sendTemplateMessage(customer.phone, templateSid, variables, tenant, undefined, { customerId: customer.id, messageType: 'reactivation' })
 
         await recordCampaignMessage({
           campaignId: campaign.id,
           customerId: customer.id,
           status: result ? 'sent' : 'failed',
+          tenantId: tenant.id,
           twilioSid: result?.sid ?? null,
           errorMessage: result ? null : 'Twilio no configurado o error de envío',
         })
@@ -164,6 +176,7 @@ async function handleCron() {
           campaignId: campaign.id,
           customerId: customer.id,
           status: 'failed',
+          tenantId: tenant.id,
           errorMessage: error instanceof Error ? error.message : 'Error desconocido',
         })
       }
@@ -179,8 +192,8 @@ async function handleCron() {
         if (alreadySent) continue
 
         try {
-          const tiersRoadmap = await buildTiersRoadmap(customer.total_points ?? 0)
-          const nextTier = await getNextTier(customer.total_points ?? 0)
+          const tiersRoadmap = await buildTiersRoadmap(customer.total_points ?? 0, tenant.id)
+          const nextTier = await getNextTier(customer.total_points ?? 0, tenant.id)
           const nextTierName = nextTier ? nextTier.tier.safe_reward_title : 'premios exclusivos'
 
           const aggressiveVars: Record<string, string> = {
@@ -193,12 +206,13 @@ async function handleCron() {
             aggressiveVars['4'] = aggressiveRewardTitle
           }
 
-          const result = await sendTemplateMessage(customer.phone, aggressiveSid, aggressiveVars)
+          const result = await sendTemplateMessage(customer.phone, aggressiveSid, aggressiveVars, tenant, undefined, { customerId: customer.id, messageType: 'reactivation' })
 
           await recordCampaignMessage({
             campaignId: campaign.id,
             customerId: customer.id,
             status: result ? 'sent' : 'failed',
+            tenantId: tenant.id,
             twilioSid: result?.sid ?? null,
             errorMessage: result ? null : 'Twilio no configurado o error de envío',
           })
@@ -216,6 +230,7 @@ async function handleCron() {
             campaignId: campaign.id,
             customerId: customer.id,
             status: 'failed',
+            tenantId: tenant.id,
             errorMessage: error instanceof Error ? error.message : 'Error desconocido',
           })
         }
@@ -248,12 +263,12 @@ export async function GET(request: NextRequest) {
   if (!validateCronSecret(request)) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
-  return handleCron()
+  return handleCron(request)
 }
 
 export async function POST(request: NextRequest) {
   if (!validateCronSecret(request)) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
-  return handleCron()
+  return handleCron(request)
 }

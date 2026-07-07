@@ -10,7 +10,7 @@ import {
   MINIMUM_VISIBLE_POINTS,
 } from '@/constants/rewards'
 import { getAllTiers } from '@/services/reward-tiers.service'
-import { getMultipleSettings } from '@/services/settings.service'
+import { getMultipleSettings, isPointsSystemEnabled } from '@/services/settings.service'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -86,7 +86,7 @@ export function generateVisitPoints(min: number, max: number): number {
 /**
  * Lee los settings de puntos configurados por el admin, con fallback a defaults.
  */
-export async function getPointsConfig(): Promise<{
+export async function getPointsConfig(tenantId: string): Promise<{
   min: number
   max: number
   welcomeBonusMin: number
@@ -99,7 +99,7 @@ export async function getPointsConfig(): Promise<{
     'welcome_bonus_points_min',
     'welcome_bonus_points_max',
     'event_bonus_points',
-  ])
+  ], tenantId)
 
   return {
     min: parseInt(settings.points_per_visit_min ?? String(DEFAULT_POINTS_PER_VISIT_MIN), 10),
@@ -118,6 +118,7 @@ export async function awardPoints(params: {
   customerId: string
   points: number
   source: PointTransactionSource
+  tenantId: string
   referenceId?: string | null
 }): Promise<{ pointsAwarded: number; newBalance: number }> {
   const supabase = getServiceClient()
@@ -131,6 +132,12 @@ export async function awardPoints(params: {
 
   if (custErr || !customer) {
     throw new Error(`Error obteniendo puntos del cliente: ${custErr?.message}`)
+  }
+
+  // Feature flag: si el admin apagó el sistema de puntos, no se otorga nada.
+  // Se devuelve el balance actual sin modificar (auditoría 18-Junio, CR-07/CR-02).
+  if (!(await isPointsSystemEnabled(params.tenantId))) {
+    return { pointsAwarded: 0, newBalance: customer.total_points }
   }
 
   const newBalance = customer.total_points + params.points
@@ -155,6 +162,7 @@ export async function awardPoints(params: {
       customer_id: params.customerId,
       points: params.points,
       source: params.source,
+      tenant_id: params.tenantId,
       reference_id: params.referenceId ?? null,
       balance_after: newBalance,
     })
@@ -173,10 +181,11 @@ export async function awardPoints(params: {
 export async function awardVisitPoints(
   customerId: string,
   visitId: string,
-  source: 'qr' | 'delivery' | 'staff_scan'
+  source: 'qr' | 'delivery' | 'staff_scan',
+  tenantId: string
 ): Promise<{ pointsAwarded: number; newBalance: number }> {
   const supabase = getServiceClient()
-  const config = await getPointsConfig()
+  const config = await getPointsConfig(tenantId)
 
   // Obtener puntos actuales del cliente
   const { data: customer } = await supabase
@@ -188,7 +197,7 @@ export async function awardVisitPoints(
   const currentPoints = customer?.total_points ?? 0
 
   // Encontrar el próximo umbral de tier
-  const tiers = await getAllTiers()
+  const tiers = await getAllTiers(tenantId)
   const nextTier = tiers.find((t) => t.point_threshold > currentPoints)
   const nextThreshold = nextTier?.point_threshold ?? 150
 
@@ -204,6 +213,7 @@ export async function awardVisitPoints(
     customerId,
     points,
     source: txSource,
+    tenantId,
     referenceId: visitId,
   })
 }
@@ -211,8 +221,8 @@ export async function awardVisitPoints(
 /**
  * Otorga puntos de bienvenida al registrarse.
  */
-export async function awardWelcomeBonus(customerId: string): Promise<{ pointsAwarded: number; newBalance: number }> {
-  const config = await getPointsConfig()
+export async function awardWelcomeBonus(customerId: string, tenantId: string): Promise<{ pointsAwarded: number; newBalance: number }> {
+  const config = await getPointsConfig(tenantId)
   if (config.welcomeBonusMax <= 0) {
     return { pointsAwarded: 0, newBalance: 0 }
   }
@@ -229,6 +239,7 @@ export async function awardWelcomeBonus(customerId: string): Promise<{ pointsAwa
     customerId,
     points: bonus,
     source: 'welcome_bonus',
+    tenantId,
   })
 }
 

@@ -10,12 +10,13 @@ function getServiceClient() {
   return createClient(url, key)
 }
 
-export async function findCustomerByPhone(phone: string): Promise<Customer | null> {
+export async function findCustomerByPhone(phone: string, tenantId: string): Promise<Customer | null> {
   const supabase = getServiceClient()
   const { data, error } = await supabase
     .from('customers')
     .select('*')
     .eq('phone', phone)
+    .eq('tenant_id', tenantId)
     .single()
 
   if (error && error.code !== 'PGRST116') {
@@ -30,6 +31,7 @@ export async function createCustomer(params: {
   name: string
   birthday: string | null
   city: string | null
+  tenantId: string
   source?: 'qr' | 'delivery'
   accepts_marketing?: boolean
   /** false cuando la primera visita debe validarla un mesero (checkin_first_visit_free='false') */
@@ -44,6 +46,7 @@ export async function createCustomer(params: {
       name: params.name,
       birthday: params.birthday,
       city: params.city,
+      tenant_id: params.tenantId,
       total_visits: countFirst ? 1 : 0,
       last_visit_at: countFirst ? new Date().toISOString() : null,
       source_channels: params.source ?? 'qr',
@@ -113,7 +116,7 @@ function normalizeToTenDigits(phone: string): string {
  * que las campañas dejen de incluirlo. Best-effort: no lanza.
  * Auditoría 12-Julio (tarea 8).
  */
-export async function setWhatsappOptOut(phone: string): Promise<void> {
+export async function setWhatsappOptOut(phone: string, tenantId: string): Promise<void> {
   try {
     const supabase = getServiceClient()
     const normalized = normalizeToTenDigits(phone)
@@ -121,6 +124,7 @@ export async function setWhatsappOptOut(phone: string): Promise<void> {
       .from('customers')
       .update({ whatsapp_opt_out_at: new Date().toISOString(), accepts_marketing: false })
       .eq('phone', normalized)
+      .eq('tenant_id', tenantId)
     if (error) console.error('[OptOut] No se pudo marcar opt-out:', error.message)
   } catch (err) {
     console.error('[OptOut] Excepción marcando opt-out:', err instanceof Error ? err.message : err)
@@ -131,7 +135,7 @@ export async function setWhatsappOptOut(phone: string): Promise<void> {
  * Limpia el opt-out de WhatsApp (cliente respondió ALTA/START/ACEPTO) y
  * reactiva accepts_marketing. Best-effort: no lanza.
  */
-export async function clearWhatsappOptOut(phone: string): Promise<void> {
+export async function clearWhatsappOptOut(phone: string, tenantId: string): Promise<void> {
   try {
     const supabase = getServiceClient()
     const normalized = normalizeToTenDigits(phone)
@@ -139,6 +143,7 @@ export async function clearWhatsappOptOut(phone: string): Promise<void> {
       .from('customers')
       .update({ whatsapp_opt_out_at: null, accepts_marketing: true })
       .eq('phone', normalized)
+      .eq('tenant_id', tenantId)
     if (error) console.error('[OptOut] No se pudo limpiar opt-out:', error.message)
   } catch (err) {
     console.error('[OptOut] Excepción limpiando opt-out:', err instanceof Error ? err.message : err)
@@ -151,7 +156,7 @@ export async function clearWhatsappOptOut(phone: string): Promise<void> {
  * errores 21610. Si la consulta falla, devuelve false (no bloquear envíos
  * por un error de DB transitorio).
  */
-export async function isPhoneOptedOut(phone: string): Promise<boolean> {
+export async function isPhoneOptedOut(phone: string, tenantId: string): Promise<boolean> {
   try {
     const supabase = getServiceClient()
     const normalized = normalizeToTenDigits(phone)
@@ -159,6 +164,7 @@ export async function isPhoneOptedOut(phone: string): Promise<boolean> {
       .from('customers')
       .select('whatsapp_opt_out_at')
       .eq('phone', normalized)
+      .eq('tenant_id', tenantId)
       .maybeSingle()
     if (error) {
       console.error('[OptOut] Error consultando opt-out (se permite el envío):', error.message)

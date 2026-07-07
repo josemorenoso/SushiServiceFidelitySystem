@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { validateTwilioSignature } from '@/lib/validators/twilio'
 import { createClient } from '@supabase/supabase-js'
 import { setWhatsappOptOut, clearWhatsappOptOut } from '@/services/customer.service'
+import { getTenantByWhatsappNumber } from '@/lib/tenant'
 
 // Keywords de opt-out/in alineados con el Messaging Service de Twilio
 // (ver docs/features/twilio-opt-out.md). Twilio normalmente los intercepta
@@ -84,6 +85,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
   }
 
+  const to = params['To'] ?? ''
+  const tenant = await getTenantByWhatsappNumber(to)
+  if (!tenant) {
+    // Twilio necesita un 200 o reintenta la entrega — no usar 404 aquí.
+    return new NextResponse(null, { status: 200 })
+  }
+
   const body = (params['Body'] ?? '').trim()
   const upper = body.toUpperCase()
 
@@ -95,14 +103,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // datos sincronizada y dejar de intentar enviarle (auditoría 12-Julio, tarea 8).
   if (OPT_OUT_KEYWORDS.includes(upper)) {
     if (phone.length === 10) {
-      await setWhatsappOptOut(phone)
+      await setWhatsappOptOut(phone, tenant.id)
       console.log(`[twilio-incoming] opt-out persistido para ${phone} (keyword="${upper}")`)
     }
     return new NextResponse(null, { status: 200 })
   }
   if (OPT_IN_KEYWORDS.includes(upper)) {
     if (phone.length === 10) {
-      await clearWhatsappOptOut(phone)
+      await clearWhatsappOptOut(phone, tenant.id)
       console.log(`[twilio-incoming] opt-in: opt-out limpiado para ${phone} (keyword="${upper}")`)
     }
     return new NextResponse(null, { status: 200 })
@@ -116,6 +124,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         .from('authorized_numbers')
         .select('id')
         .eq('phone', phone)
+        .eq('tenant_id', tenant.id)
         .eq('is_active', true)
         .maybeSingle()
 

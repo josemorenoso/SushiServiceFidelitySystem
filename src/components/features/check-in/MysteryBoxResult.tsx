@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Sparkles, Gift } from 'lucide-react'
-import { STAFF_LABEL } from '@/lib/branding'
+import { useBranding } from '@/lib/branding-context'
 import type { MysteryPrizeDisplay } from './CheckInSuccess.types'
 
 interface MysteryBoxResultProps {
@@ -23,6 +23,7 @@ export function MysteryBoxResult({
   allPrizes,
   whatsappSent = true,
 }: MysteryBoxResultProps) {
+  const branding = useBranding()
   const [phase, setPhase] = useState<'rolling' | 'reveal' | 'done'>('rolling')
 
   useEffect(() => {
@@ -122,7 +123,7 @@ export function MysteryBoxResult({
                 <div className="mt-4 flex items-center justify-center gap-2">
                   <Gift className="h-4 w-4" style={{ color: '#059669' }} strokeWidth={1.5} />
                   <p className="text-sm font-medium" style={{ color: '#059669' }}>
-                    Mostrále este mensaje al {STAFF_LABEL.toLowerCase()} para reclamar
+                    Mostrále este mensaje al {branding.staffLabel.toLowerCase()} para reclamar
                   </p>
                 </div>
               )}
@@ -132,7 +133,7 @@ export function MysteryBoxResult({
                   className="mt-3 rounded-lg px-3 py-2 text-xs font-medium animate-fade-in-up"
                   style={{ background: 'rgba(245,158,11,0.12)', color: '#b45309' }}
                 >
-                  ⚠️ No pudimos enviarte el WhatsApp. Esta pantalla es tu comprobante: mostrásela al {STAFF_LABEL.toLowerCase()} para reclamar tu premio.
+                  ⚠️ No pudimos enviarte el WhatsApp. Esta pantalla es tu comprobante: mostrásela al {branding.staffLabel.toLowerCase()} para reclamar tu premio.
                 </p>
               )}
             </div>

@@ -4,7 +4,8 @@ import { getAllTiers } from '@/services/reward-tiers.service'
 import { validatePhone } from '@/lib/validators/phone'
 import { rateLimit } from '@/lib/rate-limit'
 import { WalletCard } from '@/components/features/wallet'
-import { BRAND_NAME, BRAND_CARD_BG } from '@/lib/branding'
+import type { Branding } from '@/lib/branding'
+import { getBrandingForHost } from '@/lib/branding-server'
 import { getTenantByDomain } from '@/lib/tenant'
 
 export default async function TarjetaPage({
@@ -16,25 +17,26 @@ export default async function TarjetaPage({
   const forwarded = headersList.get('x-forwarded-for')
   const realIp = headersList.get('x-real-ip')
   const ip = (forwarded ? forwarded.split(',')[0].trim() : realIp) ?? 'unknown'
+  const branding = await getBrandingForHost()
   const rl = rateLimit(`public-tarjeta:${ip}`, 30, 60_000)
   if (!rl.allowed) {
-    return <TarjetaInput error="Demasiadas solicitudes. Intenta de nuevo en un momento." />
+    return <TarjetaInput branding={branding} error="Demasiadas solicitudes. Intenta de nuevo en un momento." />
   }
 
   const { phone } = await searchParams
 
   if (!phone) {
-    return <TarjetaInput />
+    return <TarjetaInput branding={branding} />
   }
 
   const { valid, cleaned } = validatePhone(phone)
   if (!valid) {
-    return <TarjetaInput error="Número de celular inválido" />
+    return <TarjetaInput branding={branding} error="Número de celular inválido" />
   }
 
   const tenant = await getTenantByDomain(headersList.get('host'))
   if (!tenant) {
-    return <TarjetaInput error="Restaurante no reconocido" />
+    return <TarjetaInput branding={branding} error="Restaurante no reconocido" />
   }
 
   let customer: Awaited<ReturnType<typeof findCustomerByPhone>> = null
@@ -46,11 +48,11 @@ export default async function TarjetaPage({
       getAllTiers(tenant.id),
     ])
   } catch {
-    return <TarjetaInput error="Error cargando tu tarjeta. Intenta de nuevo." />
+    return <TarjetaInput branding={branding} error="Error cargando tu tarjeta. Intenta de nuevo." />
   }
 
   if (!customer) {
-    return <TarjetaInput error="No encontramos una tarjeta para ese número" />
+    return <TarjetaInput branding={branding} error="No encontramos una tarjeta para ese número" />
   }
 
   return (
@@ -63,15 +65,15 @@ export default async function TarjetaPage({
   )
 }
 
-function TarjetaInput({ error }: { error?: string }) {
+function TarjetaInput({ error, branding }: { error?: string; branding: Branding }) {
   return (
     <div
       className="min-h-screen flex flex-col items-center justify-center px-5"
-      style={{ background: BRAND_CARD_BG }}
+      style={{ background: branding.cardBg }}
     >
       <div className="w-full max-w-sm">
         <p className="text-xs font-bold tracking-[0.2em] uppercase text-white/50 text-center mb-1">
-          {BRAND_NAME}
+          {branding.name}
         </p>
         <h1 className="font-playfair text-3xl font-bold text-white text-center mb-2">
           Tu Tarjeta Digital

@@ -3,6 +3,7 @@ import { validateTwilioSignature } from '@/lib/validators/twilio'
 import { createClient } from '@supabase/supabase-js'
 import { setWhatsappOptOut, clearWhatsappOptOut } from '@/services/customer.service'
 import { getTenantByWhatsappNumber } from '@/lib/tenant'
+import { resolveBranding, type Branding } from '@/lib/branding'
 
 // Keywords de opt-out/in alineados con el Messaging Service de Twilio
 // (ver docs/features/twilio-opt-out.md). Twilio normalmente los intercepta
@@ -10,13 +11,6 @@ import { getTenantByWhatsappNumber } from '@/lib/tenant'
 // nuestra base de datos sincronizada (auditoría 12-Julio, tarea 8).
 const OPT_OUT_KEYWORDS = ['STOP', 'STOPALL', 'UNSUBSCRIBE', 'CANCEL', 'CANCELAR', 'END', 'QUIT', 'BAJA', 'SALIR', 'SAL', 'SALI', 'FUERA', 'OPTOUT', 'NO']
 const OPT_IN_KEYWORDS = ['START', 'UNSTOP', 'YES', 'SI', 'ALTA', 'ACEPTO']
-
-const BRAND_NAME = process.env.NEXT_PUBLIC_BRAND_NAME ?? 'el restaurante'
-const RESTAURANT_LINK =
-  process.env.RESTAURANT_WHATSAPP_LINK ??
-  (process.env.DELIVERY_PHONE_NUMBER
-    ? `https://wa.me/57${process.env.DELIVERY_PHONE_NUMBER.replace(/\D/g, '')}`
-    : '')
 
 const KEYWORDS: Record<string, string[]> = {
   pedido: ['pedido', 'domicilio', 'delivery', 'comprar', 'ordenar', 'pedir', 'menu', 'carta'],
@@ -32,18 +26,22 @@ function detectIntent(text: string): keyof typeof KEYWORDS | 'default' {
   return 'default'
 }
 
-function buildMessage(intent: keyof typeof KEYWORDS | 'default'): string {
-  const redirect = RESTAURANT_LINK ? `\n\n📲 Escríbenos aquí: ${RESTAURANT_LINK}` : ''
+function buildMessage(intent: keyof typeof KEYWORDS | 'default', branding: Branding): string {
+  const brandName = branding.name
+  const link =
+    branding.whatsappLink ??
+    (branding.deliveryPhone ? `https://wa.me/57${branding.deliveryPhone.replace(/\D/g, '')}` : '')
+  const redirect = link ? `\n\n📲 Escríbenos aquí: ${link}` : ''
 
   switch (intent) {
     case 'pedido':
-      return `🍽️ ¡Para pedidos o domicilios te atendemos en la línea principal de ${BRAND_NAME}!${redirect}`
+      return `🍽️ ¡Para pedidos o domicilios te atendemos en la línea principal de ${brandName}!${redirect}`
     case 'horario':
       return `🕐 Para consultar horarios comunícate con nosotros directamente.${redirect}`
     case 'ubicacion':
       return `📍 Para dirección e indicaciones comunícate con nosotros directamente.${redirect}`
     default:
-      return `👋 Hola, este número de *${BRAND_NAME}* es exclusivo para mensajes automáticos 🔔\n\nPara hablar con nosotros:${redirect}\n\n¡Te respondemos rápido!`
+      return `👋 Hola, este número de *${brandName}* es exclusivo para mensajes automáticos 🔔\n\nPara hablar con nosotros:${redirect}\n\n¡Te respondemos rápido!`
   }
 }
 
@@ -187,7 +185,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   const intent = detectIntent(body)
-  const message = buildMessage(intent)
+  const branding = resolveBranding(tenant.config)
+  const message = buildMessage(intent, branding)
 
   console.log(`[twilio-incoming] from=${from} body="${body}" intent=${intent}`)
 

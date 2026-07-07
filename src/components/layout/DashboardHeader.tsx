@@ -9,27 +9,28 @@ import { LogOut, Menu, QrCode, LayoutDashboard, Users, Gift, Megaphone, Utensils
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
-import { BRAND_NAME, STAFF_LABEL_PLURAL } from '@/lib/branding'
-
-const navItems = [
-  { href: '/dashboard', label: 'Métricas', icon: LayoutDashboard },
-  { href: '/dashboard/customers', label: 'Clientes', icon: Users },
-  { href: '/dashboard/rewards', label: 'Recompensas', icon: Gift },
-  { href: '/dashboard/redemptions', label: 'Redenciones', icon: Ticket },
-  { href: '/dashboard/campaigns', label: 'Campañas', icon: Megaphone },
-  { href: '/dashboard/imported-contacts', label: 'Golden Bullet', icon: Crosshair },
-  { href: '/dashboard/calendar', label: 'Calendario', icon: CalendarDays },
-  { href: '/dashboard/qr', label: 'Código QR', icon: QrCode },
-  { href: '/dashboard/templates', label: 'Plantillas', icon: FileText },
-  { href: '/dashboard/staff', label: `${STAFF_LABEL_PLURAL} QR`, icon: UserCog },
-  { href: '/dashboard/authorized-numbers', label: 'Autorizados Domicilio', icon: ShieldCheck },
-  { href: '/dashboard/settings', label: 'Ajustes', icon: Settings },
-]
+import { useBranding } from '@/lib/branding-context'
 
 export function DashboardHeader() {
   const router = useRouter()
   const pathname = usePathname()
   const { isDemo } = useDemo()
+  const branding = useBranding()
+
+  const navItems = [
+    { href: '/dashboard', label: 'Métricas', icon: LayoutDashboard },
+    { href: '/dashboard/customers', label: 'Clientes', icon: Users },
+    { href: '/dashboard/rewards', label: 'Recompensas', icon: Gift },
+    { href: '/dashboard/redemptions', label: 'Redenciones', icon: Ticket },
+    { href: '/dashboard/campaigns', label: 'Campañas', icon: Megaphone },
+    { href: '/dashboard/imported-contacts', label: 'Golden Bullet', icon: Crosshair },
+    { href: '/dashboard/calendar', label: 'Calendario', icon: CalendarDays },
+    { href: '/dashboard/qr', label: 'Código QR', icon: QrCode },
+    { href: '/dashboard/templates', label: 'Plantillas', icon: FileText },
+    { href: '/dashboard/staff', label: `${branding.staffLabelPlural} QR`, icon: UserCog },
+    { href: '/dashboard/authorized-numbers', label: 'Autorizados Domicilio', icon: ShieldCheck },
+    { href: '/dashboard/settings', label: 'Ajustes', icon: Settings },
+  ]
 
   const handleLogout = async () => {
     if (isDemo) {
@@ -52,7 +53,7 @@ export function DashboardHeader() {
           <SheetContent side="left" className="w-60 p-0">
             <div className="flex h-14 items-center gap-2 border-b px-4">
               <UtensilsCrossed className="h-5 w-5 text-primary" />
-              <span className="font-semibold text-primary">{BRAND_NAME}</span>
+              <span className="font-semibold text-primary">{branding.name}</span>
             </div>
             <nav className="space-y-1 p-3">
               {navItems.map((item) => {
@@ -76,11 +77,11 @@ export function DashboardHeader() {
             </nav>
           </SheetContent>
         </Sheet>
-        <span className="font-semibold text-sm text-primary">{BRAND_NAME}</span>
+        <span className="font-semibold text-sm text-primary">{branding.name}</span>
       </div>
 
       <div className="hidden md:block">
-        <h2 className="text-sm font-medium text-muted-foreground">Panel de Administración — {BRAND_NAME}</h2>
+        <h2 className="text-sm font-medium text-muted-foreground">Panel de Administración — {branding.name}</h2>
       </div>
 
       <Button variant="ghost" size="sm" onClick={handleLogout} className="gap-2">

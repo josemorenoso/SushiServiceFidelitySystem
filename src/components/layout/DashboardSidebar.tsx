@@ -18,25 +18,26 @@ import {
   Crosshair,
   Ticket,
 } from 'lucide-react'
-import { BRAND_NAME, STAFF_LABEL_PLURAL } from '@/lib/branding'
-
-const navItems = [
-  { href: '/dashboard', label: 'Métricas', icon: LayoutDashboard },
-  { href: '/dashboard/customers', label: 'Clientes', icon: Users },
-  { href: '/dashboard/rewards', label: 'Recompensas', icon: Gift },
-  { href: '/dashboard/redemptions', label: 'Redenciones', icon: Ticket },
-  { href: '/dashboard/campaigns', label: 'Campañas', icon: Megaphone },
-  { href: '/dashboard/imported-contacts', label: 'Golden Bullet', icon: Crosshair },
-  { href: '/dashboard/calendar', label: 'Calendario', icon: CalendarDays },
-  { href: '/dashboard/qr', label: 'Código QR', icon: QrCode },
-  { href: '/dashboard/templates', label: 'Plantillas', icon: FileText },
-  { href: '/dashboard/staff', label: `${STAFF_LABEL_PLURAL} QR`, icon: UserCog },
-  { href: '/dashboard/authorized-numbers', label: 'Autorizados Domicilio', icon: ShieldCheck },
-  { href: '/dashboard/settings', label: 'Ajustes', icon: Settings },
-]
+import { useBranding } from '@/lib/branding-context'
 
 export function DashboardSidebar() {
   const pathname = usePathname()
+  const branding = useBranding()
+
+  const navItems = [
+    { href: '/dashboard', label: 'Métricas', icon: LayoutDashboard },
+    { href: '/dashboard/customers', label: 'Clientes', icon: Users },
+    { href: '/dashboard/rewards', label: 'Recompensas', icon: Gift },
+    { href: '/dashboard/redemptions', label: 'Redenciones', icon: Ticket },
+    { href: '/dashboard/campaigns', label: 'Campañas', icon: Megaphone },
+    { href: '/dashboard/imported-contacts', label: 'Golden Bullet', icon: Crosshair },
+    { href: '/dashboard/calendar', label: 'Calendario', icon: CalendarDays },
+    { href: '/dashboard/qr', label: 'Código QR', icon: QrCode },
+    { href: '/dashboard/templates', label: 'Plantillas', icon: FileText },
+    { href: '/dashboard/staff', label: `${branding.staffLabelPlural} QR`, icon: UserCog },
+    { href: '/dashboard/authorized-numbers', label: 'Autorizados Domicilio', icon: ShieldCheck },
+    { href: '/dashboard/settings', label: 'Ajustes', icon: Settings },
+  ]
 
   return (
     <aside className="glass-sidebar hidden md:flex md:w-60 md:flex-col">
@@ -48,7 +49,7 @@ export function DashboardSidebar() {
           <UtensilsCrossed className="h-3.5 w-3.5 text-white" strokeWidth={1.5} />
         </div>
         <span className="font-playfair text-base font-bold" style={{ color: '#1a1c1d', letterSpacing: '-0.02em' }}>
-          {BRAND_NAME}
+          {branding.name}
         </span>
       </div>
       <nav className="flex-1 space-y-0.5 p-3">

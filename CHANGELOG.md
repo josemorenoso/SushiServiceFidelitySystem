@@ -5,6 +5,39 @@
 
 ---
 
+## [v2.3.0] — 2026-07-06 — feat: branding por-tenant (onboarding de clientes sin clonar)
+
+> Request: para meter al cliente nuevo (Don Alirio Café) al multitenant se necesita que la marca
+> (nombre, tagline, reseña Google, WhatsApp, gradientes, label de staff) sea POR TENANT y no una
+> variable global de Vercel — de lo contrario todos los restaurantes del deployment compartido
+> mostrarían la marca de Sushi Service.
+
+### Added
+- **`src/lib/branding.ts`** — reescrito: expone el tipo `Branding`, `DEFAULT_BRANDING` (fallback desde
+  las env `NEXT_PUBLIC_BRAND_*`) y `resolveBranding(tenant.config)` que mezcla la config plana del tenant
+  (`brand_name`, `staff_role_label`, `google_maps_url`, `whatsapp_link`, `card_bg`, `page_bg`, …) sobre
+  los defaults. Un tenant sin un campo → cae al default (idéntico al comportamiento previo).
+- **`src/lib/branding-context.tsx`** — `BrandingProvider` + `useBranding()` para componentes cliente.
+- **`src/lib/branding-server.ts`** — `getBrandingForHost()` resuelve la marca por dominio (host header),
+  memoizado con `cache()` de React (1 sola query por request pese a metadata + layout).
+
+### Changed
+- **`src/app/layout.tsx`** — resuelve la marca por dominio e inyecta `BrandingProvider`; `generateMetadata`
+  usa el nombre/tagline del tenant. Consecuencia: las páginas pasan a render dinámico (SSR por request),
+  necesario para distinguir tenant por dominio.
+- **~18 consumidores de marca** migrados de constantes de entorno a `useBranding()` (cliente) o
+  `getBrandingForHost()` (server): check-in, tarjeta, wallet, CustomerCard, CheckInSuccess, MysteryBoxResult,
+  GoogleReviewCard/Popup, mesero, login, landing, demo, dashboard header/sidebar/qr, y el webhook
+  `twilio-incoming` (usa la marca del tenant ya resuelto por número).
+- **`src/types/tenant.types.ts`** — `TenantConfig` extendido con `brand_description`, `delivery_phone`,
+  `card_bg`, `page_bg`.
+
+### Notas
+- Aditivo y seguro para Sushi Service: su `config` ya trae `brand_name`/`staff_role_label`; el resto cae
+  al fallback de env → se ve idéntico. Verificado con `tsc` + `next build` en verde.
+
+---
+
 ## [v2.2.0] — 2026-07-05 — fix: auditoría de scoping multitenant (docs/superpowers/plans/2026-07-05-multitenant-AUDIT-DELEGABLE.md)
 
 > Request: ejecutar el encargo de auditoría que verifica que CADA query a una tabla con `tenant_id`

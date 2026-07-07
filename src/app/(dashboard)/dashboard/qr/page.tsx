@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { QrCode, Download, Copy, Check, ExternalLink, Plus, Minus, Upload, Trash2, Palette, Ruler } from 'lucide-react'
-import { BRAND_NAME, BRAND_SHORT } from '@/lib/branding'
+import { useBranding } from '@/lib/branding-context'
 import { QR_THEMES, QR_SIZES, composeQrPoster } from '@/lib/utils/qr-poster'
 
 const STORAGE_KEYS = {
@@ -23,6 +23,7 @@ const DEFAULT_HEADLINE = '¡GANA PREMIOS GRATIS!'
 const DEFAULT_SUBLINE = 'Escanea, regístrate y suma puntos en cada visita'
 
 export default function QrPage() {
+  const branding = useBranding()
   const [baseUrl, setBaseUrl] = useState('')
   const [totalTables, setTotalTables] = useState(10)
   const [selectedTable, setSelectedTable] = useState<number | null>(null)
@@ -113,7 +114,7 @@ export default function QrPage() {
           url,
           theme,
           size,
-          brandName: BRAND_NAME,
+          brandName: branding.name,
           headline,
           subline,
           label: mesaLabel,
@@ -125,7 +126,7 @@ export default function QrPage() {
         return null
       }
     },
-    [theme, size, headline, subline, color, logoDataUrl]
+    [theme, size, headline, subline, color, logoDataUrl, branding.name]
   )
 
   useEffect(() => {
@@ -134,7 +135,7 @@ export default function QrPage() {
     generateQR(checkInUrl, label).then(setQrDataUrl)
   }, [checkInUrl, generateQR, selectedTable])
 
-  const slug = BRAND_SHORT.toLowerCase().replace(/\s+/g, '-')
+  const slug = branding.short.toLowerCase().replace(/\s+/g, '-')
 
   const handleDownload = () => {
     if (!qrDataUrl) return

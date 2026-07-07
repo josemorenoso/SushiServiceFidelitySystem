@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { BRAND_NAME, BRAND_CARD_BG, BRAND_PAGE_BG } from '@/lib/branding'
+import { useBranding } from '@/lib/branding-context'
 import { StampsGrid } from './StampsGrid'
 
 interface TierItem {
@@ -20,6 +20,7 @@ interface WalletCardProps {
 }
 
 export function WalletCard({ name, totalPoints, totalVisits, tiers }: WalletCardProps) {
+  const branding = useBranding()
   const sorted = [...tiers].sort((a, b) => a.point_threshold - b.point_threshold)
   const nextTier = sorted.find((t) => totalPoints < t.point_threshold)
   const nextThreshold = nextTier?.point_threshold ?? totalPoints
@@ -37,12 +38,12 @@ export function WalletCard({ name, totalPoints, totalVisits, tiers }: WalletCard
   return (
     <div
       className="min-h-screen flex flex-col items-center justify-start py-8 px-4"
-      style={{ background: BRAND_PAGE_BG }}
+      style={{ background: branding.pageBg }}
     >
       <div
         className="w-full max-w-sm animate-fade-in-up"
         style={{
-          background: BRAND_CARD_BG,
+          background: branding.cardBg,
           borderRadius: '2rem',
           border: '1.5px solid rgba(255,255,255,0.22)',
           boxShadow: '0 25px 60px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.15)',
@@ -52,7 +53,7 @@ export function WalletCard({ name, totalPoints, totalVisits, tiers }: WalletCard
         <div className="px-5 pt-7 pb-8 flex flex-col items-center">
           {/* Brand */}
           <p className="text-xs font-bold tracking-[0.2em] uppercase text-white/50">
-            {BRAND_NAME}
+            {branding.name}
           </p>
           <p className="text-[11px] text-white/30 mt-0.5 tracking-wide">Tarjeta de Fidelidad</p>
 
@@ -163,7 +164,7 @@ export function WalletCard({ name, totalPoints, totalVisits, tiers }: WalletCard
           </div>
 
           <p className="mt-6 text-[11px] text-white/20 text-center">
-            {BRAND_NAME} · Programa de Fidelidad
+            {branding.name} · Programa de Fidelidad
           </p>
         </div>
       </div>

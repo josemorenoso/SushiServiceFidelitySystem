@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
 import { CheckCircle, Crown, Gift, PartyPopper, RotateCcw, Star } from 'lucide-react'
-import { STAFF_LABEL } from '@/lib/branding'
+import { useBranding } from '@/lib/branding-context'
 import { GoogleReviewCard } from './GoogleReviewCard'
 import { PointsDisplay } from './PointsDisplay'
 import { RewardChoice } from './RewardChoice'
@@ -41,6 +41,7 @@ export function CheckInSuccess({
   customerPhone,
   onReset,
 }: CheckInSuccessProps) {
+  const branding = useBranding()
   const [showReview, setShowReview] = useState(false)
   const [choicePhase, setChoicePhase] = useState<'choosing' | 'resolving' | 'result'>('choosing')
   const [mysteryResult, setMysteryResult] = useState<MysteryBoxResponse['result'] | null>(null)
@@ -222,14 +223,14 @@ export function CheckInSuccess({
               {mysteryResult.prize_title}
             </h3>
             <p className="mt-1.5 text-sm" style={{ color: '#059669' }}>
-              Mostrále este mensaje al {STAFF_LABEL.toLowerCase()} para reclamar tu premio 🎁
+              Mostrále este mensaje al {branding.staffLabel.toLowerCase()} para reclamar tu premio 🎁
             </p>
             {!mysteryWhatsappSent && (
               <p
                 className="mt-3 rounded-lg px-3 py-2 text-xs font-medium"
                 style={{ background: 'rgba(245,158,11,0.12)', color: '#b45309' }}
               >
-                ⚠️ No pudimos enviarte el WhatsApp. Muestra esta pantalla al {STAFF_LABEL.toLowerCase()} para reclamar tu premio.
+                ⚠️ No pudimos enviarte el WhatsApp. Muestra esta pantalla al {branding.staffLabel.toLowerCase()} para reclamar tu premio.
               </p>
             )}
           </div>

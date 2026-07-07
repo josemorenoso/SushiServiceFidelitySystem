@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { QrCode, LayoutDashboard, UtensilsCrossed, Sparkles } from "lucide-react";
-import { BRAND_NAME } from "@/lib/branding";
+import { getBrandingForHost } from "@/lib/branding-server";
 
-export default function Home() {
+export default async function Home() {
+  const branding = await getBrandingForHost();
   return (
     <div className="premium-bg relative flex min-h-screen flex-col items-center justify-center overflow-hidden p-6">
       {/* Orb decorativo de fondo */}
@@ -33,7 +34,7 @@ export default function Home() {
               className="font-playfair text-[2.25rem] font-bold leading-tight"
               style={{ color: "#1a1c1d", letterSpacing: "-0.02em" }}
             >
-              {BRAND_NAME}
+              {branding.name}
             </h1>
             <p
               className="mt-2 text-sm font-medium"

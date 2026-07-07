@@ -3,9 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Star, ExternalLink, Sparkles, X } from 'lucide-react'
-import { BRAND_NAME } from '@/lib/branding'
-
-const GOOGLE_MAPS_REVIEW_URL = process.env.NEXT_PUBLIC_GOOGLE_MAPS_REVIEW_URL || '#'
+import { useBranding } from '@/lib/branding-context'
 
 interface GoogleReviewPopupProps {
   customerName: string
@@ -20,6 +18,7 @@ export function GoogleReviewPopup({
   visible,
   onClose,
 }: GoogleReviewPopupProps) {
+  const branding = useBranding()
   const [animateIn, setAnimateIn] = useState(false)
   const [stars, setStars] = useState(0)
   const [hoveredStar, setHoveredStar] = useState(0)
@@ -39,7 +38,7 @@ export function GoogleReviewPopup({
   const isNewCustomer = totalVisits <= 1
 
   const handleReviewClick = () => {
-    window.open(GOOGLE_MAPS_REVIEW_URL, '_blank', 'noopener,noreferrer')
+    window.open(branding.googleReviewUrl, '_blank', 'noopener,noreferrer')
   }
 
   return (
@@ -99,7 +98,7 @@ export function GoogleReviewPopup({
           <div className="px-6 py-5 space-y-4">
             <div className="text-center">
               <p className="text-sm text-muted-foreground mb-3">
-                ¿Cómo calificarías tu experiencia en {BRAND_NAME}?
+                ¿Cómo calificarías tu experiencia en {branding.name}?
               </p>
               <div className="flex justify-center gap-1.5">
                 {[1, 2, 3, 4, 5].map((n) => (

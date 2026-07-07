@@ -1,4 +1,4 @@
-import { BRAND_NAME } from '@/lib/branding'
+import { getBrandingForHost } from '@/lib/branding-server'
 import { ArrowLeft } from 'lucide-react'
 
 export const metadata = {
@@ -6,8 +6,9 @@ export const metadata = {
   robots: 'noindex',
 }
 
-export default function PrivacidadPage() {
-  const whatsappLink = process.env.RESTAURANT_WHATSAPP_LINK ?? null
+export default async function PrivacidadPage() {
+  const branding = await getBrandingForHost()
+  const whatsappLink = branding.whatsappLink
 
   return (
     <div className="min-h-screen bg-gray-50 px-4 py-10">
@@ -24,14 +25,14 @@ export default function PrivacidadPage() {
         <h1 className="mb-1 font-playfair text-2xl font-bold text-gray-900">
           Política de Privacidad
         </h1>
-        <p className="mb-8 text-sm text-gray-500">{BRAND_NAME} — Programa de Fidelización</p>
+        <p className="mb-8 text-sm text-gray-500">{branding.name} — Programa de Fidelización</p>
 
         <div className="space-y-6 text-sm leading-relaxed text-gray-700">
 
           <section>
             <h2 className="mb-2 font-semibold text-gray-900">1. Responsable del tratamiento</h2>
             <p>
-              <strong>{BRAND_NAME}</strong> es responsable del tratamiento de los datos personales
+              <strong>{branding.name}</strong> es responsable del tratamiento de los datos personales
               recolectados a través del programa de fidelización, de conformidad con la Ley 1581 de 2012
               y el Decreto 1377 de 2013 de la República de Colombia.
             </p>

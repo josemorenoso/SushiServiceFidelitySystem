@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { Inter, Playfair_Display, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { BRAND_NAME, BRAND_TAGLINE, BRAND_DESCRIPTION } from "@/lib/branding";
+import { getBrandingForHost } from "@/lib/branding-server";
+import { BrandingProvider } from "@/lib/branding-context";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -21,22 +22,28 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: `${BRAND_NAME} — ${BRAND_TAGLINE}`,
-  description: BRAND_DESCRIPTION,
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const branding = await getBrandingForHost();
+  return {
+    title: `${branding.name} — ${branding.tagline}`,
+    description: branding.description,
+  };
+}
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const branding = await getBrandingForHost();
   return (
     <html
       lang="es"
       className={`${inter.variable} ${playfair.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <BrandingProvider value={branding}>{children}</BrandingProvider>
+      </body>
     </html>
   );
 }

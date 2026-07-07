@@ -3,11 +3,12 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useStaffAuth } from '@/hooks/useStaffAuth'
-import { STAFF_LABEL } from '@/lib/branding'
+import { useBranding } from '@/lib/branding-context'
 import { Loader2, Smartphone, Tablet, ScanLine } from 'lucide-react'
 
 export default function MeseroLoginPage() {
   const router = useRouter()
+  const branding = useBranding()
   const { session, loading: authLoading, login, verifySession } = useStaffAuth()
   const [phone, setPhone] = useState('')
   const [pin, setPin] = useState('')
@@ -107,7 +108,7 @@ export default function MeseroLoginPage() {
           <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-red-50">
             <ScanLine className="h-6 w-6 text-red-500" />
           </div>
-          <h1 className="text-xl font-bold text-gray-900">App del {STAFF_LABEL}</h1>
+          <h1 className="text-xl font-bold text-gray-900">App del {branding.staffLabel}</h1>
           <p className="mt-1 text-sm text-gray-500">Escanea los QR de los clientes</p>
         </div>
 

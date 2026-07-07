@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { ArrowLeft, ScanLine, Loader2, PartyPopper } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
-import { BRAND_NAME, STAFF_LABEL, BRAND_CARD_BG, BRAND_PAGE_BG } from '@/lib/branding'
+import { useBranding } from '@/lib/branding-context'
 import { getTierEmoji } from '@/lib/tier-emojis'
 import { StampsGrid } from '@/components/features/wallet'
 
@@ -37,6 +37,7 @@ export function CustomerCard({
   justEarnedPoints,
   onBack,
 }: CustomerCardProps) {
+  const branding = useBranding()
   const sorted = [...tiers].sort((a, b) => a.point_threshold - b.point_threshold)
   const nextTier = sorted.find((t) => totalPoints < t.point_threshold) ?? null
   const nextIndex = nextTier ? sorted.indexOf(nextTier) : -1
@@ -55,7 +56,7 @@ export function CustomerCard({
   return (
     <div
       className="fixed inset-0 z-50 overflow-y-auto flex items-start justify-center py-6 px-4"
-      style={{ background: BRAND_PAGE_BG }}
+      style={{ background: branding.pageBg }}
     >
       {/* Overlay de dopamina */}
       {justEarnedPoints != null && justEarnedPoints > 0 && (
@@ -76,7 +77,7 @@ export function CustomerCard({
       <div
         className="w-full max-w-sm animate-fade-in-up"
         style={{
-          background: BRAND_CARD_BG,
+          background: branding.cardBg,
           borderRadius: '2rem',
           border: '1.5px solid rgba(255,255,255,0.22)',
           boxShadow: '0 25px 60px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.15)',
@@ -86,7 +87,7 @@ export function CustomerCard({
         <div className="px-5 pt-7 pb-8 flex flex-col items-center">
           {/* Brand */}
           <p className="text-xs font-bold tracking-[0.2em] uppercase text-white/50">
-            {BRAND_NAME}
+            {branding.name}
           </p>
 
           {/* Name */}
@@ -161,7 +162,7 @@ export function CustomerCard({
               <ScanLine className="h-6 w-6 text-white animate-pulse shrink-0" strokeWidth={2} />
               <div>
                 <p className="text-sm font-bold text-white leading-tight">
-                  DILE AL {STAFF_LABEL.toUpperCase()} QUE TE ESCANEE
+                  DILE AL {branding.staffLabel.toUpperCase()} QUE TE ESCANEE
                 </p>
                 <p className="text-xs text-white/60">Si no, NO sumás puntos</p>
               </div>
@@ -177,7 +178,7 @@ export function CustomerCard({
           {checkingStatus && justEarnedPoints == null && (
             <div className="mt-4 flex items-center gap-2 text-xs text-white/40">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              Esperando que el {STAFF_LABEL.toLowerCase()} te escanee...
+              Esperando que el {branding.staffLabel.toLowerCase()} te escanee...
             </div>
           )}
 

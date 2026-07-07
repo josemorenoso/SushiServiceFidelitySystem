@@ -11,12 +11,16 @@ export interface TenantConfig {
   brand_name: string
   brand_tagline?: string
   brand_short?: string
-  staff_role_label?: string // 'Mesero' | 'Barbero' | 'Esteticista'
+  brand_description?: string
+  staff_role_label?: string // 'Mesero' | 'Barbero' | 'Barista'
   visit_label?: string // 'visita' | 'cita' | 'servicio'
   station_label?: string // 'mesa' | 'silla' | 'cabina'
   has_delivery_webhook?: boolean
   whatsapp_link?: string
-  google_maps_url?: string
+  google_maps_url?: string // URL de reseña en Google Maps
+  delivery_phone?: string // teléfono de domicilios (fallback del link de WhatsApp)
+  card_bg?: string // gradiente CSS de la tarjeta digital
+  page_bg?: string // gradiente CSS de fondo de la tarjeta/wallet
 }
 
 /**

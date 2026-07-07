@@ -5,7 +5,7 @@ import { CheckInForm, CheckInSuccess } from '@/components/features/check-in'
 import { Toaster, toast } from 'sonner'
 import { UtensilsCrossed } from 'lucide-react'
 import type { CheckInResult, RegisterResult, TierUnlockedInfo, NextTierInfo, TierItem } from '@/components/features/check-in/CheckInForm.types'
-import { BRAND_NAME } from '@/lib/branding'
+import { useBranding } from '@/lib/branding-context'
 
 type PageState =
   | { view: 'form'; phone?: string }
@@ -14,6 +14,7 @@ type PageState =
   | { view: 'success'; type: 'duplicate'; customerName: string; totalVisits: number }
 
 export default function CheckInPage() {
+  const branding = useBranding()
   const [state, setState] = useState<PageState>({ view: 'form' })
 
   const handleRegisterSuccess = useCallback((result: RegisterResult, phone: string) => {
@@ -86,7 +87,7 @@ export default function CheckInPage() {
             className="font-playfair text-2xl font-bold"
             style={{ color: "#1a1c1d", letterSpacing: "-0.02em" }}
           >
-            {BRAND_NAME}
+            {branding.name}
           </h1>
           <p className="mt-0.5 text-xs font-medium" style={{ color: "#9ca3af" }}>
             Programa de fidelidad

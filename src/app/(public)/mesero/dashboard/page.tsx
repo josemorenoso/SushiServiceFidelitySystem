@@ -3,11 +3,12 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useStaffAuth } from '@/hooks/useStaffAuth'
-import { STAFF_LABEL } from '@/lib/branding'
+import { useBranding } from '@/lib/branding-context'
 import { Loader2, ScanLine, LogOut, ClipboardList } from 'lucide-react'
 
 export default function MeseroDashboardPage() {
   const router = useRouter()
+  const branding = useBranding()
   const { session, loading: authLoading, logout } = useStaffAuth()
   const [stats, setStats] = useState<{ visits_today: number } | null>(null)
 
@@ -57,7 +58,7 @@ export default function MeseroDashboardPage() {
         <div className="mx-auto flex max-w-md items-center justify-between">
           <div>
             <p className="text-xs text-gray-500">
-              {session.type === 'device' ? 'Dispositivo de confianza' : STAFF_LABEL}
+              {session.type === 'device' ? 'Dispositivo de confianza' : branding.staffLabel}
             </p>
             <h1 className="text-lg font-bold text-gray-900">{session.name}</h1>
           </div>

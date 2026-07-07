@@ -2,9 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Star, ExternalLink, CheckCircle2, Heart } from 'lucide-react'
-import { BRAND_NAME } from '@/lib/branding'
-
-const GOOGLE_MAPS_REVIEW_URL = process.env.NEXT_PUBLIC_GOOGLE_MAPS_REVIEW_URL || '#'
+import { useBranding } from '@/lib/branding-context'
 
 interface GoogleReviewCardProps {
   customerName: string
@@ -23,6 +21,7 @@ interface GoogleReviewCardProps {
  *   explícitamente como "no es la reseña de Google".
  */
 export function GoogleReviewCard({ customerName, totalVisits, visible }: GoogleReviewCardProps) {
+  const branding = useBranding()
   const [animateIn, setAnimateIn] = useState(false)
   const [internalRating, setInternalRating] = useState(0)
   const [hoveredStar, setHoveredStar] = useState(0)
@@ -44,7 +43,7 @@ export function GoogleReviewCard({ customerName, totalVisits, visible }: GoogleR
 
   const handleReviewClick = () => {
     setClickedReview(true)
-    window.open(GOOGLE_MAPS_REVIEW_URL, '_blank', 'noopener,noreferrer')
+    window.open(branding.googleReviewUrl, '_blank', 'noopener,noreferrer')
   }
 
   return (
@@ -74,7 +73,7 @@ export function GoogleReviewCard({ customerName, totalVisits, visible }: GoogleR
           </h3>
           <p className="mt-1 text-xs" style={{ color: '#9ca3af' }}>
             {isNewCustomer
-              ? `Tu opinión en Google ayuda a que más personas conozcan ${BRAND_NAME}`
+              ? `Tu opinión en Google ayuda a que más personas conozcan ${branding.name}`
               : `Llevas ${totalVisits} visitas — tu reseña en Google vale oro para nosotros`}
           </p>
         </div>

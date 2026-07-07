@@ -56,75 +56,61 @@
 ## Fase 3: Setup (Implementación técnica)
 
 **Quién lo hace:** Tú o un asistente técnico (con esta guía)
-**Duración:** 3-4 horas distribuidas en 2 días
-**Objetivo:** Tener el sistema operativo
+**Duración:** ~1-1.5 horas (bajó de 3-4h desde que el sistema es multitenant — ver
+`docs/04-deployment.md` §6). **No se crea proyecto Supabase ni Vercel nuevo, ni se clona el
+repo.** Un cliente nuevo es una fila en el Supabase compartido + un dominio en el Vercel
+compartido.
 
-### Día 1 — Infraestructura (2 horas)
-
-#### 3.1.1 Recolectar datos del cliente
+### Paso 3.1 — Recolectar datos del cliente (15 min)
 Crear carpeta en Notion o Drive: `Clientes / [Nombre Restaurante]`
 
 | Dato | Cómo se obtiene |
 |------|-----------------|
-| Nombre del restaurante | El cliente te lo dice |
+| Nombre del restaurante + nombre corto | El cliente te lo dice |
+| Label del staff (Mesero/Barista/Barbero...) | Según el tipo de negocio |
 | Logo (PNG sin fondo) | Pedirlo. Si no tiene, usar Canva gratis |
-| Colores de marca (hex) | Pedirlo o sacar del Instagram del restaurante |
-| Número de mesas | Preguntar |
-| Número de WhatsApp del negocio | Preguntar. Debe ser un celular real |
-| Menú / foto del restaurante | Pedir 2-3 fotos para el QR |
+| Colores de marca (hex, opcional) | Pedirlo o sacar del Instagram del restaurante |
+| Número de WhatsApp del negocio (humano, para pedidos/dudas) | Preguntar. Debe ser un celular real |
+| Número/subcuenta de WhatsApp Twilio (automático) | Del cliente si ya lo tiene, o se crea Sandbox temporal |
 | Precio promedio del ticket | Preguntar (para benchmarks) |
-| Redes sociales | Instagram, Google Maps link |
+| Google Maps review link | Instagram, Google Maps |
 | Recompensas que quiere dar | Ej: visita 3 = bebida gratis, visita 5 = rollo gratis |
+| Subdominio elegido | Ej. `clubdonalirio.constelarys.com` |
 
 **Acción en Notion:** Mover estado a `En setup — Recopilando datos`
 
-#### 3.1.2 Crear proyecto Supabase (20 min)
-1. Ir a supabase.com → New Project
-2. Nombre: `fidelity-[nombre-restaurante]` (sin espacios)
-3. Region: `us-east-1` (más cercano)
-4. Guardar contraseña del proyecto en Notion (campo seguro)
-5. Esperar a que termine de crear (2 min)
-6. Ir a Settings → API → copiar `Project URL` y `anon public`
-7. Ir a SQL Editor → New query → pegar las migraciones en orden
-8. Ir a Authentication → Users → Invite user → email del admin del restaurante
-9. Crear una contraseña temporal, enviársela por WhatsApp
+### Paso 3.2 — Insertar el tenant en Supabase (10 min)
+Seguir `docs/04-deployment.md` §6 Paso 1: `INSERT INTO tenants (...)` en el SQL Editor del
+proyecto compartido, con la marca completa en `config`.
 
-**Acción en Notion:** Marcar checkbox `Supabase creado`
+**Acción en Notion:** Marcar checkbox `Tenant creado en Supabase`
 
-#### 3.1.3 Configurar Twilio (30 min)
-1. Ir a twilio.com/console
-2. Si el cliente YA tiene WhatsApp Business API: pedir el número, agregarlo como sender
-3. Si NO tiene: usar el Sandbox de Twilio temporalmente (`+14155238886`)
-4. Crear las 7 plantillas de texto (usar el script `scripts/twilio-create-text-templates.mjs`)
-5. Enviarlas a aprobación de Meta (tarda 24-72h)
-6. Guardar el `Account SID`, `Auth Token`, y el número `From` en Notion
+### Paso 3.3 — Configurar Twilio de la subcuenta del cliente (20 min)
+1. Si el cliente YA tiene WhatsApp Business API: pedir el número, registrarlo como Sender
+2. Si NO tiene: usar el Sandbox de Twilio temporalmente (`+14155238886`)
+3. Correr `scripts/twilio-setup.mjs` (crea Messaging Service, vincula el número, configura
+   webhook y opt-out automáticamente — ver `docs/04-deployment.md` §6 Paso 2)
+4. Cargar las credenciales en la fila del tenant (`docs/04-deployment.md` §6 Paso 3)
+5. Crear las plantillas de texto (`scripts/twilio-create-text-templates.mjs`) y enviarlas a
+   aprobación de Meta (tarda 24-72h)
 
 **Acción en Notion:** Marcar checkbox `Twilio configurado`, estado → `En setup — Esperando aprobación Meta`
 
-#### 3.1.4 Personalizar branding (15 min)
-1. Fork del repo base en GitHub
-2. Renombrar: `[nombre-restaurante]-fidelity`
-3. Editar `.env.example` → poner los datos de Supabase y Twilio
-4. Subir logo a `public/logo.png`
-5. Editar colores en `tailwind.config.ts` (si aplica)
+### Paso 3.4 — Dominio en Vercel (10 min)
+Seguir `docs/04-deployment.md` §6 Paso 4: agregar el subdominio en Settings → Domains del
+proyecto compartido, crear el registro DNS, y una vez propague hacer el `UPDATE tenants SET domain = ...`.
 
-**Acción en Notion:** Marcar checkbox `Repo creado y branding listo`
+**Acción en Notion:** Marcar checkbox `Dominio configurado`. Pegar la URL final.
 
-### Día 2 — Deploy y Configuración (2 horas)
+### Paso 3.5 — Usuario admin (5 min)
+Invite user en Supabase Auth + tagear `tenant_id` en su JWT (`docs/04-deployment.md` §6 Paso 5).
+Enviarle una contraseña temporal por WhatsApp.
 
-#### 3.2.1 Deploy en Vercel (20 min)
-1. vercel.com → Add New Project → Import Git Repo
-2. Seleccionar el repo del cliente
-3. Framework: Next.js
-4. Agregar las Environment Variables (las que copiaste de Supabase y Twilio)
-5. Deploy
-6. Guardar la URL: `https://[nombre]-fidelity.vercel.app`
+**Acción en Notion:** Marcar checkbox `Usuario admin creado`
 
-**Acción en Notion:** Marcar checkbox `Deploy en Vercel OK`. Pegar la URL.
-
-#### 3.2.2 Configurar recompensas en el dashboard (15 min)
-1. Ir a `[URL]/login`
-2. Loguearse con el admin creado en Supabase
+### Paso 3.6 — Configurar recompensas en el dashboard (15 min)
+1. Ir a `https://[subdominio-del-cliente]/login`
+2. Loguearse con el admin creado
 3. Dashboard → Recompensas → Crear tiers:
    - Bronce: 150 pts → [premio que eligió el cliente]
    - Plata: 350 pts → [premio]
@@ -134,7 +120,7 @@ Crear carpeta en Notion o Drive: `Clientes / [Nombre Restaurante]`
 
 **Acción en Notion:** Marcar checkbox `Recompensas configuradas`
 
-#### 3.2.3 Generar e imprimir QRs (20 min)
+### Paso 3.7 — Generar e imprimir QRs (20 min)
 1. Dashboard → QR → Subir logo del restaurante
 2. Seleccionar color de marca
 3. Generar QR por cada mesa (o uno general si prefiere)
@@ -143,17 +129,13 @@ Crear carpeta en Notion o Drive: `Clientes / [Nombre Restaurante]`
 
 **Acción en Notion:** Marcar checkbox `QRs generados`. Subir los PNGs a la carpeta del cliente.
 
-#### 3.2.4 Prueba end-to-end (20 min)
-1. Con tu celular, escanear un QR
-2. Registrar un cliente de prueba (usar un número de prueba, ej: 3000000000)
-3. Verificar que llegó el WhatsApp de bienvenida
-4. En el dashboard, verificar que aparece la visita
-5. Hacer un segundo check-in y verificar que suma puntos
-6. Si algo falla → revisar logs en Vercel (Deployments → latest → Logs)
+### Paso 3.8 — Prueba end-to-end (20 min)
+Seguir `docs/04-deployment.md` §6 Paso 9 (incluye probar que el auto-reply usa la marca de ESTE
+tenant y que el flujo de domicilios por WhatsApp del mesero no da 404).
 
 **Acción en Notion:** Marcar checkbox `Prueba end-to-end OK`. Si falla, crear nota con el error.
 
-#### 3.2.5 Capacitación al admin del restaurante (30-45 min)
+### Paso 3.9 — Capacitación al admin del restaurante (30-45 min)
 1. Llamada o visita presencial
 2. Mostrar:
    - Cómo ver clientes registrados
@@ -191,11 +173,13 @@ Crear carpeta en Notion o Drive: `Clientes / [Nombre Restaurante]`
 **Quién lo hace:** Tú
 **Objetivo:** Terminar limpio, dejar puerta abierta
 
-1. Exportar base de datos de clientes del restaurante (CSV desde Supabase)
+1. Exportar los clientes de ESE tenant (CSV desde Supabase, `SELECT * FROM customers WHERE tenant_id = '...'`)
 2. Entregar CSV al dueño ("aquí está tu lista de clientes")
-3. Suspender cron jobs (borrar de n8n o desactivar en Vercel)
-4. Cancelar proyecto en Twilio (liberar número)
-5. Archivar repo en GitHub
+3. `UPDATE tenants SET is_active = false WHERE slug = '...'` — con esto sale automáticamente de
+   birthday/reactivation (loop de tenants activos) y `getTenantByDomain()` deja de resolverlo
+4. Quitar su dominio de Vercel (Settings → Domains) — el proyecto compartido sigue igual para
+   los demás clientes
+5. Cancelar/liberar su subcuenta Twilio
 6. Mover en Notion: Estado → `Cancelado / Inactivo`
 
 ---

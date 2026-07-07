@@ -133,12 +133,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           return twimlResponse('❌ Error de configuración en el sistema. Avisa al administrador.')
         }
 
-        console.log(`[twilio-incoming] mesero autorizado ${phone} → forwarding a n8n`)
+        console.log(`[twilio-incoming] mesero autorizado ${phone} → forwarding a n8n (tenant=${tenant.slug})`)
+
+        // Multitenant: /api/webhook/delivery exige tenant_slug en el body — se lo
+        // inyectamos aquí para que n8n solo tenga que reenviarlo, sin necesitar
+        // su propia lógica de resolución de tenant.
+        const forwardBody = `${rawBody}&tenant_slug=${encodeURIComponent(tenant.slug)}`
 
         const n8nRes = await fetch(n8nUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: rawBody,
+          body: forwardBody,
         })
 
         const n8nText = await n8nRes.text()

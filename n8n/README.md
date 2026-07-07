@@ -1,9 +1,16 @@
 # Guía de Workflows n8n — Constelarys Fidelity System
 
+> ⚠️ **v2.4.0 — multitenant:** este doc describe un workflow **compartido por todos los
+> clientes** (ya no uno por cliente). Onboardear un cliente nuevo NO requiere duplicar
+> workflows ni crear variables `[CLIENTE]_*` — ver `docs/04-deployment.md` §5 y §6 para el
+> detalle completo. El único requisito es que el nodo HTTP que llama a
+> `/api/webhook/delivery` (workflow 1, abajo) incluya el campo `tenant_slug` en el body.
+
 ## Resumen
 
 - **n8n** = recibe mensajes WhatsApp (Twilio) + IA extrae datos + Google Contacts sync
-- **Next.js API** = toda la lógica de DB (clientes, visitas, recompensas, campañas)
+- **Next.js API** = toda la lógica de DB (clientes, visitas, recompensas, campañas), ya
+  multitenant — resuelve el cliente por `tenant_slug` (delivery) o `?tenant=` (crons)
 
 **Workflows a crear:**
 1. `domicilios_whatsapp_v4` — ⭐ **RECOMENDADO** — Parseo con IA (texto libre)
@@ -43,20 +50,32 @@ WhatsApp (Twilio) → Webhook → Extraer remitente + body
 ### Variables de entorno de n8n requeridas:
 | Variable | Valor | Dónde configurar |
 |----------|-------|-----------------|
-| `SUPABASE_URL` | URL de tu proyecto Supabase | n8n → Settings → Variables |
+| `SUPABASE_URL` | URL del proyecto Supabase compartido | n8n → Settings → Variables |
 | `SUPABASE_ANON_KEY` | Anon key de Supabase | n8n → Settings → Variables |
-| `RESTAURANT_API_URL` | URL de tu app (ej: `https://tu-app.vercel.app`) | n8n → Settings → Variables |
-| `WEBHOOK_DELIVERY_SECRET` | Secret compartido con Next.js | n8n → Settings → Variables |
+| `APP_URL` | URL de la app (cualquier dominio del proyecto Vercel compartido, ej: `https://clubsushiservice.constelarys.com`) | n8n → Settings → Variables |
+| `WEBHOOK_SECRET` | Secret compartido con Next.js (`WEBHOOK_DELIVERY_SECRET`) | n8n → Settings → Variables |
 | `OPENAI_API_KEY` | API Key de OpenAI | n8n → Settings → Variables |
+
+> Estas variables ya NO llevan prefijo por cliente (`[CLIENTE]_`) — son un único set
+> compartido por todos los tenants. Ver `docs/04-deployment.md` §5.
+
+> ⚠️ **Multitenant:** el body que llega a este workflow (reenviado por
+> `/api/webhook/twilio-incoming`) trae un campo `tenant_slug` que identifica al cliente. El
+> nodo HTTP Request que hace `POST /api/webhook/delivery` **debe incluir ese campo** en el
+> JSON que arma, además de los campos que extrae la IA (`phone`, `name`, `city`, `address`,
+> etc.) — si falta, `/api/webhook/delivery` responde 404 "Tenant no encontrado". Ver
+> `docs/04-deployment.md` §5 (W1) para el detalle de la expresión n8n exacta.
 
 ### Paso a paso:
 
 1. **Importar** `n8n/domicilios_whatsapp_v4.json` en n8n
-2. **Configurar las 5 variables** de entorno en n8n → Settings → Variables
-3. **Activar** el workflow y copiar la URL del webhook
-4. **En Twilio** → WhatsApp Sandbox → Webhook URL = URL del webhook de n8n
-5. **En `.env.local`** de Next.js: `WEBHOOK_DELIVERY_SECRET=el-mismo-secret`
-6. **Insertar números autorizados** en Supabase:
+2. **Configurar las 5 variables** de entorno en n8n → Settings → Variables (una sola vez,
+   compartidas por todos los clientes)
+3. **Agregar `tenant_slug`** al nodo que llama a `/api/webhook/delivery` (ver nota arriba)
+4. **Activar** el workflow y copiar la URL del webhook
+5. **En Vercel**: pegar esa URL en `N8N_DOMICILIOS_WEBHOOK_URL` (una sola vez, sirve para
+   todos los tenants — el webhook de Twilio-incoming ya resuelve el tenant antes de reenviar)
+6. **Insertar números autorizados** en Supabase (con el `tenant_id` del cliente correspondiente):
    ```sql
    INSERT INTO authorized_numbers (phone, name) VALUES
    ('3155578231', 'Mesero 1'),

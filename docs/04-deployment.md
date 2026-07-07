@@ -1,9 +1,14 @@
 # Despliegue e Infraestructura — Constelarys Fidelity System
 
-> **Última actualización:** 2026-06-17
+> **Última actualización:** 2026-07-07 — v2.4.0, arquitectura **multitenant** (un solo
+> Vercel + un solo Supabase compartidos por todos los clientes; ver §1 y §6).
 > **Documento único** que reemplaza: `INFRAESTRUCTURA.md`, `DEPLOYMENT_GUIDE.md`, `CONFIGURACIONES_TWILIO_SISTEMA.md`, `n8n-workflows/README.md`
 > Para plantillas WhatsApp (textos, variables, lógica de selección) → [`docs/PLANTILLAS.md`](./PLANTILLAS.md)
 > Para MCP Server de Twilio en el IDE → [`docs/TWILIO_MCP_SETUP.md`](./TWILIO_MCP_SETUP.md)
+>
+> ⚠️ **El modelo "1 cliente = 1 Vercel + 1 Supabase" (clonar el repo) quedó obsoleto desde
+> v2.3.0/v2.4.0.** Si ves un doc, script o workflow n8n que hable de crear un proyecto nuevo
+> por cliente, está desactualizado — el flujo real está en §6.
 
 ---
 
@@ -106,27 +111,35 @@ vercel deploy --prod
 
 O desde Vercel Dashboard: Import Git Repository → Framework: Next.js → configurar env vars → Deploy.
 
-### Variables de entorno (por instancia)
+### Variables de entorno — modelo multitenant (v2.3.0+)
+
+Hay **un solo proyecto Vercel** para todos los clientes. Estas variables se configuran **una
+sola vez** ahí y las comparten todos los tenants — NO se crea una copia por cliente nunca más:
 
 | Variable | Alcance | Descripción |
 |----------|---------|-------------|
-| `NEXT_PUBLIC_SUPABASE_URL` | Pública | URL del proyecto Supabase |
+| `NEXT_PUBLIC_SUPABASE_URL` | Pública | URL del proyecto Supabase compartido |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Pública | Anon key (lectura pública segura) |
 | `SUPABASE_SERVICE_ROLE_KEY` | **Servidor** | Service role key — NUNCA exponer al cliente |
-| `TWILIO_ACCOUNT_SID` | **Servidor** | Account SID (`AC...`) |
-| `TWILIO_AUTH_TOKEN` | **Servidor** | Auth token |
-| `TWILIO_WHATSAPP_NUMBER` | **Servidor** | Número WhatsApp con prefijo: `whatsapp:+57...` |
-| `TWILIO_MESSAGING_SERVICE_SID` | **Servidor** | SID del Messaging Service (`MG...`) |
-| `CRON_SECRET` | **Servidor** | Secret para autenticar crons (32 chars aleatorios) |
-| `WEBHOOK_DELIVERY_SECRET` | **Servidor** | Secret compartido con n8n para `/api/webhook/delivery` |
-| `N8N_DOMICILIOS_WEBHOOK_URL` | **Servidor** | URL webhook n8n de domicilios (W1) |
+| `CRON_SECRET` | **Servidor** | Secret para autenticar crons (32 chars aleatorios). Mismo valor en n8n para todos los clientes. |
+| `WEBHOOK_DELIVERY_SECRET` | **Servidor** | Secret compartido con n8n para `/api/webhook/delivery`. Mismo valor en n8n para todos los clientes. |
+| `N8N_DOMICILIOS_WEBHOOK_URL` | **Servidor** | URL del webhook n8n de domicilios (W1) — un único workflow compartido, ver §5 |
 | `N8N_GOOGLE_CONTACTS_WEBHOOK_URL` | **Servidor** | URL webhook n8n Google Contacts (W3, opcional) |
-| `NEXT_PUBLIC_BRAND_NAME` | Pública | Nombre del restaurante (en auto-reply, QR, mensajes) |
-| `NEXT_PUBLIC_BRAND_SHORT` | Pública | Nombre corto |
-| `RESTAURANT_WHATSAPP_LINK` | **Servidor** | `https://wa.me/57...` del número humano del restaurante |
-| `NEXT_PUBLIC_GOOGLE_MAPS_REVIEW_URL` | Pública | (Opcional) Link Google Reviews |
-| `NEXT_PUBLIC_DEMO_EMAIL` | Pública | (Opcional) Email para login demo |
-| `NEXT_PUBLIC_DEMO_PASSWORD` | Pública | (Opcional) Password demo |
+| `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_WHATSAPP_NUMBER` / `TWILIO_MESSAGING_SERVICE_SID` | **Servidor** | Cuenta **master** (Sushi Service). Sirve de *fallback* cuando un tenant no tiene su propia subcuenta configurada — ver `getTwilioClient()` en `src/services/whatsapp.service.ts` |
+| `NEXT_PUBLIC_BRAND_NAME` / `NEXT_PUBLIC_BRAND_SHORT` / `NEXT_PUBLIC_GOOGLE_MAPS_REVIEW_URL` / `RESTAURANT_WHATSAPP_LINK` | Pública / Servidor | Branding **default del sistema** — solo se usa si un tenant no tiene su propio `config` en la tabla `tenants`. Ver `src/lib/branding.ts` |
+| `NEXT_PUBLIC_DEMO_EMAIL` / `NEXT_PUBLIC_DEMO_PASSWORD` | Pública | (Opcional) Credenciales del login demo |
+
+### Datos por-tenant — NO van en Vercel, van en la tabla `tenants` (Supabase)
+
+Cuando entra un cliente nuevo (ej. Don Alirio), esto **no se toca en Vercel**. Se inserta una
+fila en `tenants` (ver §6) con:
+
+| Columna | Reemplaza a la env var... | Notas |
+|---------|---------------------------|-------|
+| `config.brand_name`, `brand_short`, `brand_tagline`, `staff_role_label`, `google_maps_url`, `whatsapp_link`, `delivery_phone`, `card_bg`, `page_bg` | `NEXT_PUBLIC_BRAND_*`, `RESTAURANT_WHATSAPP_LINK`, `NEXT_PUBLIC_GOOGLE_MAPS_REVIEW_URL` | Resuelto por dominio en cada request — ver `src/lib/branding.ts` (`resolveBranding()`) y `src/lib/branding-server.ts` |
+| `twilio_subaccount_sid`, `twilio_subaccount_auth_token`, `twilio_messaging_service_sid`, `twilio_whatsapp_number` | `TWILIO_*` | Si están vacías, el sistema cae al fallback master (columna de arriba) — útil solo en pruebas, en producción cada tenant real tiene su propia subcuenta |
+| `domain` | — (nuevo) | Dominio custom del tenant, agregado también como Domain en Vercel — ver §6 paso 3 |
+| `slug` | — (nuevo) | Usado por n8n (`tenant_slug`) y por los crons (`?tenant=`) — ver §5 |
 
 ### Crons en `vercel.json`
 
@@ -288,25 +301,25 @@ INSERT INTO authorized_numbers (phone, name, is_active) VALUES
 **Instancia compartida:** `https://n8n.almojabananet.me`
 **VPS:** servidor compartido almojabananet — costo ~$5-10/mes total para todos los clientes.
 
-> n8n es compartido entre todos los clientes. Las variables deben llevar **prefijo por cliente** para evitar conflictos.
+> **Desde v2.3.0 (multitenant) n8n deja de necesitar variables por-cliente.** Con un solo
+> Vercel project, todos los tenants comparten la misma URL base y los mismos secrets — n8n
+> distingue de qué cliente es cada request por el campo `tenant_slug` (W1) o por procesar TODOS
+> los tenants activos internamente (crons, ver más abajo). Onboardear un cliente nuevo ya NO
+> requiere tocar n8n (salvo la excepción de W1 descrita abajo, que ya está resuelta una vez).
 
 ### Variables de entorno en n8n (Settings → Variables)
 
-Para cada cliente nuevo, agregar:
+**Un único set, compartido por todos los clientes** (ya NO llevan prefijo `[CLIENTE]_`):
 
 | Variable n8n | Valor | Equivale en Vercel |
 |---|---|---|
-| `[CLIENTE]_APP_URL` | `https://[cliente].vercel.app` | — |
-| `[CLIENTE]_WEBHOOK_SECRET` | secreto único del cliente | = `WEBHOOK_DELIVERY_SECRET` del proyecto |
-| `CRON_SECRET` | (compartido entre clientes si usan el mismo) | = `CRON_SECRET` de Vercel |
+| `APP_URL` | El dominio del proyecto compartido, ej. `https://clubsushiservice.constelarys.com` (cualquier dominio del mismo proyecto Vercel sirve — todos apuntan al mismo deploy) | — |
+| `WEBHOOK_SECRET` | Secret único, el mismo para todos los clientes | = `WEBHOOK_DELIVERY_SECRET` de Vercel |
+| `CRON_SECRET` | Secret único, el mismo para todos los clientes | = `CRON_SECRET` de Vercel |
 
-**Ejemplo con Sushi Service:**
-```
-SUSHI_APP_URL            = https://sushi-service.vercel.app
-SUSHI_WEBHOOK_SECRET     = abc123...
-```
-
-⚠️ **Nunca usar nombres genéricos** (`APP_URL`, `WEBHOOK_SECRET`) — si hay dos clientes, se pisan.
+⚠️ Las variables viejas `[CLIENTE]_APP_URL` / `[CLIENTE]_WEBHOOK_SECRET` (una por cliente) ya
+no se usan — si existen en n8n de una migración anterior, se pueden dejar sin borrar (no
+estorban) o limpiarlas cuando haya tiempo.
 
 ---
 
@@ -325,9 +338,20 @@ Mesero WhatsApp → Twilio → /api/webhook/twilio-incoming (Vercel)
   → TwiML response (confirma al mesero)
 ```
 
+> ⚠️ **Único punto donde el modelo multitenant SÍ requiere editar el workflow (una sola vez,
+> ya):** `/api/webhook/delivery` exige un campo `tenant_slug` en el body (identifica a qué
+> tenant pertenece el pedido). Desde v2.4.0, `twilio-incoming/route.ts` ya inyecta ese campo
+> automáticamente al reenviar el mensaje del mesero a n8n (agrega
+> `&tenant_slug=<slug-del-tenant>` al body que llega al Webhook Trigger de W1). Falta un solo
+> paso manual: en el nodo HTTP Request que hace `POST /api/webhook/delivery`, agregar el campo
+> `tenant_slug` al JSON body, tomándolo del webhook entrante. Para confirmar el nombre exacto
+> del campo tal como lo expone n8n, usar "Listen for test event" en el nodo Webhook Trigger y
+> revisar si el body llega como `{{$json.body.tenant_slug}}` o `{{$json.tenant_slug}}` (depende
+> de si el nodo Webhook tiene el body parseado o crudo).
+
 **Configuración del nodo HTTP Request (POST al delivery):**
-- URL: `{{$env.[CLIENTE]_APP_URL}}/api/webhook/delivery`
-- Headers: `x-webhook-secret: {{$env.[CLIENTE]_WEBHOOK_SECRET}}`
+- URL: `{{$env.APP_URL}}/api/webhook/delivery`
+- Headers: `x-webhook-secret: {{$env.WEBHOOK_SECRET}}`
 - Body (JSON mínimo que espera la API):
 
 ```json
@@ -335,15 +359,18 @@ Mesero WhatsApp → Twilio → /api/webhook/twilio-incoming (Vercel)
   "phone": "{{$json.phone}}",
   "name": "{{$json.name}}",
   "city": "{{$json.city}}",
-  "address": "{{$json.address}}"
+  "address": "{{$json.address}}",
+  "tenant_slug": "{{$json.body.tenant_slug}}"
 }
 ```
 
-**Activar:**
+**Activar (una sola vez — ya no se duplica por cliente):**
 1. Importar JSON del workflow desde `docs/n8n-workflows/` (si existe)
 2. Activar el workflow (toggle arriba a la derecha)
 3. Copiar la **Webhook URL** que genera n8n
-4. Pegar esa URL en la variable `N8N_DOMICILIOS_WEBHOOK_URL` del proyecto Vercel
+4. Pegar esa URL en la variable `N8N_DOMICILIOS_WEBHOOK_URL` del proyecto Vercel (una sola vez,
+   sirve para todos los tenants — el `To` de cada mensaje ya identifica el número/tenant antes
+   de llegar acá)
 
 **Test rápido sin WhatsApp:**
 ```bash
@@ -460,136 +487,196 @@ Fire-and-forget — si falla, el check-in/delivery NO se rompe (timeout 10s, log
 > causando doble disparo — ver nota en §2). `vercel.json` tiene `"crons": []`: n8n es
 > ahora el ÚNICO disparador de estos dos. Confirmar en cada workflow ("Cron Birthday",
 > "Cron Reactivación") la zona horaria real del Schedule Trigger — puede no ser UTC.
+>
+> **v2.4.0 — onboarding sin tocar n8n:** `/api/cron/birthday` y `/api/cron/reactivation`
+> ahora aceptan `?tenant=slug` **opcional**. Si se omite, procesan TODOS los tenants activos
+> en un solo disparo (mismo patrón que `calendar-dispatch`, que ya funcionaba así). Se
+> recomienda **quitar** `?tenant=sushi-service` de los 2 nodos HTTP Request existentes para
+> que un cliente nuevo (ej. Don Alirio) reciba estos mensajes automáticamente en cuanto se
+> inserta en `tenants` con `is_active=true` — sin volver a tocar n8n. Si se deja el
+> `?tenant=`, sigue funcionando igual que antes (100% retrocompatible), pero solo cubre ese
+> tenant.
 
 **Birthday** — 8:00 AM Colombia = 13:00 UTC (si el Schedule Trigger usa UTC):
 - Schedule Trigger: todos los días a las 13:00 UTC
-- HTTP Request: `POST {{$env.[CLIENTE]_APP_URL}}/api/cron/birthday`
+- HTTP Request: `POST {{$env.APP_URL}}/api/cron/birthday` (sin `?tenant=` → todos los clientes)
 - Header: `Authorization: Bearer {{$env.CRON_SECRET}}`
 
 **Reactivación** — 10:00 AM Colombia = 15:00 UTC:
 - Schedule Trigger: todos los días a las 15:00 UTC
-- HTTP Request: `POST {{$env.[CLIENTE]_APP_URL}}/api/cron/reactivation`
+- HTTP Request: `POST {{$env.APP_URL}}/api/cron/reactivation` (sin `?tenant=` → todos los clientes)
 - Header: `Authorization: Bearer {{$env.CRON_SECRET}}`
 
 > Si se migran, eliminar esas entradas de `vercel.json` para evitar doble disparo.
 
 ---
 
-## 6. Onboarding de nuevo cliente
+## 6. Onboarding de nuevo cliente (modelo multitenant, ~30-45 min)
 
-### Paso 1 — Clonar repositorio
+> **Ya NO se clona el repo ni se crean proyectos nuevos.** Un cliente nuevo es una fila en la
+> tabla `tenants` del Supabase compartido + un dominio agregado al Vercel project compartido
+> (`sushi-service-fidelity-system`). Nada de esto toca env vars de Vercel.
 
-```bash
-git clone https://github.com/tuorg/constelarys-fidelity.git fidelity-[cliente]
-cd fidelity-[cliente]
+### Paso 1 — Insertar el tenant en Supabase
+
+SQL Editor del proyecto compartido:
+```sql
+INSERT INTO tenants (slug, name, business_type, config, is_active)
+VALUES (
+  'don-alirio',                          -- slug: usado por n8n y por los crons (?tenant=)
+  'Don Alirio Café de Origen',
+  'restaurant',
+  '{
+    "brand_name": "Don Alirio Café de Origen",
+    "brand_short": "Don Alirio",
+    "staff_role_label": "Barista",
+    "visit_label": "visita",
+    "station_label": "mesa",
+    "has_delivery_webhook": true,
+    "whatsapp_link": "https://wa.me/57...",
+    "google_maps_url": "https://..."
+  }'::jsonb,
+  true
+);
 ```
+`config` es la marca — se resuelve por dominio, ver `src/lib/branding.ts`. Si se omite un campo,
+cae al default del sistema (env vars), pero para un cliente real siempre se llena.
 
-### Paso 2 — Personalizar branding
+### Paso 2 — Twilio de la subcuenta del cliente
 
-Variables de entorno en Vercel (sin tocar código):
-```env
-NEXT_PUBLIC_BRAND_NAME=[Nombre del Restaurante]
-NEXT_PUBLIC_BRAND_SHORT=[NR]
+1. Confirmar que el cliente ya tiene su número de WhatsApp aprobado y registrado como Sender en
+   su cuenta/subcuenta Twilio (dato que ya trae Don Alirio).
+2. Correr el script de setup (crea Messaging Service, vincula el número, configura el webhook
+   **y ahora también intenta configurar opt-out/opt-in/help automáticamente** — ver §4):
+   ```bash
+   TWILIO_ACCOUNT_SID=ACxxx \
+   TWILIO_AUTH_TOKEN=xxx \
+   TWILIO_WHATSAPP_NUMBER=+57... \
+   VERCEL_APP_URL=https://clubsushiservice.constelarys.com \
+   RESTAURANT_WA_NUMBER=573001234567 \
+   node scripts/twilio-setup.mjs
+   ```
+   `VERCEL_APP_URL` es **cualquier dominio del proyecto compartido** (no hace falta que sea el
+   dominio final del cliente — el webhook de Twilio resuelve el tenant por `To`, no por Host).
+3. Guardar el `serviceSid` que imprime el script — es el `twilio_messaging_service_sid`.
+4. Guardar el `Account SID` y `Auth Token` de la subcuenta del cliente (si Don Alirio usa una
+   subcuenta bajo el master de Cada1, es el SID/token de ESA subcuenta, no el master).
+
+### Paso 3 — Cargar las credenciales Twilio en el tenant
+
+```sql
+UPDATE tenants SET
+  twilio_subaccount_sid = 'ACxxx',
+  twilio_subaccount_auth_token = 'xxx',
+  twilio_messaging_service_sid = 'MGxxx',
+  twilio_whatsapp_number = 'whatsapp:+57...'
+WHERE slug = 'don-alirio';
 ```
+Desde este momento, `getTwilioClient()` (`src/services/whatsapp.service.ts`) usa estas
+credenciales para todos los envíos de este tenant — no las del master.
 
-### Paso 3 — Supabase
+### Paso 4 — Dominio en Vercel
 
-1. Crear proyecto en https://supabase.com
-2. Ejecutar las **23 migraciones** en orden (SQL Editor → cada archivo de `supabase/migrations/`)
-3. Ejecutar la tabla manual `auto_reply_cooldown` (ver §3)
-4. Crear usuario admin: Authentication → Users → Invite user
-5. Copiar URL, anon key y service role key
+1. vercel.com → proyecto **`sushi-service-fidelity-system`** → Settings → Domains → Add →
+   `clubdonalirio.constelarys.com` (o el subdominio elegido)
+2. Vercel muestra el registro DNS (normalmente `CNAME` → `cname.vercel-dns.com`) — crearlo donde
+   esté administrado el DNS de `constelarys.com`
+3. Cuando el DNS propague:
+   ```sql
+   UPDATE tenants SET domain = 'clubdonalirio.constelarys.com' WHERE slug = 'don-alirio';
+   ```
+   Desde acá, `getTenantByDomain()` resuelve la marca y los datos de este tenant en cada
+   request a ese dominio.
 
-### Paso 4 — Twilio
+### Paso 5 — Usuario admin
 
-1. Crear Messaging Service → vincular número WhatsApp
-2. Configurar webhook: `https://[cliente].vercel.app/api/webhook/twilio-incoming`
-3. Configurar opt-out keywords en español (ver §4 o usar API PowerShell)
-4. Crear plantillas con los scripts:
+1. Supabase → Authentication → Users → Invite user (email del admin del cliente)
+2. Tagear el `tenant_id` en su JWT (sin esto, el dashboard no ve datos del tenant):
+   ```sql
+   UPDATE auth.users
+   SET raw_app_meta_data = COALESCE(raw_app_meta_data, '{}'::jsonb)
+                           || jsonb_build_object('tenant_id', (SELECT id FROM tenants WHERE slug = 'don-alirio')::text)
+   WHERE email = 'admin@donalirio.com';
+   ```
+3. El admin debe hacer login (no solo refrescar) para que el JWT traiga el `tenant_id` nuevo.
+
+### Paso 6 — n8n (normalmente NADA que hacer)
+
+- W1 (delivery), birthday, reactivation y calendar-dispatch ya están configurados para procesar
+  cualquier tenant activo automáticamente (ver §5). Un tenant nuevo con `is_active=true` entra
+  solo.
+- Única excepción: si el nodo HTTP de W1 todavía no tiene el campo `tenant_slug` agregado (ver
+  §5, W1) — se hace una sola vez, no por cliente.
+
+### Paso 7 — Plantillas WhatsApp
+
+1. Si el cliente ya tiene plantillas aprobadas en su propia cuenta Twilio, solo falta asignar
+   los SIDs en Dashboard → Ajustes.
+2. Si no, crear con los scripts (apuntando a la subcuenta del cliente vía sus credenciales):
    ```bash
    node scripts/twilio-create-text-templates.mjs
    node scripts/twilio-create-media-templates.mjs
    ```
-5. Esperar aprobación de Meta (24-72h)
-6. Agregar números de meseros autorizados en Supabase (`authorized_numbers`)
+3. Esperar aprobación de Meta (24-72h)
+4. Agregar números de meseros autorizados: `INSERT INTO authorized_numbers (phone, name, tenant_id, is_active) VALUES (...)`
 
-### Paso 5 — Vercel
+### Paso 8 — Dashboard
 
-1. Import Git Repository → Framework: Next.js
-2. Configurar todas las variables de entorno (tabla §2)
-3. Deploy → verificar que el build pasa sin errores TypeScript
-
-### Paso 6 — n8n
-
-1. Agregar variables `[CLIENTE]_APP_URL` y `[CLIENTE]_WEBHOOK_SECRET` en Settings → Variables
-2. Crear/duplicar workflow W1 (delivery-webhook) para el nuevo cliente
-3. Copiar URL del webhook W1 → pegar en `N8N_DOMICILIOS_WEBHOOK_URL` de Vercel
-4. Importar workflow W2 (calendar-dispatch) si aplica, actualizar URL
-5. Activar ambos workflows
-
-### Paso 7 — Dashboard
-
-1. Ingresar en `https://[cliente].vercel.app/login`
+1. Ingresar en `https://clubdonalirio.constelarys.com/login`
 2. Dashboard → Recompensas → Crear reward tiers (puntos + mystery box prizes)
-3. Dashboard → Ajustes → Asignar los SIDs de plantillas aprobadas (1-11 + optionalmente 12-13)
+3. Dashboard → Ajustes → Asignar los SIDs de plantillas aprobadas
 4. Dashboard → Ajustes → Configurar ticket promedio
-5. Dashboard → QR → Generar QRs con logo y color del cliente
+5. Dashboard → QR → Generar QRs (usan la marca del tenant automáticamente)
 
-### Paso 8 — Pruebas E2E
+### Paso 9 — Pruebas E2E
 
-1. Escanear QR → recibir WhatsApp de bienvenida con puntos
+1. Escanear QR → recibir WhatsApp de bienvenida con puntos, con el nombre de marca correcto
 2. Repetir hasta acumular puntos suficientes → verificar que aparece Mystery Box
-3. Escribir "hola" al número Twilio → verificar redirect a número humano con link
+3. Escribir "hola" al número Twilio del cliente → verificar redirect con el `whatsapp_link` del
+   tenant (no el de Sushi Service)
 4. Escribir "STOP" → verificar que no llegan más mensajes
-5. Número de mesero autorizado escribe pedido → verificar que llega a n8n → a la API → WhatsApp al cliente
-6. Crear evento en calendario con `send_mode='auto'` → verificar que en máx 15 min llega el WhatsApp (requiere plantillas 12-13 aprobadas)
+5. Número de mesero autorizado escribe pedido → verificar que llega a n8n → a la API (con el
+   `tenant_slug` correcto) → WhatsApp al cliente
+6. Crear evento en calendario con `send_mode='auto'` → verificar que en máx 15 min llega el WhatsApp
 
 ---
 
-## 7. Checklist pre-launch
+## 7. Checklist pre-launch (multitenant)
 
-### Supabase
-- [ ] Proyecto creado (region más cercana)
-- [ ] 23 migraciones ejecutadas en orden
-- [ ] Tabla `auto_reply_cooldown` creada manualmente
-- [ ] Usuario admin creado en Auth → Users → Invite
+### Supabase (tabla `tenants` — proyecto compartido, NO uno nuevo)
+- [ ] Fila insertada en `tenants` (`slug`, `name`, `config` con la marca completa, `is_active=true`)
+- [ ] `twilio_subaccount_sid` / `twilio_subaccount_auth_token` / `twilio_messaging_service_sid` / `twilio_whatsapp_number` cargados
+- [ ] `domain` cargado (después de confirmar el DNS)
+- [ ] Usuario admin invitado + `raw_app_meta_data.tenant_id` tageado + admin ya hizo login
 
-### Vercel
-- [ ] Deploy exitoso sin errores TypeScript
-- [ ] Todas las variables de entorno configuradas (tabla §2)
-  - [ ] `TWILIO_WHATSAPP_NUMBER` incluye prefijo `whatsapp:`
-  - [ ] `WEBHOOK_DELIVERY_SECRET` = mismo valor que `[CLIENTE]_WEBHOOK_SECRET` en n8n
-  - [ ] `N8N_DOMICILIOS_WEBHOOK_URL` apunta al webhook W1 activado
-  - [ ] `CRON_SECRET` configurado (mismo valor que en credencial Header Auth de n8n)
-  - [ ] `NEXT_PUBLIC_BRAND_NAME` con el nombre del restaurante
-  - [ ] `RESTAURANT_WHATSAPP_LINK` con el `wa.me/...` del número humano
+### Vercel (proyecto compartido `sushi-service-fidelity-system` — NO uno nuevo)
+- [ ] Dominio del cliente agregado en Settings → Domains
+- [ ] Registro DNS creado y propagado (verificar con `nslookup`/panel de Vercel)
+- [ ] Cero env vars nuevas necesarias (todas son compartidas, ver §2)
 
-### Twilio
-- [ ] Número WhatsApp asignado al Messaging Service
-- [ ] Webhook configurado: `https://[cliente].vercel.app/api/webhook/twilio-incoming` (POST)
-- [ ] Opt-out keywords en español configurados (STOP, BAJA, CANCELAR, SALIR…)
-- [ ] 11 plantillas de texto creadas (`twilio-create-text-templates.mjs`)
-- [ ] 2 plantillas de media creadas (`twilio-create-media-templates.mjs`) — opcional hasta aprobación Meta
-- [ ] SIDs de plantillas aprobadas asignados en Dashboard → Ajustes
-- [ ] Números de meseros insertados en `authorized_numbers`
+### Twilio (subcuenta del cliente)
+- [ ] Número WhatsApp asignado al Messaging Service (`scripts/twilio-setup.mjs`)
+- [ ] Webhook configurado apuntando al dominio compartido `/api/webhook/twilio-incoming` (POST)
+- [ ] Opt-out/opt-in/help keywords configurados (automático por el script — revisar el log; si falló, hacerlo manual en Console, ver §4)
+- [ ] Plantillas creadas o SIDs existentes asignados en Dashboard → Ajustes
+- [ ] Números de meseros insertados en `authorized_numbers` con el `tenant_id` correcto
 
-### n8n
-- [ ] Variables `[CLIENTE]_APP_URL` y `[CLIENTE]_WEBHOOK_SECRET` creadas
-- [ ] Workflow W1 (delivery) configurado y activado — URL copiada a Vercel
-- [ ] Workflow W2 (calendar-dispatch) importado y activado
-- [ ] Credencial `RestaurantQR CRON_SECRET` configurada en n8n
+### n8n (normalmente cero cambios)
+- [ ] Confirmar que el nodo HTTP de W1 (delivery) ya envía `tenant_slug` en el body — si no, agregarlo una sola vez (ver §5)
+- [ ] Confirmar que birthday/reactivation NO tienen `?tenant=` fijo (para que este cliente entre solo) — si lo tienen, quitarlo una sola vez (ver §5)
 
 ### Dashboard
 - [ ] Reward tiers configurados (puntos + mystery box prizes)
 - [ ] Ticket promedio configurado en Ajustes
-- [ ] QRs generados con logo y color del cliente
-- [ ] Google Reviews URL configurada (si aplica)
+- [ ] QRs generados (usan la marca del tenant automáticamente)
+- [ ] Google Reviews URL / WhatsApp link ya vienen del `config` del tenant — confirmar que se ven bien en el check-in
 
 ### Pruebas
-- [ ] QR → bienvenida WhatsApp recibida con puntos ✓
-- [ ] Auto-reply funcionando con redirect al número humano ✓
+- [ ] QR → bienvenida WhatsApp recibida con puntos, con el nombre de marca correcto ✓
+- [ ] Auto-reply funcionando con redirect al `whatsapp_link` de ESTE tenant (no el de Sushi Service) ✓
 - [ ] STOP → opt-out confirmado ✓
-- [ ] Domicilio vía mesero → registrado + WhatsApp al cliente ✓
+- [ ] Domicilio vía mesero → registrado + WhatsApp al cliente (confirmar que NO da 404 "Tenant no encontrado") ✓
+- [ ] Sushi Service y Sushi Fun se siguen viendo idénticos (regression check — un tenant nuevo no debe afectar a los existentes) ✓
 
 ---
 
@@ -624,12 +711,16 @@ NEXT_PUBLIC_BRAND_SHORT=[NR]
 
 | Concepto | Tiempo | Cobro sugerido COP |
 |----------|:------:|:------------------:|
-| Onboarding + setup Supabase/Vercel/Twilio | 2-3 h | $150.000 - $300.000 |
+| Onboarding multitenant (tenant + Twilio + dominio, §6) | 30-45 min | $150.000 - $300.000 |
 | Crear y aprobar plantillas WhatsApp | 1 h + espera | Incluido |
 | Branding + QRs | 30 min | Incluido |
 | Configurar recompensas | 30 min | Incluido |
 | Capacitación admin | 1 h | Incluido |
-| **TOTAL** | **4-6 h** | **$200.000 - $500.000** |
+| **TOTAL** | **~2.5-3 h** | **$200.000 - $500.000** |
+
+> Bajó de 4-6h a ~2.5-3h desde que el onboarding dejó de requerir clonar repo + crear proyectos
+> Supabase/Vercel nuevos (v2.3.0/v2.4.0, ver §6). El margen por cliente sube porque el costo de
+> implementación (tiempo del operador) bajó sin cambiar el precio al cliente.
 
 ### Pricing sugerido al cliente final
 
@@ -650,6 +741,6 @@ NEXT_PUBLIC_BRAND_SHORT=[NR]
 | Quality rating Twilio degradado (opt-outs > 0.5%) | Media | Alto | Cap mensual 3 msg/cliente, copy no agresivo, botón SALIR en todas las MARKETING |
 | n8n VPS caído = domicilios no se registran + calendar no dispara | Media | Alto | Monitoreo del VPS, health check alertas, botón "Enviar ahora" en dashboard como fallback |
 | Supabase Free tier límite (500 MB) | Baja | Medio | Migrar a Pro ($25/mes) cuando se acerque al límite |
-| Clone-per-client no escala > 20 clientes | Alta (si crece) | Alto | Migración a arquitectura multi-tenant (en roadmap) |
 | Plantillas `twilio/media` sin aprobar por Meta | Alta | Medio | El calendario funciona; solo el envío con imagen/video queda bloqueado |
 | CRON_SECRET no configurado en Vercel | Baja | Alto | `validateCronSecret()` rechaza todo con 401 — verificar en pre-launch |
+| RLS mal configurada en una tabla nueva expondría datos entre tenants | Baja | Crítico | Toda tabla nueva debe llevar `tenant_id` + policy `tenant_all_*` desde el día 1 (ver `docs/03-security.md` y migración `00026_multitenant_rls.sql` como plantilla) |

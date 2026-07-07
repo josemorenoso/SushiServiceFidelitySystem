@@ -96,7 +96,18 @@ async function addNumberToService(serviceSid, phoneNumberSid) {
   console.log('  ✓ Número vinculado al Messaging Service')
 }
 
-// ── 4. Configurar webhook directo en el número (respaldo si MS falla) ─────────
+// ── 4. Opt-out/opt-in/help keywords en español, a nivel del Messaging Service ─
+async function configureOptOutKeywords(serviceSid) {
+  console.log('  Configurando opt-out keywords en español...')
+  await twilioPost(`https://messaging.twilio.com/v1/Services/${serviceSid}`, {
+    OptOutKeywords: 'STOP,STOPALL,UNSUBSCRIBE,CANCEL,END,QUIT,BAJA,CANCELAR,SALIR,FUERA,BASTA',
+    OptInKeywords: 'START,YES,UNSTOP,ALTA,ACEPTO,QUIERO,SI',
+    HelpKeywords: 'HELP,INFO,AYUDA',
+  })
+  console.log('  ✓ Opt-out/opt-in/help keywords configurados vía API')
+}
+
+// ── 5. Configurar webhook directo en el número (respaldo si MS falla) ─────────
 async function setWebhookOnNumber(phoneNumberSid) {
   console.log('  Configurando webhook en el número directamente...')
   await twilioPost(
@@ -111,13 +122,15 @@ async function setWebhookOnNumber(phoneNumberSid) {
   console.log(`  ✓ Webhook configurado: ${WEBHOOK_URL}`)
 }
 
-// ── 5. RESUMEN de lo que falta hacer MANUAL en Console (opt-out keywords) ─────
+// ── 6. RESUMEN de lo que falta hacer MANUAL en Console (fallback si la API falla) ─
 function printManualSteps() {
   console.log(`
 ╔════════════════════════════════════════════════════════════════╗
 ║  PASO MANUAL — Opt-Out Keywords en español (2 min)            ║
 ╠════════════════════════════════════════════════════════════════╣
-║  Twilio Console → Messaging → Settings → Opt-Out Management  ║
+║  La API rechazó la configuración automática para esta cuenta. ║
+║  Config manual: Twilio Console → Messaging → Settings →       ║
+║  Opt-Out Management                                            ║
 ║                                                                ║
 ║  Opt-out keywords (agregar):                                   ║
 ║    BAJA, CANCELAR, FUERA, NO GRACIAS, BASTA                   ║
@@ -127,9 +140,6 @@ function printManualSteps() {
 ║                                                                ║
 ║  Help keywords (agregar):                                      ║
 ║    AYUDA, INFO                                                 ║
-║                                                                ║
-║  ⚠️  La API de Twilio NO expone este endpoint públicamente.    ║
-║     Solo se puede configurar vía Console.                      ║
 ╚════════════════════════════════════════════════════════════════╝
 `)
 }
@@ -155,7 +165,16 @@ async function main() {
     // 3. Vincular número al Messaging Service
     await addNumberToService(serviceSid, phoneNumberSid)
 
-    // 4. También setear webhook directo en el número (doble seguro)
+    // 4. Opt-out/opt-in/help keywords (intento automático vía API)
+    let optOutAutomated = true
+    try {
+      await configureOptOutKeywords(serviceSid)
+    } catch (err) {
+      optOutAutomated = false
+      console.warn(`  ⚠️  No se pudo configurar opt-out vía API (${err.message}) — usa el paso manual de abajo.`)
+    }
+
+    // 5. También setear webhook directo en el número (doble seguro)
     await setWebhookOnNumber(phoneNumberSid)
     console.log()
 
@@ -172,7 +191,11 @@ async function main() {
     console.log(`  Cuando un cliente responda al número Twilio,`)
     console.log(`  recibirá un mensaje con el link: ${WA_LINK}\n`)
 
-    printManualSteps()
+    if (optOutAutomated) {
+      console.log('✅ Opt-out/opt-in/help keywords configurados automáticamente (sin pasos manuales).\n')
+    } else {
+      printManualSteps()
+    }
 
     console.log('📋 Guarda este Messaging Service SID en tus notas:')
     console.log(`   ${serviceSid}\n`)

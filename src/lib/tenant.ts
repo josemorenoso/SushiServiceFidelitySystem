@@ -40,6 +40,17 @@ export async function getTenantByDomain(host: string | null | undefined): Promis
   return data as Tenant
 }
 
+/** Todos los tenants activos — usado por crons que procesan todos los clientes en un solo disparo (birthday, reactivation). */
+export async function getActiveTenants(): Promise<Tenant[]> {
+  const supabase = getServiceClient()
+  const { data, error } = await supabase
+    .from('tenants')
+    .select(TENANT_COLUMNS)
+    .eq('is_active', true)
+  if (error || !data) return []
+  return data as Tenant[]
+}
+
 /** Resolver tenant por id — usado por crons de sistema que iteran filas con tenant_id. */
 export async function getTenantById(id: string): Promise<Tenant | null> {
   if (!id) return null

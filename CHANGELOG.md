@@ -5,6 +5,47 @@
 
 ---
 
+## [v2.4.0] — 2026-07-07 — fix: multitenant en n8n/crons (onboarding sin tocar n8n) + opt-out automatizado
+
+> Request: para dar de alta a Don Alirio Café de Origen sin clonar nada, faltaba rediseñar el
+> onboarding (env vars, dominio Vercel, workflows n8n, opt-out de WhatsApp por subcuenta Twilio).
+> Durante la exploración se detectó que el flujo de domicilios por WhatsApp del mesero estaba
+> roto en producción: `/api/webhook/delivery` ya exigía `tenant_slug` (parte de una migración
+> multitenant anterior) pero nada lo estaba enviando.
+
+### Fixed
+- **`src/app/api/webhook/twilio-incoming/route.ts`** — el reenvío del mensaje del mesero a n8n
+  (workflow W1) ahora inyecta `tenant_slug=<slug-del-tenant>` en el body. Antes de este fix,
+  toda entrega de domicilios vía WhatsApp devolvía 404 "Tenant no encontrado" en
+  `/api/webhook/delivery`. n8n solo necesita reenviar ese campo al armar el body — ver
+  `docs/04-deployment.md` §5.
+
+### Changed
+- **`src/lib/tenant.ts`** — nuevo `getActiveTenants()` (todos los tenants con `is_active=true`).
+- **`src/app/api/cron/birthday/route.ts`** y **`.../cron/reactivation/route.ts`** — `?tenant=`
+  pasa a ser opcional. Sin el parámetro, recorren todos los tenants activos en un solo disparo
+  (mismo patrón que `calendar-dispatch`, que ya funcionaba así), con `Promise.allSettled` para
+  que un tenant con error no tumbe a los demás. Con `?tenant=` se comportan igual que antes
+  (100% retrocompatible con lo que ya llama n8n). Efecto: un cliente nuevo empieza a recibir
+  birthday/reactivation en cuanto se inserta en `tenants`, sin volver a tocar n8n.
+- **`scripts/twilio-setup.mjs`** — agrega `configureOptOutKeywords()`: intenta configurar
+  opt-out/opt-in/help vía API de Twilio (`POST /v1/Services/{sid}`) automáticamente al crear el
+  Messaging Service de un cliente nuevo; si la API lo rechaza, cae al paso manual (Twilio
+  Console) que ya existía como fallback.
+
+### Docs
+- **`docs/04-deployment.md`** — reescritura de §2 (env vars: compartidas en Vercel vs.
+  por-tenant en la tabla `tenants`), §5 (n8n: variables compartidas, qué se toca una vez), §6
+  (onboarding multitenant completo, reemplaza el flujo de clonado), §7 (checklist), §8 (costo de
+  implementación bajó de 4-6h a ~2.5-3h), §9 (riesgos).
+- **`docs/operaciones/PROCESO_VENTAS_IMPLEMENTACION.md`** — Fase 3 (Setup) y Fase 5
+  (Offboarding) reescritas para el flujo multitenant.
+- **`docs/API_DOCS.md`** — documentado `tenant_slug` (delivery) y `?tenant=` opcional (crons).
+- **`n8n/README.md`** — documentado el campo `tenant_slug` requerido en W1 y las variables de
+  n8n ahora compartidas (sin prefijo `[CLIENTE]_`).
+
+---
+
 ## [v2.3.0] — 2026-07-06 — feat: branding por-tenant (onboarding de clientes sin clonar)
 
 > Request: para meter al cliente nuevo (Don Alirio Café) al multitenant se necesita que la marca

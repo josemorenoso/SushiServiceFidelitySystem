@@ -393,9 +393,15 @@ Recibe datos pre-parseados por n8n y registra cliente + visita en la DB.
   "direccion": "Calle 100 #15-20",
   "metodo_pago": "efectivo",
   "monto_total": 45000,
-  "raw_message": "Pedido de Juan..."
+  "raw_message": "Pedido de Juan...",
+  "tenant_slug": "sushi-service"
 }
 ```
+
+> **Multitenant (v2.4.0):** `tenant_slug` es **obligatorio** — identifica a qué cliente
+> pertenece el pedido (`getTenantBySlug()`). `twilio-incoming/route.ts` lo inyecta
+> automáticamente al reenviar el mensaje del mesero a n8n; el workflow n8n solo tiene que
+> reenviarlo tal cual al armar este body (ver `docs/04-deployment.md` §5, W1).
 
 **Response 200:**
 ```json
@@ -411,6 +417,7 @@ Recibe datos pre-parseados por n8n y registra cliente + visita en la DB.
 
 **Response 400:** `{ "ok": false, "error": "Falta celular del cliente" }`
 **Response 403:** `{ "error": "No autorizado" }`
+**Response 404:** `{ "error": "Tenant no encontrado" }` — falta `tenant_slug` o no coincide con ningún tenant activo
 
 ---
 
@@ -420,14 +427,35 @@ Recibe datos pre-parseados por n8n y registra cliente + visita en la DB.
 
 **Headers:** `Authorization: Bearer {CRON_SECRET}`
 
-**Response 200:**
+**Query param `?tenant=slug` (opcional, v2.4.0):**
+- **Con `?tenant=`** → procesa solo ese tenant, response = resultado plano (shape de abajo).
+- **Sin `?tenant=`** → procesa **todos los tenants activos** (`getActiveTenants()`) en un solo
+  disparo, uno no tumba a los demás si falla (`Promise.allSettled`). Este es el modo
+  recomendado para el Schedule Trigger de n8n — un cliente nuevo entra solo, sin tocar n8n.
+
+**Response 200 (con `?tenant=`):**
 ```json
 {
+  "tenant_slug": "sushi-service",
   "ok": true,
   "campaign_id": "uuid",
   "sent": 3,
   "failed": 0,
   "total_birthday_customers": 3
+}
+```
+
+**Response 200 (sin `?tenant=`, todos los tenants):**
+```json
+{
+  "ok": true,
+  "tenants_processed": 2,
+  "sent": 5,
+  "failed": 0,
+  "results": [
+    { "tenant_slug": "sushi-service", "ok": true, "sent": 3, "failed": 0, "campaign_id": "uuid", "total_birthday_customers": 3 },
+    { "tenant_slug": "don-alirio", "ok": true, "sent": 2, "failed": 0, "campaign_id": "uuid", "total_birthday_customers": 2 }
+  ]
 }
 ```
 
@@ -438,6 +466,10 @@ Recibe datos pre-parseados por n8n y registra cliente + visita en la DB.
 **`POST /api/cron/reactivation`** — Protegido por `CRON_SECRET`
 
 **Headers:** `Authorization: Bearer {CRON_SECRET}`
+
+**Query param `?tenant=slug`:** mismo comportamiento opcional que el cron de cumpleaños (arriba) —
+con `?tenant=` procesa uno solo, sin él procesa todos los tenants activos y agrega
+`tenants_processed` + `results[]` a la response.
 
 **Settings que consume (en orden de prioridad):**
 1. `reactivation_with_reward_template_sid` + `reactivation_reward_id` → modo "vuelve y gana X" (`{{1}}=nombre, {{3}}=título premio fijo`)

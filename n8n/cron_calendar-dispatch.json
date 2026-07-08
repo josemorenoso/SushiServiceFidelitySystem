@@ -1,0 +1,62 @@
+{
+  "name": "Cron Calendario",
+  "nodes": [
+    {
+      "id": "cron_trigger",
+      "name": "Cada 15 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 300],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/15 * * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "call_calendar",
+      "name": "Ejecutar Cron Calendario",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://clubsushiservice.constelarys.com/api/cron/calendar-dispatch",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": { "name": "RestaurantQR CRON_SECRET" }
+      }
+    },
+    {
+      "id": "log_result",
+      "name": "Log Resultado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 300],
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconsole.log(`[Cron Calendar] Eventos due: ${data.processed || 0}, Enviados: ${data.total_sent || 0}, Fallidos: ${data.total_failed || 0}`);\nreturn [$input.first()];"
+      }
+    }
+  ],
+  "connections": {
+    "Cada 15 min": {
+      "main": [[{"node": "Ejecutar Cron Calendario", "type": "main", "index": 0}]]
+    },
+    "Ejecutar Cron Calendario": {
+      "main": [[{"node": "Log Resultado", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

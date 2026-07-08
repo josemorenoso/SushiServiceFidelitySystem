@@ -5,6 +5,31 @@
 
 ---
 
+## [v2.4.4] — 2026-07-07 — feat: workflow n8n para campañas de calendario (calendar-dispatch)
+
+> Request: "Armalo, ese es urgente" — faltaba el workflow de n8n que dispara
+> `/api/cron/calendar-dispatch`. Sin él, las campañas de calendario (eventos auto-programados
+> en el dashboard) nunca se enviaban: el endpoint existía pero nadie lo llamaba.
+
+### Added
+
+- **`n8n/cron_calendar-dispatch.json`** — nuevo workflow con el mismo patrón que
+  `cron_birthday`/`cron_reactivation` (schedule trigger → HTTP Request con credencial
+  `RestaurantQR CRON_SECRET` → log). Diferencia clave: corre **cada 15 min** (`*/15 * * * *`),
+  no 1 vez al día, porque `findDueAutoEvents` filtra por `scheduled_send_at <= now` (los eventos
+  tienen hora exacta, no solo fecha) — así un evento programado a las 7pm sale cerca de las 7pm
+  y no hasta el día siguiente. Un solo workflow dispara TODAS las campañas de calendario de
+  TODOS los tenants (multitenant, sin `?tenant=`; `findDueAutoEvents` recorre `restaurant_events`
+  con `send_mode=auto` + `status=scheduled`).
+
+### Notas / pendientes
+
+- Falta **importar** el JSON en `https://n8n.almojabananet.me` (el repo no se auto-aplica).
+- Para que un evento auto envíe, su tenant necesita `event_template_image_sid` o
+  `event_template_video_sid` en `admin_settings`; si no, `executeAutoEvent` no tiene plantilla.
+
+---
+
 ## [v2.4.3] — 2026-07-07 — fix: check-in muestra "0 puntos ganados" por carrera del polling (post-multitenant)
 
 > Request: "un cliente me mandó una foto donde dice segunda visita registrada y 0 puntos

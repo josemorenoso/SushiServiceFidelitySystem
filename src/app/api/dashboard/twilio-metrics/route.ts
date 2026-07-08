@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireTenantId } from '@/lib/tenant'
+import { getTenantTwilioCredentials } from '@/lib/twilio/tenant-credentials'
 
 export const dynamic = 'force-dynamic'
 
@@ -131,14 +132,15 @@ export async function GET(request: NextRequest) {
     }
 
     const tenantId = await requireTenantId()
-    const accountSid = process.env.TWILIO_ACCOUNT_SID
-    const authToken = process.env.TWILIO_AUTH_TOKEN
-    if (!accountSid || !authToken) {
+    // Multitenant: métricas de la subcuenta del tenant, no de la master (Sushi Service).
+    const creds = await getTenantTwilioCredentials(tenantId)
+    if (!creds) {
       return NextResponse.json(
-        { error: 'Twilio no configurado — faltan TWILIO_ACCOUNT_SID o TWILIO_AUTH_TOKEN' },
+        { error: 'Twilio no configurado — falta la subcuenta del tenant o TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN' },
         { status: 503 }
       )
     }
+    const { accountSid, authToken } = creds
 
     const daysParam = Number(request.nextUrl.searchParams.get('days') ?? '30')
     const days = Number.isInteger(daysParam) && daysParam >= 1 && daysParam <= 90 ? daysParam : 30

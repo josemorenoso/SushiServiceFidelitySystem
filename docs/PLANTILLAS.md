@@ -520,4 +520,34 @@ CAMPAÑAS MANUALES
 
 ---
 
-*Última actualización: v1.0.3 — 2026-05-28 — Script bulk para plantillas de texto*
+---
+
+## Multitenant — resolución de credenciales (2026-07-08)
+
+La Content API de Twilio (`content.twilio.com`) y la Messages API (`api.twilio.com`)
+son **por-cuenta**: cada subcuenta ve solo SUS plantillas y mensajes.
+
+Tras la migración multitenant, los endpoints del dashboard deben autenticar con la
+**subcuenta del tenant** (`tenants.twilio_subaccount_sid` + `_auth_token`), no con la
+cuenta master (env `TWILIO_*` = Sushi Service). De lo contrario, el dashboard de un
+cliente (p.ej. Don Alirio) listaría las plantillas de Sushi Service.
+
+Helper único: `getTenantTwilioCredentials()` en
+[`src/lib/twilio/tenant-credentials.ts`](../src/lib/twilio/tenant-credentials.ts).
+Resuelve el tenant desde el JWT (`app_metadata.tenant_id`), devuelve el header
+`Authorization` (Basic) de la subcuenta y cae a la master solo si el tenant no tiene
+subcuenta propia. Exige SID **y** token de la subcuenta juntos (nunca mezcla SID de
+subcuenta con token master).
+
+Endpoints que lo usan:
+- `GET/POST /api/dashboard/templates` — listar / crear plantillas
+- `POST /api/dashboard/templates/[sid]/submit` — enviar a aprobación de Meta
+- `GET /api/dashboard/twilio-metrics` — métricas de mensajería por tenant
+
+> ⚠️ Requiere que el admin del tenant haya re-logueado tras la migración para que el
+> JWT traiga `tenant_id`. Sin él, se cae a la master (comportamiento pre-migración).
+
+---
+
+*Última actualización: v1.0.4 — 2026-07-08 — Multitenant: endpoints de plantillas y métricas usan la subcuenta Twilio del tenant*
+*Última actualización previa: v1.0.3 — 2026-05-28 — Script bulk para plantillas de texto*

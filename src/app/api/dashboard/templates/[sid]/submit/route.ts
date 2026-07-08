@@ -1,16 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { getTenantTwilioCredentials } from '@/lib/twilio/tenant-credentials'
 
 export const dynamic = 'force-dynamic'
 
 const TWILIO_CONTENT_API = 'https://content.twilio.com/v1/Content'
-
-function getTwilioAuth() {
-  const sid = process.env.TWILIO_ACCOUNT_SID
-  const token = process.env.TWILIO_AUTH_TOKEN
-  if (!sid || !token) return null
-  return `Basic ${Buffer.from(`${sid}:${token}`).toString('base64')}`
-}
 
 export async function POST(
   request: NextRequest,
@@ -21,8 +15,10 @@ export async function POST(
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-    const auth = getTwilioAuth()
-    if (!auth) return NextResponse.json({ error: 'Twilio no configurado' }, { status: 400 })
+    // Multitenant: la plantilla vive en la subcuenta del tenant, no en la master.
+    const creds = await getTenantTwilioCredentials()
+    if (!creds) return NextResponse.json({ error: 'Twilio no configurado' }, { status: 400 })
+    const auth = creds.basicAuth
 
     const { sid } = await params
     const body = await request.json().catch(() => ({}))

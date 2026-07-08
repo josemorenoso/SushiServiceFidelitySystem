@@ -1,19 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { getTenantTwilioCredentials } from '@/lib/twilio/tenant-credentials'
 
 export const dynamic = 'force-dynamic'
 
 const TWILIO_CONTENT_API = 'https://content.twilio.com/v1/Content'
-
-function getTwilioHeaders() {
-  const sid = process.env.TWILIO_ACCOUNT_SID
-  const token = process.env.TWILIO_AUTH_TOKEN
-  if (!sid || !token) return null
-  return {
-    Authorization: `Basic ${Buffer.from(`${sid}:${token}`).toString('base64')}`,
-    'Content-Type': 'application/json',
-  }
-}
 
 export async function GET() {
   try {
@@ -23,9 +14,15 @@ export async function GET() {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
     }
 
-    const headers = getTwilioHeaders()
-    if (!headers) {
+    // Multitenant: usar las credenciales de la subcuenta del tenant, no las de la
+    // master (env). Sin esto, el dashboard listaría las plantillas de Sushi Service.
+    const creds = await getTenantTwilioCredentials()
+    if (!creds) {
       return NextResponse.json({ templates: [], error: 'Twilio no configurado' })
+    }
+    const headers = {
+      Authorization: creds.basicAuth,
+      'Content-Type': 'application/json',
     }
 
     const res = await fetch(TWILIO_CONTENT_API, {
@@ -96,7 +93,7 @@ export async function GET() {
         try {
           const approvalRes = await fetch(
             `${TWILIO_CONTENT_API}/${t.sid}/ApprovalRequests`,
-            { headers: headers!, cache: 'no-store' }
+            { headers, cache: 'no-store' }
           )
           if (approvalRes.ok) {
             const approvalData = await approvalRes.json()
@@ -151,9 +148,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
     }
 
-    const headers = getTwilioHeaders()
-    if (!headers) {
+    const creds = await getTenantTwilioCredentials()
+    if (!creds) {
       return NextResponse.json({ error: 'Twilio no configurado' }, { status: 400 })
+    }
+    const headers = {
+      Authorization: creds.basicAuth,
+      'Content-Type': 'application/json',
     }
 
     const body = await request.json()

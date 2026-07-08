@@ -26,16 +26,15 @@
       "position": [440, 300],
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.RESTAURANT_API_URL }}/api/cron/reactivation",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            { "name": "Authorization", "value": "=Bearer {{ $env.CRON_SECRET }}" }
-          ]
-        },
+        "url": "https://clubsushiservice.constelarys.com/api/cron/reactivation",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "options": {
           "timeout": 30000
         }
+      },
+      "credentials": {
+        "httpHeaderAuth": { "name": "RestaurantQR CRON_SECRET" }
       }
     },
     {

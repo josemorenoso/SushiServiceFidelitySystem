@@ -227,7 +227,29 @@ CREATE TABLE IF NOT EXISTS auto_reply_cooldown (
 
 ⚠️ Mezclarlos en el mismo número rompe la experiencia. Son roles distintos.
 
-### Configurar Messaging Service
+### ⚠️ Dos modelos de aprovisionamiento — detectar ANTES de correr `twilio-setup.mjs`
+
+Descubierto onboardeando a Don Alirio (jul/2026): Twilio tiene dos formas de tener un número
+WhatsApp activo y no se ven igual en la API. `scripts/twilio-setup.mjs` solo entiende la primera.
+
+1. **Modelo clásico** (`IncomingPhoneNumbers` + Messaging Service) — el número aparece en
+   `GET /2010-04-01/Accounts/{SID}/IncomingPhoneNumbers.json`. `twilio-setup.mjs` funciona tal cual.
+2. **Modelo self-service Senders API** (más nuevo) — el número NO aparece ahí; vive en
+   `GET https://messaging.twilio.com/v2/Channels/Senders?Channel=whatsapp` (SID con prefijo
+   `XE...`). **No usa Messaging Service** — `whatsapp.service.ts` ya envía con
+   `from: tenant.twilio_whatsapp_number` directo, sin `messagingServiceSid`. Si corres
+   `twilio-setup.mjs` contra una cuenta así, falla con "número no encontrado" — no es un error de
+   credenciales, es que busca en el endpoint viejo.
+
+Detectar cuál tiene un cliente nuevo:
+```bash
+curl -s -u "AC_SUBCUENTA:AUTH_TOKEN" "https://messaging.twilio.com/v2/Channels/Senders?Channel=whatsapp"
+```
+Si el número aparece ahí → modelo 2: configurar webhook y opt-out a mano en Console (secciones de
+abajo, ambas ya funcionan igual para los dos modelos) y dejar `twilio_messaging_service_sid = NULL`
+en la fila `tenants`.
+
+### Configurar Messaging Service (solo modelo clásico)
 
 1. Twilio Console → Messaging → Services → "Create Messaging Service"
 2. Agregar el número WhatsApp al Messaging Service
@@ -256,7 +278,8 @@ El webhook de Vercel decide internamente:
 | Opt-in  | `START, ALTA, ACEPTO, QUIERO` |
 | Help    | `HELP, AYUDA, INFO` |
 
-**Alternativa vía API** (para automatizar en onboarding masivo):
+**Alternativa vía API** (solo modelo clásico — requiere `MGxx`; en modelo Senders API usar la
+tabla de arriba a mano en Console, no hay Messaging Service donde postear esto):
 
 ```powershell
 $creds = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes('ACxx:AUTH_TOKEN'))
@@ -338,29 +361,30 @@ Mesero WhatsApp → Twilio → /api/webhook/twilio-incoming (Vercel)
   → TwiML response (confirma al mesero)
 ```
 
-> ⚠️ **Único punto donde el modelo multitenant SÍ requiere editar el workflow (una sola vez,
-> ya):** `/api/webhook/delivery` exige un campo `tenant_slug` en el body (identifica a qué
-> tenant pertenece el pedido). Desde v2.4.0, `twilio-incoming/route.ts` ya inyecta ese campo
-> automáticamente al reenviar el mensaje del mesero a n8n (agrega
-> `&tenant_slug=<slug-del-tenant>` al body que llega al Webhook Trigger de W1). Falta un solo
-> paso manual: en el nodo HTTP Request que hace `POST /api/webhook/delivery`, agregar el campo
-> `tenant_slug` al JSON body, tomándolo del webhook entrante. Para confirmar el nombre exacto
-> del campo tal como lo expone n8n, usar "Listen for test event" en el nodo Webhook Trigger y
-> revisar si el body llega como `{{$json.body.tenant_slug}}` o `{{$json.tenant_slug}}` (depende
-> de si el nodo Webhook tiene el body parseado o crudo).
+> ✅ **Resuelto (2026-07-07):** `n8n/domicilios_whatsapp_v4.json` ya propaga `tenant_slug` de
+> punta a punta — el nodo "Extraer Remitente y Body" lo lee de forma defensiva
+> (`raw.tenant_slug || raw.body?.tenant_slug`, cubre ambos formatos con los que n8n puede
+> parsear el body form-urlencoded que reenvía `twilio-incoming/route.ts`), el nodo "Parsear
+> Respuesta IA" lo agrega al objeto final, y "Registrar en RestaurantQR API" lo envía tal cual
+> vía `JSON.stringify($json)`. **Requiere re-importar el JSON en n8n** para que el workflow
+> activo tenga estos nodos actualizados — un workflow importado antes de esta fecha seguirá
+> devolviendo 404 "Tenant no encontrado" hasta que se re-importe.
 
 **Configuración del nodo HTTP Request (POST al delivery):**
 - URL: `{{$env.APP_URL}}/api/webhook/delivery`
 - Headers: `x-webhook-secret: {{$env.WEBHOOK_SECRET}}`
-- Body (JSON mínimo que espera la API):
+- Body (JSON real que arma "Parsear Respuesta IA" — ver `n8n/domicilios_whatsapp_v4.json`):
 
 ```json
 {
-  "phone": "{{$json.phone}}",
-  "name": "{{$json.name}}",
-  "city": "{{$json.city}}",
-  "address": "{{$json.address}}",
-  "tenant_slug": "{{$json.body.tenant_slug}}"
+  "nombre_cliente": "{{$json.nombre_cliente}}",
+  "celular": "{{$json.celular}}",
+  "direccion": "{{$json.direccion}}",
+  "metodo_pago": "{{$json.metodo_pago}}",
+  "monto_total": "{{$json.monto_total}}",
+  "ciudad": "{{$json.ciudad}}",
+  "raw_message": "{{$json.raw_message}}",
+  "tenant_slug": "{{$json.tenant_slug}}"
 }
 ```
 

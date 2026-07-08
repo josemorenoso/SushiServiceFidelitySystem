@@ -82,7 +82,15 @@ export async function GET(request: NextRequest) {
     // Buscar transacción de puntos de esa visita.
     // La tabla point_transactions usa `reference_id` (id de la visita) y `source`
     // ('visit_staff' | 'visit_qr' | 'visit_delivery'), NO 'visit_id'/'type'.
+    //
+    // ANTI-RACE (bug prod): el POST /api/check-in crea la VISITA antes de escribir
+    // la transacción de puntos. Si este polling detecta la visita en ese hueco de
+    // milisegundos (ensanchado por las queries .eq('tenant_id') + RLS del multitenant),
+    // devolvería points_awarded=0 y el cliente saltaría a "0 puntos ganados" con el
+    // valor congelado. Por eso NO señalamos hasRecentVisit hasta que la transacción
+    // ya exista (pointsReady). Ver `docs/features/staff-qr-scan.md` — Bug 6.
     let pointsAwarded = 0
+    let pointsReady = false
     if (recentVisit) {
       const { data: tx } = await supabase
         .from('point_transactions')
@@ -91,8 +99,21 @@ export async function GET(request: NextRequest) {
         .in('source', ['visit_staff', 'visit_qr', 'visit_delivery'])
         .order('created_at', { ascending: false })
         .limit(1)
-      if (tx && tx.length > 0) pointsAwarded = tx[0].points
+      if (tx && tx.length > 0) {
+        pointsAwarded = tx[0].points
+        pointsReady = true
+      }
     }
+
+    // El cliente transiciona a la pantalla de éxito con `hasRecentVisit`. No lo
+    // activamos hasta que los puntos estén escritos (pointsReady), con un fallback
+    // por antigüedad de la visita (>8s) como red de seguridad: si el sistema de
+    // puntos está apagado o el insert falló de verdad, igual dejamos avanzar al
+    // cliente en vez de dejarlo atrapado en el QR para siempre.
+    const visitAgeMs = recentVisit
+      ? Date.now() - new Date(recentVisit.created_at).getTime()
+      : 0
+    const visitReady = !!recentVisit && (pointsReady || visitAgeMs > 8000)
 
     // Evaluar tier
     const totalPoints = customer.total_points ?? 0
@@ -146,7 +167,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       found: true,
-      hasRecentVisit: !!recentVisit,
+      hasRecentVisit: visitReady,
       customer: {
         id: customer.id,
         name: customer.name || 'Cliente',

@@ -867,6 +867,14 @@ Durante la revisión del documento previo al desarrollo se identificaron y corri
 **Fix:** Nuevo endpoint `GET /api/check-in/status` + polling automático cada 5s en `CheckInForm.tsx`. Cuando detecta visita reciente, transiciona a `onCheckInSuccess` automáticamente.
 **Commit:** `3edd135`
 
+### Bug 6: "2ª visita registrada y 0 puntos ganados" (post-multitenant)
+
+**Síntoma:** Tras el escaneo del mesero, el celular del cliente mostraba la visita registrada pero "0 puntos ganados", pese a que el saldo real sí subía.
+**Causa:** Carrera en el polling. El `POST /api/check-in` crea la **visita** (`route.ts:596`) y solo **después** otorga los puntos (actualiza saldo → inserta `point_transactions`). El polling de `/api/check-in/status` detectaba la visita en el hueco previo a la escritura de la transacción → devolvía `points_awarded: 0` con `hasRecentVisit: true`, y `CheckInForm.tsx` (líneas 169-207) congelaba ese "0" al hacer `return` en la primera detección. El multitenant ensanchó el hueco (queries `.eq('tenant_id')` + RLS entre ambos pasos), por eso se empezó a ver en producción.
+**Evidencia:** En BD, el 100% de las visitas `staff_scan` (35/35 en Sushi Service) tenían su transacción con puntos > 0 — el problema era de timing en la lectura, no de escritura.
+**Fix:** `status/route.ts` solo activa `hasRecentVisit` cuando la transacción de puntos ya existe (`pointsReady`), con fallback por antigüedad de la visita (>8s) para no atrapar al cliente si los puntos están apagados o el insert falló.
+**Commit:** _(pendiente)_
+
 ---
 
-*Última actualización: 2026-05-31 v4 (Polling automático + fixes de producción documentados.)*
+*Última actualización: 2026-07-07 v5 (Bug 6: fix carrera del polling que mostraba "0 puntos" post-multitenant.)*

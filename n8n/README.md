@@ -59,12 +59,13 @@ WhatsApp (Twilio) → Webhook → Extraer remitente + body
 > Estas variables ya NO llevan prefijo por cliente (`[CLIENTE]_`) — son un único set
 > compartido por todos los tenants. Ver `docs/04-deployment.md` §5.
 
-> ⚠️ **Multitenant:** el body que llega a este workflow (reenviado por
+> ✅ **Multitenant (resuelto 2026-07-07):** el body que llega a este workflow (reenviado por
 > `/api/webhook/twilio-incoming`) trae un campo `tenant_slug` que identifica al cliente. El
-> nodo HTTP Request que hace `POST /api/webhook/delivery` **debe incluir ese campo** en el
-> JSON que arma, además de los campos que extrae la IA (`phone`, `name`, `city`, `address`,
-> etc.) — si falta, `/api/webhook/delivery` responde 404 "Tenant no encontrado". Ver
-> `docs/04-deployment.md` §5 (W1) para el detalle de la expresión n8n exacta.
+> workflow `n8n/domicilios_whatsapp_v4.json` ya lo propaga de punta a punta hasta el nodo
+> "Registrar en RestaurantQR API" — si falta, `/api/webhook/delivery` responde 404 "Tenant no
+> encontrado". **Requiere re-importar el JSON en n8n** para que tome el fix (un workflow
+> importado antes de esta fecha no lo tiene). Ver `docs/04-deployment.md` §5 (W1) para el
+> detalle de la expresión n8n exacta.
 
 ### Paso a paso:
 
@@ -117,7 +118,7 @@ El v4 **no incluye** Google Contacts inline como el v3. En su lugar, el webhook 
 ### Variables de entorno de n8n requeridas:
 | Variable | Valor | Dónde configurar |
 |----------|-------|-----------------|
-| `SUPABASE_URL` | `https://ijgajxoqmjdveeknabsa.supabase.co` | n8n → Settings → Variables |
+| `SUPABASE_URL` | `https://bredfyugmjjctxysnasw.supabase.co` | n8n → Settings → Variables |
 | `SUPABASE_ANON_KEY` | Tu anon key de Supabase | n8n → Settings → Variables |
 | `RESTAURANT_API_URL` | URL de tu app Next.js (ej: `https://tu-app.vercel.app` o `http://localhost:3000`) | n8n → Settings → Variables |
 | `WEBHOOK_DELIVERY_SECRET` | Un secret que inventes (mismo valor en `.env.local` de Next.js) | n8n → Settings → Variables |
@@ -224,7 +225,7 @@ Ahora cuando un cliente hace check-in por QR, nuestra API automáticamente dispa
 | Aspecto | v2 (tu original) | v3 (nuevo) |
 |---------|------------------|------------|
 | Números autorizados | Hardcoded en el código | Consulta `authorized_numbers` en Supabase |
-| Supabase | Proyecto separado (`vadqeazuuarznnurpokq`) | Proyecto unificado (`ijgajxoqmjdveeknabsa`) |
+| Supabase | Proyecto separado (`vadqeazuuarznnurpokq`) | Proyecto unificado (`bredfyugmjjctxysnasw` — Sushi Service FS) |
 | Credenciales | Hardcoded en nodos | Variables de entorno de n8n |
 | Lógica de DB | n8n llama RPC + inserta directamente | n8n llama nuestra API, la API maneja todo |
 | Google Contacts | Solo domicilios | Domicilios + QR Check-in |

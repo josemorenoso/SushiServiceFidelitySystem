@@ -5,6 +5,124 @@
 
 ---
 
+## [v2.4.3] — 2026-07-07 — fix: check-in muestra "0 puntos ganados" por carrera del polling (post-multitenant)
+
+> Request: "un cliente me mandó una foto donde dice segunda visita registrada y 0 puntos
+> ganados… fue luego de que el mesero escaneó su QR". Auditoría sobre Sushi Service.
+> Hallazgo (con evidencia en BD): las 35 visitas `staff_scan` tienen su transacción de
+> puntos con valor > 0 — es decir, **los puntos SÍ se guardaron en el saldo del cliente**.
+> Lo que falló es lo que vio en pantalla. Causa raíz: **carrera en el polling**. El
+> `POST /api/check-in` crea la VISITA (`route.ts:596`) y solo después otorga los puntos
+> (actualiza saldo → inserta transacción). El celular del cliente consulta
+> `/api/check-in/status` cada 5s; si el poll cae entre "visita creada" y "transacción
+> escrita", `status` devolvía `points_awarded: 0` y `hasRecentVisit: true` → el cliente
+> saltaba a la pantalla de éxito y **congelaba el "0"** (`CheckInForm.tsx:169-207`, hace
+> `return` tras la primera detección). El multitenant ensanchó el hueco al añadir queries
+> `.eq('tenant_id')` + RLS entre ambos pasos, por eso empezó a verse "recién".
+
+### Fixed
+
+- **`src/app/api/check-in/status/route.ts`** — `hasRecentVisit` ahora solo se activa cuando
+  la transacción de puntos de la visita ya está escrita (`pointsReady`), con un fallback por
+  antigüedad de la visita (>8s) para no dejar atrapado al cliente si el sistema de puntos está
+  apagado o el insert falló de verdad. Elimina el "0 puntos ganados" prematuro.
+
+### Notas (no incluido en este commit — requiere acción operativa)
+
+- **don-alirio sin sembrar** (detectado en la misma auditoría): el tenant se dio de alta sin
+  `reward_tiers` (0) ni `admin_settings` de puntos/plantillas (0). Consecuencia: no entrega
+  recompensa/Mystery Box al cruzar un umbral (ej. 150 pts en la 3ª visita) y no envía WhatsApp.
+  Los puntos se suman por defaults del código. **Falta seed por-tenant en el onboarding.**
+  Ver SQL de seed provisto en la auditoría.
+
+---
+
+## [v2.4.2] — 2026-07-07 — fix: n8n workflows rotos (RESTAURANT_API_URL inexistente + tenant_slug faltante)
+
+> Request: "me dijeron que no está funcionando actualmente" (n8n/crons). Investigando se
+> encontraron dos bugs reales en los workflows JSON del repo, no en el código de Vercel:
+> (1) `cron_birthday.json`, `cron_reactivation.json` y `domicilios_whatsapp_v4.json` seguían
+> apuntando a la variable de n8n `RESTAURANT_API_URL`, que ya no existe — el set compartido
+> vigente desde v2.3.0/v2.4.0 es `APP_URL` (`docs/04-deployment.md` §5). Si en n8n solo está
+> configurada `APP_URL`, el nodo HTTP Request resuelve una URL vacía y el request falla.
+> (2) `domicilios_whatsapp_v4.json` (el workflow activo recomendado) nunca llegó a incluir
+> `tenant_slug` en el body que manda a `/api/webhook/delivery` — un pendiente que v2.4.0 ya
+> había dejado documentado como "falta un paso manual" pero nunca se hizo en el JSON. Esto
+> rompía TODOS los domicilios por WhatsApp con 404 "Tenant no encontrado", no solo los crons.
+
+### Fixed
+
+- **`n8n/domicilios_whatsapp_v4.json`** — nodo "Extraer Remitente y Body" ahora lee
+  `tenant_slug` del body entrante (`raw.tenant_slug || raw.body?.tenant_slug`, cubre ambos
+  formatos de parseo de n8n); nodo "Parsear Respuesta IA" lo agrega al objeto final; nodo
+  "Registrar en RestaurantQR API" lo envía junto con el resto de campos.
+- **Se eliminó TODA dependencia de `$env`** en los 3 workflows (antes fallaban porque `$env`
+  lee las variables de entorno del **servidor** n8n / docker-compose, que NO son lo mismo que
+  "Settings → Variables" de la UI — eso es `$vars`. En producción resolvían vacío → "Invalid
+  URL: /api/cron/birthday. URL must start with http"). Nuevo modelo, 100% configurable desde la
+  UI de n8n sin tocar docker-compose:
+  - **URLs hardcodeadas**: `https://clubsushiservice.constelarys.com/api/...` (no son secretos y
+    con multitenant la URL base es idéntica para todos — el tenant se resuelve por `tenant_slug`
+    o iterando, no por host). La URL de Supabase también quedó hardcodeada en el nodo de
+    validación (endpoint público).
+  - **Secretos → n8n Credentials** (almacén encriptado de la UI, referenciados por nombre en el
+    JSON, nunca se commitean): `RestaurantQR CRON_SECRET` (Header Auth) para los 2 crons;
+    `OpenAI RestaurantQR` (Header Auth) y `RestaurantQR Webhook Delivery` (Header Auth) y
+    `Supabase Anon RestaurantQR` (Custom Auth) para domicilios.
+- **`n8n/cron_birthday.json`** y **`n8n/cron_reactivation.json`** — el `?tenant=` opcional
+  (v2.4.0) sigue intacto — estos workflows no lo usan, así que procesan todos los tenants
+  activos en un solo disparo.
+- **`docs/04-deployment.md`** §5 (W1) y **`n8n/README.md`** — el aviso de "falta un paso
+  manual" para `tenant_slug` se marca resuelto y se corrige el ejemplo de body JSON, que tenía
+  campos que nunca existieron en `DeliveryRequestBody` (`phone`/`name`/`city`/`address` en vez
+  de `nombre_cliente`/`celular`/`ciudad`/etc.).
+
+### Fixed (follow-up — debug en vivo del flujo de domicilios, misma fecha)
+
+- **Proyecto Supabase equivocado**: el ref cableado era `ijgajxoqmjdveeknabsa` (proyecto DEMO
+  "Restaurant Qr"), no `bredfyugmjjctxysnasw` (el real, "Sushi Service FS"). Se coló al
+  hardcodear la URL tomándola del `.mcp.json`, que apuntaba al demo. Corregido en
+  `n8n/domicilios_whatsapp_v4.json`, `n8n/README.md` y `.mcp.json`. La app en Vercel NO estaba
+  afectada (lee el proyecto de sus env vars, no del repo).
+- **Nodos de validación de remitente eliminados** de `domicilios_whatsapp_v4.json`
+  (`¿Viene de Twilio?`, `Validar Remitente en DB`, `Remitente Autorizado?`, `Responder No
+  Autorizado`). Chequeo duplicado y roto: (a) la migración 00026 activó RLS en
+  `authorized_numbers` y el rol `anon` ya no puede leerla → la consulta devolvía `[]` y frenaba
+  el flujo con "No output data"; (b) `twilio-incoming/route.ts` YA valida al mesero
+  (service-role, tenant-scoped) antes de reenviar a n8n, así que sobraba. Flujo nuevo:
+  `Extraer Remitente y Body → IA → Parsear → Registrar`.
+- **`Parsear Respuesta IA`** ahora lee también `response.text` (además de `.output` y
+  `.choices[]`), para soportar el nodo nativo "Basic LLM Chain" de n8n usado en la instancia en
+  vivo (devuelve `{ text }`, no `{ choices }`) → mataba el flujo con "La IA no devolvió JSON
+  válido" pese a que la extracción era correcta.
+
+### Notas / pendientes
+
+- `n8n/domicilios_whatsapp_v3.json` (legacy, parseo con regex) no se tocó — no está en uso,
+  queda como referencia histórica.
+- **Estos fixes viven solo en el repo — no se auto-aplican a la instancia n8n en vivo.**
+  Falta re-importar los 3 JSON en `https://n8n.almojabananet.me` para que el fix tome efecto.
+
+---
+
+## [v2.4.1] — 2026-07-07 — docs: dos modelos de número Twilio (detectado onboardeando a Don Alirio)
+
+> Request: dar de alta a Don Alirio Café de Origen. Al correr `scripts/twilio-setup.mjs` contra
+> su subcuenta, falló con "número no encontrado" pese a tener el número aprobado. Investigando se
+> encontró que su cuenta usa el modelo **self-service WhatsApp Senders API** de Twilio (más
+> nuevo), donde el número vive en `GET /v2/Channels/Senders` en vez de `IncomingPhoneNumbers` —
+> `twilio-setup.mjs` solo soporta el modelo clásico. No requiere Messaging Service:
+> `whatsapp.service.ts` ya envía con `from` directo, sin `messagingServiceSid`.
+
+### Docs
+- **`docs/04-deployment.md`** §4 — nueva subsección "Dos modelos de aprovisionamiento" con el
+  comando `curl` para detectar cuál tiene un cliente nuevo antes de correr el script, y notas en
+  "Configurar Messaging Service" / "Alternativa vía API" aclarando que son solo para el modelo
+  clásico. Para el modelo Senders API, webhook y opt-out se configuran a mano en Console (los
+  pasos de esas dos secciones ya sirven para ambos modelos, sin cambios).
+
+---
+
 ## [v2.4.0] — 2026-07-07 — fix: multitenant en n8n/crons (onboarding sin tocar n8n) + opt-out automatizado
 
 > Request: para dar de alta a Don Alirio Café de Origen sin clonar nada, faltaba rediseñar el

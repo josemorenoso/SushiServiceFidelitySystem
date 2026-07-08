@@ -22,79 +22,7 @@
       "typeVersion": 2,
       "position": [440, 300],
       "parameters": {
-        "jsCode": "const raw = $input.first().json;\n\n// Body: Twilio directo, Twilio via proxy Vercel (body anidado), chat hook\nconst bodyRaw = raw.Body || raw.body?.Body || raw.messages?.[0]?.text?.body || raw.text || (typeof raw.body === 'string' ? raw.body : null) || raw.chatInput || raw.message || '';\nconst body = String(bodyRaw).trim();\n\nif (!body) throw new Error('Mensaje vacío');\n\n// From: Twilio directo o via proxy Vercel (body anidado)\nconst rawFrom = raw.From || raw.body?.From || raw.messages?.[0]?.from || raw.from || raw.sender || '';\nconst is_twilio = !!rawFrom;\n\nlet remitente = '';\n\nif (rawFrom) {\n  remitente = String(rawFrom)\n    .replace(/^whatsapp:\\+?/i, '')\n    .replace(/[^0-9]/g, '')\n    .replace(/^57/, '')\n    .slice(-10);\n}\n\n// Si no hay remitente (chat hook u otros), extraer celular del cuerpo\nif (!remitente || remitente.length !== 10) {\n  const celularLine = body.match(/celular\\s*[:\\-]?\\s*(\\+?[\\d\\s]{10,15})/i);\n  if (celularLine) {\n    const digits = celularLine[1].replace(/\\D/g, '').replace(/^57/, '').slice(-10);\n    if (/^3\\d{9}$/.test(digits)) remitente = digits;\n  }\n}\nif (!remitente || remitente.length !== 10) {\n  const match = body.match(/\\b(3[0-9]{9})\\b/);\n  if (match) remitente = match[1];\n}\n\nif (!remitente || remitente.length !== 10) {\n  throw new Error('No se pudo extraer numero de remitente');\n}\n\nreturn [{ json: { remitente, body, raw_payload: raw, is_twilio } }];"
-      }
-    },
-    {
-      "id": "check_twilio_src",
-      "name": "¿Viene de Twilio?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "position": [660, 300],
-      "parameters": {
-        "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
-          "conditions": [
-            {
-              "id": "tw1",
-              "leftValue": "={{ $json.is_twilio }}",
-              "rightValue": true,
-              "operator": { "type": "boolean", "operation": "equals" }
-            }
-          ],
-          "combinator": "and"
-        }
-      }
-    },
-    {
-      "id": "validar_rem_db",
-      "name": "Validar Remitente en DB",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [880, 160],
-      "parameters": {
-        "method": "GET",
-        "url": "={{ $env.SUPABASE_URL }}/rest/v1/authorized_numbers?phone=eq.{{ $json.remitente }}&is_active=eq.true&select=id,name",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            { "name": "apikey", "value": "={{ $env.SUPABASE_ANON_KEY }}" },
-            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_ANON_KEY }}" }
-          ]
-        }
-      }
-    },
-    {
-      "id": "check_auth_1",
-      "name": "Remitente Autorizado?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "position": [1100, 160],
-      "parameters": {
-        "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
-          "conditions": [
-            {
-              "id": "c1",
-              "leftValue": "={{ $json.length > 0 }}",
-              "rightValue": true,
-              "operator": { "type": "boolean", "operation": "equals" }
-            }
-          ],
-          "combinator": "and"
-        }
-      }
-    },
-    {
-      "id": "resp_ign_1",
-      "name": "Responder No Autorizado",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "position": [1320, 60],
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "{\"ok\":false,\"error\":\"Remitente no autorizado\"}",
-        "options": { "responseCode": 403 }
+        "jsCode": "const raw = $input.first().json;\n\n// Body: Twilio directo, Twilio via proxy Vercel (body anidado), chat hook\nconst bodyRaw = raw.Body || raw.body?.Body || raw.messages?.[0]?.text?.body || raw.text || (typeof raw.body === 'string' ? raw.body : null) || raw.chatInput || raw.message || '';\nconst body = String(bodyRaw).trim();\n\nif (!body) throw new Error('Mensaje vacío');\n\n// From: Twilio directo o via proxy Vercel (body anidado)\nconst rawFrom = raw.From || raw.body?.From || raw.messages?.[0]?.from || raw.from || raw.sender || '';\nconst is_twilio = !!rawFrom;\n\n// tenant_slug: inyectado por twilio-incoming/route.ts al reenviar (multitenant, ver docs/04-deployment.md §5)\nconst tenant_slug = raw.tenant_slug || raw.body?.tenant_slug || '';\n\nlet remitente = '';\n\nif (rawFrom) {\n  remitente = String(rawFrom)\n    .replace(/^whatsapp:\\+?/i, '')\n    .replace(/[^0-9]/g, '')\n    .replace(/^57/, '')\n    .slice(-10);\n}\n\n// Si no hay remitente (chat hook u otros), extraer celular del cuerpo\nif (!remitente || remitente.length !== 10) {\n  const celularLine = body.match(/celular\\s*[:\\-]?\\s*(\\+?[\\d\\s]{10,15})/i);\n  if (celularLine) {\n    const digits = celularLine[1].replace(/\\D/g, '').replace(/^57/, '').slice(-10);\n    if (/^3\\d{9}$/.test(digits)) remitente = digits;\n  }\n}\nif (!remitente || remitente.length !== 10) {\n  const match = body.match(/\\b(3[0-9]{9})\\b/);\n  if (match) remitente = match[1];\n}\n\nif (!remitente || remitente.length !== 10) {\n  throw new Error('No se pudo extraer numero de remitente');\n}\n\nreturn [{ json: { remitente, body, raw_payload: raw, is_twilio, tenant_slug } }];"
       }
     },
     {
@@ -106,16 +34,20 @@
       "parameters": {
         "method": "POST",
         "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Authorization", "value": "=Bearer {{ $env.OPENAI_API_KEY }}" },
             { "name": "Content-Type", "value": "application/json" }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ model: 'gpt-4o-mini', temperature: 0, max_tokens: 400, messages: [{ role: 'system', content: 'Eres un asistente que extrae datos de pedidos de domicilio desde mensajes de WhatsApp de un restaurante. Del mensaje del usuario, extrae estos campos en JSON estricto:\\n- nombre_cliente (string) — nombre del cliente. Si no hay nombre claro, usa \"Cliente Domicilio\"\\n- celular (string) — SOLO los 10 dígitos del celular colombiano (sin +57, sin espacios). Empieza con 3.\\n- direccion (string | null) — dirección de entrega\\n- metodo_pago (string | null) — efectivo, transferencia, nequi, daviplata, tarjeta, etc.\\n- monto_total (number | null) — valor total en COP como número (sin puntos, sin $, \"35mil\"=35000, \"50k\"=50000)\\n- ciudad (string) — ciudad del cliente inferida de la dirección. Si hay Cra, Cl, Tr, Calle sin ciudad explícita → Envigado. Si hay ciudad clara como Medellín, Itagüí, Sabaneta → usarla. Por defecto: Envigado.\\n\\nSi no puedes extraer un campo, usa null. El celular es OBLIGATORIO.\\nResponde SOLO con el JSON válido, sin markdown, sin explicaciones, sin ```.' }, { role: 'user', content: $('Extraer Remitente y Body').first().json.body }] }) }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": { "name": "OpenAI RestaurantQR" }
       }
     },
     {
@@ -125,7 +57,7 @@
       "typeVersion": 2,
       "position": [1340, 440],
       "parameters": {
-        "jsCode": "const response = $input.first().json;\n// Soporta AI Agent node (response.output) y OpenAI HTTP API (response.choices[0].message.content)\nconst content = response.output || response.choices?.[0]?.message?.content || '';\nlet parsed;\ntry {\n  // Limpiar posibles backticks o whitespace\n  const cleaned = content.replace(/```json\\n?/g, '').replace(/```/g, '').trim();\n  parsed = JSON.parse(cleaned);\n} catch (e) {\n  throw new Error('La IA no devolvió JSON válido: ' + content.substring(0, 200));\n}\n\n// Validar celular\nlet celular = String(parsed.celular || '').replace(/[\\s\\-\\(\\)]/g, '').replace(/^\\+?57/, '').replace(/^0/, '').slice(-10);\nif (!/^3\\d{9}$/.test(celular)) {\n  throw new Error('No se encontró un celular colombiano válido. IA extrajo: ' + (parsed.celular || 'nada'));\n}\n\n// Normalizar monto\nlet monto_total = null;\nif (parsed.monto_total !== null && parsed.monto_total !== undefined) {\n  monto_total = typeof parsed.monto_total === 'number' ? parsed.monto_total : parseFloat(String(parsed.monto_total).replace(/[^0-9.]/g, ''));\n  if (isNaN(monto_total)) monto_total = null;\n}\n\nconst body = $('Extraer Remitente y Body').first().json.body;\n\nreturn [{ json: {\n  nombre_cliente: String(parsed.nombre_cliente || 'Cliente Domicilio').trim(),\n  celular,\n  direccion: parsed.direccion || null,\n  metodo_pago: parsed.metodo_pago || null,\n  monto_total,\n  ciudad: parsed.ciudad || 'Envigado',\n  raw_message: body\n} }];"
+        "jsCode": "const response = $input.first().json;\n// Soporta AI Agent node (response.output) y OpenAI HTTP API (response.choices[0].message.content)\nconst content = response.output || response.text || response.choices?.[0]?.message?.content || '';\nlet parsed;\ntry {\n  // Limpiar posibles backticks o whitespace\n  const cleaned = content.replace(/```json\\n?/g, '').replace(/```/g, '').trim();\n  parsed = JSON.parse(cleaned);\n} catch (e) {\n  throw new Error('La IA no devolvió JSON válido: ' + content.substring(0, 200));\n}\n\n// Validar celular\nlet celular = String(parsed.celular || '').replace(/[\\s\\-\\(\\)]/g, '').replace(/^\\+?57/, '').replace(/^0/, '').slice(-10);\nif (!/^3\\d{9}$/.test(celular)) {\n  throw new Error('No se encontró un celular colombiano válido. IA extrajo: ' + (parsed.celular || 'nada'));\n}\n\n// Normalizar monto\nlet monto_total = null;\nif (parsed.monto_total !== null && parsed.monto_total !== undefined) {\n  monto_total = typeof parsed.monto_total === 'number' ? parsed.monto_total : parseFloat(String(parsed.monto_total).replace(/[^0-9.]/g, ''));\n  if (isNaN(monto_total)) monto_total = null;\n}\n\nconst body = $('Extraer Remitente y Body').first().json.body;\nconst tenant_slug = $('Extraer Remitente y Body').first().json.tenant_slug;\n\nreturn [{ json: {\n  nombre_cliente: String(parsed.nombre_cliente || 'Cliente Domicilio').trim(),\n  celular,\n  direccion: parsed.direccion || null,\n  metodo_pago: parsed.metodo_pago || null,\n  monto_total,\n  ciudad: parsed.ciudad || 'Envigado',\n  raw_message: body,\n  tenant_slug\n} }];"
       }
     },
     {
@@ -136,17 +68,21 @@
       "position": [1580, 440],
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.RESTAURANT_API_URL }}/api/webhook/delivery",
+        "url": "https://clubsushiservice.constelarys.com/api/webhook/delivery",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Content-Type", "value": "application/json" },
-            { "name": "x-webhook-secret", "value": "={{ $env.WEBHOOK_DELIVERY_SECRET }}" }
+            { "name": "Content-Type", "value": "application/json" }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($json) }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": { "name": "RestaurantQR Webhook Delivery" }
       }
     },
     {
@@ -193,22 +129,7 @@
       "main": [[{"node": "Extraer Remitente y Body", "type": "main", "index": 0}]]
     },
     "Extraer Remitente y Body": {
-      "main": [[{"node": "¿Viene de Twilio?", "type": "main", "index": 0}]]
-    },
-    "¿Viene de Twilio?": {
-      "main": [
-        [{"node": "Validar Remitente en DB", "type": "main", "index": 0}],
-        [{"node": "IA Extrae Datos del Pedido", "type": "main", "index": 0}]
-      ]
-    },
-    "Validar Remitente en DB": {
-      "main": [[{"node": "Remitente Autorizado?", "type": "main", "index": 0}]]
-    },
-    "Remitente Autorizado?": {
-      "main": [
-        [{"node": "Responder No Autorizado", "type": "main", "index": 0}],
-        [{"node": "IA Extrae Datos del Pedido", "type": "main", "index": 0}]
-      ]
+      "main": [[{"node": "IA Extrae Datos del Pedido", "type": "main", "index": 0}]]
     },
     "IA Extrae Datos del Pedido": {
       "main": [[{"node": "Parsear Respuesta IA", "type": "main", "index": 0}]]

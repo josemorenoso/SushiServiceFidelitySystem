@@ -18,9 +18,9 @@ export async function GET(request: NextRequest) {
     if (!tenant) {
       return NextResponse.json({ min: 60, max: 90 }, { status: 200 })
     }
-    const { min, max } = await getPointsConfig(tenant.id)
+    const { visitMin, visitMax } = await getPointsConfig(tenant.id)
     return NextResponse.json(
-      { min, max },
+      { min: visitMin, max: visitMax },
       { headers: { 'Cache-Control': 'public, max-age=60' } }
     )
   } catch (err) {

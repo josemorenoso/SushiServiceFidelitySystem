@@ -5,6 +5,88 @@
 
 ---
 
+## [v2.4.0] — 2026-07-12 — feat: Calibrador de puntos + fix: el shortfall configurable era una configuración fantasma
+
+> Request: "Estoy teniendo muchos problemas para el tema de definición de recompensas, ya que hay
+> negocios que quieren cambiar el tema del sistema de puntos [...] estoy con un café y el umbral de
+> 150 puntos que se alcanzan en 3 visitas [...] me pidió si esos 150 puntos podíamos alcanzarlos pero
+> ya no en 3 sino en 5 visitas [...] ¿dejamos esto así para poder darles el gancho psicológico [...]
+> o añadimos una capa extra de personalización?"
+
+### Contexto — no hacía falta una capa de personalización, hacía falta un traductor
+
+La mecánica **ya se autoajusta**: el near-miss de `generateSmartVisitPoints()` es relativo a la
+distancia al umbral, no a un número de visitas. Bajando los puntos por visita, el "casi lo logro" se
+desplaza solo. Lo que no existía era la **traducción**: el dueño veía seis casillas numéricas sueltas y
+ninguna le decía en cuántas visitas cae el premio.
+
+**Hallazgo que invalidaba la receta obvia:** la visita 1 **no otorga puntos de visita**, otorga el
+**bono de bienvenida** — `check-in/route.ts` llama a `awardWelcomeBonus()` en el registro, nunca a
+`awardVisitPoints()`. Con el default de 75-90 sobre un umbral de 150, **más de la mitad del premio se
+regala antes de que el cliente vuelva una sola vez**. Bajar los puntos por visita a 25-35 *dejando el
+bono intacto* da el premio en la visita **4**, no en la 5. Por eso el calibrador ajusta el bono junto
+con los puntos: si no, promete N visitas y entrega N−1.
+
+**Segundo hallazgo:** la fórmula cerrada (`bono + (N−1) × puntos ≈ umbral`) **falla por una visita**
+cuando el cliente aterriza dentro de la banda del shortfall y el algoritmo le inserta un "casi lo logro"
+extra. El calibrador por tanto **no despeja: busca**. Barre candidatos, simula cada uno con el algoritmo
+real y se queda con el que aterriza el premio exactamente donde se pidió.
+
+### Fixed (hallazgo 3.3 de la auditoría — configuración fantasma)
+
+- **`src/services/points.service.ts`** — `getPointsConfig()` ahora lee `shortfall_min` y `shortfall_max`
+  de `admin_settings`. Antes el dashboard los guardaba correctamente y el servicio **los ignoraba**:
+  `generateSmartVisitPoints()` usaba siempre las constantes `DEFAULT_POINTS_SHORTFALL_MIN/MAX`. El dueño
+  configuraba el "casi lo logro" y no pasaba nada.
+
+### Added
+
+- **`src/lib/points-engine.ts`** (nuevo) — el algoritmo extraído a un módulo **puro, sin I/O**, para que
+  el dashboard pueda simularlo en el navegador sin arrastrar el SDK de Supabase al bundle. Expone
+  `generateSmartVisitPoints()`, `generateWelcomeBonusPoints()`, `simulateJourney()`,
+  `deriveRewardVisit()`, `calibrate()` y `sanitizeConfig()`.
+  - **El `rng` inyectable es la pieza clave:** el simulador **no es una copia del algoritmo**, es el
+    algoritmo con `rng = () => 0.5` (el "cliente mediano"). La tabla del dashboard no puede
+    desincronizarse de producción.
+  - `sanitizeConfig()` blinda contra configs corruptas (rangos invertidos, ceros, `NaN`) que llegan de
+    una tabla key-value de strings editable a mano.
+- **`src/components/dashboard/PointsCalibrator.tsx`** (nuevo) — la perilla: *"¿En cuántas visitas quieres
+  que tus clientes se ganen su primer premio?"* + la tabla espejo visita a visita, señalando dónde cae el
+  near-miss y dónde el premio. Si la meta no es alcanzable con el umbral actual, muestra el rango posible
+  en vez de guardar una promesa falsa.
+- **`src/constants/rewards.ts`** — `CALIBRATOR_WELCOME_FACTOR` (1.1 — el bono se mantiene
+  proporcionalmente más generoso que una visita, conservando el Endowed Progress Effect a cualquier
+  escala), `CALIBRATOR_VISIT_SPREAD`, `CALIBRATOR_WELCOME_SPREAD`, `CALIBRATOR_MIN_VISITS`,
+  `CALIBRATOR_MAX_VISITS`, `CALIBRATOR_MAX_SIMULATED_VISITS`.
+
+### Changed
+
+- **`src/app/(dashboard)/dashboard/settings/page.tsx`** — Sistema de Puntos abre con el calibrador. Los
+  seis inputs (puntos, bienvenida, shortfall) se pliegan bajo **Ajustes avanzados**, prellenados con lo
+  que la perilla decidió y editables a mano — quien los toque ve la tabla recalcularse en vivo. Añadido
+  el fetch de `/api/dashboard/reward-tiers` para leer el umbral del primer premio.
+- **`src/services/points.service.ts`** — `getPointsConfig()` devuelve un `PointsEngineConfig` completo
+  (`visitMin/visitMax/welcomeMin/welcomeMax/shortfallMin/shortfallMax`) en vez de `{min, max,
+  welcomeBonusMin, welcomeBonusMax}`. `awardWelcomeBonus()` delega en `generateWelcomeBonusPoints()`.
+- **`src/app/api/public/points-range/route.ts`** — adaptado a la nueva forma de `getPointsConfig()`. La
+  respuesta pública (`{min, max}`) **no cambia**.
+
+### Sin migración de DB
+
+Las seis keys ya existían en `admin_settings`. No hay endpoints nuevos: el motor es puro y corre en el
+navegador, y el umbral sale de `GET /api/dashboard/reward-tiers`, que ya existía.
+
+### Verificación
+
+`npx tsc --noEmit` limpio · `npx next build` verde · `npx eslint` sin errores nuevos. Motor verificado
+contra 48 combinaciones de umbral × meta: **si `calibrate()` dice que acierta, la simulación aterriza el
+premio exactamente en la visita pedida**. No regresión: con los defaults (60-90 / 75-90 / 5-30, umbral
+150) el premio sigue cayendo en la visita 3.
+
+📄 Spec: `docs/superpowers/specs/2026-07-12-points-calibrator-design.md`
+
+---
+
 ## [v2.3.0] — 2026-07-11 — feat: Premios Otorgados (reward_grants) + fix: condición de carrera en la redención de premios
 
 > Request: "Necesito que en las campañas de reactivación agresiva pueda yo seleccionar un

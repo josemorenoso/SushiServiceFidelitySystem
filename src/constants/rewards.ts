@@ -71,6 +71,32 @@ export const DEFAULT_POINTS_SHORTFALL_MAX = 30
 /** Mínimo de puntos que una visita puede dar (para no verse sospechoso). */
 export const MINIMUM_VISIBLE_POINTS = 15
 
+// ═══════════════════════════════════════════════════════════════
+// Calibrador de puntos (Bloque 2)
+// ═══════════════════════════════════════════════════════════════
+
+/** Cuánto más generoso es el bono de bienvenida que una visita normal.
+ *
+ *  Reproduce los defaults actuales (bono ~82 sobre visitas ~75) y es lo que conserva el
+ *  Endowed Progress Effect a cualquier escala: si el calibrador baja los puntos por visita,
+ *  el bono baja con ellos pero sigue siendo el número más alto que el cliente ve. */
+export const CALIBRATOR_WELCOME_FACTOR = 1.1
+
+/** Amplitud del rango aleatorio alrededor del promedio, como fracción.
+ *  0.2 sobre un promedio de 75 reproduce el 60-90 default. */
+export const CALIBRATOR_VISIT_SPREAD = 0.2
+
+/** Amplitud del rango del bono. 0.1 sobre un promedio de 82 reproduce el 75-90 default. */
+export const CALIBRATOR_WELCOME_SPREAD = 0.1
+
+/** Metas de visitas que el dueño puede pedir. Menos de 3 mata el near-miss; más de 10 es
+ *  una fidelización que ningún cliente aguanta. */
+export const CALIBRATOR_MIN_VISITS = 3
+export const CALIBRATOR_MAX_VISITS = 10
+
+/** Horizonte de la simulación. Si el premio no cae aquí dentro, la config es inservible. */
+export const CALIBRATOR_MAX_SIMULATED_VISITS = 12
+
 /** Puntos de bienvenida al registrarse — mínimo del rango (Endowed Progress Effect). */
 export const DEFAULT_WELCOME_BONUS_POINTS = 75
 

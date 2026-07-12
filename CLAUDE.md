@@ -64,7 +64,10 @@
 | `src/lib/supabase/*` | `docs/02-architecture.md` + `docs/03-security.md` |
 | `src/lib/twilio/*` | `docs/02-architecture.md` + `docs/04-deployment.md` |
 | `src/services/*` | `docs/features/[feature].md` correspondiente |
-| `src/constants/rewards.ts` | `docs/features/campaigns.md` + `docs/features/calendar.md` |
+| `src/constants/rewards.ts` | `docs/features/campaigns.md` + `docs/features/calendar.md` + `docs/features/points-mystery-box.md` |
+| `src/lib/points-engine.ts` | `docs/features/points-mystery-box.md` |
+| `src/services/points.service.ts` | `docs/features/points-mystery-box.md` |
+| `src/components/dashboard/PointsCalibrator.tsx` | `docs/features/points-mystery-box.md` |
 | `supabase/migrations/*.sql` | `docs/DB_SCHEMA.md` |
 | `src/app/api/**` | `docs/API_DOCS.md` + `docs/features/[feature].md` |
 | `scripts/twilio-setup.mjs` | `docs/04-deployment.md` |

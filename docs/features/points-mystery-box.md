@@ -37,52 +37,112 @@ Migración del sistema de recompensas lineales por visitas a un sistema de **pun
 
 | Fuente | Puntos | Configurable | Notas |
 |--------|--------|-------------|-------|
-| **Visita QR** | Rango inteligente (default: 60–90, limitado cerca del umbral) | Sí (`admin_settings`) | Mín 3 visitas para primera recompensa |
+| **Registro (visita 1)** | Bono de bienvenida (default: 75–90) | Sí (`admin_settings`) | Endowed Progress Effect. **La visita 1 otorga ESTO, no puntos de visita.** |
+| **Visita QR (2ª en adelante)** | Rango inteligente (default: 60–90, limitado cerca del umbral) | Sí (`admin_settings`) | |
 | **Domicilio** | Mismo rango que QR | Sí | Mismo tratamiento |
 | **Evento/Festival** | Bonus fijo (default: 25) | Sí, por evento | Se suma al registro del check-in del evento |
 | **Campaña engagement** | Bonus fijo (default: 10) | Sí | Futuro: puntos por interacciones |
-| **Registro inicial** | Bonus de bienvenida (default: 0) | Sí | Efecto "Endowed Progress" si se activa |
+
+> ⚠️ **El bono de bienvenida es la palanca dominante del sistema, y es fácil pasarlo por alto.**
+> `awardVisitPoints()` **no corre en el registro**: la primera visita llama a `awardWelcomeBonus()`
+> (`src/app/api/check-in/route.ts`). Con el default de 75-90 sobre un umbral de 150, **más de la mitad
+> del premio se regala antes de que el cliente vuelva una sola vez**. Cualquier razonamiento sobre "en
+> cuántas visitas se gana el premio" que ignore el bono está mal.
+>
+> *Excepción:* en modo `staff_verified` con `checkin_first_visit_free=false`, el registro no otorga nada
+> y el escaneo del mesero es el que otorga los puntos de la primera visita.
 
 ### 2.2 Matemáticas del algoritmo inteligente
 
-**Restricción fundamental:** El cliente SIEMPRE necesita mínimo 3 visitas para alcanzar el primer tier.
+El near-miss es **relativo a la distancia al umbral**, no a un número fijo de visitas. Por eso el sistema
+**se autoajusta a cualquier configuración de puntos** sin tocar la mecánica: si bajas los puntos por
+visita, el "casi lo logro" se desplaza solo a la visita que corresponda.
 
-**Psicología del enganche:**
-1. **Visita 1:** Puntos altos (60-90) → Cliente piensa "con 2 visitas llego"
-2. **Visita 2:** Sistema LIMITA para dejar al cliente 5-30 pts corto → "Casi lo logro, me falta poquito"
-3. **Visita 3:** Cualquier cantidad cruza el umbral → PREMIO
+**Psicología del enganche** (con los defaults, umbral 150):
+1. **Visita 1 (registro):** bono alto (75-90) → el cliente piensa "con 2 visitas más llego".
+2. **Visita 2:** el sistema **LIMITA** para dejarlo 5-30 pts corto → *"casi lo logro, me falta poquito"*.
+3. **Visita 3:** cualquier cantidad cruza el umbral → **PREMIO**.
 
 ```
 PRIMER_UMBRAL = 150 puntos
-POINTS_MIN = 60, POINTS_MAX = 90
+WELCOME_MIN = 75, WELCOME_MAX = 90
+POINTS_MIN  = 60, POINTS_MAX  = 90
 SHORTFALL_MIN = 5, SHORTFALL_MAX = 30
 
-Ejemplo real:
-  Visita 1: balance=0, remaining=150 > 90 → random(60,90) = 78 → balance=78
-  Visita 2: balance=78, remaining=72, 30 < 72 ≤ 90 → LIMITAR
-    shortfall = random(5,30) = 18 → target = 72-18 = 54 → balance=132 (18 corto!)
-  Visita 3: balance=132, remaining=18, ≤ 30 → random(18,90) = 45 → balance=177 → PREMIO! 🎉
+Recorrido del cliente mediano:
+  Visita 1 (registro): bono = 83 → balance=83
+  Visita 2: balance=83, remaining=67, 30 < 67 ≤ 90 → LIMITAR
+    shortfall = 18 → target = 67-18 = 49 → balance=132 (¡18 corto!)
+  Visita 3: balance=132, remaining=18, ≤ 30 → cruza → balance=186 → PREMIO! 🎉
 ```
 
-### 2.3 Algoritmo de generación (`generateSmartVisitPoints`)
+### 2.3 El motor: `src/lib/points-engine.ts`
+
+El cálculo es **puro y sin I/O**, deliberadamente separado de `points.service.ts` (que importa Supabase).
+Lo consumen dos sitios que no pueden compartir código de servidor:
+
+| Consumidor | Qué hace |
+|------------|----------|
+| `src/services/points.service.ts` | Producción: otorga los puntos en el check-in real. |
+| `src/components/dashboard/PointsCalibrator.tsx` | Simulación: dibuja la tabla del calibrador en el navegador. |
 
 ```typescript
-function generateSmartVisitPoints(currentPoints, nextThreshold, min, max) {
+function generateSmartVisitPoints(currentPoints, nextThreshold, config, rng = Math.random) {
   const remaining = nextThreshold - currentPoints
 
-  // CASO 1: Lejos — ni con máximo llega → dar alto (60-90)
-  if (remaining > max) return randomTriangular(min, max)
+  // CASO 1: Lejos — ni con el máximo llega → dar alto
+  if (remaining > config.visitMax) return randomTriangular(config.visitMin, config.visitMax, rng)
 
-  // CASO 2: Podría cruzar — LIMITAR para dejar 5-30 corto
-  if (remaining > SHORTFALL_MAX) {
-    const shortfall = random(SHORTFALL_MIN, SHORTFALL_MAX)
-    return clamp(remaining - shortfall, MINIMUM_VISIBLE_POINTS, max)
+  // CASO 2: Podría cruzar — LIMITAR para dejarlo `shortfall` corto
+  if (remaining > config.shortfallMax) {
+    const shortfall = random(config.shortfallMin, config.shortfallMax, rng)
+    return clamp(remaining - shortfall, MINIMUM_VISIBLE_POINTS, config.visitMax)
   }
 
-  // CASO 3: Ya cerca (≤30) — dar suficiente para cruzar
-  return randomTriangular(max(remaining, MINIMUM_VISIBLE_POINTS), max)
+  // CASO 3: Ya dentro de la banda del shortfall — dar suficiente para cruzar
+  return randomTriangular(max(remaining, MINIMUM_VISIBLE_POINTS), config.visitMax, rng)
 }
 ```
+
+**El `rng` inyectable es el truco central.** El simulador del dashboard **no es una copia del
+algoritmo**: llama a esta misma función con `rng = () => 0.5`, lo que la vuelve determinística y
+devuelve el centro de cada rango — el "cliente mediano". Si alguien cambia el algoritmo, la tabla que ve
+el dueño cambia con él. **No pueden desincronizarse.**
+
+La config se **sanea** en la entrada (`sanitizeConfig`): los seis números vienen de `admin_settings`, una
+tabla key-value de strings editable a mano. Rangos invertidos, ceros o `NaN` caen a los defaults en vez
+de reventar un check-in.
+
+### 2.4 El calibrador (Ajustes → Sistema de Puntos)
+
+El dueño no configura puntos. Configura **una intención de negocio**:
+
+> *"Quiero que mi premio de 150 puntos se gane en **5 visitas**."*
+
+El calibrador deriva los seis números y **enseña el recorrido visita a visita**, corriendo el algoritmo
+real. Los seis inputs siguen ahí, plegados bajo *Ajustes avanzados*, editables a mano; quien los toque ve
+la tabla recalcularse en vivo.
+
+**Cómo calibra (`calibrate()` en el motor):** no despeja una fórmula, **busca**. La cuenta cerrada
+(`bono + (N−1) × puntos ≈ umbral`) **falla por una visita** cuando el cliente aterriza dentro de la banda
+del shortfall y el algoritmo le inserta un "casi lo logro" extra. Así que el calibrador barre candidatos
+de puntos-por-visita, **simula cada uno**, y se queda con el que aterriza el premio exactamente en la
+visita pedida. La mediana de la banda que funciona, no su borde.
+
+| Qué ajusta | Qué NO ajusta |
+|------------|---------------|
+| `points_per_visit_min` / `_max` | El **umbral del tier** — es el gancho del dueño ("150 puntos y te lo ganas") y tiene su propio CRUD en Ajustes → Premios. |
+| `welcome_bonus_points_min` / `_max` — **obligatorio**: sin tocar el bono, la meta de N visitas es una mentira | El **shortfall** — se respeta el que el dueño configuró. |
+
+El bono se mantiene proporcionalmente más generoso que una visita normal
+(`CALIBRATOR_WELCOME_FACTOR = 1.1`): es lo que conserva el Endowed Progress Effect **a cualquier escala**.
+
+**Metas imposibles:** con un umbral de 150 no se puede llegar en 9 visitas — cada visita daría menos de
+`MINIMUM_VISIBLE_POINTS` (15) y se vería sospechoso. El calibrador **no guarda una promesa que no puede
+cumplir**: muestra el rango alcanzable y sugiere subir el umbral.
+
+**Cambiar la calibración NO recalcula el historial.** Los clientes que ya tienen puntos los conservan. La
+UI lo advierte explícitamente.
 
 ---
 

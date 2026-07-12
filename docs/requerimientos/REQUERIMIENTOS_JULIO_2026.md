@@ -1,7 +1,7 @@
 # Requerimientos — Julio 2026
 
-> **Estado:** 🔨 EN CURSO — Bloque 1 ✅ COMPLETO · Bloque 2 ⏳ · Bloque 3 ⏳
-> **Fecha:** 2026-07-11
+> **Estado:** 🔨 EN CURSO — Bloque 1 ✅ COMPLETO · Bloque 2 ✅ COMPLETO · Bloque 3 ⏳
+> **Fecha:** 2026-07-11 (actualizado 2026-07-12)
 > **Origen:** solicitud del dueño del producto + auditoría de código previa al desarrollo
 > **Método:** AInnovate v2 (Documentation-Driven Development)
 
@@ -17,12 +17,12 @@ doc de feature.
 
 ---
 
-## 0. Estado actual (2026-07-11)
+## 0. Estado actual (2026-07-12)
 
 | Bloque | Estado | Commit |
 |--------|--------|--------|
 | **1 — Premios otorgados, entrega y reactivación agresiva** | ✅ Código completo, typecheck + build verdes | `66ceada` |
-| **2 — Calibrador de puntos y umbrales** | ⏳ Diseñado, sin código | — |
+| **2 — Calibrador de puntos y umbrales** | ✅ Código completo, typecheck + build verdes. **Sin migración, sin tareas del dueño: funciona al desplegar.** | v2.4.0 |
 | **3 — Pop-up de reseñas de Google con tracking** | ⏳ Diseñado, sin código | — |
 
 ### ⚠️ 4 tareas que debe hacer el dueño para que el Bloque 1 funcione en producción
@@ -128,22 +128,36 @@ El near-miss del algoritmo es **relativo, no absoluto**. `generateSmartVisitPoin
 propósito siempre que le falten más de 30 puntos, y le **garantiza** cruzar el umbral cuando le faltan
 menos. No está atado a "3 visitas": está atado a la distancia al umbral.
 
-Si al café se le bajan los puntos por visita de 60-90 a 25-35 — que **ya es configurable hoy** en
-Dashboard > Ajustes > Sistema de Puntos — el umbral de 150 cae naturalmente en la visita 5, y el
-"casi lo logro" aparece solo en la visita 4:
+El gancho psicológico se conserva a cualquier escala de puntos. **No hay que cambiar la mecánica.**
 
-| Visita | Puntos otorgados | Acumulado | Faltan | Caso del algoritmo |
-|--------|------------------|-----------|--------|--------------------|
-| 1 | 25-35 | ~30 | 120 | Caso 1 (lejos) |
-| 2 | 25-35 | ~65 | 85 | Caso 2 (dejar corto) |
-| 3 | 25-35 | ~100 | 50 | Caso 2 (dejar corto) |
-| 4 | 20-35 | ~125 | **25** | Caso 2 → **near-miss** |
-| 5 | ≥25 | **≥150** | 0 | Caso 3 (garantiza cruzar) |
-
-El gancho psicológico se conserva intacto. **No hay que cambiar la mecánica.**
-
-El problema real es que el dueño ve dos inputs de puntos sueltos y **no tiene forma de traducirlos a
+El problema real es que el dueño ve seis inputs de puntos sueltos y **no tiene forma de traducirlos a
 visitas**. La solución es un calibrador, no una capa de personalización. Ver Bloque 2.
+
+> #### ⚠️ Corrección (2026-07-12) — este análisis tenía la cuenta mal
+>
+> La versión original de esta sección afirmaba que bajar los puntos por visita a 25-35 hacía caer el
+> premio en la visita 5, con una tabla donde la visita 1 otorgaba 25-35 puntos. **Es falso.**
+>
+> **La visita 1 no otorga puntos de visita: otorga el bono de bienvenida.**
+> [`check-in/route.ts:410`](../../src/app/api/check-in/route.ts) llama a `awardWelcomeBonus()` en el
+> registro y **nunca** a `awardVisitPoints()`. El bono default es 75-90 — sobre un umbral de 150, **más
+> de la mitad del premio se regala antes de que el cliente vuelva una sola vez**.
+>
+> Con el bono intacto en 75-90 y los puntos por visita en 25-35, el premio cae en la visita **4**:
+>
+> | Visita | Otorga | Acumulado | Faltan |
+> |--------|--------|-----------|--------|
+> | 1 | **bono 75-90** | ~82 | 68 |
+> | 2 | 25-35 (lejos) | ~112 | 38 |
+> | 3 | 25-35 (lejos) | ~142 | **8** |
+> | 4 | cruza | **≥150** | — |
+>
+> Y con un umbral de 150, metas de 6+ visitas serían **imposibles** sin tocar el bono.
+>
+> **Por eso el calibrador del Bloque 2 ajusta el bono de bienvenida junto con los puntos por visita.**
+> Uno que solo moviera `points_per_visit_min/max` prometería N visitas y entregaría N−1 — exactamente el
+> pecado del hallazgo 3.3. La conclusión de fondo (*no hay que cambiar la mecánica, hay que traducirla*)
+> **se sostiene**; lo que estaba mal era la aritmética.
 
 ### R6 — Pop-up de reseñas de Google
 
@@ -321,14 +335,43 @@ el mesero no tenía dónde tocar y por eso un premio de campaña no cabía en ni
 📄 Spec: [`docs/superpowers/specs/2026-07-11-reward-grants-design.md`](../superpowers/specs/2026-07-11-reward-grants-design.md)
 📄 Feature: [`docs/features/reward-grants.md`](../features/reward-grants.md)
 
-### Bloque 2 — Calibrador de puntos y umbrales ⏳ PENDIENTE
+### Bloque 2 — Calibrador de puntos y umbrales ✅ COMPLETO (v2.4.0)
 
 Cubre **R5** y el hallazgo **3.3**.
 
-- Arreglar la configuración fantasma: que `getPointsConfig()` lea `shortfall_min`/`shortfall_max`.
-- Calibrador en Ajustes: el dueño dice *"quiero que el premio se gane en 5 visitas"* y el sistema calcula
-  y propone los puntos por visita, mostrando la simulación visita a visita (incluido dónde cae el
-  near-miss) antes de guardar.
+No hacía falta una capa de personalización de la mecánica: hacía falta un **traductor**. El dueño veía
+seis casillas numéricas sueltas y ninguna le decía en cuántas visitas cae el premio.
+
+**Qué se construyó:**
+
+| Pieza | Archivo |
+|-------|---------|
+| Motor puro (algoritmo + simulador + calibrador), sin I/O, compartido entre producción y el navegador | `src/lib/points-engine.ts` |
+| La perilla *"¿en cuántas visitas se gana el premio?"* + tabla espejo visita a visita | `src/components/dashboard/PointsCalibrator.tsx` |
+| Sistema de Puntos abre con el calibrador; los seis inputs se pliegan bajo *Ajustes avanzados* | `src/app/(dashboard)/dashboard/settings/page.tsx` |
+| **Fix 3.3:** `getPointsConfig()` por fin lee `shortfall_min`/`shortfall_max` | `src/services/points.service.ts` |
+| Constantes del calibrador | `src/constants/rewards.ts` |
+
+**Dos hallazgos que cambiaron el diseño:**
+
+1. **La visita 1 otorga el bono de bienvenida, no puntos de visita** (ver la corrección en §2/R5). El bono
+   es la palanca dominante, así que el calibrador **tiene** que ajustarlo junto con los puntos por visita.
+2. **La fórmula cerrada falla por una visita** cuando el cliente aterriza dentro de la banda del
+   shortfall. El calibrador por tanto **no despeja: busca** — barre candidatos, simula cada uno con el
+   algoritmo real, y se queda con el que aterriza el premio exactamente donde se pidió.
+
+**El simulador no es una copia del algoritmo.** Es el algoritmo, con el `rng` inyectado en `() => 0.5`
+(el "cliente mediano"). La tabla del dashboard **no puede desincronizarse** de producción.
+
+**Verificación:** `npx tsc --noEmit` limpio · `npx next build` verde · `npx eslint` sin errores nuevos.
+48 combinaciones de umbral × meta cumplen la invariante (`achieved ⇒ el premio cae en la visita pedida`).
+Sin regresión: con los defaults, el premio sigue cayendo en la visita 3.
+
+**✅ Sin migración de DB y sin tareas del dueño.** Las seis keys ya existían en `admin_settings` y no hay
+endpoints nuevos. **Funciona en cuanto se despliegue.**
+
+📄 Spec: [`docs/superpowers/specs/2026-07-12-points-calibrator-design.md`](../superpowers/specs/2026-07-12-points-calibrator-design.md)
+📄 Feature: [`docs/features/points-mystery-box.md`](../features/points-mystery-box.md) (§2.3 y §2.4)
 
 ### Bloque 3 — Pop-up de reseñas de Google con tracking ⏳ PENDIENTE
 
@@ -363,6 +406,7 @@ Cubre **R6, R6.a, R6.b, R6.c** y los hallazgos **3.6, 3.7, 3.8**.
 |-------|--------|
 | 2026-07-11 | Creación. Requerimientos R1-R6, hallazgos de auditoría 3.1-3.8, decisiones D1-D8, descomposición en 3 bloques. |
 | 2026-07-11 | Bloque 1 completado (`66ceada`). Añadidas §0 (estado + 4 tareas del dueño) y §8 (handoff). |
+| 2026-07-12 | Bloque 2 completado (v2.4.0). **Corregida la tabla de R5**, que ignoraba el bono de bienvenida y por eso daba 5 visitas donde el código da 4. Actualizados §0, §5, §8.2 (gotcha 8) y §8.3. |
 
 ---
 
@@ -428,49 +472,28 @@ tenant que falle no debe tumbar a los demás). Copia el patrón de
 | 5 | **RLS de tablas nuevas:** el patrón es `CREATE POLICY tenant_all_<tabla> ... USING (tenant_id = current_tenant_id() OR is_super_admin())`. Postgres **no** soporta `CREATE POLICY IF NOT EXISTS`. | Usa `DROP POLICY IF EXISTS` + `CREATE POLICY`. Copia `00031_reward_grants.sql`. |
 | 6 | **El check-in del cliente es stateless en el navegador.** Cero `localStorage`, cero cookies. El cliente se identifica **solo por teléfono**. | Para el Bloque 3 ("no volver a mostrarle el pop-up al que ya reseñó"), la persistencia **tiene que ir en la DB** (columna en `customers` o tabla propia). `localStorage` no sirve: el cliente vuelve desde otro teléfono y se rompe. |
 | 7 | **No hay sistema de analytics/eventos.** Ni PostHog, ni GA, ni tabla `events`. Lo más parecido es `message_logs`, que es solo de WhatsApp. | El tracking del click al link de Google (R6.a) hay que **construirlo desde cero**. |
-| 8 | **`getPointsConfig()` no lee `shortfall_min`/`shortfall_max`.** El dashboard los guarda y el servicio los ignora. | Es el hallazgo 3.3. Arreglarlo es parte del Bloque 2. |
+| 8 | ~~`getPointsConfig()` no lee `shortfall_min`/`shortfall_max`~~ — **arreglado en el Bloque 2 (v2.4.0).** Ojo con lo otro: **la visita 1 otorga el bono de bienvenida, NO puntos de visita** (`awardWelcomeBonus`, no `awardVisitPoints`). | El bono es la palanca dominante del sistema de puntos. Ignorarlo hace que cualquier cuenta de "en cuántas visitas se gana el premio" salga mal — le pasó al análisis original de R5. |
 | 9 | **Puede haber otra IA trabajando en el mismo árbol.** El 2026-07-11 había cambios sin commitear en `calendar.service.ts`, `whatsapp.service.ts`, `check-in/route.ts`, `PLANTILLAS.md`, `media.ts`. | **Stagea solo tus archivos por ruta explícita.** Nunca `git add -A` ni `git add .`. |
 
-### 8.3 Bloque 2 — Calibrador de puntos y umbrales (⏳ siguiente)
+### 8.3 Bloque 2 — Calibrador de puntos y umbrales (✅ HECHO, v2.4.0)
 
-**Cubre:** R5 (§2) + hallazgo 3.3.
+**Cubrió:** R5 (§2) + hallazgo 3.3. Ver §5 para el detalle de lo construido. Lo que necesitas saber si
+tocas el sistema de puntos:
 
-**El problema real, y no es el que parece.** El dueño de un café pidió que sus 150 puntos se alcanzaran
-en 5 visitas en vez de 3, y la pregunta era si eso rompía el gancho psicológico. **No lo rompe**, y esto
-ya está analizado y cerrado en §2/R5: el near-miss de `generateSmartVisitPoints()`
-(`src/services/points.service.ts:49-79`) es **relativo a la distancia al umbral**, no a un número de
-visitas. Deja al cliente corto a propósito mientras le falten más de 30 puntos, y le **garantiza** cruzar
-cuando le faltan menos. Bajando `points_per_visit_min/max` de 60-90 a 25-35, el umbral de 150 cae solo en
-la visita 5 y el "casi lo logro" aparece en la 4. **La mecánica ya se autoajusta.**
-
-**Por eso NO hay que añadir una capa de personalización de la mecánica.** Lo que falta es que el dueño
-pueda *verlo*: hoy ve dos inputs de puntos sueltos y no tiene forma de traducirlos a visitas.
-
-**Qué construir:**
-
-1. **Arreglar la configuración fantasma (hallazgo 3.3).** `getPointsConfig()`
-   (`src/services/points.service.ts:89-111`) debe leer `shortfall_min` y `shortfall_max` de
-   `admin_settings`, y `generateSmartVisitPoints()` debe usarlos en vez de las constantes
-   `DEFAULT_POINTS_SHORTFALL_MIN/MAX` de `src/constants/rewards.ts`. Hoy el dueño los configura en
-   Ajustes, se guardan bien, y **no pasa nada**.
-
-2. **Calibrador en Dashboard → Ajustes → Sistema de Puntos.** El dueño dice *"quiero que el premio se
-   gane en 5 visitas"* y el sistema:
-   - calcula y **propone** `points_per_visit_min/max` a partir del `point_threshold` del primer tier
-     (`reward_tiers`, CRUD en `/api/dashboard/reward-tiers`),
-   - **simula visita a visita** con el algoritmo real y muestra la tabla (puntos ganados, acumulado,
-     cuánto falta), señalando **dónde cae el near-miss**,
-   - deja al dueño guardar o ajustar a mano.
-
-   La simulación tiene que llamar a la **misma función** que usa producción, no a una copia. Si hace
-   falta, extrae el cálculo puro a algo testeable y compártelo entre el servicio y el simulador.
-
-**Archivos:** `src/services/points.service.ts`, `src/constants/rewards.ts`,
-`src/app/(dashboard)/dashboard/settings/page.tsx`, y probablemente un componente nuevo
-`src/components/dashboard/PointsCalibrator.tsx`.
-
-**Cuidado:** cambiar los puntos por visita **no** re-calcula el historial. Los clientes que ya tienen
-puntos los conservan. Deja eso explícito en la UI para que el dueño no se lleve una sorpresa.
+- **El algoritmo ya no vive en `points.service.ts`.** Vive en **`src/lib/points-engine.ts`**, puro y sin
+  I/O, porque lo importa también un componente de cliente (`PointsCalibrator.tsx`) que no puede arrastrar
+  el SDK de Supabase al navegador. `points.service.ts` lo re-exporta para no romper imports.
+- **`generateSmartVisitPoints()` cambió de firma:** ahora es
+  `(currentPoints, nextThreshold, config: PointsEngineConfig, rng?)`. El `rng` inyectable es lo que
+  permite simular con el **mismo código** que corre en producción (`rng = () => 0.5` → el cliente
+  mediano). **No escribas nunca una segunda copia del algoritmo.**
+- **`getPointsConfig()` ya lee `shortfall_min`/`shortfall_max`** (era el hallazgo 3.3) y devuelve un
+  `PointsEngineConfig` completo, no `{min, max, welcomeBonusMin, welcomeBonusMax}`.
+- **La visita 1 otorga el BONO DE BIENVENIDA, no puntos de visita.** Es la trampa que hizo que el
+  análisis original de R5 tuviera la cuenta mal (ver la corrección en §2/R5). Si razonas sobre "en
+  cuántas visitas se gana el premio" e ignoras el bono, te vas a equivocar.
+- Cambiar los puntos **no** recalcula el historial. Los clientes que ya tienen puntos los conservan. La
+  UI lo advierte.
 
 ### 8.4 Bloque 3 — Pop-up de reseñas de Google con tracking (⏳ después)
 

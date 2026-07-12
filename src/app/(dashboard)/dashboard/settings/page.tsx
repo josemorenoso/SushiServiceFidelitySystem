@@ -1,9 +1,11 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { Settings, DollarSign, Save, Loader2, CheckCircle, Crown, CalendarHeart, Mail, RefreshCw, Gift, UserPlus, X, Plus, Zap, MapPin, Sparkles, Package, TrendingUp, Flame, ScanLine } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { PointsCalibrator } from '@/components/dashboard/PointsCalibrator'
+import type { PointsEngineConfig } from '@/lib/points-engine'
 
 interface TwilioTemplate {
   sid: string
@@ -137,6 +139,8 @@ export default function SettingsPage() {
   const [pointsEnabled, setPointsEnabled] = useState(true)
   const [pointsSaving, setPointsSaving] = useState(false)
   const [pointsSaved, setPointsSaved] = useState(false)
+  /** Umbral del primer premio: el `point_threshold` más bajo entre los tiers activos. */
+  const [firstTierThreshold, setFirstTierThreshold] = useState<number | null>(null)
 
   // Check-in verification config
   const [checkinMode, setCheckinMode] = useState<'auto' | 'staff_verified'>('auto')
@@ -171,6 +175,27 @@ export default function SettingsPage() {
   const [locationSaving, setLocationSaving] = useState(false)
   const [locationSaved, setLocationSaved] = useState(false)
 
+  /** Los seis inputs de Ajustes avanzados, traducidos a la config que entiende el motor. */
+  const pointsConfig = useMemo<PointsEngineConfig>(() => ({
+    visitMin: parseInt(pointsMin, 10),
+    visitMax: parseInt(pointsMax, 10),
+    welcomeMin: parseInt(welcomeMin, 10),
+    welcomeMax: parseInt(welcomeMax, 10),
+    shortfallMin: parseInt(shortfallMin, 10),
+    shortfallMax: parseInt(shortfallMax, 10),
+  }), [pointsMin, pointsMax, welcomeMin, welcomeMax, shortfallMin, shortfallMax])
+
+  /** El calibrador propone: se vuelcan los seis números en los inputs. Guardar sigue siendo manual. */
+  const applyCalibration = useCallback((cfg: PointsEngineConfig) => {
+    setPointsMin(String(cfg.visitMin))
+    setPointsMax(String(cfg.visitMax))
+    setWelcomeMin(String(cfg.welcomeMin))
+    setWelcomeMax(String(cfg.welcomeMax))
+    setShortfallMin(String(cfg.shortfallMin))
+    setShortfallMax(String(cfg.shortfallMax))
+    setPointsSaved(false)
+  }, [])
+
   const saveSetting = useCallback(async (key: string, value: string) => {
     const res = await fetch('/api/dashboard/settings', {
       method: 'PUT',
@@ -190,8 +215,9 @@ export default function SettingsPage() {
       fetch('/api/dashboard/rewards').then((r) => r.json()),
       fetch('/api/dashboard/location').then((r) => r.ok ? r.json() : null).catch(() => null),
       fetch('/api/dashboard/campaign-rewards?active=true').then((r) => r.ok ? r.json() : []).catch(() => []),
+      fetch('/api/dashboard/reward-tiers').then((r) => r.ok ? r.json() : []).catch(() => []),
     ])
-      .then(([settingsData, templatesData, rewardsData, locationData, campaignRewardsData]) => {
+      .then(([settingsData, templatesData, rewardsData, locationData, campaignRewardsData, tiersData]) => {
         setSettings(settingsData)
         if (settingsData.avg_ticket) setAvgTicket(settingsData.avg_ticket)
         if (settingsData.black_benefits) {
@@ -228,6 +254,17 @@ export default function SettingsPage() {
         if (settingsData.shortfall_max) setShortfallMax(settingsData.shortfall_max)
         if (settingsData.pity_timer_threshold) setPityThreshold(settingsData.pity_timer_threshold)
         if (settingsData.points_system_enabled !== undefined) setPointsEnabled(settingsData.points_system_enabled === 'true')
+
+        // Umbral de referencia del calibrador: el primer premio que el cliente puede ganar.
+        const activeTiers: { point_threshold: number; is_active: boolean }[] = Array.isArray(tiersData)
+          ? tiersData.filter((t: { is_active: boolean }) => t.is_active)
+          : []
+        setFirstTierThreshold(
+          activeTiers.length > 0
+            ? Math.min(...activeTiers.map((t) => t.point_threshold))
+            : null
+        )
+
         if (settingsData.checkin_mode === 'staff_verified' || settingsData.checkin_mode === 'auto') setCheckinMode(settingsData.checkin_mode)
         setFirstVisitFree(settingsData.checkin_first_visit_free !== 'false')
         if (settingsData.reactivation_soft_days) setReactivationSoftDays(settingsData.reactivation_soft_days)
@@ -545,7 +582,7 @@ export default function SettingsPage() {
           </div>
           <div className="flex-1">
             <h2 className="text-base font-bold" style={{ color: '#1a1c1d' }}>Sistema de Puntos</h2>
-            <p className="text-xs" style={{ color: '#9ca3af' }}>Configura los rangos de puntos por visita, bienvenida y shortfall.</p>
+            <p className="text-xs" style={{ color: '#9ca3af' }}>Elige en cuántas visitas se gana el premio. Los puntos se calculan solos.</p>
           </div>
           <button
             type="button"
@@ -564,60 +601,79 @@ export default function SettingsPage() {
           </button>
         </div>
 
+        {/* El calibrador: la perilla de "en cuántas visitas se gana el premio" + la tabla espejo.
+            Los seis números que hay debajo son su consecuencia, no su causa. */}
+        <PointsCalibrator
+          threshold={firstTierThreshold}
+          config={pointsConfig}
+          onChange={applyCalibration}
+          disabled={loading}
+        />
+
         <div className="space-y-5">
-          {/* Puntos por visita */}
-          <div>
-            <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: '#6b7280' }}>
-              Puntos por visita (check-in)
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-[11px]" style={{ color: '#9ca3af' }}>Minimo</label>
-                <Input type="number" min={1} value={pointsMin} onChange={(e) => setPointsMin(e.target.value)} disabled={loading} />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[11px]" style={{ color: '#9ca3af' }}>Maximo</label>
-                <Input type="number" min={1} value={pointsMax} onChange={(e) => setPointsMax(e.target.value)} disabled={loading} />
-              </div>
-            </div>
-            <p className="text-[10px] mt-1" style={{ color: '#b0b0b0' }}>Rango aleatorio de puntos que el cliente recibe en cada visita. Default: 60-90.</p>
-          </div>
+          {/* Los seis números: plegados, porque el calibrador ya los decide. Quien los edite a
+              mano ve la tabla de arriba recalcularse en vivo con sus valores. */}
+          <details className="rounded-xl" style={{ border: '1px solid rgba(0,0,0,0.06)' }}>
+            <summary className="cursor-pointer select-none px-4 py-3 text-xs font-semibold uppercase tracking-widest" style={{ color: '#6b7280' }}>
+              Ajustes avanzados
+            </summary>
 
-          {/* Puntos de bienvenida */}
-          <div>
-            <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: '#6b7280' }}>
-              Puntos de bienvenida (registro)
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-[11px]" style={{ color: '#9ca3af' }}>Minimo</label>
-                <Input type="number" min={0} value={welcomeMin} onChange={(e) => setWelcomeMin(e.target.value)} disabled={loading} />
+            <div className="space-y-5 px-4 pt-1 pb-4">
+              {/* Puntos por visita */}
+              <div>
+                <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: '#6b7280' }}>
+                  Puntos por visita (check-in)
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[11px]" style={{ color: '#9ca3af' }}>Minimo</label>
+                    <Input type="number" min={1} value={pointsMin} onChange={(e) => setPointsMin(e.target.value)} disabled={loading} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px]" style={{ color: '#9ca3af' }}>Maximo</label>
+                    <Input type="number" min={1} value={pointsMax} onChange={(e) => setPointsMax(e.target.value)} disabled={loading} />
+                  </div>
+                </div>
+                <p className="text-[10px] mt-1" style={{ color: '#b0b0b0' }}>Rango aleatorio de puntos que el cliente recibe de su 2da visita en adelante. Default: 60-90.</p>
               </div>
-              <div className="space-y-1">
-                <label className="text-[11px]" style={{ color: '#9ca3af' }}>Maximo</label>
-                <Input type="number" min={0} value={welcomeMax} onChange={(e) => setWelcomeMax(e.target.value)} disabled={loading} />
-              </div>
-            </div>
-            <p className="text-[10px] mt-1" style={{ color: '#b0b0b0' }}>Monto alto de bienvenida que crea ilusion de que en 2 visitas llegan al primer tier. Default: 75-90.</p>
-          </div>
 
-          {/* Shortfall */}
-          <div>
-            <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: '#6b7280' }}>
-              Shortfall (2da visita)
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-[11px]" style={{ color: '#9ca3af' }}>Min pts corto</label>
-                <Input type="number" min={1} value={shortfallMin} onChange={(e) => setShortfallMin(e.target.value)} disabled={loading} />
+              {/* Puntos de bienvenida */}
+              <div>
+                <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: '#6b7280' }}>
+                  Puntos de bienvenida (registro)
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[11px]" style={{ color: '#9ca3af' }}>Minimo</label>
+                    <Input type="number" min={0} value={welcomeMin} onChange={(e) => setWelcomeMin(e.target.value)} disabled={loading} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px]" style={{ color: '#9ca3af' }}>Maximo</label>
+                    <Input type="number" min={0} value={welcomeMax} onChange={(e) => setWelcomeMax(e.target.value)} disabled={loading} />
+                  </div>
+                </div>
+                <p className="text-[10px] mt-1" style={{ color: '#b0b0b0' }}>Lo que recibe en su PRIMERA visita, al registrarse. Es la palanca mas fuerte del sistema: sobre un umbral de 150, un bono de 75-90 ya regala mas de medio premio. Default: 75-90.</p>
               </div>
-              <div className="space-y-1">
-                <label className="text-[11px]" style={{ color: '#9ca3af' }}>Max pts corto</label>
-                <Input type="number" min={1} value={shortfallMax} onChange={(e) => setShortfallMax(e.target.value)} disabled={loading} />
+
+              {/* Shortfall */}
+              <div>
+                <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: '#6b7280' }}>
+                  Shortfall (el &quot;casi lo logro&quot;)
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[11px]" style={{ color: '#9ca3af' }}>Min pts corto</label>
+                    <Input type="number" min={1} value={shortfallMin} onChange={(e) => setShortfallMin(e.target.value)} disabled={loading} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px]" style={{ color: '#9ca3af' }}>Max pts corto</label>
+                    <Input type="number" min={1} value={shortfallMax} onChange={(e) => setShortfallMax(e.target.value)} disabled={loading} />
+                  </div>
+                </div>
+                <p className="text-[10px] mt-1" style={{ color: '#b0b0b0' }}>Cuantos puntos queda corto el cliente en la visita previa al premio. Es lo que le hace volver una vez mas. Default: 5-30.</p>
               </div>
             </div>
-            <p className="text-[10px] mt-1" style={{ color: '#b0b0b0' }}>Cuantos puntos queda corto el cliente tras la 2da visita. Obliga una 3ra visita. Default: 5-30.</p>
-          </div>
+          </details>
 
           {/* Pity Timer */}
           <div>

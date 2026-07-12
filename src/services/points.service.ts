@@ -7,10 +7,22 @@ import {
   DEFAULT_WELCOME_BONUS_POINTS_MAX,
   DEFAULT_POINTS_SHORTFALL_MIN,
   DEFAULT_POINTS_SHORTFALL_MAX,
-  MINIMUM_VISIBLE_POINTS,
+  DEFAULT_EVENT_BONUS_POINTS,
 } from '@/constants/rewards'
+import {
+  generateSmartVisitPoints,
+  generateWelcomeBonusPoints,
+  sanitizeConfig,
+  type PointsEngineConfig,
+} from '@/lib/points-engine'
 import { getAllTiers } from '@/services/reward-tiers.service'
 import { getMultipleSettings, isPointsSystemEnabled } from '@/services/settings.service'
+
+// El algoritmo vive en @/lib/points-engine (puro, sin I/O) para que el calibrador del
+// dashboard pueda simularlo en el navegador con el MISMO código que corre aquí.
+// Se re-exporta para no romper a quien lo importe desde este servicio.
+export { generateSmartVisitPoints, generateWelcomeBonusPoints } from '@/lib/points-engine'
+export type { PointsEngineConfig } from '@/lib/points-engine'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -20,93 +32,35 @@ function getServiceClient() {
 }
 
 /**
- * Genera puntos aleatorios con distribución triangular (sesgo hacia el centro).
- * Usado internamente cuando no hay lógica de limitación.
- */
-function randomTriangular(min: number, max: number): number {
-  const u = Math.random()
-  const avg = (min + max) / 2
-  if (u < 0.5) {
-    return Math.round(min + Math.sqrt(u * 2) * (avg - min))
-  }
-  return Math.round(max - Math.sqrt((1 - u) * 2) * (max - avg))
-}
-
-/**
- * Algoritmo inteligente de puntos.
- *
- * REGLA CORE: El cliente SIEMPRE necesita mínimo 3 visitas para alcanzar un tier.
- *
- * Visita 1 (lejos): 60-90 pts → crea ilusión de que 2 visitas bastan.
- * Visita 2 (podría cruzar): se limita para dejar al cliente 5-30 pts corto.
- * Visita 3+ (ya cerca): cualquier cantidad cruza el umbral → PREMIO.
- *
- * @param currentPoints - Puntos actuales del cliente ANTES de esta visita.
- * @param nextThreshold - Umbral del próximo tier a alcanzar.
- * @param min - Mínimo general por visita (default 60).
- * @param max - Máximo general por visita (default 90).
- */
-export function generateSmartVisitPoints(
-  currentPoints: number,
-  nextThreshold: number,
-  min: number,
-  max: number
-): number {
-  const remaining = nextThreshold - currentPoints
-
-  // CASO 1: Lejos del umbral — ni con máximo llega → dar puntos altos (emocionante)
-  if (remaining > max) {
-    return randomTriangular(min, max)
-  }
-
-  // CASO 2: Podría cruzar con esta visita — LIMITAR para dejar 5-30 corto
-  if (remaining > DEFAULT_POINTS_SHORTFALL_MAX) {
-    // Queremos que tras esta visita quede entre (threshold - SHORTFALL_MAX) y (threshold - SHORTFALL_MIN)
-    const shortfall = DEFAULT_POINTS_SHORTFALL_MIN +
-      Math.floor(Math.random() * (DEFAULT_POINTS_SHORTFALL_MAX - DEFAULT_POINTS_SHORTFALL_MIN + 1))
-    let target = remaining - shortfall
-    // Piso: no dar menos de MINIMUM_VISIBLE_POINTS (para no verse sospechoso)
-    target = Math.max(target, MINIMUM_VISIBLE_POINTS)
-    // Techo: no exceder max
-    target = Math.min(target, max)
-    return target
-  }
-
-  // CASO 3: Ya está a 30 o menos del umbral (viene de una visita limitadora)
-  // → Dar suficiente para cruzar, pero con variación emocionante
-  const minToCross = Math.max(remaining, MINIMUM_VISIBLE_POINTS)
-  return randomTriangular(minToCross, max)
-}
-
-/** @deprecated Usa generateSmartVisitPoints en su lugar. Conservado para tests. */
-export function generateVisitPoints(min: number, max: number): number {
-  return randomTriangular(min, max)
-}
-
-/**
  * Lee los settings de puntos configurados por el admin, con fallback a defaults.
+ *
+ * `shortfall_min` / `shortfall_max` se leen aquí desde el Bloque 2. Antes el dashboard los
+ * guardaba y el servicio los ignoraba: el dueño configuraba el "casi lo logro" y no pasaba
+ * nada (hallazgo 3.3 de la auditoría de julio 2026).
  */
-export async function getPointsConfig(tenantId: string): Promise<{
-  min: number
-  max: number
-  welcomeBonusMin: number
-  welcomeBonusMax: number
-  eventBonus: number
-}> {
+export async function getPointsConfig(tenantId: string): Promise<PointsEngineConfig & { eventBonus: number }> {
   const settings = await getMultipleSettings([
     'points_per_visit_min',
     'points_per_visit_max',
     'welcome_bonus_points_min',
     'welcome_bonus_points_max',
+    'shortfall_min',
+    'shortfall_max',
     'event_bonus_points',
   ], tenantId)
 
+  const config = sanitizeConfig({
+    visitMin: parseInt(settings.points_per_visit_min ?? String(DEFAULT_POINTS_PER_VISIT_MIN), 10),
+    visitMax: parseInt(settings.points_per_visit_max ?? String(DEFAULT_POINTS_PER_VISIT_MAX), 10),
+    welcomeMin: parseInt(settings.welcome_bonus_points_min ?? String(DEFAULT_WELCOME_BONUS_POINTS), 10),
+    welcomeMax: parseInt(settings.welcome_bonus_points_max ?? String(DEFAULT_WELCOME_BONUS_POINTS_MAX), 10),
+    shortfallMin: parseInt(settings.shortfall_min ?? String(DEFAULT_POINTS_SHORTFALL_MIN), 10),
+    shortfallMax: parseInt(settings.shortfall_max ?? String(DEFAULT_POINTS_SHORTFALL_MAX), 10),
+  })
+
   return {
-    min: parseInt(settings.points_per_visit_min ?? String(DEFAULT_POINTS_PER_VISIT_MIN), 10),
-    max: parseInt(settings.points_per_visit_max ?? String(DEFAULT_POINTS_PER_VISIT_MAX), 10),
-    welcomeBonusMin: parseInt(settings.welcome_bonus_points_min ?? String(DEFAULT_WELCOME_BONUS_POINTS), 10),
-    welcomeBonusMax: parseInt(settings.welcome_bonus_points_max ?? String(DEFAULT_WELCOME_BONUS_POINTS_MAX), 10),
-    eventBonus: parseInt(settings.event_bonus_points ?? '25', 10),
+    ...config,
+    eventBonus: parseInt(settings.event_bonus_points ?? String(DEFAULT_EVENT_BONUS_POINTS), 10),
   }
 }
 
@@ -176,7 +130,11 @@ export async function awardPoints(params: {
 
 /**
  * Otorga puntos inteligentes por una visita (QR o delivery).
- * Usa generateSmartVisitPoints para limitar la 2da visita y garantizar la 3ra.
+ *
+ * Ojo: NO corre en el registro. La primera visita de un cliente nuevo otorga el bono de
+ * bienvenida (`awardWelcomeBonus`), no puntos de visita. Esto corre de la 2ª visita en
+ * adelante — salvo en modo `staff_verified` con la primera visita no libre, donde el
+ * escaneo del mesero es la primera vez que se otorgan puntos.
  */
 export async function awardVisitPoints(
   customerId: string,
@@ -201,7 +159,7 @@ export async function awardVisitPoints(
   const nextTier = tiers.find((t) => t.point_threshold > currentPoints)
   const nextThreshold = nextTier?.point_threshold ?? 150
 
-  const points = generateSmartVisitPoints(currentPoints, nextThreshold, config.min, config.max)
+  const points = generateSmartVisitPoints(currentPoints, nextThreshold, config)
   const txSourceMap: Record<string, PointTransactionSource> = {
     qr: 'visit_qr',
     delivery: 'visit_delivery',
@@ -219,17 +177,15 @@ export async function awardVisitPoints(
 }
 
 /**
- * Otorga puntos de bienvenida al registrarse.
+ * Otorga puntos de bienvenida al registrarse (Endowed Progress Effect).
+ *
+ * Es la primera visita del cliente y la palanca más fuerte del sistema: con el default de
+ * 75-90 sobre un umbral de 150, más de la mitad del premio se regala antes de que vuelva.
+ * Por eso el calibrador lo ajusta junto con los puntos por visita.
  */
 export async function awardWelcomeBonus(customerId: string, tenantId: string): Promise<{ pointsAwarded: number; newBalance: number }> {
   const config = await getPointsConfig(tenantId)
-  if (config.welcomeBonusMax <= 0) {
-    return { pointsAwarded: 0, newBalance: 0 }
-  }
-
-  const bonusMin = Math.max(config.welcomeBonusMin, 0)
-  const bonusMax = Math.max(config.welcomeBonusMax, bonusMin)
-  const bonus = bonusMin + Math.floor(Math.random() * (bonusMax - bonusMin + 1))
+  const bonus = generateWelcomeBonusPoints(config)
 
   if (bonus <= 0) {
     return { pointsAwarded: 0, newBalance: 0 }

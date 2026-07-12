@@ -1,6 +1,6 @@
 # Feature — Premios Otorgados (Reward Grants)
 
-> **Estado:** 🔨 EN DESARROLLO
+> **Estado:** ✅ COMPLETO — pendiente de aplicar la migración 00031 en producción
 > **Versión:** v2.3.0
 > **Fecha:** 2026-07-11
 > **Spec:** [`docs/superpowers/specs/2026-07-11-reward-grants-design.md`](../superpowers/specs/2026-07-11-reward-grants-design.md)
@@ -138,19 +138,29 @@ plantilla agresiva de 4 variables sigue funcionando sin cambios.
 - **Aislamiento por tenant:** toda query filtra `tenant_id` explícitamente. El proyecto usa service-role,
   que ignora RLS por diseño — el filtrado es responsabilidad del código.
 
-## Pendiente
+## Estado de implementación
 
-- [ ] Migración `00031_reward_grants.sql` (tablas, índices, trigger, backfill)
-- [ ] `reward-grant.service.ts` + `campaign-reward.service.ts`
-- [ ] `POST /api/reward-redeem` acepta `grant_id`; `tier_id` opcional
-- [ ] `/api/staff/pending-rewards` + pantalla `/mesero/rewards`
-- [ ] `RewardAlert` lee grants y soporta varios
-- [ ] Banner "Disponible" en la tarjeta del cliente
-- [ ] Cron de reactivación otorga el premio + `{{5}}` fecha límite
-- [ ] Cron `/api/cron/reward-reminder` + workflow de n8n
-- [ ] Catálogo `/dashboard/campaign-rewards`
-- [ ] Config en Ajustes + métricas en `/dashboard/redemptions`
-- [ ] Actualizar `DB_SCHEMA.md`, `API_DOCS.md`, `CHANGELOG.md`
+- [x] Migración `00031_reward_grants.sql` (tablas, índices, trigger, backfill)
+- [x] `reward-grant.service.ts` + `campaign-reward.service.ts`
+- [x] `POST /api/reward-redeem` acepta `grant_id`; `tier_id` opcional
+- [x] `/api/staff/pending-rewards` + pantalla `/mesero/rewards` (con contador en su dashboard)
+- [x] `RewardAlert` lee grants y soporta varios
+- [x] Banner "Disponible" en la tarjeta del cliente
+- [x] Cron de reactivación otorga el premio + `{{5}}` fecha límite
+- [x] Cron `/api/cron/reward-reminder` + workflow `n8n/cron_reward-reminder.json`
+- [x] Catálogo `/dashboard/campaign-rewards`
+- [x] Config en Ajustes + métricas en `/dashboard/redemptions`
+- [x] `DB_SCHEMA.md`, `API_DOCS.md`, `CHANGELOG.md` actualizados
+
+## Pendiente de despliegue
+
+- [ ] **Aplicar la migración 00031 en Supabase.** Hasta entonces, `/mesero/rewards` y el catálogo
+      devuelven error (la UI degrada con un toast, no revienta).
+- [ ] **Crear las plantillas de Twilio** y aprobarlas: la agresiva necesita `{{4}}` premio y
+      `{{5}}` fecha límite; el recordatorio es una plantilla nueva.
+- [ ] **Importar `n8n/cron_reward-reminder.json`** en n8n y activarlo.
+- [ ] **Crear los premios del catálogo** en `/dashboard/campaign-rewards` y elegir uno en
+      Ajustes > Premio de Reactivación Agresiva.
 
 ## Deja listo para después
 

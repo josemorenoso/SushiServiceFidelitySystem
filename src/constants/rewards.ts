@@ -19,8 +19,28 @@ export const RECOVERY_ZONE_END_DAYS = 25
  *  NO cuenta: birthday (prioridad absoluta) ni utility templates que reaccionan al scan. */
 export const MONTHLY_MARKETING_CAP = 3
 
-/** Sources de campaign que consumen cupo del MONTHLY_MARKETING_CAP. */
-export const MONTHLY_CAP_SOURCES = ['manual', 'calendar', 'reactivation'] as const
+/** Sources de campaign que consumen cupo del MONTHLY_MARKETING_CAP.
+ *
+ *  `reward_reminder` (el aviso de "tu premio vence en N días") SÍ consume cupo: es
+ *  marketing. Pero está EXENTO del FREQUENCY_CAP_DAYS de 7 días — si no, con ventanas de
+ *  premio de 5-7 días (las que generan urgencia real) el recordatorio no se enviaría nunca.
+ *  Ref: docs/features/reward-grants.md, decisión D5. */
+export const MONTHLY_CAP_SOURCES = ['manual', 'calendar', 'reactivation', 'reward_reminder'] as const
+
+// ═══════════════════════════════════════════════════════════════
+// Premios otorgados (reward_grants, migración 00031)
+// ═══════════════════════════════════════════════════════════════
+
+/** Días de ventana del premio de reactivación agresiva, desde el envío.
+ *
+ *  Es un reloj INDEPENDIENTE de REACTIVATION_AGGRESSIVE_DAYS: subir la reactivación
+ *  agresiva de 25 a 45 días no toca la ventana del premio. Configurable por tenant en
+ *  `admin_settings.aggressive_reward_window_days`. */
+export const DEFAULT_AGGRESSIVE_REWARD_WINDOW_DAYS = 7
+
+/** Cuántos días antes del vencimiento se manda el recordatorio.
+ *  Configurable por tenant en `admin_settings.reward_reminder_days_before`. */
+export const DEFAULT_REWARD_REMINDER_DAYS_BEFORE = 2
 
 /** Días antes de un evento del calendario en los que se bloquean campañas manuales
  *  conflictivas para reservar cupo del cap mensual. */

@@ -6,6 +6,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import { useBranding } from '@/lib/branding-context'
 import { getTierEmoji } from '@/lib/tier-emojis'
 import { StampsGrid } from '@/components/features/wallet'
+import { AvailableRewardBanner, type ActiveGrant } from './AvailableRewardBanner'
 
 interface TierItem {
   tier_name: string
@@ -24,6 +25,8 @@ interface CustomerCardProps {
   tiers: TierItem[]
   checkingStatus: boolean
   justEarnedPoints: number | null
+  /** Premios otorgados y sin reclamar (migración 00031). */
+  activeGrants?: ActiveGrant[]
   onBack: () => void
 }
 
@@ -35,6 +38,7 @@ export function CustomerCard({
   tiers,
   checkingStatus,
   justEarnedPoints,
+  activeGrants = [],
   onBack,
 }: CustomerCardProps) {
   const branding = useBranding()
@@ -141,6 +145,9 @@ export function CustomerCard({
               </p>
             )}
           </div>
+
+          {/* Premio disponible sin reclamar */}
+          <AvailableRewardBanner grants={activeGrants} staffLabel={branding.staffLabel} />
 
           {/* Divider */}
           <div

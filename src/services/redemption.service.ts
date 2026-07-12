@@ -24,8 +24,11 @@ function getServiceClient() {
 
 export interface RecordRedemptionParams {
   customerId: string
+  /** El premio otorgado que esta entrega cierra (migración 00031). Camino principal. */
+  grantId?: string | null
   mysteryBoxResultId?: string | null
-  tierId: string
+  /** Nullable desde 00031: un premio de campaña no tiene tier. */
+  tierId?: string | null
   prizeTitle: string
   source?: RedemptionSource
   redeemedByStaffId?: string | null
@@ -39,14 +42,44 @@ export type RecordRedemptionResult =
   | { ok: false; error: string; code: 'already_redeemed' | 'db_error' | 'invalid_result' }
 
 /**
- * Registra una redención física. El trigger de DB marca el mystery_box_results
- * como `redeemed=true`. El índice único parcial previene duplicados a nivel de DB.
+ * Registra una redención física.
+ *
+ * La defensa contra la doble entrega está en la BASE DE DATOS, no aquí: los índices
+ * únicos parciales sobre `grant_id` y `mystery_box_result_id` hacen que un segundo
+ * INSERT concurrente choque con un 23505, que se traduce a `already_redeemed`. Las
+ * validaciones previas solo sirven para dar un mensaje mejor en el caso no concurrente.
+ *
+ * Los triggers de DB cierran el grant (`mark_grant_redeemed`) y marcan el resultado de
+ * mystery box (`mark_mystery_box_redeemed`).
  */
 export async function recordRedemption(
   params: RecordRedemptionParams,
   tenantId: string
 ): Promise<RecordRedemptionResult> {
   const supabase = getServiceClient()
+
+  // Si viene atado a un premio otorgado, validar que sea del cliente y esté activo.
+  if (params.grantId) {
+    const { data: grant, error: grantErr } = await supabase
+      .from('reward_grants')
+      .select('id, customer_id, status, expires_at')
+      .eq('id', params.grantId)
+      .eq('tenant_id', tenantId)
+      .maybeSingle()
+
+    if (grantErr) {
+      return { ok: false, error: grantErr.message, code: 'db_error' }
+    }
+    if (!grant || grant.customer_id !== params.customerId) {
+      return { ok: false, error: 'El premio no pertenece a este cliente', code: 'invalid_result' }
+    }
+    if (grant.status === 'redeemed') {
+      return { ok: false, error: 'Este premio ya fue entregado', code: 'already_redeemed' }
+    }
+    if (grant.status === 'expired' || (grant.expires_at && new Date(grant.expires_at) < new Date())) {
+      return { ok: false, error: 'Este premio ya venció', code: 'invalid_result' }
+    }
+  }
 
   // Si viene atado a un resultado de mystery box, validar que no esté ya redimido.
   if (params.mysteryBoxResultId) {
@@ -71,8 +104,9 @@ export async function recordRedemption(
     .from('reward_redemptions')
     .insert({
       customer_id: params.customerId,
+      grant_id: params.grantId ?? null,
       mystery_box_result_id: params.mysteryBoxResultId ?? null,
-      tier_id: params.tierId,
+      tier_id: params.tierId ?? null,
       prize_title: params.prizeTitle,
       source: params.source ?? 'mystery_box',
       redeemed_by_staff_id: params.redeemedByStaffId ?? null,
@@ -175,7 +209,7 @@ export async function getRedemptions(filters: RedemptionFilters, tenantId: strin
   let query = supabase
     .from('reward_redemptions')
     .select(
-      'id, customer_id, mystery_box_result_id, tier_id, prize_title, source, redeemed_at, redeemed_by_staff_id, table_number, notes, pos_reference, created_at, customers(name, phone), staff_users(name)',
+      'id, customer_id, grant_id, mystery_box_result_id, tier_id, prize_title, source, redeemed_at, redeemed_by_staff_id, table_number, notes, pos_reference, created_at, customers(name, phone), staff_users(name)',
       { count: 'exact' }
     )
     .eq('tenant_id', tenantId)
@@ -200,6 +234,7 @@ export async function getRedemptions(filters: RedemptionFilters, tenantId: strin
     return {
       id: row.id,
       customer_id: row.customer_id,
+      grant_id: row.grant_id,
       mystery_box_result_id: row.mystery_box_result_id,
       tier_id: row.tier_id,
       prize_title: row.prize_title,

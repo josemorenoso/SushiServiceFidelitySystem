@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Gift, Download } from 'lucide-react'
 import { toast } from 'sonner'
 import { RedemptionSummaryCards, type RedemptionSummaryData } from '@/components/dashboard/RedemptionSummaryCards'
+import { GrantMetricsCards, type GrantMetricsData } from '@/components/dashboard/GrantMetricsCards'
 import { RedemptionsTable, type RedemptionRow } from '@/components/dashboard/RedemptionsTable'
 
 function todayISO() {
@@ -18,6 +19,7 @@ export default function RedemptionsPage() {
   const [from, setFrom] = useState(todayISO())
   const [to, setTo] = useState(todayISO())
   const [summary, setSummary] = useState<RedemptionSummaryData | null>(null)
+  const [grantMetrics, setGrantMetrics] = useState<GrantMetricsData | null>(null)
   const [rows, setRows] = useState<RedemptionRow[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -50,14 +52,20 @@ export default function RedemptionsPage() {
       // Solo aceptamos un summary con la forma esperada (arrays). Si la API falló
       // (p.ej. falta correr la migración 00022) degradamos a null/vacío sin reventar.
       setSummary(summaryData && Array.isArray(summaryData.by_prize) ? summaryData : null)
+      setGrantMetrics(
+        summaryData?.grants && Array.isArray(summaryData.grants.by_source)
+          ? summaryData.grants
+          : null
+      )
       setRows(Array.isArray(listData?.redemptions) ? listData.redemptions : [])
       setTotal(typeof listData?.total === 'number' ? listData.total : 0)
 
       if (!summaryRes.ok || !listRes.ok) {
-        toast.error('No se pudieron cargar las redenciones (¿falta correr la migración 00022?)')
+        toast.error('No se pudieron cargar las redenciones (¿faltan las migraciones 00022 / 00031?)')
       }
     } catch {
       setSummary(null)
+      setGrantMetrics(null)
       setRows([])
       toast.error('Error cargando redenciones')
     } finally {
@@ -140,6 +148,8 @@ export default function RedemptionsPage() {
           }}>Este mes</Button>
         </div>
       </div>
+
+      <GrantMetricsCards metrics={grantMetrics} loading={loading} />
 
       <RedemptionSummaryCards summary={summary} loading={loading} />
 

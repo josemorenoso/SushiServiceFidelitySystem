@@ -3,6 +3,7 @@ import { validatePhone } from '@/lib/validators/phone'
 import { findCustomerByPhone } from '@/services/customer.service'
 import { getNextTier, getAllTiers } from '@/services/reward-tiers.service'
 import { getPendingReward } from '@/services/redemption.service'
+import { getActiveGrants } from '@/services/reward-grant.service'
 import { rateLimit } from '@/lib/rate-limit'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { getTenantByDomain } from '@/lib/tenant'
@@ -165,6 +166,12 @@ export async function GET(request: NextRequest) {
     // la alerta "CLIENTE TIENE PREMIO PENDIENTE".
     const pendingReward = await getPendingReward(customer.id, tenant.id)
 
+    // ─── Premios otorgados activos (migración 00031) ───
+    // Alimenta el banner "Disponible" de la tarjeta del cliente (con su cuenta regresiva)
+    // y la alerta del mesero al escanear. Viaja en la misma llamada que el cliente ya hace
+    // cada 5s, así que no añade coste de red.
+    const activeGrants = await getActiveGrants(customer.id, tenant.id)
+
     return NextResponse.json({
       found: true,
       hasRecentVisit: visitReady,
@@ -177,6 +184,7 @@ export async function GET(request: NextRequest) {
       points_awarded: pointsAwarded,
       tier_unlocked: tierUnlocked,
       pending_reward: pendingReward,
+      active_grants: activeGrants,
       next_tier: nextTierInfo ? {
         name: nextTierInfo.tier.tier_name,
         points_remaining: nextTierInfo.pointsRemaining,

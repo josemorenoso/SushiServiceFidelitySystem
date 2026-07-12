@@ -114,15 +114,26 @@ export async function hasRecentCampaignMessage(
 /**
  * Creates or finds today's campaign of a given type.
  */
+/**
+ * `source` se separa de `type` cuando una campaña pertenece a la familia de otra pero debe
+ * contarse aparte: el recordatorio de vencimiento de premio es `type='reactivation'` (es del
+ * mismo linaje) pero `source='reward_reminder'`, que es lo que lee MONTHLY_CAP_SOURCES.
+ * El CHECK de `campaigns.type` no acepta 'reward_reminder'; el de `source` sí (migración 00031).
+ */
 export async function getOrCreateTodayCampaign(
   type: 'birthday' | 'reactivation',
   messageTemplate: string,
-  tenantId: string
+  tenantId: string,
+  source?: string
 ): Promise<Campaign> {
   const supabase = getServiceClient()
   const today = new Date()
   const todayStr = today.toISOString().split('T')[0]
-  const name = `${type}_${todayStr}`
+  const effectiveSource = source ?? type
+  // El nombre lleva el source, no el type: si no, el recordatorio del día reutilizaría la
+  // campaña de reactivación de ese mismo día y sus mensajes se contarían bajo el source
+  // equivocado.
+  const name = `${effectiveSource}_${todayStr}`
 
   const { data: existing } = await supabase
     .from('campaigns')
@@ -138,7 +149,7 @@ export async function getOrCreateTodayCampaign(
     .insert({
       name,
       type,
-      source: type,
+      source: effectiveSource,
       status: 'running',
       message_template: messageTemplate,
       executed_at: today.toISOString(),

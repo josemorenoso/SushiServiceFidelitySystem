@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { findCustomerByPhone } from '@/services/customer.service'
 import { getTierById } from '@/services/reward-tiers.service'
 import { resolveMysteryBox, generateNearMissText } from '@/services/mystery-box.service'
+import { grantReward } from '@/services/reward-grant.service'
 import { buildTiersRoadmap } from '@/services/reward-tiers.service'
 import { sendTemplateMessage } from '@/services/whatsapp.service'
 import { getMultipleSettings } from '@/services/settings.service'
@@ -80,6 +81,33 @@ export async function POST(request: NextRequest) {
       tenantId: tenant.id,
     })
 
+    // ─── Otorgar el premio (migración 00031) ───
+    // Este es el arreglo de la condición de carrera: hasta ahora el premio elegido solo
+    // existía como mystery_box_results, y el mesero ya había pasado de pantalla. Ahora
+    // queda como `reward_grant` activo y aparece en /mesero/rewards hasta que se entregue.
+    //
+    // No propaga: si el grant falla, el cliente igual ve su premio en pantalla. Un premio
+    // sin registrar es recuperable; un check-in caído, no.
+    try {
+      const granted = await grantReward(
+        {
+          customerId: customer.id,
+          grantType: 'tier_prize',
+          source: choice === 'safe' ? 'safe_choice' : 'mystery_box',
+          prizeTitle: result.prizeTitle,
+          tierId: tier.id,
+          mysteryBoxResultId: result.resultId,
+          // Los premios de tier no vencen.
+        },
+        tenant.id
+      )
+      if (!granted.ok) {
+        console.error('[MysteryBox] No se pudo otorgar el premio:', granted.code, granted.error)
+      }
+    } catch (err) {
+      console.error('[MysteryBox] Error otorgando el premio:', err)
+    }
+
     // Near-miss text (solo para mystery box)
     const nearMissText = choice === 'mystery'
       ? generateNearMissText(
@@ -114,7 +142,6 @@ export async function POST(request: NextRequest) {
             settings.reward_safe_template_sid,
             { '1': customer.name, '2': tier.tier_name, '3': result.prizeTitle, '4': roadmap },
             tenant,
-            undefined,
             { customerId: customer.id, messageType: 'safe_reward' }
           )
           whatsappSent = res !== null
@@ -137,7 +164,6 @@ export async function POST(request: NextRequest) {
             templateSid,
             vars,
             tenant,
-            undefined,
             { customerId: customer.id, messageType: result.wasGolden ? 'golden_box' : 'mystery_box' }
           )
           whatsappSent = res !== null

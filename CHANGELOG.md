@@ -5,6 +5,164 @@
 
 ---
 
+## [v2.3.0] — 2026-07-11 — feat: Premios Otorgados (reward_grants) + fix: condición de carrera en la redención de premios
+
+> Request: "Necesito que en las campañas de reactivación agresiva pueda yo seleccionar un
+> incentivo para el cliente (premio) para que vuelva y sea por tiempo limitado [...] Necesito
+> que por favor arregles el aspecto de redención de premios, al parecer no están apareciendo
+> los premios redimidos en el dashboard [...] además de poner no sólo la mesa si no la persona
+> que entregó el premio"
+
+### Contexto — el bug de redención
+
+Hasta ahora el sistema sabía quién *ganó* un premio (`mystery_box_results`) y qué se *entregó*
+(`reward_redemptions`), pero nada en el medio. `RewardAlert` consultaba el premio pendiente
+**una sola vez**, en el instante del escaneo del mesero — el momento exacto en que el cliente
+**todavía no había elegido** su Mystery Box en su propio celular. La fila de `reward_redemptions`
+casi nunca llegaba a crearse, y por eso el dashboard de redenciones salía vacío (con la mesa y
+el mesero en blanco, aunque esas columnas ya existían desde v2.0.0). Un segundo hallazgo cerraba
+la trampa: `reward_redemptions.tier_id` era `NOT NULL`, así que aunque `source='campaign_reward'`
+ya existía en el CHECK, era **literalmente imposible** registrar un premio de campaña (no tiene
+tier). `reward_grants` es la pieza que faltaba entre "ganar" y "entregar": un premio que le
+PERTENECE a un cliente y queda esperando a que alguien lo reclame, sin ventana de tiempo.
+
+### Fixed (crítico)
+
+- **`src/components/features/staff/RewardAlert.tsx`** — deja de depender de la ventana de 3
+  segundos post-escaneo. Ahora lee `active_grants[]` (vía `GET /api/check-in/status`, que hace
+  polling cada 3s durante 60s) y registra la entrega contra un `grant_id` real. La garantía ya
+  no es esta ventana corta, sino `/mesero/rewards`, donde el premio espera indefinidamente.
+- **`supabase/migrations/00031_reward_grants.sql`** — `ALTER TABLE reward_redemptions ALTER
+  COLUMN tier_id DROP NOT NULL`. Sin este cambio, un premio de campaña (`source='campaign_reward'`)
+  nunca podía insertarse pese a estar permitido por el CHECK existente.
+
+### Added
+
+- **`supabase/migrations/00031_reward_grants.sql`** — tablas `campaign_rewards` (catálogo
+  editable de premios de campaña) y `reward_grants` (el premio otorgado: tipo, origen, estado,
+  vencimiento opcional). Índices + índice único parcial anti-duplicado
+  `(customer_id, source) WHERE status='active' AND grant_type='campaign_prize'` + columna
+  `reward_redemptions.grant_id` con su propio índice único parcial anti doble-entrega + trigger
+  `mark_grant_redeemed()` + RLS + backfill de los premios ya elegidos y nunca entregados.
+- **`src/services/reward-grant.service.ts`** — `grantReward()`, `getActiveGrants()`,
+  `getPendingGrantsForPresentCustomers()`, `expireGrants()`, `findGrantsDueForReminder()`,
+  `markReminderSent()`, `getGrantMetrics()`.
+- **`src/services/campaign-reward.service.ts`** — CRUD del catálogo (`getCampaignRewards`,
+  `createCampaignReward`, `updateCampaignReward`, `deactivateCampaignReward`).
+- **`src/app/(public)/mesero/rewards/page.tsx`**, **`src/components/features/staff/PendingRewardsList.tsx`**
+  y **`src/app/api/staff/pending-rewards/route.ts`** — pantalla **Premios pendientes**: lista los
+  `reward_grants` activos de clientes con check-in en las últimas 6h. Es el arreglo real de la
+  condición de carrera — el lugar donde el premio espera a que alguien lo entregue.
+- **`src/components/features/check-in/AvailableRewardBanner.tsx`** (integrado en
+  `CustomerCard.tsx`) — banner "Disponible: X premio — vence en N días" en la tarjeta del cliente,
+  con cuenta regresiva para los premios de campaña.
+- **`src/app/api/cron/reactivation/route.ts`** — la reactivación agresiva ahora otorga el premio
+  del catálogo (`campaign_rewards`) con `expires_at = envío + aggressive_reward_window_days`
+  (reloj independiente de los días de reactivación) y agrega `{{5}}` (fecha límite) a la
+  plantilla de Twilio.
+- **`src/app/api/cron/reward-reminder/route.ts`** (nuevo, disparado por n8n) — barrido de
+  premios vencidos (siempre) + recordatorio configurable a quien no ha vuelto, exento del cap de
+  frecuencia de 7 días pero sujeto al cap mensual de 3.
+- **`src/app/(dashboard)/dashboard/campaign-rewards/page.tsx`** + **`src/app/api/dashboard/campaign-rewards/route.ts`**
+  — catálogo de premios de campaña (CRUD, baja lógica).
+- **`src/components/dashboard/GrantMetricsCards.tsx`**, **`src/app/api/dashboard/redemptions/summary/route.ts`**
+  y **`src/app/(dashboard)/dashboard/redemptions/page.tsx`** — métricas de otorgados/redimidos/
+  vencidos/tasa de redención, segmentadas por origen (`by_source`).
+- **`src/app/(dashboard)/dashboard/settings/page.tsx`** — configuración del premio de reactivación
+  agresiva, ventana en días y recordatorio (`aggressive_reward_id`,
+  `aggressive_reward_window_days`, `reward_reminder_enabled`, `reward_reminder_days_before`,
+  `reward_reminder_template_sid`). Reemplaza a `reactivation_aggressive_reward_id`, que apuntaba
+  a la tabla `rewards` legacy y no tenía UI.
+
+### Changed
+
+- **`src/lib/staff-auth.ts`** (nuevo) — `resolveStaffAuth()` extraído de `check-in` y
+  `reward-redeem`, donde vivía duplicado; ahora también lo usa `staff/pending-rewards`.
+- **`src/app/api/reward-redeem/route.ts`** — acepta `grant_id` (camino principal); `tier_id` pasa
+  a opcional; exige `grant_id` **o** `mystery_box_result_id`; `409 already_redeemed` cuando el
+  premio ya fue entregado.
+- **`src/app/api/check-in/status/route.ts`** — agrega `active_grants[]` a la respuesta (misma
+  llamada de polling que el cliente ya hace cada 5s).
+- **`src/app/api/mystery-box/resolve/route.ts`** — otorga el `reward_grant` (`grant_type='tier_prize'`)
+  inmediatamente después de resolver el Mystery Box/premio seguro.
+- **`src/services/redemption.service.ts`** — `recordRedemption()` acepta `grantId`, valida que el
+  grant pertenezca al cliente y siga `active`/no vencido antes de insertar.
+- **`src/constants/rewards.ts`** — `MONTHLY_CAP_SOURCES` incluye `reward_reminder`; nuevas
+  `DEFAULT_AGGRESSIVE_REWARD_WINDOW_DAYS` (7) y `DEFAULT_REWARD_REMINDER_DAYS_BEFORE` (2).
+
+### Docs
+
+- **`docs/DB_SCHEMA.md`** — tablas `campaign_rewards` y `reward_grants`; `reward_redemptions`
+  actualizada (`tier_id` nullable, columna `grant_id` + índice único parcial); `campaigns.source`
+  admite `reward_reminder`; migración 00031 en el historial.
+- **`docs/API_DOCS.md`** — `GET /api/staff/pending-rewards`, `GET|POST|PATCH|DELETE
+  /api/dashboard/campaign-rewards`, `GET|POST /api/cron/reward-reminder` (nuevos);
+  `POST /api/reward-redeem`, `GET /api/check-in/status` y `GET|POST /api/cron/reactivation`
+  actualizados.
+
+---
+
+## [v2.4.5] — 2026-07-11 — fix: la media de los eventos de calendario nunca era dinámica
+
+> Request: "Twilio permite enviar imágenes variables sin previa aprobación? o sea nuestra plantilla
+> de creación de evento en calendario con imagen funciona? porque la creé sola y me cargó una especie
+> de imagen de prueba que no tengo idea de dónde salió."
+
+### Contexto — el bug
+
+La plantilla `twilio/media` se creaba con una **URL de media fija** (una imagen de muestra de
+`gstatic.com`) y el envío intentaba sustituirla pasando `mediaUrl` al SDK junto con `contentSid`.
+Eso **no funciona**: en la API de Mensajes de Twilio, `ContentSid` y `MediaUrl` son **mutuamente
+excluyentes** (*"contentSid — required if Body or MediaUrl is not passed"*), así que la media sale
+**únicamente** de la definición de la plantilla. Resultado: **todos los clientes habrían recibido la
+imagen de muestra**, nunca el flyer del evento. La suposición equivocada estaba escrita como verdad
+en `docs/features/calendar.md` ("Twilio usa `mediaUrl` para sobreescribir la URL de ejemplo").
+
+### Fixed
+
+- **`scripts/twilio-create-media-templates.mjs`** — la media ahora es dinámica de verdad. Twilio solo
+  admite variables en la URL de media **después del dominio**, así que la plantilla se aprueba con el
+  dominio del bucket público como parte fija y `{{6}}` como el **path** del archivo:
+  `media: ["<supabase>/storage/v1/object/public/event-media/{{6}}"]`. Además el script **verifica que
+  el sample sea públicamente descargable antes de crear nada** (Meta lo descarga para aprobar; si no
+  lo alcanza, rechaza la plantilla).
+- **`src/services/whatsapp.service.ts`** — se elimina el parámetro `mediaUrl` de `sendTemplateMessage`:
+  era inerte con `contentSid` y era el origen del malentendido. De paso desaparece el `as any` del
+  payload (Mandamiento IX).
+- **`src/services/calendar.service.ts`** — `executeAutoEvent` manda en `{{6}}` el **path dentro del
+  bucket** (derivado de `media_url`), no la URL completa. Falla con error explícito si el evento no
+  tiene media o si `media_url` apunta fuera del bucket `event-media` — antes habría enviado la imagen
+  equivocada en silencio.
+
+### Added
+
+- **`src/lib/twilio/media.ts`** — `EVENT_MEDIA_BUCKET`, `getEventMediaBaseUrl()` y
+  `eventMediaPathFromPublicUrl()`: única fuente de verdad de la parte fija de la URL y de la
+  derivación del path que viaja en `{{6}}`.
+
+### Changed
+
+- Callers de `sendTemplateMessage` (check-in, delivery webhook, mystery-box, campañas manuales,
+  contactos importados, crons de cumpleaños/reactivación) actualizados a la nueva firma. Sin cambio
+  de comportamiento: todos pasaban `undefined` en esa posición.
+- `docs/features/calendar.md` y `docs/PLANTILLAS.md` — corregida la afirmación falsa sobre `mediaUrl`
+  y documentado el patrón real de media dinámica.
+
+### ⚠️ Acción requerida (no es solo código)
+
+Las plantillas ya aprobadas tienen la URL de media **fija**: no se puede editar una plantilla aprobada.
+Hay que **recrearlas y volver a pasar por aprobación de Meta (24-72h)**:
+
+1. Subir un archivo de muestra al bucket `event-media` (p.ej. `_samples/sample.jpg` y `_samples/sample.mp4`).
+2. Ejecutar `node scripts/twilio-create-media-templates.mjs` (ahora exige `NEXT_PUBLIC_SUPABASE_URL`).
+3. Al aprobar, reemplazar `event_template_image_sid` / `event_template_video_sid` en `admin_settings`
+   con los SIDs nuevos.
+
+Hasta entonces, los eventos de calendario con imagen **no deben enviarse**: la plantilla vieja manda
+la imagen de muestra.
+
+---
+
 ## [v2.4.4] — 2026-07-07 — feat: workflow n8n para campañas de calendario (calendar-dispatch)
 
 > Request: "Armalo, ese es urgente" — faltaba el workflow de n8n que dispara

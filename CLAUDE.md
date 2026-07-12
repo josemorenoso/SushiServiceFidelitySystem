@@ -73,3 +73,14 @@
 | `src/app/api/dashboard/calendar/*` | `docs/features/calendar.md` + `docs/API_DOCS.md` |
 | `src/services/calendar.service.ts` | `docs/features/calendar.md` + `docs/DB_SCHEMA.md` |
 | `src/app/api/cron/calendar-dispatch/*` | `docs/features/calendar.md` |
+| `src/services/reward-grant.service.ts` | `docs/features/reward-grants.md` + `docs/DB_SCHEMA.md` |
+| `src/services/campaign-reward.service.ts` | `docs/features/reward-grants.md` |
+| `src/services/redemption.service.ts` | `docs/features/reward-grants.md` + `docs/features/redemption-tracking.md` |
+| `src/app/api/reward-redeem/*` | `docs/features/reward-grants.md` + `docs/03-security.md` |
+| `src/app/api/staff/pending-rewards/*` | `docs/features/reward-grants.md` |
+| `src/app/api/cron/reward-reminder/*` | `docs/features/reward-grants.md` + `docs/features/campaigns.md` |
+| `src/app/api/dashboard/campaign-rewards/*` | `docs/features/reward-grants.md` + `docs/API_DOCS.md` |
+| `src/app/(public)/mesero/*` | `docs/features/reward-grants.md` + `docs/features/staff-qr-scan.md` |
+| `src/components/features/staff/*` | `docs/features/reward-grants.md` + `docs/features/staff-qr-scan.md` |
+| `src/app/(dashboard)/dashboard/campaign-rewards/*` | `docs/features/reward-grants.md` |
+| `src/app/(dashboard)/dashboard/redemptions/*` | `docs/features/reward-grants.md` + `docs/features/redemption-tracking.md` |

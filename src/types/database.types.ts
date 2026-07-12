@@ -198,7 +198,8 @@ export interface RewardRedemption {
   id: string
   customer_id: string
   mystery_box_result_id: string | null
-  tier_id: string
+  /** Nullable desde la migración 00031: un premio de campaña no tiene tier. */
+  tier_id: string | null
   prize_title: string
   source: RedemptionSource
   redeemed_at: string
@@ -206,6 +207,54 @@ export interface RewardRedemption {
   table_number: number | null
   notes: string | null
   pos_reference: string | null
+  /** El premio otorgado que esta entrega cierra (migración 00031). */
+  grant_id: string | null
+  created_at: string
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Reward Grants — el premio otorgado (v2.3.0, migración 00031)
+//
+// La pieza que va entre "ganar" y "entregar": un premio que le PERTENECE a un
+// cliente y está pendiente de reclamar.
+//   Ref: docs/features/reward-grants.md
+// ═══════════════════════════════════════════════════════════════
+
+export type GrantType = 'tier_prize' | 'campaign_prize'
+
+/** De dónde salió el premio. `manual` queda reservado para referidos y promos. */
+export type GrantSource = 'mystery_box' | 'safe_choice' | 'reactivation' | 'review' | 'manual'
+
+export type GrantStatus = 'active' | 'redeemed' | 'expired'
+
+export interface RewardGrant {
+  id: string
+  tenant_id: string
+  customer_id: string
+  grant_type: GrantType
+  source: GrantSource
+  /** Snapshot: renombrar el premio del catálogo no cambia lo ya otorgado. */
+  prize_title: string
+  tier_id: string | null
+  mystery_box_result_id: string | null
+  campaign_reward_id: string | null
+  campaign_id: string | null
+  status: GrantStatus
+  /** NULL = no vence. Los premios de tier no vencen; los de campaña sí. */
+  expires_at: string | null
+  reminder_sent_at: string | null
+  granted_at: string
+  redeemed_at: string | null
+  created_at: string
+}
+
+/** Catálogo editable de premios de campaña (Dashboard > Premios de campaña). */
+export interface CampaignReward {
+  id: string
+  tenant_id: string
+  title: string
+  description: string | null
+  is_active: boolean
   created_at: string
 }
 

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Loader2, Phone, User, MapPin, ArrowLeft } from 'lucide-react'
 import { RewardsPreview } from './RewardsPreview'
 import { CustomerCard } from './CustomerCard'
+import type { ActiveGrant } from './AvailableRewardBanner'
 
 interface TierPreview {
   tier_name: string
@@ -101,6 +102,8 @@ export function CheckInForm({
   const [previewTiers, setPreviewTiers] = useState<TierPreview[]>([])
   const [pointsRange, setPointsRange] = useState<{ min: number; max: number } | null>(null)
   const [justEarnedPoints, setJustEarnedPoints] = useState<number | null>(null)
+  /** Premios otorgados y sin reclamar. Alimenta el banner "Disponible" (migración 00031). */
+  const [activeGrants, setActiveGrants] = useState<ActiveGrant[]>([])
 
   useEffect(() => {
     fetch('/api/public/reward-tiers')
@@ -165,6 +168,10 @@ export function CheckInForm({
         const res = await fetch(`/api/check-in/status?phone=${encodeURIComponent(phone)}`)
         const data = await res.json()
         if (cancelled) return
+
+        // Premios otorgados sin reclamar → banner "Disponible" con cuenta regresiva.
+        // Viaja en la misma llamada que ya hacíamos, así que no añade coste de red.
+        setActiveGrants(data.active_grants ?? [])
 
         if (data.hasRecentVisit) {
           const tierUnlocked = data.tier_unlocked ?? null
@@ -612,6 +619,7 @@ export function CheckInForm({
         tiers={previewTiers}
         checkingStatus={checkingStatus}
         justEarnedPoints={justEarnedPoints}
+        activeGrants={activeGrants}
         onBack={() => {
           setStep('phone')
           setCustomerQR(null)

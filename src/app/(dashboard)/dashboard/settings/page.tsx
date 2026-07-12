@@ -19,6 +19,13 @@ interface RewardOption {
   is_active: boolean
 }
 
+/** Premio del catálogo de campaña (Dashboard > Premios de campaña, migración 00031). */
+interface CampaignRewardOption {
+  id: string
+  title: string
+  is_active: boolean
+}
+
 function SaveButton({ saving, saved, onClick, disabled }: { saving: boolean; saved: boolean; onClick: () => void; disabled: boolean }) {
   return (
     <button
@@ -144,6 +151,17 @@ export default function SettingsPage() {
   const [reactivationSaved, setReactivationSaved] = useState(false)
   const [reactivationError, setReactivationError] = useState<string | null>(null)
 
+  // Premio de reactivación agresiva + recordatorio de vencimiento (migración 00031)
+  const [campaignRewards, setCampaignRewards] = useState<CampaignRewardOption[]>([])
+  const [aggressiveRewardId, setAggressiveRewardId] = useState('')
+  const [aggressiveWindowDays, setAggressiveWindowDays] = useState('7')
+  const [reminderEnabled, setReminderEnabled] = useState(false)
+  const [reminderDaysBefore, setReminderDaysBefore] = useState('2')
+  const [reminderTemplateSid, setReminderTemplateSid] = useState('')
+  const [grantSaving, setGrantSaving] = useState(false)
+  const [grantSaved, setGrantSaved] = useState(false)
+  const [grantError, setGrantError] = useState<string | null>(null)
+
   // Location config
   const [locationLat, setLocationLat] = useState('')
   const [locationLon, setLocationLon] = useState('')
@@ -171,8 +189,9 @@ export default function SettingsPage() {
       fetch('/api/dashboard/templates').then((r) => r.json()),
       fetch('/api/dashboard/rewards').then((r) => r.json()),
       fetch('/api/dashboard/location').then((r) => r.ok ? r.json() : null).catch(() => null),
+      fetch('/api/dashboard/campaign-rewards?active=true').then((r) => r.ok ? r.json() : []).catch(() => []),
     ])
-      .then(([settingsData, templatesData, rewardsData, locationData]) => {
+      .then(([settingsData, templatesData, rewardsData, locationData, campaignRewardsData]) => {
         setSettings(settingsData)
         if (settingsData.avg_ticket) setAvgTicket(settingsData.avg_ticket)
         if (settingsData.black_benefits) {
@@ -214,6 +233,14 @@ export default function SettingsPage() {
         if (settingsData.reactivation_soft_days) setReactivationSoftDays(settingsData.reactivation_soft_days)
         if (settingsData.reactivation_aggressive_days) setReactivationAggressiveDays(settingsData.reactivation_aggressive_days)
         if (settingsData.geo_strict_mode !== undefined) setGeoStrictMode(settingsData.geo_strict_mode === 'true')
+
+        // Premio de reactivación agresiva + recordatorio (migración 00031)
+        setCampaignRewards(Array.isArray(campaignRewardsData) ? campaignRewardsData : [])
+        setAggressiveRewardId(settingsData.aggressive_reward_id ?? '')
+        if (settingsData.aggressive_reward_window_days) setAggressiveWindowDays(settingsData.aggressive_reward_window_days)
+        setReminderEnabled(settingsData.reward_reminder_enabled === 'true')
+        if (settingsData.reward_reminder_days_before) setReminderDaysBefore(settingsData.reward_reminder_days_before)
+        setReminderTemplateSid(settingsData.reward_reminder_template_sid ?? '')
 
         if (locationData) {
           setLocationLat(String(locationData.lat ?? ''))
@@ -272,6 +299,7 @@ export default function SettingsPage() {
         saveSetting('points_earned_far_template_sid', pointsEarnedFarTemplateSid),
         saveSetting('points_earned_near_template_sid', pointsEarnedNearTemplateSid),
         saveSetting('reactivation_aggressive_template_sid', reactivationAggressiveTemplateSid),
+        saveSetting('reward_reminder_template_sid', reminderTemplateSid),
         saveSetting('event_template_image_sid', eventTemplateImageSid),
         saveSetting('event_template_video_sid', eventTemplateVideoSid),
       ])
@@ -315,6 +343,48 @@ export default function SettingsPage() {
       setTimeout(() => setCheckinSaved(false), 3000)
     } catch { /* silent */ } finally {
       setCheckinSaving(false)
+    }
+  }
+
+  const handleSaveGrantConfig = async () => {
+    const windowDays = parseInt(aggressiveWindowDays, 10)
+    const daysBefore = parseInt(reminderDaysBefore, 10)
+    setGrantError(null)
+
+    if (!Number.isInteger(windowDays) || windowDays < 1) {
+      setGrantError('La ventana del premio debe ser un número mayor a 0.')
+      return
+    }
+    if (reminderEnabled) {
+      if (!Number.isInteger(daysBefore) || daysBefore < 1) {
+        setGrantError('Los días de aviso deben ser un número mayor a 0.')
+        return
+      }
+      if (daysBefore >= windowDays) {
+        setGrantError('El aviso debe salir ANTES de que venza el premio: los días de aviso tienen que ser menores que la ventana.')
+        return
+      }
+      if (!reminderTemplateSid) {
+        setGrantError('Elige la plantilla del recordatorio abajo, en Plantillas de WhatsApp.')
+        return
+      }
+    }
+
+    setGrantSaving(true)
+    setGrantSaved(false)
+    try {
+      await Promise.all([
+        saveSetting('aggressive_reward_id', aggressiveRewardId),
+        saveSetting('aggressive_reward_window_days', String(windowDays)),
+        saveSetting('reward_reminder_enabled', String(reminderEnabled)),
+        saveSetting('reward_reminder_days_before', String(daysBefore)),
+      ])
+      setGrantSaved(true)
+      setTimeout(() => setGrantSaved(false), 3000)
+    } catch (err) {
+      setGrantError(err instanceof Error ? err.message : 'Error guardando')
+    } finally {
+      setGrantSaving(false)
     }
   }
 
@@ -689,6 +759,97 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      {/* ─── PREMIO DE REACTIVACIÓN AGRESIVA (migración 00031) ─── */}
+      <div className="dashboard-card p-6 max-w-2xl" style={{ border: '1px solid rgba(245, 158, 11, 0.2)' }}>
+        <div className="flex items-center gap-3 mb-6">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ background: 'rgba(245, 158, 11, 0.15)' }}>
+            <Flame className="h-5 w-5" strokeWidth={1.5} style={{ color: '#f59e0b' }} />
+          </div>
+          <div>
+            <h2 className="text-base font-bold" style={{ color: '#1a1c1d' }}>Premio de Reactivación Agresiva</h2>
+            <p className="text-xs" style={{ color: '#9ca3af' }}>&ldquo;Vuelve antes del 18 y te llevas 1/2 sushi gratis.&rdquo; El premio se otorga al enviar el mensaje y el cliente lo ve en su tarjeta con la cuenta regresiva.</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="text-[11px] font-semibold" style={{ color: '#6b7280' }}>Premio a regalar</label>
+            <select
+              value={aggressiveRewardId}
+              onChange={(e) => setAggressiveRewardId(e.target.value)}
+              disabled={loading}
+              className="h-9 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm transition-colors outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/50"
+            >
+              <option value="">— Sin premio (solo mensaje) —</option>
+              {campaignRewards.map((r) => (
+                <option key={r.id} value={r.id}>{r.title}</option>
+              ))}
+            </select>
+            <p className="text-[10px]" style={{ color: '#b0b0b0' }}>
+              Del catálogo de <a href="/dashboard/campaign-rewards" className="underline">Premios de campaña</a>. Sin premio, la campaña sigue siendo solo un recordatorio.
+            </p>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[11px] font-semibold" style={{ color: '#6b7280' }}>Ventana del premio (días)</label>
+            <Input
+              type="number"
+              min={1}
+              value={aggressiveWindowDays}
+              onChange={(e) => setAggressiveWindowDays(e.target.value)}
+              disabled={loading}
+              placeholder="7"
+            />
+            <p className="text-[10px]" style={{ color: '#b0b0b0' }}>
+              Cuánto tiempo tiene el cliente para venir a reclamarlo. Default: 7 días. Es independiente de los días de reactivación.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-5 pt-5" style={{ borderTop: '1px solid rgba(0,0,0,0.06)' }}>
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={reminderEnabled}
+              onChange={(e) => setReminderEnabled(e.target.checked)}
+              disabled={loading}
+              className="mt-0.5 h-4 w-4 rounded"
+            />
+            <div>
+              <p className="text-sm font-semibold" style={{ color: '#1a1c1d' }}>Recordarle antes de que venza</p>
+              <p className="text-[11px]" style={{ color: '#9ca3af' }}>
+                Un solo mensaje, solo a quien no ha vuelto. Cuenta contra el límite de 3 mensajes de marketing al mes por cliente.
+              </p>
+            </div>
+          </label>
+
+          {reminderEnabled && (
+            <div className="mt-4 max-w-[220px] space-y-1">
+              <label className="text-[11px] font-semibold" style={{ color: '#6b7280' }}>Días antes de vencer</label>
+              <Input
+                type="number"
+                min={1}
+                value={reminderDaysBefore}
+                onChange={(e) => setReminderDaysBefore(e.target.value)}
+                disabled={loading}
+                placeholder="2"
+              />
+              <p className="text-[10px]" style={{ color: '#b0b0b0' }}>
+                Debe ser menor que la ventana. Con ventana de 7 y aviso de 2, el mensaje sale el día 5.
+              </p>
+            </div>
+          )}
+        </div>
+
+        {grantError && (
+          <p className="text-xs mt-3 font-medium" style={{ color: '#ef4444' }}>{grantError}</p>
+        )}
+
+        <div className="mt-4">
+          <SaveButton saving={grantSaving} saved={grantSaved} onClick={handleSaveGrantConfig} disabled={grantSaving || loading} />
+        </div>
+      </div>
+
       {/* ─── UBICACIÓN DEL LOCAL — PRÓXIMAMENTE ─── */}
       <div className="dashboard-card p-6 max-w-2xl relative" style={{ border: '1px solid rgba(59, 130, 246, 0.15)' }}>
         <div className="flex items-center gap-3 mb-6">
@@ -850,9 +1011,19 @@ export default function SettingsPage() {
             <TemplateSelector
               label="Reactivación AGRESIVA (25d+)"
               icon={<Flame className="h-3.5 w-3.5" style={{ color: '#DC2626' }} />}
-              hint="Variables: {{1}}=nombre, {{2}}=puntos actuales, {{3}}=próximo tier. Para clientes inactivos 25+ días."
+              hint="Variables: {{1}}=nombre · {{2}}=puntos · {{3}}=próximo tier · {{4}}=premio · {{5}}=fecha límite. {{4}} y {{5}} solo si configuraste un premio arriba."
               value={reactivationAggressiveTemplateSid}
               onChange={setReactivationAggressiveTemplateSid}
+              templates={approvedTemplates}
+            />
+
+            {/* Recordatorio de vencimiento del premio (migración 00031) */}
+            <TemplateSelector
+              label="Premio por vencer (recordatorio)"
+              icon={<Flame className="h-3.5 w-3.5" style={{ color: '#F59E0B' }} />}
+              hint="Variables: {{1}}=nombre · {{2}}=premio · {{3}}=días restantes. Se envía solo si activaste el recordatorio arriba."
+              value={reminderTemplateSid}
+              onChange={setReminderTemplateSid}
               templates={approvedTemplates}
             />
 

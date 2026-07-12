@@ -79,7 +79,7 @@ export function useStaffAuth() {
     setSession(null)
   }, [])
 
-  const getAuthHeaders = useCallback(() => {
+  const getAuthHeaders = useCallback((): Record<string, string> => {
     if (session?.type === 'staff' && session.token) {
       return { Authorization: `Bearer ${session.token}` }
     }

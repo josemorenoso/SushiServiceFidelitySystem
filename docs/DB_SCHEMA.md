@@ -1,7 +1,7 @@
 # Esquema de Base de Datos
 
 **Base de datos:** Supabase (PostgreSQL)
-**Última actualización:** 2026-07-05
+**Última actualización:** 2026-07-11
 
 ---
 
@@ -91,10 +91,40 @@ erDiagram
         timestamp created_at
     }
 
+    campaign_rewards {
+        uuid id PK
+        uuid tenant_id FK
+        text title
+        text description
+        boolean is_active
+        timestamp created_at
+    }
+
+    reward_grants {
+        uuid id PK
+        uuid tenant_id FK
+        uuid customer_id FK
+        text grant_type
+        text source
+        text prize_title
+        uuid tier_id FK
+        uuid mystery_box_result_id FK
+        uuid campaign_reward_id FK
+        uuid campaign_id FK
+        text status
+        timestamp expires_at
+        timestamp reminder_sent_at
+        timestamp granted_at
+        timestamp redeemed_at
+        timestamp created_at
+    }
+
     customers ||--o{ visits : "has many"
     customers ||--o{ campaign_messages : "receives"
     customers ||--o{ message_logs : "receives"
+    customers ||--o{ reward_grants : "owns"
     campaigns ||--o{ campaign_messages : "sends"
+    campaign_rewards ||--o{ reward_grants : "catalogs"
     staff_users ||--o{ visits : "registers"
     staff_users ||--o{ staff_devices : "owns"
 ```
@@ -117,6 +147,8 @@ erDiagram
 | 10 | [staff_users](#staff_users) | Cuentas de meseros (login con PIN) | SI | Service: ALL (backend maneja auth) |
 | 11 | [staff_devices](#staff_devices) | Dispositivos de confianza registrados por supervisor | SI | Service: ALL |
 | 12 | [message_logs](#message_logs) | Tracking de TODOS los mensajes WhatsApp (transaccionales + campañas) | SI | Admin: lectura; Service: INSERT/UPDATE |
+| 13 | [campaign_rewards](#campaign_rewards) | Catálogo editable de premios de campaña (reactivación, referidos, promos) | SI | Admin: CRUD completo (vía service role, filtrado por tenant en código) |
+| 14 | [reward_grants](#reward_grants) | El premio otorgado: pertenece a un cliente, pendiente de reclamar | SI | Admin: CRUD completo (vía service role, filtrado por tenant en código) |
 
 ---
 
@@ -244,7 +276,7 @@ CREATE POLICY "admin_update_customers" ON customers
 | `scheduled_at` | `timestamptz` | SI | `NULL` | Fecha programada |
 | `executed_at` | `timestamptz` | SI | `NULL` | Fecha de ejecución real |
 | `created_at` | `timestamptz` | NO | `now()` | Fecha de creación |
-| `source` | `text` | NO | `'manual'` | Origen real: 'manual', 'calendar', 'reactivation', 'birthday'. Usado por `filterByMonthlyCap` (cuenta manual+calendar+reactivation; NO cuenta birthday). |
+| `source` | `text` | NO | `'manual'` | Origen real: 'manual', 'calendar', 'reactivation', 'birthday', **'reward_reminder'** (migración 00031). Usado por `filterByMonthlyCap` (cuenta manual+calendar+reactivation+reward_reminder; NO cuenta birthday). |
 | `media_url` | `text` | SI | `NULL` | URL pública del media adjunto (Supabase Storage bucket `event-media`) si la campaña usa plantilla `twilio/media`. |
 | `media_type` | `text` | SI | `NULL` | 'image' o 'video'. NULL para campañas de solo texto. |
 
@@ -566,14 +598,15 @@ CREATE POLICY "service_update_message_logs" ON message_logs
 
 ### reward_redemptions
 
-> Tracking de la **entrega física** de un premio en el local (v2.0.0, migración 00022). Una fila por premio entregado. Ver `docs/features/redemption-tracking.md`.
+> Tracking de la **entrega física** de un premio en el local (v2.0.0, migración 00022). Una fila por premio entregado. Ver `docs/features/redemption-tracking.md` y `docs/features/reward-grants.md`.
 
 | Columna | Tipo | Nullable | Default | Descripción |
 |---------|------|----------|---------|-------------|
 | `id` | `uuid` | NO | `gen_random_uuid()` | PK |
 | `customer_id` | `uuid` | NO | - | FK → customers(id) ON DELETE CASCADE |
+| `grant_id` | `uuid` | SI | `NULL` | **Nueva (00031).** FK → reward_grants(id) ON DELETE SET NULL. El premio otorgado que esta entrega cierra — camino principal desde la migración 00031 |
 | `mystery_box_result_id` | `uuid` | SI | `NULL` | FK → mystery_box_results(id) ON DELETE SET NULL. Link al premio elegido |
-| `tier_id` | `uuid` | NO | - | FK → reward_tiers(id) ON DELETE RESTRICT |
+| `tier_id` | `uuid` | **SI** | `NULL` | FK → reward_tiers(id) ON DELETE RESTRICT. **Nullable desde 00031** (antes NOT NULL): un premio de campaña no tiene tier |
 | `prize_title` | `text` | NO | - | Snapshot del premio entregado |
 | `source` | `text` | NO | `'mystery_box'` | `mystery_box` \| `safe_choice` \| `staff_override` \| `campaign_reward` (CHECK) |
 | `redeemed_at` | `timestamptz` | NO | `now()` | Momento de la entrega física |
@@ -583,9 +616,12 @@ CREATE POLICY "service_update_message_logs" ON message_logs
 | `pos_reference` | `text` | SI | `NULL` | Ticket/factura del POS para conciliación |
 | `created_at` | `timestamptz` | NO | `now()` | - |
 
-**Índices:** `idx_reward_redemptions_customer (customer_id, redeemed_at DESC)`, `idx_reward_redemptions_staff`, `idx_reward_redemptions_date`, `idx_reward_redemptions_pos`, índice único parcial `idx_reward_redemptions_unique_mystery_box (mystery_box_result_id) WHERE NOT NULL` (anti-duplicado).
+**Índices:** `idx_reward_redemptions_customer (customer_id, redeemed_at DESC)`, `idx_reward_redemptions_staff`, `idx_reward_redemptions_date`, `idx_reward_redemptions_pos`, índice único parcial `idx_reward_redemptions_unique_mystery_box (mystery_box_result_id) WHERE NOT NULL` (anti-duplicado), índice único parcial **`idx_reward_redemptions_unique_grant (grant_id) WHERE grant_id IS NOT NULL`** (00031 — anti doble-entrega: si dos meseros tocan "Entregar" sobre el mismo premio otorgado al mismo tiempo, el segundo INSERT choca con un 23505 que `recordRedemption()` traduce a `already_redeemed`; la garantía vive en la base de datos, no en la UI).
 
-**Trigger:** `trg_reward_redemptions_insert` AFTER INSERT → `mark_mystery_box_redeemed()` marca `mystery_box_results.redeemed = true`.
+**Triggers:**
+
+- `trg_reward_redemptions_insert` AFTER INSERT → `mark_mystery_box_redeemed()` marca `mystery_box_results.redeemed = true`.
+- `trg_reward_redemptions_grant` AFTER INSERT → `mark_grant_redeemed()` (00031): si `NEW.grant_id IS NOT NULL`, marca ese `reward_grants.status = 'redeemed'` y `redeemed_at = NEW.redeemed_at` (solo si seguía `active`).
 
 **RLS:** admin SELECT/UPDATE (`auth.role()='authenticated'`); service SELECT/INSERT (`true`).
 
@@ -618,6 +654,79 @@ CREATE POLICY "service_update_message_logs" ON message_logs
 **RLS:** admin ALL (`auth.role()='authenticated'`); service SELECT/INSERT/UPDATE (`true`).
 
 **Seed `admin_settings` (00023):** `golden_bullet_enabled='false'` (feature flag), `twilio_cost_per_message_usd='0.0175'`.
+
+---
+
+### campaign_rewards
+
+> Catálogo editable de premios de campaña (v2.3.0, migración 00031). Lo edita el dueño en
+> Dashboard > Premios de campaña y lo otorgan las campañas como `reward_grants` (hoy:
+> reactivación agresiva; después: referidos, promos, recompensa por reseña). Deliberadamente
+> independiente de `reward_tiers`: los tiers se ganan con puntos, regalar uno gratis por
+> campaña devaluaría el sistema de puntos. Ver `docs/features/reward-grants.md`.
+
+| Columna | Tipo | Nullable | Default | Descripción |
+|---------|------|----------|---------|-------------|
+| `id` | `uuid` | NO | `gen_random_uuid()` | PK |
+| `tenant_id` | `uuid` | NO | - | FK → tenants(id) ON DELETE CASCADE |
+| `title` | `text` | NO | - | Nombre del premio (ej: "1/2 sushi gratis") |
+| `description` | `text` | SI | `NULL` | Descripción libre |
+| `is_active` | `boolean` | NO | `true` | Si aparece disponible para nuevas campañas |
+| `created_at` | `timestamptz` | NO | `now()` | Fecha de creación |
+
+**Índices:**
+
+| Nombre | Columnas | Tipo |
+|--------|----------|------|
+| `campaign_rewards_pkey` | `id` | PRIMARY KEY |
+| `idx_campaign_rewards_tenant_active` | `(tenant_id, is_active)` | BTREE |
+
+**RLS:** `tenant_all_campaign_rewards` FOR ALL — `USING/WITH CHECK (tenant_id = current_tenant_id() OR is_super_admin())`. El service role bypasa RLS por diseño; el aislamiento real lo hace el código filtrando `tenant_id`.
+
+**Baja lógica:** `DELETE /api/dashboard/campaign-rewards` no borra la fila, marca `is_active=false` — los `reward_grants` ya otorgados guardan `prize_title` como snapshot, así que retirar un premio del catálogo no rompe lo que ya está en curso.
+
+---
+
+### reward_grants
+
+> El premio otorgado: la pieza que faltaba entre "ganar" (`mystery_box_results` / cron de
+> reactivación) y "entregar" (`reward_redemptions`). Un premio que le PERTENECE a un cliente
+> y está pendiente de reclamar, con estado y vencimiento opcional (v2.3.0, migración 00031).
+> Ver `docs/features/reward-grants.md`.
+
+| Columna | Tipo | Nullable | Default | Descripción |
+|---------|------|----------|---------|-------------|
+| `id` | `uuid` | NO | `gen_random_uuid()` | PK |
+| `tenant_id` | `uuid` | NO | - | FK → tenants(id) ON DELETE CASCADE |
+| `customer_id` | `uuid` | NO | - | FK → customers(id) ON DELETE CASCADE |
+| `grant_type` | `text` | NO | - | `tier_prize` \| `campaign_prize` (CHECK) |
+| `source` | `text` | NO | - | `mystery_box` \| `safe_choice` \| `reactivation` \| `review` \| `manual` (CHECK) |
+| `prize_title` | `text` | NO | - | Snapshot del título del premio. Si el dueño renombra el premio del catálogo después, lo ya otorgado no cambia |
+| `tier_id` | `uuid` | SI | `NULL` | FK → reward_tiers(id) ON DELETE SET NULL. Solo para `tier_prize` |
+| `mystery_box_result_id` | `uuid` | SI | `NULL` | FK → mystery_box_results(id) ON DELETE SET NULL. Solo para `tier_prize` |
+| `campaign_reward_id` | `uuid` | SI | `NULL` | FK → campaign_rewards(id) ON DELETE SET NULL. Solo para `campaign_prize` |
+| `campaign_id` | `uuid` | SI | `NULL` | FK → campaigns(id) ON DELETE SET NULL. Solo para `campaign_prize` |
+| `status` | `text` | NO | `'active'` | `active` \| `redeemed` \| `expired` (CHECK) |
+| `expires_at` | `timestamptz` | SI | `NULL` | NULL = no vence. Los premios de tier no vencen; los de campaña sí |
+| `reminder_sent_at` | `timestamptz` | SI | `NULL` | Cuándo se envió el recordatorio de vencimiento (cron `reward-reminder`) |
+| `granted_at` | `timestamptz` | NO | `now()` | Momento en que se otorgó el premio |
+| `redeemed_at` | `timestamptz` | SI | `NULL` | Lo llena el trigger `mark_grant_redeemed()` al entregarse |
+| `created_at` | `timestamptz` | NO | `now()` | Fecha de creación del registro |
+
+**Índices:**
+
+| Nombre | Columnas | Tipo | Descripción |
+|--------|----------|------|-------------|
+| `reward_grants_pkey` | `id` | PRIMARY KEY | - |
+| `idx_reward_grants_customer` | `(tenant_id, customer_id, status)` | BTREE | Consulta caliente: premios activos de un cliente (tarjeta + escaneo del mesero) |
+| `idx_reward_grants_expiry` | `(tenant_id, status, expires_at)` | BTREE | Cron de recordatorio y barrido de vencidos |
+| `idx_reward_grants_unique_active_campaign` | `(customer_id, source)` | UNIQUE (parcial: `WHERE status = 'active' AND grant_type = 'campaign_prize'`) | Anti-duplicado: un cliente no puede tener dos premios de campaña activos a la vez del mismo `source` (ni dos de reactivación, ni dos de reseña). Deliberadamente NO aplica a `tier_prize`: un cliente sí puede desbloquear dos tiers antes de que le entreguen el primero |
+
+**Trigger:** `trg_reward_redemptions_grant` AFTER INSERT ON `reward_redemptions` → `mark_grant_redeemed()`: si la redención trae `grant_id`, marca ese `reward_grants.status = 'redeemed'` y `redeemed_at = NEW.redeemed_at` (solo si seguía `active`). Mismo patrón que `mark_mystery_box_redeemed()` (00022), que se conserva intacto.
+
+**RLS:** `tenant_all_reward_grants` FOR ALL — `USING/WITH CHECK (tenant_id = current_tenant_id() OR is_super_admin())`. El service role bypasa RLS; el aislamiento real lo hace el código.
+
+**Backfill (00031):** los premios que los clientes ya habían elegido en `mystery_box_results` (`redeemed=false`) y nadie había entregado se migran a `reward_grants` activos, para que aparezcan en `/mesero/rewards` desde el primer día.
 
 ---
 
@@ -672,6 +781,7 @@ CREATE POLICY "service_update_message_logs" ON message_logs
 | 27 | `00027_wallet.sql` | 2026-07-04 | Tabla `tenant_wallet_transactions` — billetera prepagada COP por tenant (recargas/ajustes/reembolsos). NO tiene `tenant_id` propio de las 18 tablas de negocio (es la tabla de facturación). | Pendiente |
 | 28 | `00028_seed_sushi_service.sql` | 2026-07-04 | Backfill de `tenant_id` en todos los datos existentes (tenant puente "Sushi Service"), activa `NOT NULL`, crea los uniques compuestos `(campo, tenant_id)` que reemplazan a los globales dropeados en 00025. | Pendiente |
 | 29 | `00029_tenant_domain.sql` | 2026-07-05 | Columna `tenants.domain` + índice único parcial — resuelve el tenant por host header (subdominios existentes de cada restaurante) en vez de por slug en la URL. | Pendiente |
+| 31 | `00031_reward_grants.sql` | 2026-07-11 | Tablas `campaign_rewards` y `reward_grants` + índices + índice único parcial anti-duplicado + RLS + backfill; `reward_redemptions.tier_id` pasa a nullable y gana `grant_id` + índice único parcial anti doble-entrega; `campaigns.source` admite `'reward_reminder'`; trigger `mark_grant_redeemed()`. Premios Otorgados (v2.3.0). | Pendiente |
 
 ### `tenant_id` en las 18 tablas de negocio
 
@@ -725,3 +835,5 @@ $$ LANGUAGE plpgsql;
 | message_logs | Admin | Service | Service | NO |
 | reward_redemptions | Admin + Service | Service | Admin | NO |
 | imported_contacts | Admin + Service | Admin + Service | Admin + Service | NO |
+| campaign_rewards | Admin + Service | Admin + Service | Admin + Service | Admin (lógico, `is_active=false`) |
+| reward_grants | Admin + Service | Service | Service | NO |

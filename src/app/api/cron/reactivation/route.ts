@@ -13,6 +13,9 @@ import { getMultipleSettings, getReactivationDaysConfig } from '@/services/setti
 import { getRewardById, getNextReward, getRewardTitle, buildRewardsRoadmap } from '@/services/reward.service'
 import { filterByMonthlyCap } from '@/services/campaign.service'
 import { getNextTier, buildTiersRoadmap } from '@/services/reward-tiers.service'
+import { getCampaignRewardById } from '@/services/campaign-reward.service'
+import { grantReward } from '@/services/reward-grant.service'
+import { DEFAULT_AGGRESSIVE_REWARD_WINDOW_DAYS } from '@/constants/rewards'
 import { getTenantBySlug, getActiveTenants } from '@/lib/tenant'
 import type { Tenant } from '@/types/tenant.types'
 
@@ -23,10 +26,18 @@ interface TenantCronResult {
   sent: number
   failed: number
   aggressive_sent: number
+  /** Premios de campaña otorgados en esta corrida (con su fecha límite). */
+  rewards_granted: number
   total_inactive_customers: number
   reactivation_soft_days?: number
   reactivation_aggressive_days?: number
+  aggressive_reward_window_days?: number
   error?: string
+}
+
+/** "18 de julio" — la fecha límite tal como la ve el cliente en su WhatsApp. */
+function formatDeadline(date: Date): string {
+  return date.toLocaleDateString('es-CO', { day: 'numeric', month: 'long' })
 }
 
 async function processTenant(tenant: Tenant): Promise<TenantCronResult> {
@@ -40,7 +51,9 @@ async function processTenant(tenant: Tenant): Promise<TenantCronResult> {
       'reactivation_reward_id',
       'reactivation_template_sid', // legacy
       'reactivation_aggressive_template_sid', // 25d+ agresiva con puntos
-      'reactivation_aggressive_reward_id',    // recompensa especial opcional para {{4}}
+      'aggressive_reward_id',                 // premio del catálogo campaign_rewards
+      'aggressive_reward_window_days',        // ventana del premio, en días desde el envío
+      'reactivation_aggressive_reward_id',    // LEGACY: apuntaba a la tabla `rewards`, sin UI
     ], tenant.id)
 
     const withRewardSid = settings.reactivation_with_reward_template_sid
@@ -48,13 +61,36 @@ async function processTenant(tenant: Tenant): Promise<TenantCronResult> {
     const legacySid = settings.reactivation_template_sid
     const rewardId = settings.reactivation_reward_id
 
-    // Settings de recompensa agresiva
-    const aggressiveRewardId = settings.reactivation_aggressive_reward_id
+    // ─── Premio de la reactivación agresiva (R1) ───
+    // Sale del catálogo `campaign_rewards`, que sí tiene UI en el dashboard. Se conserva un
+    // fallback a `reactivation_aggressive_reward_id` (tabla `rewards` legacy) para no romper
+    // a los tenants que lo tengan seteado a mano en la DB.
     let aggressiveRewardTitle: string | null = null
-    if (aggressiveRewardId) {
-      const aggressiveReward = await getRewardById(aggressiveRewardId)
-      if (aggressiveReward) aggressiveRewardTitle = aggressiveReward.title
+    let aggressiveCampaignRewardId: string | null = null
+
+    if (settings.aggressive_reward_id) {
+      const campaignReward = await getCampaignRewardById(settings.aggressive_reward_id, tenant.id)
+      if (campaignReward && campaignReward.is_active) {
+        aggressiveRewardTitle = campaignReward.title
+        aggressiveCampaignRewardId = campaignReward.id
+      }
     }
+    if (!aggressiveRewardTitle && settings.reactivation_aggressive_reward_id) {
+      const legacyReward = await getRewardById(settings.reactivation_aggressive_reward_id)
+      if (legacyReward) aggressiveRewardTitle = legacyReward.title
+    }
+
+    // Ventana del premio: reloj INDEPENDIENTE de los días de reactivación (decisión D6).
+    const parsedWindow = Number(settings.aggressive_reward_window_days)
+    const rewardWindowDays =
+      Number.isFinite(parsedWindow) && parsedWindow > 0
+        ? Math.floor(parsedWindow)
+        : DEFAULT_AGGRESSIVE_REWARD_WINDOW_DAYS
+
+    // Solo otorgamos un premio real si hay un premio del catálogo configurado. Sin catálogo
+    // el mensaje agresivo sigue saliendo (con el título legacy si lo hay), pero no hay nada
+    // que el mesero pueda entregar, así que no se crea ningún grant fantasma.
+    const grantsEnabled = aggressiveCampaignRewardId !== null
 
     // Decidir qué modo usar
     let mode: 'with_reward' | 'no_reward' | 'legacy' | null = null
@@ -87,6 +123,7 @@ async function processTenant(tenant: Tenant): Promise<TenantCronResult> {
         sent: 0,
         failed: 0,
         aggressive_sent: 0,
+        rewards_granted: 0,
         total_inactive_customers: 0,
         error: 'No hay plantilla de reactivación configurada. Ve a Dashboard > Ajustes.',
       }
@@ -106,6 +143,7 @@ async function processTenant(tenant: Tenant): Promise<TenantCronResult> {
         failed: 0,
         total_inactive_customers: 0,
         aggressive_sent: 0,
+        rewards_granted: 0,
       }
     }
 
@@ -127,6 +165,7 @@ async function processTenant(tenant: Tenant): Promise<TenantCronResult> {
     let sent = 0
     let failed = 0
     let aggressiveSent = 0
+    let rewardsGranted = 0
     const sentCustomerIds: string[] = []
 
     // Aplicar cap mensual a clientes suaves
@@ -163,7 +202,7 @@ async function processTenant(tenant: Tenant): Promise<TenantCronResult> {
           }
         }
 
-        const result = await sendTemplateMessage(customer.phone, templateSid, variables, tenant, undefined, { customerId: customer.id, messageType: 'reactivation' })
+        const result = await sendTemplateMessage(customer.phone, templateSid, variables, tenant, { customerId: customer.id, messageType: 'reactivation' })
 
         await recordCampaignMessage({
           campaignId: campaign.id,
@@ -206,17 +245,22 @@ async function processTenant(tenant: Tenant): Promise<TenantCronResult> {
           const nextTier = await getNextTier(customer.total_points ?? 0, tenant.id)
           const nextTierName = nextTier ? nextTier.tier.safe_reward_title : 'premios exclusivos'
 
+          const deadline = new Date(Date.now() + rewardWindowDays * 24 * 60 * 60 * 1000)
+
           const aggressiveVars: Record<string, string> = {
             '1': customer.name,
             '2': String(customer.total_points ?? 0),
             '3': nextTierName,
           }
-          // Si hay recompensa especial configurada para agresiva, añadir como {{4}}
+          // Si hay premio configurado, va como {{4}} y su fecha límite como {{5}}.
+          // sendTemplateMessage reintenta con una variable menos ante el error 21665 de
+          // Twilio, así que una plantilla de 4 variables sigue funcionando sin tocar nada.
           if (aggressiveRewardTitle) {
             aggressiveVars['4'] = aggressiveRewardTitle
+            aggressiveVars['5'] = formatDeadline(deadline)
           }
 
-          const result = await sendTemplateMessage(customer.phone, aggressiveSid, aggressiveVars, tenant, undefined, { customerId: customer.id, messageType: 'reactivation' })
+          const result = await sendTemplateMessage(customer.phone, aggressiveSid, aggressiveVars, tenant, { customerId: customer.id, messageType: 'reactivation' })
 
           await recordCampaignMessage({
             campaignId: campaign.id,
@@ -231,6 +275,35 @@ async function processTenant(tenant: Tenant): Promise<TenantCronResult> {
             aggressiveSent++
             sent++
             sentCustomerIds.push(customer.id)
+
+            // ─── Otorgar el premio con su fecha límite (R1) ───
+            // Solo tras un envío exitoso: un premio que el cliente nunca supo que tenía no
+            // sirve de nada, y ensuciaría la tasa de redención.
+            //
+            // `duplicate_active` no es un error: significa que el cliente ya tenía un premio
+            // de reactivación vivo. El índice único parcial de la DB lo garantiza.
+            if (grantsEnabled && aggressiveCampaignRewardId && aggressiveRewardTitle) {
+              const granted = await grantReward(
+                {
+                  customerId: customer.id,
+                  grantType: 'campaign_prize',
+                  source: 'reactivation',
+                  prizeTitle: aggressiveRewardTitle,
+                  campaignRewardId: aggressiveCampaignRewardId,
+                  campaignId: campaign.id,
+                  windowDays: rewardWindowDays,
+                },
+                tenant.id
+              )
+              if (granted.ok) {
+                rewardsGranted++
+              } else if (granted.code !== 'duplicate_active') {
+                console.error(
+                  `[Cron Reactivation] (${tenant.slug}) No se pudo otorgar el premio a ${customer.id}:`,
+                  granted.error
+                )
+              }
+            }
           } else {
             failed++
           }
@@ -257,9 +330,11 @@ async function processTenant(tenant: Tenant): Promise<TenantCronResult> {
       sent,
       failed,
       aggressive_sent: aggressiveSent,
+      rewards_granted: rewardsGranted,
       total_inactive_customers: customers.length,
       reactivation_soft_days: softDays,
       reactivation_aggressive_days: aggressiveDays,
+      aggressive_reward_window_days: rewardWindowDays,
     }
 }
 
@@ -290,6 +365,7 @@ async function handleCron(request: NextRequest) {
             sent: 0,
             failed: 0,
             aggressive_sent: 0,
+            rewards_granted: 0,
             total_inactive_customers: 0,
             error: r.reason instanceof Error ? r.reason.message : 'Error desconocido',
           }
@@ -301,6 +377,7 @@ async function handleCron(request: NextRequest) {
       sent: results.reduce((acc, r) => acc + r.sent, 0),
       failed: results.reduce((acc, r) => acc + r.failed, 0),
       aggressive_sent: results.reduce((acc, r) => acc + r.aggressive_sent, 0),
+      rewards_granted: results.reduce((acc, r) => acc + r.rewards_granted, 0),
       results,
     })
   } catch (error) {

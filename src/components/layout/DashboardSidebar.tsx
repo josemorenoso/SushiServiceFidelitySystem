@@ -17,6 +17,7 @@ import {
   UserCog,
   Crosshair,
   Ticket,
+  PackageOpen,
 } from 'lucide-react'
 import { useBranding } from '@/lib/branding-context'
 
@@ -28,6 +29,7 @@ export function DashboardSidebar() {
     { href: '/dashboard', label: 'Métricas', icon: LayoutDashboard },
     { href: '/dashboard/customers', label: 'Clientes', icon: Users },
     { href: '/dashboard/rewards', label: 'Recompensas', icon: Gift },
+    { href: '/dashboard/campaign-rewards', label: 'Premios de campaña', icon: PackageOpen },
     { href: '/dashboard/redemptions', label: 'Redenciones', icon: Ticket },
     { href: '/dashboard/campaigns', label: 'Campañas', icon: Megaphone },
     { href: '/dashboard/imported-contacts', label: 'Golden Bullet', icon: Crosshair },

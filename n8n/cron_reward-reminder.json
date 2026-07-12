@@ -1,0 +1,64 @@
+{
+  "name": "Cron Recordatorio de Premios",
+  "nodes": [
+    {
+      "id": "cron_trigger",
+      "name": "Diario 11:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 300],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 16 * * *"
+            }
+          ]
+        }
+      },
+      "notes": "16:00 UTC = 11:00 Colombia. Una vez al día basta: el recordatorio se sella con reminder_sent_at, así que una segunda corrida no manda nada dos veces."
+    },
+    {
+      "id": "call_reward_reminder",
+      "name": "Ejecutar Cron Recordatorio",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://clubsushiservice.constelarys.com/api/cron/reward-reminder",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": { "name": "RestaurantQR CRON_SECRET" }
+      },
+      "notes": "Sin ?tenant= recorre TODOS los tenants activos. El barrido de premios vencidos corre siempre, aunque el recordatorio esté apagado en Ajustes."
+    },
+    {
+      "id": "log_result",
+      "name": "Log Resultado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 300],
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconsole.log(`[Cron RewardReminder] Vencidos: ${data.expired || 0}, Recordatorios enviados: ${data.sent || 0}, Fallidos: ${data.failed || 0}, Bloqueados por cap mensual: ${data.skipped_monthly_cap || 0}`);\nreturn [$input.first()];"
+      }
+    }
+  ],
+  "connections": {
+    "Diario 11:00": {
+      "main": [[{ "node": "Ejecutar Cron Recordatorio", "type": "main", "index": 0 }]]
+    },
+    "Ejecutar Cron Recordatorio": {
+      "main": [[{ "node": "Log Resultado", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

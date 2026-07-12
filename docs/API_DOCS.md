@@ -5,7 +5,7 @@
 - **Dashboard endpoints** — Cookie-based (Supabase SSR, sesión admin via `supabase.auth.getUser()`)
 - **Staff endpoints públicos** (`/api/staff/*`) — Bearer Token (Staff JWT) o `X-Device-Token`
 - **Webhooks / Cron** — `x-webhook-secret` o `CRON_SECRET`
-**Última actualización:** 2026-05-31
+**Última actualización:** 2026-07-11
 > **Nota:** Validación de geolocalización está en **STANDBY** (v1.0.5-3). El backend no valida GPS por defecto. Puede reactivarse descomentando el bloque en `src/app/api/check-in/route.ts`.
 
 ---
@@ -41,14 +41,15 @@ Webhooks validan origen por número autorizado o `x-webhook-secret`. Cron jobs v
 | GET | /api/health | Estado del servidor | NO |
 | GET | /api/health/twilio | Test conexión Twilio (saldo) | NO |
 | POST | /api/check-in | Registrar visita (QR) + conversión Golden Bullet | NO (público) |
-| GET | /api/check-in/status | Estado del cliente + visita reciente + `pending_reward` | NO (público) |
+| GET | /api/check-in/status | Estado del cliente + visita reciente + `pending_reward` + `active_grants[]` | NO (público) |
 | GET | /api/public/customer-card | Datos de tarjeta del cliente (puntos, tiers) por teléfono | NO (público) |
-| POST | /api/reward-redeem | Registrar entrega física de un premio | Staff (Bearer/X-Device-Token) |
+| POST | /api/reward-redeem | Registrar entrega física de un premio (acepta `grant_id`, `tier_id` opcional) | Staff (Bearer/X-Device-Token) |
 | POST | /api/webhook/delivery | Recibir datos de domicilio (n8n/Twilio) | x-webhook-secret |
 | POST | /api/webhook/twilio-incoming | Auto-responder mensajes entrantes al número | Twilio Signature |
 | GET/POST | /api/cron/birthday | Enviar felicitaciones de cumpleaños | CRON_SECRET |
-| GET/POST | /api/cron/reactivation | Enviar reactivaciones (días configurables, default 21/25) | CRON_SECRET |
+| GET/POST | /api/cron/reactivation | Enviar reactivaciones (días configurables, default 21/25) + otorga premio de campaña con `expires_at` | CRON_SECRET |
 | GET/POST | /api/cron/calendar-dispatch | Auto-enviar eventos del calendario vencidos (disparado por n8n) | CRON_SECRET |
+| GET/POST | /api/cron/reward-reminder | Barrido de vencidos + recordatorio de premio por vencer (disparado por n8n) | CRON_SECRET |
 | GET | /api/dashboard/metrics | Métricas generales | Admin Cookie |
 | GET | /api/dashboard/customers | Lista de clientes | Admin Cookie |
 | POST | /api/dashboard/campaigns | Crear campaña manual | Admin Cookie |
@@ -58,6 +59,10 @@ Webhooks validan origen por número autorizado o `x-webhook-secret`. Cron jobs v
 | GET | /api/dashboard/twilio-balance | Saldo Twilio + costo por mensaje | Admin Cookie |
 | GET | /api/dashboard/redemptions | Listar redenciones con filtros | Admin Cookie |
 | GET | /api/dashboard/redemptions/summary | Resumen de redenciones (premio/hora/mesero) | Admin Cookie |
+| GET | /api/dashboard/campaign-rewards | Listar catálogo de premios de campaña (`?active=true` opcional) | Admin Cookie |
+| POST | /api/dashboard/campaign-rewards | Crear premio de campaña | Admin Cookie |
+| PATCH | /api/dashboard/campaign-rewards | Actualizar premio (título, descripción, `is_active`) | Admin Cookie |
+| DELETE | /api/dashboard/campaign-rewards?id=X | Baja lógica del premio (`is_active=false`, no borra) | Admin Cookie |
 | POST | /api/dashboard/imported-contacts/validate | Validar CSV de contactos (sin insertar) | Admin Cookie + flag |
 | POST | /api/dashboard/imported-contacts/confirm | Confirmar e importar/enviar Golden Bullet | Admin Cookie + flag |
 | GET | /api/dashboard/imported-contacts | Listar lotes o contactos de un lote | Admin Cookie |
@@ -94,6 +99,7 @@ Webhooks validan origen por número autorizado o `x-webhook-secret`. Cron jobs v
 | GET | /api/staff/stats | Visitas registradas hoy | Staff JWT / Device |
 | POST | /api/staff/device/register | Activar dispositivo de confianza | Supervisor PIN |
 | POST | /api/staff/device/verify | Verificar device_token | NO |
+| GET | /api/staff/pending-rewards | Premios activos de clientes con check-in en las últimas 6h | Staff JWT / Device |
 
 ---
 
@@ -334,6 +340,19 @@ Endpoint para que la pantalla del cliente (mostrando el QR) detecte automáticam
     "points_remaining": 90,
     "threshold": 400
   },
+  "pending_reward": null,
+  "active_grants": [
+    {
+      "id": "uuid-del-grant",
+      "prize_title": "1/2 sushi gratis",
+      "grant_type": "campaign_prize",
+      "source": "reactivation",
+      "expires_at": "2026-07-18T23:59:59.000Z",
+      "granted_at": "2026-07-11T10:00:00.000Z",
+      "tier_id": null,
+      "mystery_box_result_id": null
+    }
+  ],
   "tiers": [
     { "tier_name": "Bronce", "point_threshold": 150, "safe_reward_title": "Bebida gratis", "mystery_box_enabled": true, "is_black": false },
     ...
@@ -342,6 +361,8 @@ Endpoint para que la pantalla del cliente (mostrando el QR) detecte automáticam
 ```
 
 > **`tier_unlocked`**: Es `null` salvo que el cliente haya superado el umbral de un tier y aún no lo haya reclamado (sin fila en `mystery_box_results` para ese `tier_id`). Devuelve el tier de mayor umbral pendiente. El cliente lo consume solo cuando `hasRecentVisit` es `true`, mostrando el flujo de elección de premio (safe vs Mystery Box) en su propio dispositivo.
+>
+> **`active_grants[]`** (migración 00031, v2.3.0): premios ya otorgados (activos, no vencidos) que le pertenecen al cliente — de tier (`grant_type: 'tier_prize'`, no vencen, `expires_at: null`) o de campaña (`grant_type: 'campaign_prize'`, vencen). Alimenta el banner "Disponible: X premio — vence en N días" en la tarjeta del cliente y la alerta del mesero al escanear. Viaja en la misma llamada de polling que ya hace el cliente cada 5s, sin costo de red adicional. Ordenado por `granted_at` ascendente (el más antiguo primero).
 
 **Response 200 (cliente encontrado, sin visita reciente):**
 ```json
@@ -372,6 +393,86 @@ Endpoint para que la pantalla del cliente (mostrando el QR) detecte automáticam
 
 > **Nota:** Una "visita reciente" se define como una visita `source = 'staff_scan'` creada en los últimos 30 minutos. El endpoint busca en la tabla `visits` y, si encuentra una, consulta `point_transactions` filtrando por `reference_id` (id de la visita) y `source IN ('visit_staff','visit_qr','visit_delivery')` para obtener los puntos otorgados.  
 > **Importante:** `point_transactions` usa las columnas `reference_id` y `source` (NO `visit_id`/`type`). Consultar las columnas incorrectas devuelve `points_awarded = 0` aunque el saldo sea correcto.
+
+---
+
+### Staff: Premios pendientes
+
+**`GET /api/staff/pending-rewards`** — Staff (Bearer JWT o `X-Device-Token`)
+
+Alimenta la pantalla **`/mesero/rewards`**. Devuelve los premios (`reward_grants`) activos de clientes con check-in en las **últimas 6 horas** (ventana fija, no configurable — un turno cabe de sobra). Es el arreglo de la condición de carrera de redención: antes el mesero solo podía registrar la entrega en los 3 segundos posteriores al escaneo, cuando el cliente todavía no había elegido su Mystery Box en su celular.
+
+**Headers:**
+```
+Authorization: Bearer {staff_jwt}
+```
+```
+X-Device-Token: {device_fingerprint}
+```
+
+**Response 200:**
+```json
+{
+  "ok": true,
+  "count": 2,
+  "grants": [
+    {
+      "id": "uuid-del-grant",
+      "customer_id": "uuid-cliente",
+      "prize_title": "1/2 sushi gratis",
+      "grant_type": "campaign_prize",
+      "source": "reactivation",
+      "expires_at": "2026-07-18T23:59:59.000Z",
+      "granted_at": "2026-07-11T10:00:00.000Z",
+      "tier_id": null,
+      "mystery_box_result_id": null,
+      "customer_name": "Juan Pérez",
+      "customer_phone": "3001234567"
+    }
+  ]
+}
+```
+
+**Response 404:** `{ "error": "Restaurante no reconocido", "message": "..." }` — dominio sin tenant.
+**Response 401:** `{ "error": "No autorizado", "message": "Mesero o dispositivo no válido." }`
+
+---
+
+### Reward Redeem (Registrar entrega física)
+
+**`POST /api/reward-redeem`** — Staff (Bearer JWT o `X-Device-Token`)
+
+Registra la entrega física de un premio. Desde la migración 00031 (v2.3.0), el camino principal es anclar la entrega a un `grant_id` (premio otorgado, de tier o de campaña); `mystery_box_result_id` se mantiene por compatibilidad. `tier_id` es **opcional** — un premio de campaña no tiene tier.
+
+**Request:**
+```json
+{
+  "customer_id": "uuid-cliente",
+  "grant_id": "uuid-del-grant",
+  "mystery_box_result_id": null,
+  "tier_id": null,
+  "prize_title": "1/2 sushi gratis",
+  "source": "campaign_reward",
+  "table_number": 12,
+  "notes": null,
+  "pos_reference": null
+}
+```
+
+**Validaciones:**
+- `customer_id` y `prize_title` son obligatorios.
+- Se requiere `grant_id` **o** `mystery_box_result_id` (al menos uno) — es lo que ancla la entrega a algo que los índices únicos de la base de datos puedan proteger contra doble entrega.
+- El cliente debe pertenecer al tenant resuelto por dominio (defensa anti-IDOR).
+
+**Response 201:**
+```json
+{ "ok": true, "redemption": { "id": "uuid", "grant_id": "uuid-del-grant", "tier_id": null, "prize_title": "1/2 sushi gratis", "...": "..." } }
+```
+
+**Response 400:** `{ "error": "Datos inválidos", "message": "Se requiere customer_id y prize_title" }` o `{ "message": "Se requiere grant_id o mystery_box_result_id" }`
+**Response 404:** `{ "error": "No encontrado", "message": "Cliente no encontrado" }`
+**Response 409:** `{ "error": "No se pudo registrar", "message": "...", "code": "already_redeemed" }` — el premio ya fue entregado (por carrera entre dos meseros, o porque el grant ya estaba `redeemed`/`expired`). La garantía anti doble-entrega vive en el índice único parcial de la base de datos, no en la UI.
+**Response 401:** `{ "error": "No autorizado", "message": "Mesero o dispositivo no válido." }`
 
 ---
 
@@ -480,6 +581,8 @@ con `?tenant=` procesa uno solo, sin él procesa todos los tenants activos y agr
 
 Si ninguno está configurado, retorna `{ ok: false, error: "..." }` sin enviar.
 
+**Premio de campaña (R1, migración 00031, v2.3.0):** si hay un premio activo configurado en `aggressive_reward_id` (catálogo `campaign_rewards`; con fallback legacy a `reactivation_aggressive_reward_id`), cada envío exitoso a un cliente del grupo agresivo **otorga un `reward_grant`** con `expires_at = ahora + aggressive_reward_window_days` (default 7, ventana INDEPENDIENTE de los días de reactivación). El premio y la fecha límite viajan en la plantilla como `{{4}}` y `{{5}}` (`sendTemplateMessage` reintenta sin esas variables ante el error 21665 de Twilio, así que una plantilla de 4 variables sigue funcionando). Si el cliente ya tenía un premio de reactivación activo, la base de datos rechaza el duplicado (`duplicate_active`) y no cuenta como error.
+
 **Response 200:**
 ```json
 {
@@ -488,11 +591,66 @@ Si ninguno está configurado, retorna `{ ok: false, error: "..." }` sin enviar.
   "sent": 12,
   "failed": 1,
   "aggressive_sent": 3,
+  "rewards_granted": 3,
   "total_inactive_customers": 13,
   "reactivation_soft_days": 21,
-  "reactivation_aggressive_days": 25
+  "reactivation_aggressive_days": 25,
+  "aggressive_reward_window_days": 7
 }
 ```
+
+> **`rewards_granted`**: cuántos `reward_grants` de campaña se otorgaron en esta corrida (subconjunto de `aggressive_sent` — solo se otorga tras un envío de WhatsApp exitoso, para no ensuciar la tasa de redención con premios que el cliente nunca supo que tenía).
+
+---
+
+### Cron: Recordatorio de Premio
+
+**`POST /api/cron/reward-reminder`** — Protegido por `CRON_SECRET`
+
+**Headers:** `Authorization: Bearer {CRON_SECRET}`
+
+**Query param `?tenant=slug`:** mismo comportamiento opcional que los demás crons — con `?tenant=` procesa uno solo, sin él procesa todos los tenants activos (`getActiveTenants()`, `Promise.allSettled`) y agrega `tenants_processed` + `results[]` a la response.
+
+> **Quién lo dispara:** al igual que `calendar-dispatch`, NO está en `vercel.json`. Lo dispara **n8n**.
+
+Hace dos cosas, en este orden, por cada tenant:
+
+1. **Barrido de vencidos** — marca `expired` los `reward_grants` activos cuya `expires_at` ya pasó. Corre **siempre**, aunque el recordatorio esté apagado, para que las métricas de "vencidos sin reclamar" del dashboard sean honestas sin necesitar un cron aparte.
+2. **Recordatorio** — si `reward_reminder_enabled='true'` y hay `reward_reminder_template_sid` configurado, envía **un solo** WhatsApp a los premios que vencen dentro de `reward_reminder_days_before` días (default 2) cuyo dueño no ha vuelto desde que se le otorgó el premio. Sella `reminder_sent_at` para no reenviar en la próxima corrida.
+
+**Caps (decisión D5):**
+
+- **Exento** del cap de frecuencia de 7 días (`FREQUENCY_CAP_DAYS`) — sin esta excepción el recordatorio nunca saldría con ventanas de premio de 5-7 días, que son justo las que generan urgencia.
+- **Sujeto** al cap mensual de 3 mensajes de marketing (`source='reward_reminder'` está en `MONTHLY_CAP_SOURCES`).
+
+**Response 200 (con `?tenant=`):**
+```json
+{
+  "tenant_slug": "sushi-service",
+  "ok": true,
+  "expired": 2,
+  "candidates": 5,
+  "sent": 4,
+  "failed": 0,
+  "skipped_monthly_cap": 1,
+  "reminder_enabled": true
+}
+```
+
+**Response 200 (sin `?tenant=`, todos los tenants):**
+```json
+{
+  "ok": true,
+  "tenants_processed": 2,
+  "expired": 3,
+  "sent": 6,
+  "failed": 0,
+  "skipped_monthly_cap": 1,
+  "results": [ { "tenant_slug": "sushi-service", "ok": true, "expired": 2, "candidates": 5, "sent": 4, "failed": 0, "skipped_monthly_cap": 1, "reminder_enabled": true } ]
+}
+```
+
+**Response 401:** `{ "error": "No autorizado" }` (CRON_SECRET ausente o no coincide)
 
 ---
 
@@ -751,6 +909,44 @@ Actualiza una configuración por clave.
 ```
 
 **Response 400:** `{ "error": "key y value son requeridos" }`
+
+---
+
+### Dashboard: Catálogo de premios de campaña
+
+> CRUD del catálogo editable (`campaign_rewards`, migración 00031, v2.3.0). Dashboard > Premios de campaña. Los premios de este catálogo son los que las campañas otorgan como `reward_grants` (hoy: reactivación agresiva).
+
+**`GET /api/dashboard/campaign-rewards`** — Admin Cookie
+
+**Query params:** `?active=true` (opcional) — solo devuelve los premios con `is_active=true`.
+
+**Response 200:**
+```json
+[
+  { "id": "uuid", "tenant_id": "uuid", "title": "1/2 sushi gratis", "description": null, "is_active": true, "created_at": "..." }
+]
+```
+
+**`POST /api/dashboard/campaign-rewards`** — Admin Cookie
+
+**Request:** `{ "title": "1/2 sushi gratis", "description": "Aplica solo en salón" }`
+
+**Response 201:** `{ "id": "uuid", "tenant_id": "uuid", "title": "1/2 sushi gratis", "description": "Aplica solo en salón", "is_active": true, "created_at": "..." }`
+**Response 400:** `{ "error": "El título es requerido" }`
+
+**`PATCH /api/dashboard/campaign-rewards`** — Admin Cookie
+
+**Request:** `{ "id": "uuid", "title": "1/2 sushi gratis (VIP)", "description": null, "is_active": true }` — `id` obligatorio, el resto es un subconjunto opcional (título, descripción, `is_active`).
+
+**Response 200:** `{ "id": "uuid", "...": "..." }`
+**Response 400:** `{ "error": "id es requerido" }` o `{ "error": "Nada que actualizar" }`
+
+**`DELETE /api/dashboard/campaign-rewards?id=uuid`** — Admin Cookie
+
+**Baja lógica, no borrado:** marca `is_active=false`, no elimina la fila. Los `reward_grants` ya otorgados guardan `prize_title` como snapshot, así que retirar un premio del catálogo no rompe lo que ya está en curso — los clientes que ya lo tienen lo siguen viendo y el mesero lo sigue pudiendo entregar.
+
+**Response 200:** `{ "ok": true }`
+**Response 400:** `{ "error": "id es requerido" }`
 
 ---
 

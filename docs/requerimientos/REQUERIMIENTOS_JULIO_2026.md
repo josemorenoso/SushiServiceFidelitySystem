@@ -1,6 +1,6 @@
 # Requerimientos — Julio 2026
 
-> **Estado:** 📋 APROBADO — en desarrollo (Bloque 1)
+> **Estado:** 🔨 EN CURSO — Bloque 1 ✅ COMPLETO · Bloque 2 ⏳ · Bloque 3 ⏳
 > **Fecha:** 2026-07-11
 > **Origen:** solicitud del dueño del producto + auditoría de código previa al desarrollo
 > **Método:** AInnovate v2 (Documentation-Driven Development)
@@ -9,6 +9,35 @@ Este documento es la **fuente de verdad** de lo pedido en julio 2026. Recoge los
 textuales, los hallazgos de la auditoría de código que los preceden, las decisiones tomadas y la
 descomposición en bloques de trabajo. Cada bloque tiene después su propio spec técnico y su propio
 doc de feature.
+
+> **📌 ¿Eres una IA que retoma este trabajo?**
+> Lee la **[§8 Handoff](#8-handoff--contexto-para-retomar-el-trabajo)** al final. Contiene todo el
+> contexto de arquitectura, gotchas y decisiones ya tomadas para que puedas desarrollar los Bloques 2
+> y 3 **sin releer el repo entero**.
+
+---
+
+## 0. Estado actual (2026-07-11)
+
+| Bloque | Estado | Commit |
+|--------|--------|--------|
+| **1 — Premios otorgados, entrega y reactivación agresiva** | ✅ Código completo, typecheck + build verdes | `66ceada` |
+| **2 — Calibrador de puntos y umbrales** | ⏳ Diseñado, sin código | — |
+| **3 — Pop-up de reseñas de Google con tracking** | ⏳ Diseñado, sin código | — |
+
+### ⚠️ 4 tareas que debe hacer el dueño para que el Bloque 1 funcione en producción
+
+El código está listo, pero **no hace nada hasta que estas cuatro cosas ocurran**. Ninguna la puede
+hacer la IA.
+
+| # | Tarea | Por qué | Si no se hace |
+|---|-------|---------|---------------|
+| 1 | **Aplicar la migración `supabase/migrations/00031_reward_grants.sql`** en Supabase | Crea `reward_grants` y `campaign_rewards`, hace `tier_id` nullable, y hace el **backfill** de los premios pendientes históricos | `/mesero/rewards` y el catálogo dan error (la UI degrada con un toast, no revienta) |
+| 2 | **Crear y aprobar las plantillas de Twilio** | La agresiva ahora usa `{{4}}` = premio y `{{5}}` = fecha límite. El recordatorio es una **plantilla nueva** (`{{1}}` nombre · `{{2}}` premio · `{{3}}` días restantes) | La agresiva sigue funcionando con 4 variables (Twilio 21665 → reintento con una menos), pero **sin fecha límite**. El recordatorio no sale nunca |
+| 3 | **Importar `n8n/cron_reward-reminder.json`** en n8n y activarlo | Es el único disparador del cron (`vercel.json` está en `"crons": []`) | Los premios **nunca vencen** (se quedan `active` para siempre) y no sale ningún recordatorio |
+| 4 | **Crear los premios** en Dashboard → *Premios de campaña*, y elegir uno en Dashboard → *Ajustes → Premio de Reactivación Agresiva* | Sin premio en el catálogo, `grantsEnabled = false` | La reactivación agresiva manda el mensaje pero **no otorga ningún premio**. Es solo un recordatorio, no una campaña agresiva |
+
+**El orden importa:** 1 → 4 → 2 → 3. Sin la migración, el catálogo del paso 4 ni siquiera carga.
 
 ---
 
@@ -252,24 +281,42 @@ añade en el Bloque 3.
 El trabajo se parte en tres bloques independientes, cada uno con su spec técnico y su doc de feature.
 **El calendario queda explícitamente fuera** (lo resuelve otro equipo).
 
-### Bloque 1 — Premios otorgados, entrega y reactivación agresiva 🔨 EN DESARROLLO
+### Bloque 1 — Premios otorgados, entrega y reactivación agresiva ✅ COMPLETO (`66ceada`)
 
 Cubre **R1, R2, R3** y los hallazgos **3.1, 3.2, 3.4**.
 
-Introduce el concepto que falta en el sistema: el **premio otorgado** (`reward_grants`) — un premio que
-le pertenece a un cliente y está pendiente de reclamar. Hoy el sistema sabe quién *ganó* un premio
-(`mystery_box_results`) y qué se *entregó* (`reward_redemptions`), pero no tiene nada en medio. Por eso
-el mesero no tiene dónde tocar y por eso un premio de campaña no cabe en ningún lado.
+Introdujo el concepto que faltaba en el sistema: el **premio otorgado** (`reward_grants`) — un premio
+que le pertenece a un cliente y está pendiente de reclamar. El sistema sabía quién *ganó* un premio
+(`mystery_box_results`) y qué se *entregó* (`reward_redemptions`), pero no tenía nada en medio. Por eso
+el mesero no tenía dónde tocar y por eso un premio de campaña no cabía en ningún lado.
 
-- Tabla `reward_grants` (premio con dueño, estado y vencimiento opcional).
-- Tabla `campaign_rewards` (catálogo editable de premios de campaña).
-- `reward_redemptions.tier_id` pasa a nullable.
-- Pantalla "Premios pendientes" en la app del mesero, con mesa y atribución automática al mesero.
-- El premio activo se muestra en la tarjeta del cliente, con cuenta regresiva.
-- El premio activo salta en la pantalla del mesero al escanear.
-- El cron de reactivación agresiva otorga el premio con `expires_at` y lo nombra en el WhatsApp.
-- Cron nuevo de recordatorio de vencimiento (disparado por n8n), configurable en Ajustes.
-- Métricas en el dashboard: otorgados / redimidos / vencidos / tasa de redención por origen.
+```
+  GANAR                    TENER                      ENTREGAR
+  mystery_box_results  →   reward_grants          →   reward_redemptions
+  cron reactivación    →   ← LA PIEZA NUEVA           (mesa + mesero)
+```
+
+**Qué se construyó:**
+
+| Pieza | Archivo |
+|-------|---------|
+| Tablas `reward_grants` + `campaign_rewards`, `tier_id` nullable, `grant_id` con índice único (anti doble-entrega), trigger `mark_grant_redeemed`, backfill | `supabase/migrations/00031_reward_grants.sql` |
+| Motor de premios otorgados | `src/services/reward-grant.service.ts` |
+| Catálogo de premios de campaña | `src/services/campaign-reward.service.ts` |
+| Pantalla "Premios pendientes" del mesero | `src/app/(public)/mesero/rewards/page.tsx` + `src/components/features/staff/PendingRewardsList.tsx` + `src/app/api/staff/pending-rewards/route.ts` |
+| Banner "Disponible: X — vence en N días" en la tarjeta del cliente | `src/components/features/check-in/AvailableRewardBanner.tsx` |
+| Alerta de premio al escanear (reescrita: lee grants, soporta varios, polling corto) | `src/components/features/staff/RewardAlert.tsx` |
+| Reactivación agresiva otorga el premio con `expires_at` + `{{5}}` = fecha límite | `src/app/api/cron/reactivation/route.ts` |
+| Cron de recordatorio (barrido de vencidos + aviso) | `src/app/api/cron/reward-reminder/route.ts` + `n8n/cron_reward-reminder.json` |
+| Catálogo en el dashboard | `src/app/(dashboard)/dashboard/campaign-rewards/page.tsx` + `src/app/api/dashboard/campaign-rewards/route.ts` |
+| Config (premio, ventana, recordatorio) | `src/app/(dashboard)/dashboard/settings/page.tsx` |
+| Métricas: otorgados / redimidos / vencidos / tasa de redención por origen | `src/components/dashboard/GrantMetricsCards.tsx` |
+| `resolveStaffAuth` extraído (estaba duplicado en 2 rutas, iba por la 3ª) | `src/lib/staff-auth.ts` |
+
+**Verificación:** `npx tsc --noEmit` limpio · `npx next build` verde · `npx eslint` sin errores nuevos
+(el árbol limpio ya tenía 14 errores preexistentes en `useDashboardAnalytics.ts` y `useStaffAuth.ts`).
+
+**⚠️ NO está desplegado.** Ver las [4 tareas del dueño](#4-tareas-que-debe-hacer-el-dueño-para-que-el-bloque-1-funcione-en-producción) en §0.
 
 📄 Spec: [`docs/superpowers/specs/2026-07-11-reward-grants-design.md`](../superpowers/specs/2026-07-11-reward-grants-design.md)
 📄 Feature: [`docs/features/reward-grants.md`](../features/reward-grants.md)
@@ -315,3 +362,186 @@ Cubre **R6, R6.a, R6.b, R6.c** y los hallazgos **3.6, 3.7, 3.8**.
 | Fecha | Cambio |
 |-------|--------|
 | 2026-07-11 | Creación. Requerimientos R1-R6, hallazgos de auditoría 3.1-3.8, decisiones D1-D8, descomposición en 3 bloques. |
+| 2026-07-11 | Bloque 1 completado (`66ceada`). Añadidas §0 (estado + 4 tareas del dueño) y §8 (handoff). |
+
+---
+
+## 8. Handoff — contexto para retomar el trabajo
+
+> Esta sección existe para que una IA pueda desarrollar los Bloques 2 y 3 **sin releer el repo**.
+> Todo lo de aquí está verificado contra el código a 2026-07-11.
+
+### 8.1 Lo mínimo que hay que saber de la arquitectura
+
+**Stack:** Next.js 16 (App Router) + React 19 + Supabase (Postgres + Auth) + TailwindCSS 4 + shadcn/ui
++ Twilio (WhatsApp). Deploy en Vercel. TypeScript estricto, cero `any`.
+
+**Multitenant — y esto es lo más importante de todo:**
+
+> El 95% del acceso a datos usa el **service-role client** (`getServiceClient()`), que **ignora RLS por
+> diseño**. El aislamiento entre restaurantes es responsabilidad del **código**: cada query debe llevar
+> `.eq('tenant_id', tenantId)` a mano. **Sin excepción.** Olvidarlo filtra datos entre restaurantes.
+> Ref: `docs/DB_SCHEMA.md`, sección de RLS.
+
+Cómo se resuelve el tenant, según el contexto (todo en `src/lib/tenant.ts`):
+
+| Contexto | Función |
+|----------|---------|
+| Rutas públicas (`/check-in`, `/mesero`) | `getTenantByDomain(host)` — por `tenants.domain` |
+| Dashboard admin | `requireTenantId()` — lee `app_metadata.tenant_id` del JWT de Supabase Auth |
+| Crons | `getTenantBySlug(slug)` con `?tenant=`, o `getActiveTenants()` para recorrer todos |
+| Webhooks de Twilio | `getTenantByMessagingService()` / `getTenantByWhatsappNumber()` |
+
+**Configuración del negocio:** vive en `admin_settings`, una tabla **key-value** con PK compuesta
+`(key, tenant_id)`. No son columnas tipadas. Se lee con `getSettingValue()` / `getMultipleSettings()`
+(`src/services/settings.service.ts`) y se escribe desde el dashboard con `PUT /api/dashboard/settings`.
+**Todos los valores son strings** — hay que parsear (`Number(...)`, `=== 'true'`).
+
+**Branding por tenant:** `tenants.config` (jsonb) → `resolveBranding()` en `src/lib/branding.ts`,
+consumido en cliente con `useBranding()`. Ahí vive `google_maps_url` (el link de reseñas), que **no
+tiene UI todavía** — hoy solo se edita por SQL.
+
+**Auth del mesero:** `resolveStaffAuth(request, tenant)` en `src/lib/staff-auth.ts` (extraído en el
+Bloque 1). Dos escenarios: `Bearer <staff JWT>` o `X-Device-Token`. Devuelve `{ valid, staffId }` — el
+`staffId` es lo que permite **atribuir** una acción a un mesero concreto. En el cliente, el hook es
+`useStaffAuth()` con `getAuthHeaders()`.
+
+**Crons:** `vercel.json` está en `"crons": []` **a propósito**. **n8n es el único disparador.** Los
+workflows viven en `n8n/*.json`. Todo cron valida `validateCronSecret(request)`, acepta `?tenant=<slug>`
+para un solo tenant, y sin ese parámetro recorre `getActiveTenants()` con `Promise.allSettled` (un
+tenant que falle no debe tumbar a los demás). Copia el patrón de
+`src/app/api/cron/reward-reminder/route.ts`, que es el más reciente y limpio.
+
+**Sistema de caps de marketing** (`src/constants/rewards.ts`):
+- `FREQUENCY_CAP_DAYS = 7` — mínimo entre mensajes de marketing por cliente (vía `customers.last_campaign_at`).
+- `MONTHLY_MARKETING_CAP = 3` — máximo al mes, contado sobre `MONTHLY_CAP_SOURCES = ['manual', 'calendar', 'reactivation', 'reward_reminder']` con `filterByMonthlyCap()`.
+- Cumpleaños y el recordatorio de premio están **exentos del cap de 7 días** pero **sujetos al mensual**.
+
+### 8.2 Gotchas que te van a morder
+
+| # | Trampa | Qué hacer |
+|---|--------|-----------|
+| 1 | **Twilio error 21665** — `sendTemplateMessage()` reintenta con **una variable menos** si la plantilla no tiene tantas. Degrada en silencio. | Nunca asumas que una variable llegó. Si añades `{{N}}`, el tenant con la plantilla vieja **no falla**: simplemente pierde esa variable. |
+| 2 | **Saltos de línea en plantillas** — Twilio revienta (21656). `sendTemplateMessage()` convierte `\n` → `·` automáticamente. | No pelees con esto, ya está resuelto. |
+| 3 | **`campaigns.type`** solo acepta `manual \| birthday \| reactivation`. `campaigns.source` acepta además `calendar` y `reward_reminder`. | Si creas un tipo de campaña nuevo, usa `getOrCreateTodayCampaign(type, template, tenantId, source)` — el 4º parámetro separa `source` de `type` sin tocar el CHECK. |
+| 4 | **La próxima migración es la `00032`.** | No reutilices el 00031. |
+| 5 | **RLS de tablas nuevas:** el patrón es `CREATE POLICY tenant_all_<tabla> ... USING (tenant_id = current_tenant_id() OR is_super_admin())`. Postgres **no** soporta `CREATE POLICY IF NOT EXISTS`. | Usa `DROP POLICY IF EXISTS` + `CREATE POLICY`. Copia `00031_reward_grants.sql`. |
+| 6 | **El check-in del cliente es stateless en el navegador.** Cero `localStorage`, cero cookies. El cliente se identifica **solo por teléfono**. | Para el Bloque 3 ("no volver a mostrarle el pop-up al que ya reseñó"), la persistencia **tiene que ir en la DB** (columna en `customers` o tabla propia). `localStorage` no sirve: el cliente vuelve desde otro teléfono y se rompe. |
+| 7 | **No hay sistema de analytics/eventos.** Ni PostHog, ni GA, ni tabla `events`. Lo más parecido es `message_logs`, que es solo de WhatsApp. | El tracking del click al link de Google (R6.a) hay que **construirlo desde cero**. |
+| 8 | **`getPointsConfig()` no lee `shortfall_min`/`shortfall_max`.** El dashboard los guarda y el servicio los ignora. | Es el hallazgo 3.3. Arreglarlo es parte del Bloque 2. |
+| 9 | **Puede haber otra IA trabajando en el mismo árbol.** El 2026-07-11 había cambios sin commitear en `calendar.service.ts`, `whatsapp.service.ts`, `check-in/route.ts`, `PLANTILLAS.md`, `media.ts`. | **Stagea solo tus archivos por ruta explícita.** Nunca `git add -A` ni `git add .`. |
+
+### 8.3 Bloque 2 — Calibrador de puntos y umbrales (⏳ siguiente)
+
+**Cubre:** R5 (§2) + hallazgo 3.3.
+
+**El problema real, y no es el que parece.** El dueño de un café pidió que sus 150 puntos se alcanzaran
+en 5 visitas en vez de 3, y la pregunta era si eso rompía el gancho psicológico. **No lo rompe**, y esto
+ya está analizado y cerrado en §2/R5: el near-miss de `generateSmartVisitPoints()`
+(`src/services/points.service.ts:49-79`) es **relativo a la distancia al umbral**, no a un número de
+visitas. Deja al cliente corto a propósito mientras le falten más de 30 puntos, y le **garantiza** cruzar
+cuando le faltan menos. Bajando `points_per_visit_min/max` de 60-90 a 25-35, el umbral de 150 cae solo en
+la visita 5 y el "casi lo logro" aparece en la 4. **La mecánica ya se autoajusta.**
+
+**Por eso NO hay que añadir una capa de personalización de la mecánica.** Lo que falta es que el dueño
+pueda *verlo*: hoy ve dos inputs de puntos sueltos y no tiene forma de traducirlos a visitas.
+
+**Qué construir:**
+
+1. **Arreglar la configuración fantasma (hallazgo 3.3).** `getPointsConfig()`
+   (`src/services/points.service.ts:89-111`) debe leer `shortfall_min` y `shortfall_max` de
+   `admin_settings`, y `generateSmartVisitPoints()` debe usarlos en vez de las constantes
+   `DEFAULT_POINTS_SHORTFALL_MIN/MAX` de `src/constants/rewards.ts`. Hoy el dueño los configura en
+   Ajustes, se guardan bien, y **no pasa nada**.
+
+2. **Calibrador en Dashboard → Ajustes → Sistema de Puntos.** El dueño dice *"quiero que el premio se
+   gane en 5 visitas"* y el sistema:
+   - calcula y **propone** `points_per_visit_min/max` a partir del `point_threshold` del primer tier
+     (`reward_tiers`, CRUD en `/api/dashboard/reward-tiers`),
+   - **simula visita a visita** con el algoritmo real y muestra la tabla (puntos ganados, acumulado,
+     cuánto falta), señalando **dónde cae el near-miss**,
+   - deja al dueño guardar o ajustar a mano.
+
+   La simulación tiene que llamar a la **misma función** que usa producción, no a una copia. Si hace
+   falta, extrae el cálculo puro a algo testeable y compártelo entre el servicio y el simulador.
+
+**Archivos:** `src/services/points.service.ts`, `src/constants/rewards.ts`,
+`src/app/(dashboard)/dashboard/settings/page.tsx`, y probablemente un componente nuevo
+`src/components/dashboard/PointsCalibrator.tsx`.
+
+**Cuidado:** cambiar los puntos por visita **no** re-calcula el historial. Los clientes que ya tienen
+puntos los conservan. Deja eso explícito en la UI para que el dueño no se lleve una sorpresa.
+
+### 8.4 Bloque 3 — Pop-up de reseñas de Google con tracking (⏳ después)
+
+**Cubre:** R6, R6.a, R6.b, R6.c (§2) + hallazgos 3.6, 3.7, 3.8.
+
+**Estado actual del código:**
+- Hoy hay una **card inline** (no modal): `src/components/features/check-in/GoogleReviewCard.tsx`,
+  montada en `CheckInSuccess.tsx` tras un `setTimeout` de 2.5s.
+- `src/components/features/check-in/GoogleReviewPopup.tsx` **existe pero es código muerto** — cero
+  referencias. Fue el modal viejo (el de la "X" en la esquina que la gente cerraba por reflejo). Se puede
+  reescribir o borrar.
+- **Ya existe un doc de diseño previo**: `docs/features/review-flow.md` propone una v1.5.0 con modal
+  sticky. **Nunca se implementó.** Léelo, pero la fuente de verdad de lo que el dueño quiere ahora es
+  R6 en §2 de este documento.
+- El link de Google vive en `tenants.config.google_maps_url` → `useBranding().googleReviewUrl`. **Sin UI.**
+
+**Lo que el dueño pidió, textual (R6):** modal **sin la "X"** (la gente la cerraba a los 2 segundos por
+reflejo). Copy tipo *"gánate X por dejarnos una reseña en Google"*. **Dos botones**: uno de dejar reseña
+que despliega los pasos (1. muéstrale la reseña al mesero · 2. redime tu regalo) y al final el link; y
+otro que diga **"La próxima lo hago"** — para que no se sientan obligados. La recompensa X debe ser
+**configurable en Ajustes**.
+
+**Cómo encaja con el Bloque 1 (esto ahorra la mitad del trabajo):**
+
+> La recompensa por reseña **no necesita infraestructura nueva**. Reutiliza el catálogo
+> `campaign_rewards` y el motor `reward_grants`: dejar reseña llama a
+> `grantReward({ grantType: 'campaign_prize', source: 'review', ... })` — el `source: 'review'` **ya
+> está en el CHECK de la migración 00031**. El premio aparece solo en `/mesero/rewards`, el mesero lo
+> entrega por el mismo camino que todo lo demás, y cae solo en las métricas de
+> `/dashboard/redemptions` con su tasa de redención. **No toques la entrega, la atribución al mesero,
+> el vencimiento ni las métricas: ya funcionan.**
+
+**Lo que sí hay que construir:**
+
+1. **Persistencia del estado del cliente** (R6.b). Nueva columna o tabla — recomendado: columnas en
+   `customers` (`google_review_clicked_at`, `google_review_postponed_at`), porque el navegador es
+   stateless (gotcha #6) y el cliente se identifica por teléfono. Migración `00032`.
+   - Tocó "Dejar reseña" y fue al link → **nunca más** se le muestra.
+   - Tocó "La próxima lo hago" → **sí** se le vuelve a mostrar.
+2. **Tracking del click** (R6.a). Endpoint nuevo (ej. `POST /api/check-in/review-click`) que sella la
+   columna y **otorga el grant**. Es lo que permite medir efectividad. No existe nada de analytics: hay
+   que construirlo (gotcha #7).
+3. **Pantalla de agradecimiento** al volver de Google (R6.c): *"Gracias por dejarnos tus comentarios, te
+   esperamos de regreso"*.
+4. **UI en Ajustes** para el link de Google (hallazgo 3.8, hoy solo por SQL) y para elegir la recompensa
+   por reseña del catálogo `campaign_rewards`.
+
+**Ojo con el diseño del modal:** el flujo público de check-in **no usa shadcn/Dialog**. Usa clases
+propias definidas en `src/app/globals.css` (`.premium-card`, `.btn-premium`, `.premium-bg`) con estilos
+inline para los gradientes de marca. Es un sistema visual paralelo al del dashboard. Respétalo — es el
+Mandamiento VII.
+
+### 8.5 Deuda conocida (no bloquea nada, pero está ahí)
+
+| Deuda | Dónde |
+|-------|-------|
+| **El filtro de blackout de campañas manuales está muerto**: `getActiveBlackouts()` se consulta pero el predicado siempre devuelve `true`; `totalSkippedBlackout` es siempre 0. Se reporta como aplicado sin aplicarse. | `src/app/api/dashboard/campaigns/manual/route.ts:128-137` |
+| **`GoogleReviewPopup.tsx` es código muerto** (cero referencias). | `src/components/features/check-in/GoogleReviewPopup.tsx` |
+| **`reactivation_aggressive_reward_id` (legacy)** apunta a la tabla `rewards` vieja y no tiene UI. El Bloque 1 lo reemplazó por `aggressive_reward_id` (catálogo), pero **dejó el fallback vivo** para no romper tenants que lo tuvieran seteado a mano. Se puede retirar cuando se confirme que nadie lo usa. | `src/app/api/cron/reactivation/route.ts` |
+| **`docs/01-project-overview.md` y `docs/02-architecture.md` no reflejan el estado multitenant.** `DB_SCHEMA.md` sí. | — |
+| **14 errores de ESLint preexistentes** (`react-hooks/set-state-in-effect`) en `useDashboardAnalytics.ts` y `useStaffAuth.ts`. No los introdujo el Bloque 1. | — |
+
+### 8.6 Reglas del proyecto que hay que cumplir (no son opcionales)
+
+Están en `CLAUDE.md` y `METODO_AINNOVATE.md`. Las que más se olvidan:
+
+1. **Documentar ANTES de codear.** Crea/actualiza `docs/features/[feature].md` antes de escribir código.
+2. **Actualizar `CHANGELOG.md`** en cada request, citando el request original textual.
+3. **Actualizar `docs/DB_SCHEMA.md`** si tocas la DB y `docs/API_DOCS.md` si tocas endpoints.
+4. **Actualizar la tabla de lookup de `CLAUDE.md`** con los archivos nuevos.
+5. **Nada hardcodeado**: credenciales en `.env`, config de negocio en `admin_settings`.
+6. **TypeScript estricto, cero `any`.**
+7. **Verificar antes de entregar**: `npx tsc --noEmit` y `npx next build`.
+8. **Nunca `git add -A`** (gotcha #9).

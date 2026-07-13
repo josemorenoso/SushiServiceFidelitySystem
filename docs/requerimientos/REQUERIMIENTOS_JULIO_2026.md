@@ -227,15 +227,18 @@ declara soportar premios de campaña y a la vez hace imposible insertarlos. Bloq
 
 **Fix:** hacer `tier_id` nullable (los premios de tier lo siguen llenando; los de campaña, no).
 
-### 3.3 🟠 Configuración fantasma en el sistema de puntos
+### 3.3 ✅ RESUELTO (Bloque 2, v2.4.0) — Configuración fantasma en el sistema de puntos
 
-Dashboard > Ajustes tiene inputs para `shortfall_min` y `shortfall_max`, y los guarda correctamente en
-`admin_settings`. Pero `getPointsConfig()`
-([`src/services/points.service.ts:89-111`](../../src/services/points.service.ts)) **nunca lee esas dos
-keys**. `generateSmartVisitPoints()` usa siempre las constantes `DEFAULT_POINTS_SHORTFALL_MIN/MAX` de
-[`src/constants/rewards.ts`](../../src/constants/rewards.ts).
+Dashboard > Ajustes tenía inputs para `shortfall_min` y `shortfall_max`, y los guardaba correctamente en
+`admin_settings`. Pero `getPointsConfig()` **nunca leía esas dos keys**: `generateSmartVisitPoints()`
+usaba siempre las constantes `DEFAULT_POINTS_SHORTFALL_MIN/MAX` de `src/constants/rewards.ts`. El dueño
+configuraba el "casi lo logro" y no pasaba nada.
 
-El dueño configura el "casi lo logro" y no pasa nada. Va en el Bloque 2.
+**Arreglado:** `getPointsConfig()` ([`src/services/points.service.ts`](../../src/services/points.service.ts))
+lee las dos keys y devuelve un `PointsEngineConfig` completo que se le pasa entero al algoritmo. Los
+valores se **sanean** en la entrada (`sanitizeConfig()` en [`src/lib/points-engine.ts`](../../src/lib/points-engine.ts)):
+vienen de una tabla key-value de strings editable a mano, así que un rango invertido o un `NaN` cae a los
+defaults en vez de reventar un check-in.
 
 ### 3.4 🟠 `reactivation_aggressive_reward_id` no tiene UI
 

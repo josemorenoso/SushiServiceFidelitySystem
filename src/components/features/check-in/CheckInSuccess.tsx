@@ -4,12 +4,13 @@ import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
 import { CheckCircle, Crown, Gift, PartyPopper, RotateCcw, Star } from 'lucide-react'
 import { useBranding } from '@/lib/branding-context'
-import { GoogleReviewCard } from './GoogleReviewCard'
+import { GoogleReviewModal } from './GoogleReviewModal'
 import { PointsDisplay } from './PointsDisplay'
 import { RewardChoice } from './RewardChoice'
 import { MysteryBoxResult } from './MysteryBoxResult'
 import { TiersRoadmap } from './TiersRoadmap'
 import type { CheckInSuccessProps } from './CheckInSuccess.types'
+import type { ReviewPromptState } from '@/types/database.types'
 
 interface MysteryBoxResponse {
   ok: boolean
@@ -42,7 +43,8 @@ export function CheckInSuccess({
   onReset,
 }: CheckInSuccessProps) {
   const branding = useBranding()
-  const [showReview, setShowReview] = useState(false)
+  const [reviewPrompt, setReviewPrompt] = useState<ReviewPromptState | null>(null)
+  const [reviewDismissed, setReviewDismissed] = useState(false)
   const [choicePhase, setChoicePhase] = useState<'choosing' | 'resolving' | 'result'>('choosing')
   const [mysteryResult, setMysteryResult] = useState<MysteryBoxResponse['result'] | null>(null)
   // Auditoría 12-Julio: si el WhatsApp falló, el premio igual es válido. La UI debe
@@ -51,13 +53,33 @@ export function CheckInSuccess({
   const [mysteryWhatsappSent, setMysteryWhatsappSent] = useState(true)
   const [choiceLoading, setChoiceLoading] = useState(false)
 
+  // El premio manda: mientras el cliente tenga un Mystery Box por elegir, el pop-up de
+  // reseña NO existe. Taparle la elección del premio con una petición de reseña sería
+  // cambiar oro por cobre (decisión B3-D6).
+  const awaitingRewardChoice = type === 'tier_unlocked' && choicePhase !== 'result'
+
+  // Pop-up de reseña (R6). Quién lo ve lo decide el SERVIDOR: el navegador del check-in es
+  // stateless y no tiene forma de saber si este cliente ya reseñó. El fetch se hace tarde a
+  // propósito — primero que vea sus puntos, después le pedimos algo.
   useEffect(() => {
-    if (type !== 'duplicate') {
-      // Card inline de reseña: aparece a los 2.5s, sin modal (Req P1.2)
-      const timer = setTimeout(() => setShowReview(true), 2500)
-      return () => clearTimeout(timer)
+    if (type === 'duplicate' || !customerPhone) return
+    if (awaitingRewardChoice || reviewPrompt) return
+
+    let cancelled = false
+    const timer = setTimeout(() => {
+      fetch(`/api/check-in/review-prompt?phone=${encodeURIComponent(customerPhone)}`)
+        .then((res) => res.json())
+        .then((data: ReviewPromptState) => {
+          if (!cancelled) setReviewPrompt(data)
+        })
+        .catch((err) => console.error('[CheckInSuccess] Error consultando el prompt de reseña:', err))
+    }, 2500)
+
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
     }
-  }, [type])
+  }, [type, customerPhone, awaitingRewardChoice, reviewPrompt])
 
   const handleRewardChoice = useCallback(async (choice: 'safe' | 'mystery') => {
     if (!tierUnlocked || !customerPhone) {
@@ -322,13 +344,6 @@ export function CheckInSuccess({
         </p>
       )}
 
-      {/* Solicitud de reseña — card inline, no modal (Req P1.2) */}
-      <GoogleReviewCard
-        customerName={customerName}
-        totalVisits={totalVisits}
-        visible={showReview}
-      />
-
       {/* Botón volver */}
       <button
         className="btn-secondary-premium flex h-[52px] w-full items-center justify-center gap-2 rounded-xl text-sm font-medium"
@@ -338,6 +353,17 @@ export function CheckInSuccess({
         <RotateCcw className="h-3.5 w-3.5" strokeWidth={1.5} />
         Nuevo check-in
       </button>
+
+      {/* Pop-up de reseña de Google (R6) — sin X: la salida es un botón explícito. */}
+      {reviewPrompt?.show && !reviewDismissed && !awaitingRewardChoice && customerPhone && (
+        <GoogleReviewModal
+          phone={customerPhone}
+          customerName={customerName}
+          rewardTitle={reviewPrompt.reward_title}
+          googleUrl={reviewPrompt.google_url}
+          onDismiss={() => setReviewDismissed(true)}
+        />
+      )}
     </div>
   )
 }

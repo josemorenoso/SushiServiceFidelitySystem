@@ -16,6 +16,10 @@ export interface Customer {
   last_points_awarded_at: string | null
   /** Si el cliente vino de un contacto importado (Golden Bullet, migración 00023) */
   imported_contact_id: string | null
+  /** Fue al link de reseñas de Google → nunca más se le muestra el pop-up (migración 00032). */
+  google_review_clicked_at: string | null
+  /** Tocó "La próxima lo hago" → sí se le vuelve a mostrar (migración 00032). */
+  google_review_postponed_at: string | null
   created_at: string
   updated_at: string
 }
@@ -259,6 +263,45 @@ export interface CampaignReward {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Reseñas de Google — memoria y funnel (v2.5.0, migración 00032)
+//   Ref: docs/features/review-flow.md
+// ═══════════════════════════════════════════════════════════════
+
+export type ReviewAction = 'shown' | 'clicked' | 'postponed'
+
+export interface ReviewEvent {
+  id: string
+  tenant_id: string
+  customer_id: string
+  action: ReviewAction
+  /** Solo en 'clicked': el premio que se otorgó por la reseña. */
+  grant_id: string | null
+  created_at: string
+}
+
+/** Lo que el modal necesita saber al montarse. Lo decide el SERVIDOR, nunca el cliente. */
+export interface ReviewPromptState {
+  show: boolean
+  /** null = no hay recompensa configurada → el modal pide la reseña sin prometer nada. */
+  reward_title: string | null
+  /** Vacío = no hay link → el modal no se muestra (no hay a dónde mandar al cliente). */
+  google_url: string
+}
+
+/** El embudo: se mostró N veces → X fueron a Google → Y reclamaron el premio. */
+export interface ReviewFunnel {
+  shown: number
+  clicked: number
+  postponed: number
+  /** Premios de reseña efectivamente entregados por un mesero. */
+  redeemed: number
+  /** clicked / shown, en porcentaje. Mide el GANCHO (¿convence el premio?). */
+  click_rate: number
+  /** redeemed / clicked, en porcentaje. Mide la OPERACIÓN (¿el mesero cierra el ciclo?). */
+  redemption_rate: number
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Imported Contacts — Golden Bullet (v2.0.0, migración 00023)
 // ═══════════════════════════════════════════════════════════════
 
@@ -343,7 +386,7 @@ export interface Database {
     Tables: {
       customers: {
         Row: Customer
-        Insert: Omit<Customer, 'id' | 'created_at' | 'updated_at' | 'total_visits' | 'last_visit_at' | 'source_channels' | 'last_campaign_at' | 'total_points' | 'current_tier' | 'mystery_box_low_streak' | 'last_points_awarded_at' | 'whatsapp_opt_out_at' | 'imported_contact_id'> & {
+        Insert: Omit<Customer, 'id' | 'created_at' | 'updated_at' | 'total_visits' | 'last_visit_at' | 'source_channels' | 'last_campaign_at' | 'total_points' | 'current_tier' | 'mystery_box_low_streak' | 'last_points_awarded_at' | 'whatsapp_opt_out_at' | 'imported_contact_id' | 'google_review_clicked_at' | 'google_review_postponed_at'> & {
           id?: string
           created_at?: string
           updated_at?: string
@@ -358,8 +401,19 @@ export interface Database {
           mystery_box_low_streak?: number
           last_points_awarded_at?: string | null
           imported_contact_id?: string | null
+          google_review_clicked_at?: string | null
+          google_review_postponed_at?: string | null
         }
         Update: Partial<Omit<Customer, 'id' | 'created_at'>>
+      }
+      review_events: {
+        Row: ReviewEvent
+        Insert: Omit<ReviewEvent, 'id' | 'created_at'> & {
+          id?: string
+          created_at?: string
+          grant_id?: string | null
+        }
+        Update: Partial<Omit<ReviewEvent, 'id' | 'created_at'>>
       }
       visits: {
         Row: Visit

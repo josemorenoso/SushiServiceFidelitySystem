@@ -12,6 +12,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js'
+import { percentInt } from '@/lib/format/percent'
 import type { GrantSource, GrantStatus, GrantType, RewardGrant } from '@/types/database.types'
 
 function getServiceClient() {
@@ -39,7 +40,8 @@ export interface GrantRewardParams {
   mysteryBoxResultId?: string | null
   campaignRewardId?: string | null
   campaignId?: string | null
-  /** Días de ventana desde ahora. Omitir → el premio no vence. */
+  /** Días de ventana desde ahora. Omitir (null/undefined) → el premio NO vence.
+   *  Un número (incluido 0) SÍ define una ventana: 0 o negativo = vence de inmediato. */
   windowDays?: number | null
 }
 
@@ -60,10 +62,13 @@ export async function grantReward(
 ): Promise<GrantRewardResult> {
   const supabase = getServiceClient()
 
+  // `windowDays` omitido (null/undefined) → el premio no vence nunca. Un número —incluido
+  // 0— SÍ es una ventana: NO se colapsa `0` con "omitido" (ese era el bug: `windowDays: 0`
+  // producía un grant permanente en vez de uno vencido). 0 o negativo → vence de inmediato.
   const expiresAt =
-    params.windowDays && params.windowDays > 0
-      ? new Date(Date.now() + params.windowDays * 24 * 60 * 60 * 1000).toISOString()
-      : null
+    params.windowDays == null
+      ? null
+      : new Date(Date.now() + Math.max(0, params.windowDays) * 24 * 60 * 60 * 1000).toISOString()
 
   const { data, error } = await supabase
     .from('reward_grants')
@@ -391,21 +396,20 @@ export async function getGrantMetrics(
   }
 
   const granted = rows.length
-  const rate = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 100) : 0)
 
   return {
     granted,
     redeemed,
     expired,
     active,
-    redemption_rate: rate(redeemed, granted),
+    redemption_rate: percentInt(redeemed, granted),
     by_source: [...bySource.entries()]
       .map(([source, b]) => ({
         source,
         granted: b.granted,
         redeemed: b.redeemed,
         expired: b.expired,
-        redemption_rate: rate(b.redeemed, b.granted),
+        redemption_rate: percentInt(b.redeemed, b.granted),
       }))
       .sort((a, b) => b.granted - a.granted),
   }

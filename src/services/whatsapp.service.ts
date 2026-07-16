@@ -63,12 +63,18 @@ function getTwilioClient(tenant: TenantMessagingContext) {
   return { accountSid, authToken, whatsappNumber }
 }
 
+/**
+ * NO recibe `mediaUrl` a propósito: en la API de Mensajes de Twilio `ContentSid` y
+ * `MediaUrl` son mutuamente excluyentes. Al enviar una plantilla, la media sale
+ * ÚNICAMENTE de la definición de la plantilla. Para media dinámica, la plantilla
+ * debe declarar la variable en el path (ver `src/lib/twilio/media.ts`) y la URL real
+ * viaja en `contentVariables`.
+ */
 export async function sendTemplateMessage(
   phone: string,
   contentSid: string,
   variables: Record<string, string>,
   tenant: TenantMessagingContext,
-  mediaUrl?: string,
   logContext?: MessageLogContext
 ): Promise<TwilioMessageResponse | null> {
   const config = getTwilioClient(tenant)
@@ -126,18 +132,13 @@ export async function sendTemplateMessage(
     const subset: Record<string, string> = {}
     sortedKeys.slice(0, maxVars).forEach((k) => { subset[k] = sanitized[k] })
 
-    const messagePayload: Record<string, string> = {
-      from: config.whatsappNumber,
-      to: formatPhoneForWhatsApp(phone),
-      contentSid,
-      contentVariables: JSON.stringify(subset),
-    }
-    if (mediaUrl) {
-      messagePayload.mediaUrl = mediaUrl
-    }
-
     try {
-      const message = await client.messages.create(messagePayload as any)
+      const message = await client.messages.create({
+        from: config.whatsappNumber,
+        to: formatPhoneForWhatsApp(phone),
+        contentSid,
+        contentVariables: JSON.stringify(subset),
+      })
       if (maxVars < sortedKeys.length) {
         console.warn(`[WhatsApp] Enviado con ${maxVars}/${sortedKeys.length} vars (mismatch corregido): ${message.sid}`)
       } else {

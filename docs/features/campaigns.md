@@ -127,6 +127,9 @@ Definidas en `src/constants/rewards.ts` (fallbacks):
 | `RECOVERY_ZONE_START_DAYS` | 18 | Inicio zona de recuperación (días sin visita) |
 | `RECOVERY_ZONE_END_DAYS` | 25 | Fin zona de recuperación (días sin visita) |
 
+> `rewards.ts` también aloja las constantes del pop-up de reseñas (`DEFAULT_REVIEW_REWARD_WINDOW_DAYS`,
+> `REVIEW_SHOWN_DEDUPE_HOURS`): pertenecen a **[review-flow.md](review-flow.md)**, no a este doc.
+
 ### Días de Reactivación Configurables (v1.4.0 — Req 6A)
 
 Los días de reactivación ya NO están fijos: se leen de `admin_settings` vía

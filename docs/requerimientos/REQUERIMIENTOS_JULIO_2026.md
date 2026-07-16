@@ -1,7 +1,7 @@
 # Requerimientos — Julio 2026
 
-> **Estado:** 🔨 EN CURSO — Bloque 1 ✅ COMPLETO · Bloque 2 ✅ COMPLETO · Bloque 3 ⏳
-> **Fecha:** 2026-07-11 (actualizado 2026-07-12)
+> **Estado:** ✅ LOS TRES BLOQUES COMPLETOS — pendientes las tareas de despliegue del dueño (§0)
+> **Fecha:** 2026-07-11 (actualizado 2026-07-13)
 > **Origen:** solicitud del dueño del producto + auditoría de código previa al desarrollo
 > **Método:** AInnovate v2 (Documentation-Driven Development)
 
@@ -12,18 +12,30 @@ doc de feature.
 
 > **📌 ¿Eres una IA que retoma este trabajo?**
 > Lee la **[§8 Handoff](#8-handoff--contexto-para-retomar-el-trabajo)** al final. Contiene todo el
-> contexto de arquitectura, gotchas y decisiones ya tomadas para que puedas desarrollar los Bloques 2
-> y 3 **sin releer el repo entero**.
+> contexto de arquitectura, gotchas y decisiones ya tomadas para que puedas trabajar **sin releer el
+> repo entero**.
 
 ---
 
-## 0. Estado actual (2026-07-12)
+## 0. Estado actual (2026-07-13)
 
-| Bloque | Estado | Commit |
-|--------|--------|--------|
+| Bloque | Estado | Versión |
+|--------|--------|---------|
 | **1 — Premios otorgados, entrega y reactivación agresiva** | ✅ Código completo, typecheck + build verdes | `66ceada` |
 | **2 — Calibrador de puntos y umbrales** | ✅ Código completo, typecheck + build verdes. **Sin migración, sin tareas del dueño: funciona al desplegar.** | v2.4.0 |
-| **3 — Pop-up de reseñas de Google con tracking** | ⏳ Diseñado, sin código | — |
+| **3 — Pop-up de reseñas de Google con tracking** | ✅ Código completo, typecheck + build verdes. Requiere la migración `00032` y el link de Google. | v2.5.0 |
+
+**El código de los tres bloques está escrito y verificado. Nada está desplegado.** Lo que falta son
+tareas que solo puede hacer el dueño: aplicar dos migraciones, crear plantillas de Twilio, importar un
+workflow de n8n y configurar cuatro cosas en el dashboard.
+
+### ⚠️ 3 tareas que debe hacer el dueño para que el Bloque 3 funcione en producción
+
+| # | Tarea | Si no se hace |
+|---|-------|---------------|
+| 1 | **Aplicar la migración `supabase/migrations/00032_review_tracking.sql`** | El pop-up no aparece y no se mide nada. La UI degrada en silencio: el check-in sigue funcionando. |
+| 2 | **Pegar el link de reseñas de Google** en Dashboard → *Ajustes → Reseñas de Google* | **El pop-up no aparece NUNCA.** No hay a dónde mandar al cliente. Es el hallazgo 3.8: hasta ahora ese link solo se podía editar por SQL. |
+| 3 | *(Opcional)* **Elegir la recompensa por reseña** del catálogo | El pop-up sale igual, pero **pide el favor en vez de ofrecer algo** — que es exactamente lo que ya no funcionaba. |
 
 ### ⚠️ 4 tareas que debe hacer el dueño para que el Bloque 1 funcione en producción
 
@@ -259,22 +271,30 @@ aplicarse nunca.
 
 **Fuera de alcance de estos bloques.** Se documenta como deuda conocida.
 
-### 3.6 🟡 `GoogleReviewPopup.tsx` es código muerto
+### 3.6 ✅ RESUELTO (Bloque 3, v2.5.0) — `GoogleReviewPopup.tsx` era código muerto
 
-[`src/components/features/check-in/GoogleReviewPopup.tsx`](../../src/components/features/check-in/GoogleReviewPopup.tsx)
-sigue en el repo sin una sola referencia (fue reemplazado por `GoogleReviewCard.tsx` en v1.4.0). Se
-elimina o se reescribe en el Bloque 3.
+Seguía en el repo sin una sola referencia (fue reemplazado por `GoogleReviewCard.tsx` en v1.4.0). Era el
+modal viejo, el de la "X" que la gente cerraba por reflejo.
 
-### 3.7 🟡 No existe tracking de eventos del cliente
+**Eliminado.** También se eliminó `GoogleReviewCard.tsx`: lo reemplaza `GoogleReviewModal.tsx`.
 
-No hay tabla de eventos ni integración de analytics (PostHog/GA/Mixpanel: cero resultados en el repo).
-`message_logs` es lo más cercano, pero es específico de WhatsApp. R6.a (rastrear clicks al link de
-Google) requiere construir la persistencia desde cero.
+### 3.7 ✅ RESUELTO (Bloque 3, v2.5.0) — No existía tracking de eventos del cliente
 
-### 3.8 🟡 El link de Google no tiene UI
+No había tabla de eventos ni analytics (PostHog/GA/Mixpanel: cero resultados en el repo). `message_logs`
+era lo más cercano, pero es específico de WhatsApp.
 
-`tenants.config.google_maps_url` solo se puede editar por SQL. No hay formulario en el dashboard. Se
-añade en el Bloque 3.
+**Arreglado:** `review_events` (migración 00032) es la **primera tabla de eventos del sistema**. Registra
+`shown` / `clicked` / `postponed` y alimenta el embudo del dashboard. Deliberadamente **no** es una tabla
+genérica `events(name, payload jsonb)`: tiene tres acciones y un CHECK que las cierra. Una genérica sería
+más "flexible" y por eso mismo imposible de consultar sin adivinar qué se guardó.
+
+### 3.8 ✅ RESUELTO (Bloque 3, v2.5.0) — El link de Google no tenía UI
+
+`tenants.config.google_maps_url` solo se podía editar por SQL.
+
+**Arreglado:** Dashboard → *Ajustes → Reseñas de Google*, vía `PUT /api/dashboard/tenant-config`. El
+endpoint hace **lectura → merge → escritura** con **whitelist de claves**: un `UPDATE` directo sobre la
+columna `config` (jsonb) borraría el branding entero del tenant.
 
 ---
 
@@ -376,19 +396,54 @@ endpoints nuevos. **Funciona en cuanto se despliegue.**
 📄 Spec: [`docs/superpowers/specs/2026-07-12-points-calibrator-design.md`](../superpowers/specs/2026-07-12-points-calibrator-design.md)
 📄 Feature: [`docs/features/points-mystery-box.md`](../features/points-mystery-box.md) (§2.3 y §2.4)
 
-### Bloque 3 — Pop-up de reseñas de Google con tracking ⏳ PENDIENTE
+### Bloque 3 — Pop-up de reseñas de Google con tracking ✅ COMPLETO (v2.5.0)
 
 Cubre **R6, R6.a, R6.b, R6.c** y los hallazgos **3.6, 3.7, 3.8**.
 
-- Modal sin "X" (la salida es un botón explícito, no un gesto reflejo).
-- Recompensa configurable en Ajustes — reutiliza el catálogo `campaign_rewards` del Bloque 1: dejar
-  reseña otorga un `reward_grant`, que el mesero entrega por el mismo camino que todo lo demás.
-- Botón "Dejar reseña" → pasos 1/2 → link de Google. Botón "La próxima lo hago" → sin culpa.
-- Persistencia del estado del cliente (`reviewed` / `postponed`) para no volver a mostrarlo a quien ya
-  reseñó, pero sí a quien lo pospuso.
-- Tracking del click al link para medir efectividad.
-- Pantalla de agradecimiento al volver de Google.
-- UI en Ajustes para el link de Google (hoy solo editable por SQL).
+El problema nunca fue el formato del pop-up: fue que **pedir un favor no convierte**. El modal v1.0 tenía
+una "X" que la gente cerraba por reflejo; la card inline v1.4 dejó de molestar pero también dejó de
+existir. El modal vuelve, pero ahora **ofrece un premio** y no se puede cerrar por reflejo.
+
+**La decisión que ahorró la mitad del trabajo:** la recompensa por reseña **no necesitaba infraestructura
+nueva**. `source: 'review'` ya estaba en el CHECK de la migración 00031. Dejar reseña otorga un
+`reward_grant` y a partir de ahí todo el camino del Bloque 1 corre solo: banner en la tarjeta del cliente,
+`/mesero/rewards`, entrega con mesa y mesero, métricas de redención. **No se tocó nada de eso.**
+
+**Qué se construyó:**
+
+| Pieza | Archivo |
+|-------|---------|
+| Memoria del cliente (`google_review_clicked_at` / `postponed_at`) + tabla `review_events` | `supabase/migrations/00032_review_tracking.sql` |
+| El gate, el funnel y la delegación del premio | `src/services/review.service.ts` |
+| ¿Se muestra el pop-up? + sella la impresión (dedupe 12h) | `src/app/api/check-in/review-prompt/route.ts` |
+| Click (sella + otorga el premio) / posponer | `src/app/api/check-in/review-action/route.ts` |
+| El modal: oferta → pasos 1/2 → espera → gracias. **Sin X, sin click-fuera, sin Escape** | `src/components/features/check-in/GoogleReviewModal.tsx` |
+| Lo monta y lo hace **esperar** a que el cliente elija su Mystery Box | `src/components/features/check-in/CheckInSuccess.tsx` |
+| Funnel en Dashboard → Redenciones | `src/app/api/dashboard/review-metrics/route.ts` + `src/components/dashboard/ReviewFunnelCard.tsx` |
+| UI del link de Google (hallazgo 3.8) con whitelist sobre `tenants.config` | `src/app/api/dashboard/tenant-config/route.ts` + `settings/page.tsx` |
+| **Eliminados:** `GoogleReviewPopup.tsx` (hallazgo 3.6, código muerto) y `GoogleReviewCard.tsx` | — |
+
+**Cuatro decisiones que conviene no deshacer sin pensarlo:**
+
+1. **El premio se otorga al tocar el link, sin verificar la reseña.** El paso 1 que el cliente lee es
+   *"muéstrale la reseña al mesero"*: **el mesero es el verificador**. Google no expone ninguna API para
+   confirmarlo — cualquier otra cosa sería teatro.
+2. **El prompt vive en su propio endpoint, no en la respuesta del check-in.** En el flujo real
+   (`staff_verified`) el `POST /api/check-in` lo hace el celular **del mesero**; la pantalla del cliente la
+   alimenta el polling de `/api/check-in/status`, que corre **cada 5 segundos** y habría disparado una
+   impresión por segundo.
+3. **La pantalla de gracias se dispara al recuperar el foco** (`visibilitychange`), no al tocar el botón:
+   decirle "gracias por tu reseña" a alguien que aún no la ha escrito sería mentirle.
+4. **El CTA final es un `<a target="_blank">` real y el POST no se espera con `await`.** Con
+   `window.open()` después de un `await`, Safari en iOS lo bloquearía como pop-up no solicitado y el botón
+   no haría nada.
+
+**Verificación:** `npx tsc --noEmit` limpio · `npx next build` verde · `npx eslint` sin errores nuevos.
+
+**⚠️ NO está desplegado.** Ver las [3 tareas del dueño](#3-tareas-que-debe-hacer-el-dueño-para-que-el-bloque-3-funcione-en-producción) en §0.
+
+📄 Spec: [`docs/superpowers/specs/2026-07-13-google-review-popup-design.md`](../superpowers/specs/2026-07-13-google-review-popup-design.md)
+📄 Feature: [`docs/features/review-flow.md`](../features/review-flow.md)
 
 ---
 
@@ -410,6 +465,7 @@ Cubre **R6, R6.a, R6.b, R6.c** y los hallazgos **3.6, 3.7, 3.8**.
 | 2026-07-11 | Creación. Requerimientos R1-R6, hallazgos de auditoría 3.1-3.8, decisiones D1-D8, descomposición en 3 bloques. |
 | 2026-07-11 | Bloque 1 completado (`66ceada`). Añadidas §0 (estado + 4 tareas del dueño) y §8 (handoff). |
 | 2026-07-12 | Bloque 2 completado (v2.4.0). **Corregida la tabla de R5**, que ignoraba el bono de bienvenida y por eso daba 5 visitas donde el código da 4. Actualizados §0, §5, §8.2 (gotcha 8) y §8.3. |
+| 2026-07-13 | Bloque 3 completado (v2.5.0). Hallazgos 3.6, 3.7 y 3.8 cerrados. **Corregida la §8.4**, que daba por hecho que el prompt podía colgarse de la respuesta del check-in: en el flujo real ese POST lo hace el celular del mesero, no el del cliente. Actualizados §0, §3, §5, §8.4 y §8.5. |
 
 ---
 
@@ -498,51 +554,40 @@ tocas el sistema de puntos:
 - Cambiar los puntos **no** recalcula el historial. Los clientes que ya tienen puntos los conservan. La
   UI lo advierte.
 
-### 8.4 Bloque 3 — Pop-up de reseñas de Google con tracking (⏳ después)
+### 8.4 Bloque 3 — Pop-up de reseñas de Google con tracking (✅ HECHO, v2.5.0)
 
-**Cubre:** R6, R6.a, R6.b, R6.c (§2) + hallazgos 3.6, 3.7, 3.8.
+**Cubrió:** R6, R6.a, R6.b, R6.c (§2) + hallazgos 3.6, 3.7, 3.8. Ver §5 para el detalle de lo construido.
+Lo que necesitas saber si tocas el flujo de reseñas:
 
-**Estado actual del código:**
-- Hoy hay una **card inline** (no modal): `src/components/features/check-in/GoogleReviewCard.tsx`,
-  montada en `CheckInSuccess.tsx` tras un `setTimeout` de 2.5s.
-- `src/components/features/check-in/GoogleReviewPopup.tsx` **existe pero es código muerto** — cero
-  referencias. Fue el modal viejo (el de la "X" en la esquina que la gente cerraba por reflejo). Se puede
-  reescribir o borrar.
-- **Ya existe un doc de diseño previo**: `docs/features/review-flow.md` propone una v1.5.0 con modal
-  sticky. **Nunca se implementó.** Léelo, pero la fuente de verdad de lo que el dueño quiere ahora es
-  R6 en §2 de este documento.
-- El link de Google vive en `tenants.config.google_maps_url` → `useBranding().googleReviewUrl`. **Sin UI.**
+> #### ⚠️ Corrección — la versión original de esta sección tenía una suposición falsa
+>
+> Proponía colgar el prompt del check-in y tracking del click en un `POST /api/check-in/review-click`.
+> **La pantalla de éxito del cliente NO la alimenta el `POST /api/check-in`.** En el modo real
+> (`checkin_mode = staff_verified`) ese POST lo hace **el celular del mesero** al escanear; el celular del
+> cliente está en otra pantalla haciendo **polling de `GET /api/check-in/status`** cada 5 segundos
+> (`CheckInForm.tsx`). Colgar el prompt de ahí habría disparado **una impresión por segundo**.
+>
+> Por eso el prompt vive en **`GET /api/check-in/review-prompt`**, un endpoint propio, agnóstico del modo
+> de check-in. **`check-in/route.ts` no se tocó** (lo cual además evitó chocar con la otra IA que ya lo
+> estaba modificando — gotcha #9).
 
-**Lo que el dueño pidió, textual (R6):** modal **sin la "X"** (la gente la cerraba a los 2 segundos por
-reflejo). Copy tipo *"gánate X por dejarnos una reseña en Google"*. **Dos botones**: uno de dejar reseña
-que despliega los pasos (1. muéstrale la reseña al mesero · 2. redime tu regalo) y al final el link; y
-otro que diga **"La próxima lo hago"** — para que no se sientan obligados. La recompensa X debe ser
-**configurable en Ajustes**.
-
-**Cómo encaja con el Bloque 1 (esto ahorra la mitad del trabajo):**
-
-> La recompensa por reseña **no necesita infraestructura nueva**. Reutiliza el catálogo
-> `campaign_rewards` y el motor `reward_grants`: dejar reseña llama a
-> `grantReward({ grantType: 'campaign_prize', source: 'review', ... })` — el `source: 'review'` **ya
-> está en el CHECK de la migración 00031**. El premio aparece solo en `/mesero/rewards`, el mesero lo
-> entrega por el mismo camino que todo lo demás, y cae solo en las métricas de
-> `/dashboard/redemptions` con su tasa de redención. **No toques la entrega, la atribución al mesero,
-> el vencimiento ni las métricas: ya funcionan.**
-
-**Lo que sí hay que construir:**
-
-1. **Persistencia del estado del cliente** (R6.b). Nueva columna o tabla — recomendado: columnas en
-   `customers` (`google_review_clicked_at`, `google_review_postponed_at`), porque el navegador es
-   stateless (gotcha #6) y el cliente se identifica por teléfono. Migración `00032`.
-   - Tocó "Dejar reseña" y fue al link → **nunca más** se le muestra.
-   - Tocó "La próxima lo hago" → **sí** se le vuelve a mostrar.
-2. **Tracking del click** (R6.a). Endpoint nuevo (ej. `POST /api/check-in/review-click`) que sella la
-   columna y **otorga el grant**. Es lo que permite medir efectividad. No existe nada de analytics: hay
-   que construirlo (gotcha #7).
-3. **Pantalla de agradecimiento** al volver de Google (R6.c): *"Gracias por dejarnos tus comentarios, te
-   esperamos de regreso"*.
-4. **UI en Ajustes** para el link de Google (hallazgo 3.8, hoy solo por SQL) y para elegir la recompensa
-   por reseña del catálogo `campaign_rewards`.
+- **El premio NO se construyó aquí.** `registerReviewClick()` delega en `grantReward()` con
+  `source: 'review'` (que ya estaba en el CHECK de la 00031). **No toques la entrega, la atribución al
+  mesero, el vencimiento ni las métricas: ya funcionaban y siguen funcionando.**
+- **El gate es server-side y vive en `customers`** (`google_review_clicked_at` / `google_review_postponed_at`).
+  Nunca en el navegador: el check-in es stateless (gotcha #6) y el cliente se identifica solo por teléfono.
+  Clickeó → nunca más. Pospuso → se le vuelve a mostrar.
+- **El funnel vive en `review_events`** — la primera tabla de eventos del sistema. El evento `shown` lo
+  sella el endpoint del prompt, **deduplicado a 12h**: si contara cada recarga, el denominador se inflaría
+  y la tasa de conversión mentiría hacia abajo.
+- **El modal espera al Mystery Box.** Si el check-in desbloqueó un tier, el pop-up no existe hasta que el
+  cliente elija su premio. Taparle esa elección sería cambiar oro por cobre.
+- **El CTA final es un `<a target="_blank">` y el POST no se espera con `await`.** Con `window.open()`
+  después de un `await`, Safari en iOS lo bloquea como pop-up no solicitado. Si algún día "no pasa nada al
+  tocar Ir a Google" en un iPhone, empieza por aquí.
+- **El link de Google vive en `tenants.config` (jsonb), no en `admin_settings`** — es de donde lo lee
+  `resolveBranding()`. Se escribe con `PUT /api/dashboard/tenant-config`, que hace merge y tiene
+  **whitelist de claves**: un `UPDATE` directo de `config` borraría el branding entero del tenant.
 
 **Ojo con el diseño del modal:** el flujo público de check-in **no usa shadcn/Dialog**. Usa clases
 propias definidas en `src/app/globals.css` (`.premium-card`, `.btn-premium`, `.premium-bg`) con estilos
@@ -554,7 +599,7 @@ Mandamiento VII.
 | Deuda | Dónde |
 |-------|-------|
 | **El filtro de blackout de campañas manuales está muerto**: `getActiveBlackouts()` se consulta pero el predicado siempre devuelve `true`; `totalSkippedBlackout` es siempre 0. Se reporta como aplicado sin aplicarse. | `src/app/api/dashboard/campaigns/manual/route.ts:128-137` |
-| **`GoogleReviewPopup.tsx` es código muerto** (cero referencias). | `src/components/features/check-in/GoogleReviewPopup.tsx` |
+| ~~`GoogleReviewPopup.tsx` es código muerto~~ — **eliminado en el Bloque 3 (v2.5.0)**, junto con `GoogleReviewCard.tsx`. | — |
 | **`reactivation_aggressive_reward_id` (legacy)** apunta a la tabla `rewards` vieja y no tiene UI. El Bloque 1 lo reemplazó por `aggressive_reward_id` (catálogo), pero **dejó el fallback vivo** para no romper tenants que lo tuvieran seteado a mano. Se puede retirar cuando se confirme que nadie lo usa. | `src/app/api/cron/reactivation/route.ts` |
 | **`docs/01-project-overview.md` y `docs/02-architecture.md` no reflejan el estado multitenant.** `DB_SCHEMA.md` sí. | — |
 | **14 errores de ESLint preexistentes** (`react-hooks/set-state-in-effect`) en `useDashboardAnalytics.ts` y `useStaffAuth.ts`. No los introdujo el Bloque 1. | — |

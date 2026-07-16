@@ -57,7 +57,7 @@ async function processTenant(tenant: Tenant): Promise<TenantCronResult> {
 
     try {
       const tiersRoadmap = await buildTiersRoadmap(customer.total_points ?? 0, tenant.id)
-      const result = await sendTemplateMessage(customer.phone, templateSid, { '1': customer.name, '2': tiersRoadmap }, tenant, undefined, { customerId: customer.id, messageType: 'birthday' })
+      const result = await sendTemplateMessage(customer.phone, templateSid, { '1': customer.name, '2': tiersRoadmap }, tenant, { customerId: customer.id, messageType: 'birthday' })
 
       await recordCampaignMessage({
         campaignId: campaign.id,

@@ -167,3 +167,25 @@ plantilla agresiva de 4 variables sigue funcionando sin cambios.
 El catálogo y el motor de grants **son la infraestructura de los referidos, las promos y la recompensa por
 reseña**. Ninguno tendrá que tocar la entrega, la atribución al mesero, el vencimiento ni las métricas:
 solo otorgar un grant con otro `source`.
+
+---
+
+## Correcciones de auditoría (v2.5.1)
+
+- **`grantReward({ windowDays })` — `0` ya no significa "no vence".** La condición anterior
+  (`windowDays && windowDays > 0`) colapsaba `0` con "omitido" y producía un grant **permanente**
+  (`expires_at: null`). Ahora: `null`/`undefined` = no vence; un número —incluido `0`— SÍ define ventana
+  (0 o negativo = vence de inmediato). Ningún caller pasa 0 hoy, pero el default silencioso era peligroso.
+- **`recordRedemption` — filtro `tenant_id` en la rama de mystery box.** La validación por
+  `mystery_box_result_id` buscaba la fila solo por `id`; ahora filtra también por `tenant_id`, igual que la
+  rama de `grant_id`. Defensa consistente contra IDOR entre tenants (antes se apoyaba solo en `customer_id`).
+- **Cron de recordatorio en lotes.** `reward-reminder` enviaba en serie (un `await` de red por candidato).
+  Ahora usa lotes paralelos (`BATCH_SIZE=10`, mismo patrón que `campaigns/manual`): 20-50 premios pasan de
+  10-25 s a unos pocos segundos.
+
+- **`reward-redeem` vuelve a aceptar la entrada manual del mesero (`staff_override`).** La 00031 empezó a
+  exigir `grant_id` o `mystery_box_result_id` para que los índices únicos impidan la doble entrega, pero eso
+  rompía el shape legacy `staff_override` (solo `tier_id` + `prize_title`, sin ancla), que devolvía 400.
+  Ahora `staff_override` está **exento** del requisito de ancla: es un registro de auditoría escrito a mano
+  (p. ej. una integración de POS), no un flujo automático, así que la protección de doble entrega no aplica
+  a ese caso. El resto de orígenes siguen obligados a venir anclados.

@@ -16,6 +16,7 @@ import { getNextTier, buildTiersRoadmap } from '@/services/reward-tiers.service'
 import { getCampaignRewardById } from '@/services/campaign-reward.service'
 import { grantReward } from '@/services/reward-grant.service'
 import { DEFAULT_AGGRESSIVE_REWARD_WINDOW_DAYS } from '@/constants/rewards'
+import { APP_TIMEZONE } from '@/lib/timezone'
 import { getTenantBySlug, getActiveTenants } from '@/lib/tenant'
 import type { Tenant } from '@/types/tenant.types'
 
@@ -35,9 +36,11 @@ interface TenantCronResult {
   error?: string
 }
 
-/** "18 de julio" — la fecha límite tal como la ve el cliente en su WhatsApp. */
+/** "18 de julio" — la fecha límite tal como la ve el cliente en su WhatsApp.
+ *  El cron corre en UTC: sin `timeZone` explícito, de noche en Colombia la fecha se
+ *  adelantaría un día respecto al `expires_at` real que gobierna la redención. */
 function formatDeadline(date: Date): string {
-  return date.toLocaleDateString('es-CO', { day: 'numeric', month: 'long' })
+  return date.toLocaleDateString('es-CO', { day: 'numeric', month: 'long', timeZone: APP_TIMEZONE })
 }
 
 async function processTenant(tenant: Tenant): Promise<TenantCronResult> {

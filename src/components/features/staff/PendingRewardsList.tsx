@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { Gift, Loader2, CheckCircle2, PartyPopper, RefreshCw } from 'lucide-react'
+import { expiryLabel } from '@/lib/format/grant-expiry'
 
 export interface PendingGrant {
   id: string
@@ -45,14 +46,6 @@ function timeAgo(iso: string): string {
   const hours = Math.floor(minutes / 60)
   if (hours < 24) return `hace ${hours} h`
   return `hace ${Math.floor(hours / 24)} d`
-}
-
-function expiryLabel(iso: string | null): string | null {
-  if (!iso) return null
-  const days = Math.ceil((new Date(iso).getTime() - Date.now()) / 86400000)
-  if (days <= 0) return 'vence hoy'
-  if (days === 1) return 'vence mañana'
-  return `vence en ${days} días`
 }
 
 /**

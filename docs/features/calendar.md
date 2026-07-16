@@ -78,15 +78,33 @@ El cumpleaños es un evento de relación, no de marketing táctico. Su dedup nat
 
 ## Pipeline de envío con media (Twilio Content API)
 
-1. Admin sube imagen/video al endpoint `/api/dashboard/calendar/media-upload` → Supabase Storage → URL pública.
+1. Admin sube imagen/video al endpoint `/api/dashboard/calendar/media-upload` → Supabase Storage (bucket `event-media`) → URL pública.
 2. URL pública se persiste en `restaurant_events.media_url`.
-3. Al ejecutar el evento, `calendar.service.executeScheduledEvent`:
+3. Al ejecutar el evento, `calendar.service.executeAutoEvent`:
    - Resuelve `content_sid` desde `admin_settings` según `media_type`
    - Crea una `campaigns` row con `source='calendar'` + `media_url` + `media_type`
-   - Llama a `whatsapp.service.sendTemplateMessage(phone, contentSid, vars, { mediaUrl })`
-4. Twilio envía la plantilla `twilio/media` con la URL pública. Meta descarga y entrega.
+   - Deriva el **path dentro del bucket** desde `media_url` (`eventMediaPathFromPublicUrl`)
+   - Llama a `sendTemplateMessage(phone, contentSid, vars, tenant, logCtx)` con ese path en `{{6}}`
+4. Twilio compone la URL final (`<bucket público>/{{6}}`), la descarga Meta y entrega.
 
-**Bloqueante operativo:** las 2 plantillas (`event_template_image`, `event_template_video`) deben estar aprobadas por Meta antes de poder usarse en producción (24-72h de espera tras submit).
+### Cómo funciona la media dinámica (leer antes de tocar esto)
+
+Dos reglas de Twilio gobiernan el diseño:
+
+1. **Las variables en la URL de media solo se admiten después del dominio** ([docs](https://www.twilio.com/docs/content/twilio-media)). Por eso la plantilla se aprueba con el dominio del bucket como parte **fija** y `{{6}}` como el **path** del archivo:
+
+   ```
+   media: ["https://<proj>.supabase.co/storage/v1/object/public/event-media/{{6}}"]
+   → al enviar: contentVariables { "6": "<event_id>/1720000000_flyer.jpg" }
+   ```
+
+2. **`ContentSid` y `MediaUrl` son mutuamente excluyentes.** Al enviar una plantilla, la media sale **únicamente** de la definición de la plantilla. Pasar `mediaUrl` junto a `contentSid` **no sobreescribe nada** — por eso `sendTemplateMessage` ya no acepta ese parámetro.
+
+Meta aprueba la **estructura** (header de imagen + texto), no la imagen concreta: una vez aprobada, cada evento manda su propia imagen **sin re-aprobar nada**.
+
+**Consecuencia operativa:** todo media de evento debe vivir en el bucket `event-media` (el dominio de la plantilla es fijo). Si `media_url` apunta a otro dominio, `executeAutoEvent` falla con un error explícito en vez de enviar la imagen equivocada. Un evento `auto` sin media también falla: la plantilla es `twilio/media` y exige el archivo.
+
+**Bloqueante operativo:** las 2 plantillas (`event_template_image`, `event_template_video`) deben estar aprobadas por Meta antes de poder usarse en producción (24-72h de espera tras submit). El sample de `{{6}}` debe ser un archivo **real y público** del bucket: Meta lo descarga para revisar la plantilla.
 
 ---
 
@@ -164,7 +182,7 @@ Estos componentes están implementados pero dependen de que Meta apruebe las pla
 
 ## Estado del pipeline de envío
 
-El pipeline de envío está implementado. Las plantillas `twilio/media` se crean vía `scripts/twilio-create-media-templates.mjs` y el envío dinámico funciona pasando `mediaUrl` al SDK de Twilio junto con `contentSid`.
+El pipeline de envío está implementado. Las plantillas `twilio/media` se crean vía `scripts/twilio-create-media-templates.mjs` con la media dinámica cableada como `<dominio fijo del bucket>/{{6}}`, y el envío pasa el path del archivo en `contentVariables.{{6}}`.
 
 **Bloqueante actual:** Meta debe aprobar las plantillas `twilio/media` antes de que los mensajes con media sean entregables (24-72h tras envío a aprobación).
 

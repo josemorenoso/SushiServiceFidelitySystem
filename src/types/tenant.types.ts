@@ -52,10 +52,16 @@ export type TenantPublic = Omit<Tenant, 'twilio_subaccount_sid' | 'twilio_subacc
 export interface TenantWalletTransaction {
   id: string
   tenant_id: string
-  type: 'topup' | 'adjustment' | 'refund'
+  type: 'topup' | 'adjustment' | 'refund' | 'debit'
   amount_cop: number
   amount_usd: number | null
   usd_cop_rate: number | null
+  // Columnas del débito (migración 00033). NULL en recargas/ajustes.
+  unit_price_cop: number | null
+  quantity: number | null
+  message_log_id: string | null
+  source: 'manual' | 'wompi' | 'system' | null
+  external_ref: string | null
   notes: string | null
   created_by: string
   created_at: string

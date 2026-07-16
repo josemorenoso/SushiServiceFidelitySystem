@@ -106,7 +106,7 @@ async function sendCheckinTemplate(
     return { sent: false, templateType, reason: 'no_template_configured' }
   }
   try {
-    const res = await sendTemplateMessage(phone, templateSid, variables, tenant, undefined, {
+    const res = await sendTemplateMessage(phone, templateSid, variables, tenant, {
       customerId: customerId ?? null,
       messageType: templateType,
     })

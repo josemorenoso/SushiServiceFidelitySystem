@@ -5,6 +5,260 @@
 
 ---
 
+## [v2.6.0] — 2026-07-15 — feat: billetera prepagada por tenant (débito, corte y recarga manual)
+
+> Request: *"¿Cómo distribuyo ahora el presupuesto? Un cliente me transfirió 50,000 y recargué 100,000 en
+> la cuenta matriz, pero ¿cómo la subcuenta se atribuye los 50? ¿Dónde anoto cuando me depositan, cómo
+> rastreo cuánto han usado? [...] necesito que cada subcuenta tenga un bloqueo por recarga [...] créame un
+> dashboard sencillo donde escoja a los clientes y les asigne la cantidad de dinero."*
+>
+> Twilio no reparte saldo entre subcuentas (todas consumen del mismo bote matriz), así que la atribución
+> del saldo pasa a vivir en nuestra DB. Bloques 1 (débito), 2 (saldo visible + corte) y 3a (recarga
+> manual) del spec. Aprobado: débito por trigger, tarifa como columna protegida, tarifa inicial **$100
+> COP/msg**, corte mixto, sin cobro retroactivo.
+> Spec: `docs/superpowers/specs/2026-07-13-wallet-billing-design.md`
+> Feature: `docs/features/wallet-billing.md`
+
+### Added
+
+- **Débito automático por mensaje** (`supabase/migrations/00033_wallet_debits.sql`) — trigger
+  `trg_debit_wallet` sobre `message_logs`: cuando un mensaje obtiene `twilio_sid` (Twilio lo aceptó),
+  inserta un `debit` negativo en `tenant_wallet_transactions` por `tenants.price_per_message_cop`. Misma
+  transacción que el log (no divergen). Idempotente por `UNIQUE (message_log_id)`. No cobra opt-outs,
+  fallidos ni avisos `low_balance`. El histórico previo NO se cobra retroactivo.
+- **Tarifa y contacto por tenant** (00033) — columnas `price_per_message_cop` (default 100, CHECK > 0),
+  `low_balance_threshold_msgs`, `low_balance_notified_at`, `owner_phone`, `owner_email`. La tarifa es
+  columna (no `config` jsonb) para que el tenant no pueda editarse su propio precio.
+- **`tenant_messages_available()`** (00033) — mensajes disponibles derivados (`saldo ÷ tarifa`), nunca
+  almacenados.
+- **Corte por saldo en envíos masivos** (`src/services/wallet.service.ts` `canSendBulk` +
+  `src/app/api/dashboard/campaigns/manual/route.ts` + `src/services/imported-contacts.service.ts`) — una
+  campaña manual o un Golden Bullet sin saldo suficiente responde **409** con el faltante en COP. Los
+  transaccionales nunca se bloquean (corte mixto).
+- **Panel de billeteras del super-admin** (`/dashboard/admin/wallets` + `SuperAdminWallets.tsx` +
+  `GET /api/admin/wallets` + `POST /api/admin/wallet/topup`) — tabla con saldo, mensajes disponibles,
+  consumo del mes y última recarga por tenant; diálogo para **asignar saldo manualmente** ("me dieron 50k
+  → le asigno 50k"). Idempotente por `UNIQUE (source, external_ref)`.
+- **Tarjeta de saldo del tenant** (`WalletCard.tsx` + `GET /api/dashboard/wallet`) — el tenant ve SU saldo
+  COP, sus mensajes disponibles y su consumo del mes, con alerta de saldo bajo/negativo.
+- **Helpers de super-admin** (`src/lib/admin.ts`) — `isSuperAdmin()` / `requireSuperAdmin()` leen el rol
+  del JWT (`app_metadata.role`), el mismo que usa RLS. Link "Billeteras" en el sidebar solo para
+  super-admin (layout server-side, sin parpadeo).
+
+### Fixed — security
+
+- **Saldo de la cuenta matriz expuesto a cualquier tenant** (`src/app/api/dashboard/twilio-balance/route.ts`)
+  — el endpoint devolvía el balance de la cuenta Twilio **matriz** (inventario del operador) a cualquier
+  admin autenticado. Ahora solo el super-admin lo ve; los tenants reciben únicamente las constantes de
+  costo (`restricted: true`) y su propio saldo vía `WalletCard`.
+
+### Changed
+
+- **TRM USD→COP centralizada** (`src/constants/wallet.ts`) — estaba hardcodeada (4200) en
+  `imported-contacts.service.ts` y `twilio-balance/route.ts`. Ahora es una constante única con override por
+  env (`USD_COP_RATE`). Con el modelo prepago la TRM solo afecta el reporte de margen del operador, no al
+  tenant.
+
+### Pendiente (documentado en el spec)
+
+- Guard `canSendBulk` en los crons masivos (birthday/reactivation/calendar-dispatch/reward-reminder).
+- Bloque 4 (avisos de saldo bajo por WhatsApp) y Bloque 5 (autoservicio con Wompi).
+
+---
+
+## [v2.5.1] — 2026-07-15 — fix: auditoría de código (recall xhigh) sobre los Bloques 1-3
+
+> Request: "Audita todo lo que está por comitear, todos los cambios" → "soluciona todo eso y agrega todo
+> a los archivos correspondientes." Revisión multi-ángulo (10 finders + verificación) del diff pendiente
+> antes de desplegar. 15 hallazgos; se corrigen los 10 accionables y se documentan 5 decisiones.
+
+### Fixed — correctness
+
+- **Premio de reseña repetible sin límite** (`src/services/review.service.ts`) — `registerReviewClick()`
+  no chequeaba `customers.google_review_clicked_at` antes de otorgar. El índice único de la 00031 solo
+  bloquea mientras el grant sigue **activo**: una vez redimido o vencido, repetir el POST público
+  (`/api/check-in/review-action`) acuñaba un premio nuevo cada vez. Ahora `clicked_at` es el candado
+  permanente: si ya fue a Google, se devuelve su premio activo (si existe) sin crear otro.
+- **Link vacío no apagaba el pop-up** (`src/services/review.service.ts`) — el gate leía la URL vía
+  `resolveBranding()`, que cae al default del entorno (`NEXT_PUBLIC_GOOGLE_MAPS_REVIEW_URL`, el link de la
+  cuenta maestra) cuando el tenant tiene el campo vacío. Un tenant que borraba su link seguía mostrando el
+  pop-up y mandaba a sus clientes a la ficha de Google de **otro negocio**. Ahora se distingue `undefined`
+  (nunca configurado → default de la cuenta maestra) de `''` (vaciado a propósito → pop-up apagado).
+- **Premio prometido sin haberse otorgado** (`src/services/review.service.ts` +
+  `GoogleReviewModal.tsx`) — ante un `db_error` real, `registerReviewClick()` devolvía igual el
+  `rewardTitle` y el modal mostraba "Tu regalo: X" sin un grant que lo respaldara (imposible de redimir).
+  Ahora en `db_error` se devuelve `prize_title: null`, y la pantalla de gracias solo promete el premio que
+  el servidor **realmente otorgó** (`grantedPrize`, no el teaser). En el caso `duplicate_active` se
+  devuelve el premio activo existente **con su `expires_at` real**, no `null` (antes se perdía la cuenta
+  regresiva en el reintento).
+- **`windowDays: 0` producía un premio permanente** (`src/services/reward-grant.service.ts`) — la
+  condición `params.windowDays && params.windowDays > 0` colapsaba `0` con "omitido" → `expires_at: null`
+  (no vence nunca). Ahora `null`/`undefined` = no vence; un número (incluido 0) SÍ define ventana (0 o
+  negativo = vence de inmediato).
+- **Falta de filtro `tenant_id` en la rama de mystery box** (`src/services/redemption.service.ts`) — la
+  validación por `mystery_box_result_id` buscaba la fila solo por `id`, a diferencia de la rama de
+  `grant_id` justo arriba. Se añade `.eq('tenant_id', tenantId)` para cerrar el hueco de IDOR entre
+  tenants de forma consistente.
+- **Fecha límite de reactivación en zona horaria equivocada** (`src/app/api/cron/reactivation/route.ts`)
+  — `formatDeadline()` usaba `toLocaleDateString` sin `timeZone`; el cron corre en UTC, así que de noche en
+  Colombia la fecha del WhatsApp se adelantaba un día respecto al `expires_at` real. Se formatea en
+  `America/Bogota` (nueva constante `src/lib/timezone.ts` → `APP_TIMEZONE`).
+
+### Fixed — concurrencia / eficiencia
+
+- **Lost-update al guardar el link de Google** (`src/app/api/dashboard/tenant-config/route.ts` +
+  `00032`) — el PUT hacía lectura → merge-en-JS → escritura de `tenants.config` (el jsonb con TODO el
+  branding); dos escrituras concurrentes se pisaban. Ahora el merge es **atómico en la base de datos**
+  (`config = config || patch`) vía la nueva función `merge_tenant_config(uuid, jsonb)` de la migración
+  00032.
+- **Carrera en el dedupe de impresiones** (`src/services/review.service.ts` + `00032`) —
+  `logReviewShown()` era un check-then-act (SELECT + INSERT, dos idas a la base): dos peticiones casi
+  simultáneas inflaban el denominador del funnel. Ahora es **una sola sentencia** (`INSERT ... WHERE NOT
+  EXISTS`) vía la función `log_review_shown_deduped(uuid, uuid, int)`: una ida a la base y la ventana de
+  carrera reducida a lo que dura la sentencia.
+- **Cron de recordatorio secuencial** (`src/app/api/cron/reward-reminder/route.ts`) — enviaba un mensaje
+  por candidato con `await` en serie (20-50 premios = 10-25 s). Ahora envía en **lotes paralelos**
+  (`BATCH_SIZE=10`, mismo patrón que `campaigns/manual`).
+
+### Fixed — compatibilidad
+
+- **`reward-redeem` volvía a rechazar la entrada manual del mesero** (`src/app/api/reward-redeem/route.ts`)
+  — la 00031 empezó a exigir `grant_id` o `mystery_box_result_id`, lo que hacía 400 al shape legacy
+  `staff_override` (solo `tier_id` + `prize_title`, sin ancla). Ahora `staff_override` está **exento** del
+  requisito de ancla: es un registro de auditoría escrito a mano (p. ej. una integración de POS). El resto
+  de orígenes siguen obligados a venir anclados para conservar la protección de doble entrega.
+
+### Changed — reuse / limpieza
+
+- **`percentInt(part, whole)`** (nuevo `src/lib/format/percent.ts`) reemplaza tres copias del helper de
+  porcentaje (`review.service`, `reward-grant.service`).
+- **`expiryLabel` / `expiryLabelWithDate`** (nuevo `src/lib/format/grant-expiry.ts`) reemplazan tres
+  copias del formateador "vence en N días" (`GoogleReviewModal`, `AvailableRewardBanner`,
+  `PendingRewardsList`).
+- **`NO_GOOGLE_REVIEW_URL`** se exporta desde `src/lib/branding.ts` en vez de repetir el centinela `'#'`.
+- **`resolvePhoneRequest()`** (nuevo `src/lib/phone-request.ts`) — tronco común de los endpoints públicos
+  identificados por teléfono (validar → rate limit → tenant → cliente). `review-prompt` y `review-action`
+  lo comparten; cada uno decide qué HTTP devolver por `reason` (p. ej. `review-prompt` trata al cliente
+  desconocido como "no mostrar", no como 404).
+
+### Decisiones (2 hallazgos NO forzados, con motivo)
+
+- **`PointsCalibrator` con `threshold === 0`**: se deja `!threshold`. **La corrección sugerida por el
+  auditor era incorrecta**: el motor (`points-engine`) ya retorna vacío para `threshold <= 0` (no se puede
+  calibrar a 0 puntos), así que dejar pasar 0 rompería la UI (visitas `undefined`). El estado vacío actual
+  es el comportamiento correcto; un tier de umbral 0 no es un escenario real.
+- **`review-metrics` re-consulta `reward_grants`**: se deja. "Deduplicar" acoplaría dos endpoints
+  independientes que hoy corren en paralelo; la query ya está acotada e indexada (`tenant_id` + `source`).
+  No hay forma de mejorarla sin empeorar la arquitectura.
+
+### Verificación
+
+`npx tsc --noEmit` limpio · `npx next build` verde (68 páginas) · `eslint` sin errores nuevos.
+
+### Tarea del dueño
+
+- Las correcciones del lost-update y del dedupe añaden dos funciones a la migración **`00032`**
+  (`merge_tenant_config`, `log_review_shown_deduped`). Si ya aplicaste una versión previa de la 00032,
+  vuelve a correrla — es idempotente (`CREATE TABLE IF NOT EXISTS`, `CREATE OR REPLACE FUNCTION`).
+
+---
+
+## [v2.5.0] — 2026-07-13 — feat: Pop-up de reseñas de Google con premio y tracking (Bloque 3)
+
+> Request: "En el aspecto de reseñas de Google, la gente no las está dejando [...] un pop up otra vez
+> como estaba antes, pero diferente, porque antes estaba la x en la esquina y la gente literal a los 2
+> segundos que salía lo cerraba instintivamente [...] ahora un pop up que diga algo como 'gánate X por
+> dejarnos una reseña en Google', y que haya dos botones: uno de dejar reseña y salen los pasos — 1
+> muéstrale al mesero la reseña, 2 redime tu regalo — y al final el botón; y que la recompensa X sea
+> variable y definible en los ajustes del dashboard. Y el segundo botón debe ser 'La próxima lo hago'
+> para que no se sientan obligados."
+>
+> Con tres requisitos adicionales: **(R6.a)** "Debemos rastrear quiénes están ingresando en el botón del
+> link de Google para analizar efectividad de nuestra estrategia." · **(R6.b)** "Luego de que un cliente
+> dejó la reseña y fue al link de Google ya no debe volver a salirle esta ventana, a menos que el cliente
+> haya tocado 'La próxima lo hago'." · **(R6.c)** "Luego de dejar reseña y volver a la página debe salir:
+> 'gracias por dejarnos tus comentarios, te esperamos de regreso'."
+
+### Contexto — el problema nunca fue el formato, fue que pedir un favor no convierte
+
+Dos intentos previos fracasaron por razones distintas: el modal v1.0 tenía una **X** que la gente cerraba
+por reflejo, y la card inline v1.4 dejó de molestar pero también dejó de existir (compite con los puntos y
+los tiers, y **no ofrece nada a cambio**). El modal vuelve, pero ahora **ofrece un premio** y no se puede
+cerrar por reflejo.
+
+**La decisión que ahorró la mitad del trabajo:** la recompensa por reseña **no necesita infraestructura
+nueva**. Reutiliza entero el motor del Bloque 1 — `source: 'review'` ya estaba en el CHECK de la migración
+00031. Dejar reseña otorga un `reward_grant` y a partir de ahí todo corre solo: el premio le sale al
+cliente en el banner de su tarjeta, le aparece al mesero en `/mesero/rewards`, se entrega con el mismo
+botón y cae en las métricas con su atribución de mesa y mesero. **No se tocó la entrega, ni el
+vencimiento, ni las métricas.**
+
+### Added
+
+- **`supabase/migrations/00032_review_tracking.sql`** (nueva) — `customers` gana
+  `google_review_clicked_at` y `google_review_postponed_at` (la memoria), y se crea `review_events`
+  (el funnel). **La memoria va en la DB y no en el navegador** porque el check-in del cliente es
+  *stateless* (cero `localStorage`, cero cookies): se identifica solo por teléfono, así que una bandera
+  en el navegador se rompería en cuanto abriera su tarjeta desde otro celular.
+- **`src/services/review.service.ts`** (nuevo) — el gate (a quién se le muestra), el funnel y la
+  delegación del premio a `reward-grant.service`.
+- **`src/app/api/check-in/review-prompt/route.ts`** (nuevo) — decide si se muestra el pop-up y sella la
+  impresión, **deduplicada a 12h** (recargar la pantalla no debe inflar el denominador del funnel).
+- **`src/app/api/check-in/review-action/route.ts`** (nuevo) — `clicked` (sella + otorga el premio) o
+  `postponed`. Rate-limited por teléfono.
+- **`src/components/features/check-in/GoogleReviewModal.tsx`** (nuevo) — el modal, en cuatro fases:
+  oferta → pasos 1/2 → espera → gracias. **Sin X, sin click-fuera, sin Escape.**
+- **`src/app/api/dashboard/review-metrics/route.ts`** + **`ReviewFunnelCard.tsx`** (nuevos) — el embudo
+  en Dashboard → Redenciones: *se mostró 240 veces → 38 fueron a Google (16%) → 29 reclamaron (76%)*.
+- **`src/app/api/dashboard/tenant-config/route.ts`** (nuevo) — **hallazgo 3.8**: el link de Google
+  (`tenants.config.google_maps_url`) solo se podía editar por SQL. Ahora tiene UI. Escribe con
+  lectura → merge → escritura y **whitelist de claves**: un `UPDATE` directo de `config` borraría el
+  branding entero del tenant.
+
+### Changed
+
+- **`src/components/features/check-in/CheckInSuccess.tsx`** — monta el modal y, si el check-in desbloqueó
+  un tier, **lo hace esperar** a que el cliente elija su Mystery Box. Taparle la elección del premio con
+  una petición de reseña sería cambiar oro por cobre.
+- **`src/app/(dashboard)/dashboard/settings/page.tsx`** — sección *Reseñas de Google*: link, recompensa
+  (del catálogo `campaign_rewards`) y ventana del premio.
+
+### Removed
+
+- **`src/components/features/check-in/GoogleReviewPopup.tsx`** — **hallazgo 3.6**: código muerto desde
+  v1.4.0, cero referencias. Era el modal de la "X".
+- **`src/components/features/check-in/GoogleReviewCard.tsx`** — la reemplaza el modal.
+
+### Decisiones que conviene recordar
+
+- **El premio se otorga al tocar el link, sin verificar que la reseña exista.** No es un agujero: el paso 1
+  que el cliente lee es *"muéstrale la reseña al mesero"* — **el mesero es el verificador**, igual que con
+  cualquier otro premio. Google no expone ninguna API para confirmarlo; cualquier otra cosa sería teatro.
+- **La pantalla de gracias se dispara con `visibilitychange`**, cuando el cliente vuelve a la pestaña — no
+  al tocar el botón. Decirle "gracias por tu reseña" a alguien que aún no la ha escrito sería mentirle.
+- **El CTA final es un `<a target="_blank">` real y el POST no se espera con `await`.** Si abriéramos la
+  pestaña con `window.open()` después de un `await`, Safari en iOS lo trataría como pop-up no solicitado y
+  lo bloquearía: el cliente tocaría "Ir a Google" y no pasaría nada.
+- **El prompt vive en un endpoint propio, no en la respuesta del check-in.** En el flujo real
+  (`checkin_mode = staff_verified`) ese POST lo hace el celular **del mesero**; la pantalla del cliente la
+  alimenta el polling de `/api/check-in/status`, que corre cada 5 segundos y habría disparado una
+  impresión por segundo.
+- **Sin premio configurado el pop-up sale igual** (pidiendo el favor). Exigir premio lo apagaría solo si el
+  dueño no configura nada — exactamente el problema de fondo del requerimiento.
+
+### Verificación
+
+`npx tsc --noEmit` limpio · `npx next build` verde · `npx eslint` sin errores nuevos (las 4 warnings de
+`settings/page.tsx` son preexistentes, de la sección de ubicación "próximamente").
+
+### Tareas del dueño
+
+1. **Aplicar la migración `00032_review_tracking.sql`.**
+2. **Pegar el link de Google** en Ajustes → *Reseñas de Google*. **Sin él el pop-up no aparece nunca.**
+3. *(Opcional)* **Elegir la recompensa.** Sin ella el pop-up sale, pero sin gancho.
+
+---
+
 ## [v2.4.0] — 2026-07-12 — feat: Calibrador de puntos + fix: el shortfall configurable era una configuración fantasma
 
 > Request: "Estoy teniendo muchos problemas para el tema de definición de recompensas, ya que hay

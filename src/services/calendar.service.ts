@@ -30,6 +30,7 @@ import {
 } from '@/services/campaign.service'
 import { sendTemplateMessage } from '@/services/whatsapp.service'
 import { getTenantById } from '@/lib/tenant'
+import { EVENT_MEDIA_BUCKET, eventMediaPathFromPublicUrl } from '@/lib/twilio/media'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -338,7 +339,24 @@ export async function executeAutoEvent(eventId: string): Promise<ExecuteAutoEven
     const brandName = tenant.config?.brand_name ?? 'El Restaurante'
     const eventDate = formatEventDate(event.event_date)
     const cta = event.description?.trim() || '¡Te esperamos!'
-    const mediaUrl = event.media_url ?? ''
+
+    // La plantilla es `twilio/media`: su URL de media es
+    // `<bucket público>/{{6}}`, así que {{6}} debe ser el PATH dentro del bucket,
+    // no la URL completa. Sin media no hay nada que enviar por esta plantilla.
+    if (!event.media_url) {
+      throw new Error(
+        'El evento no tiene media_url. Las plantillas de evento son twilio/media ' +
+        'y requieren una imagen o video: súbelo desde el dashboard antes de enviar.'
+      )
+    }
+    const mediaPath = eventMediaPathFromPublicUrl(event.media_url)
+    if (!mediaPath) {
+      throw new Error(
+        `media_url no pertenece al bucket '${EVENT_MEDIA_BUCKET}' (${event.media_url}). ` +
+        'La plantilla aprobada tiene el dominio fijo, así que solo puede servir archivos ' +
+        'de ese bucket: vuelve a subir el archivo desde el dashboard.'
+      )
+    }
 
     let sent = 0
     let failed = 0
@@ -351,10 +369,10 @@ export async function executeAutoEvent(eventId: string): Promise<ExecuteAutoEven
         '3': event.title,
         '4': eventDate,
         '5': cta,
-        '6': mediaUrl,
+        '6': mediaPath,
       }
 
-      const result = await sendTemplateMessage(customer.phone, templateSid, variables, tenant, mediaUrl, { customerId: customer.id, messageType: 'calendar_event' })
+      const result = await sendTemplateMessage(customer.phone, templateSid, variables, tenant, { customerId: customer.id, messageType: 'calendar_event' })
       await recordCampaignMessage({
         campaignId: campaign.id,
         customerId: customer.id,

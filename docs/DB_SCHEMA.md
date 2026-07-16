@@ -149,6 +149,7 @@ erDiagram
 | 12 | [message_logs](#message_logs) | Tracking de TODOS los mensajes WhatsApp (transaccionales + campañas) | SI | Admin: lectura; Service: INSERT/UPDATE |
 | 13 | [campaign_rewards](#campaign_rewards) | Catálogo editable de premios de campaña (reactivación, referidos, promos) | SI | Admin: CRUD completo (vía service role, filtrado por tenant en código) |
 | 14 | [reward_grants](#reward_grants) | El premio otorgado: pertenece a un cliente, pendiente de reclamar | SI | Admin: CRUD completo (vía service role, filtrado por tenant en código) |
+| 15 | [review_events](#review_events) | Funnel del pop-up de reseñas de Google: mostrado → click → pospuesto | SI | Admin: CRUD completo (vía service role, filtrado por tenant en código) |
 
 ---
 
@@ -175,8 +176,14 @@ erDiagram
 | `checkin_lon` | `numeric(11,8)` | SI | `NULL` | Última longitud de check-in |
 | `checkin_distance_meters` | `integer` | SI | `NULL` | Distancia al local en el último check-in (metros) |
 | `imported_contact_id` | `uuid` | SI | `NULL` | FK → imported_contacts(id) ON DELETE SET NULL. Trazabilidad si el cliente vino de un contacto importado (Golden Bullet, migración 00023) |
+| `google_review_clicked_at` | `timestamptz` | SI | `NULL` | **Nueva (00032).** El cliente fue al link de reseñas de Google → **nunca más** se le muestra el pop-up (R6.b). Es el gate: lo lee `getReviewPromptState()` |
+| `google_review_postponed_at` | `timestamptz` | SI | `NULL` | **Nueva (00032).** Tocó "La próxima lo hago" → **sí** se le vuelve a mostrar, en su próximo check-in. Informativo: el gate NO lo consulta |
 | `created_at` | `timestamptz` | NO | `now()` | Fecha de creación |
 | `updated_at` | `timestamptz` | NO | `now()` | Última actualización |
+
+> **Por qué la memoria de la reseña vive en la DB y no en el navegador:** el check-in del cliente es
+> *stateless* (cero `localStorage`, cero cookies) y el cliente se identifica **solo por teléfono**. Una
+> bandera en el navegador se rompería en cuanto abriera su tarjeta desde otro celular.
 
 **Índices:**
 
@@ -364,6 +371,12 @@ CREATE POLICY "admin_update_customers" ON customers
 | `points_system_enabled` | `true` | Feature flag: sistema de puntos activo |
 | `reactivation_soft_days` | _(vacío inicial — fallback `21`)_ | Días de inactividad para reactivación suave (configurable v1.4.0) |
 | `reactivation_aggressive_days` | _(vacío inicial — fallback `25`)_ | Días de inactividad para reactivación agresiva (configurable v1.4.0, debe ser > suave) |
+| `review_reward_id` | _(vacío inicial)_ | **(00032)** Id de `campaign_rewards` que se otorga por dejar reseña. Vacío = el pop-up sale igual, pero sin premio |
+| `review_reward_window_days` | _(vacío inicial — fallback `30`)_ | **(00032)** Días que tiene el cliente para reclamar el premio por reseña |
+
+> ⚠️ El **link de reseñas de Google** NO vive aquí: vive en `tenants.config.google_maps_url` (jsonb),
+> que es de donde lo lee `resolveBranding()`. Duplicarlo crearía dos fuentes de verdad. Se edita con
+> `PUT /api/dashboard/tenant-config` (whitelist de claves).
 
 **Políticas RLS:**
 
@@ -730,6 +743,41 @@ CREATE POLICY "service_update_message_logs" ON message_logs
 
 ---
 
+### review_events
+
+> Funnel del pop-up de reseñas de Google (v2.5.0, migración 00032).
+>
+> **Es la primera tabla de eventos del sistema.** Antes no había NADA de analytics en el repo (ni
+> PostHog, ni GA, ni tabla de eventos) — hallazgo 3.7 de la auditoría de julio. Deliberadamente **no**
+> es una tabla genérica `events(name, payload jsonb)`: tiene tres acciones y un CHECK que las cierra.
+> Una tabla genérica sería más "flexible" y por eso mismo imposible de consultar sin adivinar qué se
+> guardó.
+
+| Columna | Tipo | Nullable | Default | Descripción |
+|---------|------|----------|---------|-------------|
+| `id` | `uuid` | NO | `gen_random_uuid()` | PK |
+| `tenant_id` | `uuid` | NO | - | FK → tenants(id) ON DELETE CASCADE |
+| `customer_id` | `uuid` | NO | - | FK → customers(id) ON DELETE CASCADE |
+| `action` | `text` | NO | - | CHECK: `'shown'` \| `'clicked'` \| `'postponed'` |
+| `grant_id` | `uuid` | SI | `NULL` | FK → reward_grants(id) ON DELETE SET NULL. Solo en `'clicked'`: el premio otorgado por la reseña. Permite cruzar el funnel con la entrega real |
+| `created_at` | `timestamptz` | NO | `now()` | - |
+
+**Índices:**
+
+| Nombre | Columnas | Tipo | Para qué |
+|--------|----------|------|----------|
+| `review_events_pkey` | `id` | PRIMARY KEY | - |
+| `idx_review_events_funnel` | `(tenant_id, action, created_at DESC)` | BTREE | El embudo del dashboard por rango de fechas |
+| `idx_review_events_customer` | `(customer_id, action, created_at DESC)` | BTREE | Dedupe del evento `shown` (ventana de 12h) |
+
+**Dedupe de `shown`:** recargar la pantalla de éxito **no** cuenta como una segunda impresión. Si lo
+hiciera, el denominador del funnel se infla y la tasa de conversión miente hacia abajo. `logReviewShown()`
+descarta la impresión si ya hay una del mismo cliente en las últimas `REVIEW_SHOWN_DEDUPE_HOURS` (12).
+
+**RLS:** `tenant_all_review_events` FOR ALL — `USING/WITH CHECK (tenant_id = current_tenant_id() OR is_super_admin())`.
+
+---
+
 ## Storage Buckets
 
 ### event-media
@@ -782,6 +830,8 @@ CREATE POLICY "service_update_message_logs" ON message_logs
 | 28 | `00028_seed_sushi_service.sql` | 2026-07-04 | Backfill de `tenant_id` en todos los datos existentes (tenant puente "Sushi Service"), activa `NOT NULL`, crea los uniques compuestos `(campo, tenant_id)` que reemplazan a los globales dropeados en 00025. | Pendiente |
 | 29 | `00029_tenant_domain.sql` | 2026-07-05 | Columna `tenants.domain` + índice único parcial — resuelve el tenant por host header (subdominios existentes de cada restaurante) en vez de por slug en la URL. | Pendiente |
 | 31 | `00031_reward_grants.sql` | 2026-07-11 | Tablas `campaign_rewards` y `reward_grants` + índices + índice único parcial anti-duplicado + RLS + backfill; `reward_redemptions.tier_id` pasa a nullable y gana `grant_id` + índice único parcial anti doble-entrega; `campaigns.source` admite `'reward_reminder'`; trigger `mark_grant_redeemed()`. Premios Otorgados (v2.3.0). | Pendiente |
+| 32 | `00032_review_tracking.sql` | 2026-07-13 | `customers` gana `google_review_clicked_at` y `google_review_postponed_at` (la memoria del pop-up); tabla nueva `review_events` (funnel mostrado → click → pospuesto) + índices + RLS; funciones `merge_tenant_config(uuid, jsonb)` (merge atómico de `tenants.config`) y `log_review_shown_deduped(uuid, uuid, int)` (dedupe del evento `shown` en una sola sentencia) — fixes auditoría v2.5.1. Reseñas de Google (v2.5.0, Bloque 3). **Sin backfill: el premio por reseña reutiliza `reward_grants`, donde `source='review'` ya existía desde la 00031.** | Pendiente |
+| 33 | `00033_wallet_debits.sql` | 2026-07-13 | El **débito** de la billetera. `tenants` gana `price_per_message_cop` (default 100, CHECK > 0), `low_balance_threshold_msgs`, `low_balance_notified_at`, `owner_phone`, `owner_email`. `tenant_wallet_transactions`: el CHECK de `type` admite `'debit'`; columnas nuevas `message_log_id` (FK, **UNIQUE parcial** → idempotencia), `unit_price_cop`, `quantity`, `source` (`manual`/`wompi`/`system`), `external_ref` (**UNIQUE parcial** `(source, external_ref)`). Trigger `trg_debit_wallet` sobre `message_logs` inserta el `debit` cuando `twilio_sid` deja de ser NULL. Función `tenant_messages_available()`. Billetera prepagada (v2.6.0, Bloques 1-3a). **Sin backfill: el ledger arranca en cero, no se cobra el histórico.** | Pendiente |
 
 ### `tenant_id` en las 18 tablas de negocio
 
@@ -837,3 +887,4 @@ $$ LANGUAGE plpgsql;
 | imported_contacts | Admin + Service | Admin + Service | Admin + Service | NO |
 | campaign_rewards | Admin + Service | Admin + Service | Admin + Service | Admin (lógico, `is_active=false`) |
 | reward_grants | Admin + Service | Service | Service | NO |
+| review_events | Admin + Service | Service | Service | NO |

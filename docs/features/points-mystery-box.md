@@ -769,4 +769,13 @@ Sección "Sistema de Puntos" con feature flag toggle y los siguientes campos:
 
 ---
 
+> **Nota (v2.5.1).** El calibrador (`PointsCalibrator`) gatea con `if (!threshold)`: eso trata `null`, `0`
+> y `NaN` como "sin premio configurado". Es correcto **a propósito** — el motor `points-engine` retorna
+> vacío para `threshold <= 0` (no se puede calibrar a 0 puntos), y dejar pasar `0` rompería la tabla
+> (visitas `undefined`). No es un bug; un tier de umbral 0 no es un escenario real.
+>
+> `rewards.ts` también aloja las constantes del pop-up de reseñas
+> (`DEFAULT_REVIEW_REWARD_WINDOW_DAYS`, `REVIEW_SHOWN_DEDUPE_HOURS`), que pertenecen a
+> **[review-flow.md](review-flow.md)**.
+
 *Última actualización: 2026-05-25 (v1.0.3: dashboard tiers + settings)*

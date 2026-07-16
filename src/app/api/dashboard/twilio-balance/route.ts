@@ -1,9 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-
-// Meta Fee: $0.0125/msg + Twilio Fee: $0.005/msg = $0.0175/msg total
-const TWILIO_MSG_COST_USD = 0.0175
-const USD_TO_COP = 4200
+import { isSuperAdmin } from '@/lib/admin'
+import { MESSAGE_COST_USD as TWILIO_MSG_COST_USD, USD_TO_COP } from '@/constants/wallet'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,6 +11,19 @@ export async function GET() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+    }
+
+    // SEGURIDAD (spec §6.1): el saldo de la cuenta MATRIZ es el inventario del
+    // operador. Un admin de tenant NO debe verlo — solo recibe las constantes
+    // de costo (no sensibles), que ImportedContactsUploader usa para estimar.
+    if (!(await isSuperAdmin())) {
+      return NextResponse.json({
+        balance: null,
+        currency: 'USD',
+        restricted: true,
+        costPerMessage: TWILIO_MSG_COST_USD,
+        costPerMessageCOP: Math.round(TWILIO_MSG_COST_USD * USD_TO_COP),
+      })
     }
 
     const accountSid = process.env.TWILIO_ACCOUNT_SID

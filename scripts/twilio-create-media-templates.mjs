@@ -12,14 +12,35 @@
  *   {{3}} = título del evento
  *   {{4}} = fecha del evento (legible)
  *   {{5}} = descripción / CTA
- *   {{6}} = URL del archivo media (imagen o video) — dinámico al enviar
+ *   {{6}} = PATH del archivo dentro del bucket `event-media` — dinámico al enviar
  *
- * La plantilla se aprueba una vez y el URL de media se pasa en cada envío
- * vía contentVariables → {{6}}. Meta aprueba la *estructura*, no la imagen.
+ * ── Cómo funciona la media dinámica (importante) ─────────────────────────────
+ * Twilio solo admite variables en la URL de media DESPUÉS del dominio:
+ *   "Variables are only supported after the domain"
+ *   https://www.twilio.com/docs/content/twilio-media
+ *
+ * Por eso la plantilla se aprueba con el dominio del bucket público como parte
+ * FIJA y `{{6}}` como el path del archivo:
+ *
+ *   media: ["https://<proj>.supabase.co/storage/v1/object/public/event-media/{{6}}"]
+ *   → al enviar: contentVariables { "6": "<event_id>/1720000000_flyer.jpg" }
+ *
+ * Meta aprueba la ESTRUCTURA (header de imagen + texto), no la imagen concreta:
+ * una vez aprobada, cada evento manda su propia imagen sin re-aprobar nada.
+ *
+ * OJO: `ContentSid` y `MediaUrl` son mutuamente excluyentes en la API de Mensajes.
+ * La media sale ÚNICAMENTE de la plantilla; no se puede sobreescribir al enviar.
+ *
+ * ── Requisito previo ────────────────────────────────────────────────────────
+ * El sample de {{6}} debe ser un archivo REAL y público en el bucket: Meta lo
+ * descarga para revisar la plantilla. Sube uno desde el dashboard (o Supabase
+ * Storage) y pásalo en SAMPLE_IMAGE_PATH / SAMPLE_VIDEO_PATH.
+ * El script verifica que sea accesible ANTES de crear nada.
  *
  * Uso:
  *   TWILIO_ACCOUNT_SID=ACxxx \
  *   TWILIO_AUTH_TOKEN=xxx \
+ *   NEXT_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co \
  *   NEXT_PUBLIC_BRAND_NAME="La Fogata" \
  *   node scripts/twilio-create-media-templates.mjs
  *
@@ -31,10 +52,20 @@
 const {
   TWILIO_ACCOUNT_SID: SID,
   TWILIO_AUTH_TOKEN: TOKEN,
+  NEXT_PUBLIC_SUPABASE_URL: SUPABASE_URL,
   NEXT_PUBLIC_BRAND_NAME: BRAND_NAME = 'El Restaurante',
+  SAMPLE_IMAGE_PATH = '_samples/sample.jpg',
+  SAMPLE_VIDEO_PATH = '_samples/sample.mp4',
+  // Meta exige nombres de plantilla ÚNICOS. Si ya existe una plantilla con el
+  // nombre base (p.ej. la vieja de media fija), pasa TEMPLATE_SUFFIX=_v2 para
+  // crear la nueva en paralelo sin borrar la anterior:
+  //   evento_imagen_<brand>_v2
+  TEMPLATE_SUFFIX = '',
 } = process.env
 
-const missing = ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN'].filter((k) => !process.env[k])
+const missing = ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'NEXT_PUBLIC_SUPABASE_URL'].filter(
+  (k) => !process.env[k]
+)
 if (missing.length) {
   console.error('❌ Faltan variables de entorno:\n' + missing.map((k) => `   ${k}`).join('\n'))
   process.exit(1)
@@ -42,6 +73,10 @@ if (missing.length) {
 
 const CONTENT_API = 'https://content.twilio.com/v1/Content'
 const AUTH = 'Basic ' + Buffer.from(`${SID}:${TOKEN}`).toString('base64')
+
+const EVENT_MEDIA_BUCKET = 'event-media'
+// Parte FIJA de la URL de media. Debe coincidir con src/lib/twilio/media.ts.
+const MEDIA_BASE_URL = `${SUPABASE_URL.replace(/\/+$/, '')}/storage/v1/object/public/${EVENT_MEDIA_BUCKET}`
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 async function contentPost(body) {
@@ -69,38 +104,48 @@ async function submitApproval(sid, name) {
   return json
 }
 
+/**
+ * Meta descarga el sample para revisar la plantilla. Si no es accesible
+ * públicamente, la aprobación se rechaza — así que fallamos antes de crear nada.
+ */
+async function assertSampleReachable(url) {
+  let res
+  try {
+    res = await fetch(url, { method: 'GET', headers: { Range: 'bytes=0-0' } })
+  } catch (err) {
+    throw new Error(`no se pudo descargar (${err.message})`)
+  }
+  if (!res.ok) throw new Error(`HTTP ${res.status} al descargarlo`)
+}
+
 // ── Definición de plantillas ──────────────────────────────────────────────────
 // Meta requiere suficiente texto entre variables (ratio ~1 var / 50 chars).
-// Con 5 variables este body de ~170 chars cumple la regla.
+// Con 5 variables de texto este body de ~170 chars cumple la regla.
 const TEMPLATE_BODY = `¡Hola {{1}}! 🎉\n\n*{{2}}* tiene el placer de invitarte a vivir una noche especial:\n*{{3}}* 🍽️\n\n📅 {{4}}\n\n{{5}}\n\n¡Te esperamos con tu familia!\n\n_Responde SALIR para no recibir más mensajes._`
+
+const slug = BRAND_NAME.toLowerCase().replace(/[^a-z0-9]/g, '_')
+const suffix = TEMPLATE_SUFFIX.toLowerCase().replace(/[^a-z0-9_]/g, '')
 
 const templates = [
   {
-    friendly_name: `evento_imagen_${BRAND_NAME.toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
-    meta_name: `evento_imagen_${BRAND_NAME.toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
-    type: 'twilio/media',
-    // meta_mime_types determines what Meta approves: image/jpeg + image/png
-    mime_hint: 'image',
+    friendly_name: `evento_imagen_${slug}${suffix}`,
+    meta_name: `evento_imagen_${slug}${suffix}`,
+    settings_key: 'event_template_image_sid',
+    sample_path: SAMPLE_IMAGE_PATH,
     description: 'Festival / promo con imagen (JPG/PNG)',
   },
   {
-    friendly_name: `evento_video_${BRAND_NAME.toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
-    meta_name: `evento_video_${BRAND_NAME.toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
-    type: 'twilio/media',
-    mime_hint: 'video',
+    friendly_name: `evento_video_${slug}${suffix}`,
+    meta_name: `evento_video_${slug}${suffix}`,
+    settings_key: 'event_template_video_sid',
+    sample_path: SAMPLE_VIDEO_PATH,
     description: 'Festival / promo con video (MP4)',
   },
 ]
 
-function buildTemplateBody(mimeHint) {
-  // URLs de Google Storage / gstatic — accesibles por bots de Meta sin bloqueos.
-  // Wikipedia y W3Schools bloquean user-agents de crawlers → rechazo en aprobación.
-  const sampleMediaUrl = mimeHint === 'image'
-    ? 'https://www.gstatic.com/webp/gallery3/1.png'
-    : 'https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4'
-
+function buildTemplateBody(friendlyName, samplePath) {
   return {
-    friendly_name: undefined, // set per-template
+    friendly_name: friendlyName,
     language: 'es',
     variables: {
       '1': 'María',
@@ -108,12 +153,14 @@ function buildTemplateBody(mimeHint) {
       '3': 'Festival Gastronómico',
       '4': 'sábado 14 de junio',
       '5': '¡Te esperamos con tu familia! 🍽️',
-      '6': sampleMediaUrl,
+      // Sample del PATH (no de la URL completa): Twilio lo concatena al dominio fijo.
+      '6': samplePath,
     },
     types: {
       'twilio/media': {
         body: TEMPLATE_BODY,
-        media: [sampleMediaUrl], // URL real de ejemplo (Twilio NO acepta {{N}} aquí)
+        // Dominio FIJO + {{6}} como path → media dinámica sin re-aprobar por evento.
+        media: [`${MEDIA_BASE_URL}/{{6}}`],
       },
     },
   }
@@ -122,20 +169,37 @@ function buildTemplateBody(mimeHint) {
 // ── Main ──────────────────────────────────────────────────────────────────────
 async function main() {
   console.log('\n🚀 twilio-create-media-templates\n')
-  console.log(`  Brand: ${BRAND_NAME}`)
-  console.log(`  Account: ${SID}\n`)
+  console.log(`  Brand:      ${BRAND_NAME}`)
+  console.log(`  Account:    ${SID}`)
+  console.log(`  Media base: ${MEDIA_BASE_URL}/{{6}}\n`)
 
+  // 1) Verificar los samples ANTES de crear plantillas (Meta los descarga).
+  console.log('⏳ Verificando que los samples sean públicamente accesibles...')
+  for (const tpl of templates) {
+    const url = `${MEDIA_BASE_URL}/${tpl.sample_path}`
+    try {
+      await assertSampleReachable(url)
+      console.log(`  ✓ ${tpl.sample_path}`)
+    } catch (err) {
+      console.error(`\n❌ Sample inaccesible para ${tpl.friendly_name}: ${err.message}`)
+      console.error(`   URL: ${url}`)
+      console.error('\n   Meta descarga este archivo para aprobar la plantilla.')
+      console.error(`   Sube un archivo de ejemplo al bucket '${EVENT_MEDIA_BUCKET}' en esa ruta`)
+      console.error('   (o pasa SAMPLE_IMAGE_PATH / SAMPLE_VIDEO_PATH con la ruta correcta) y reintenta.\n')
+      process.exit(1)
+    }
+  }
+  console.log()
+
+  // 2) Crear + enviar a aprobación.
   const results = {}
 
   for (const tpl of templates) {
     console.log(`⏳ Creando plantilla: ${tpl.friendly_name} (${tpl.description})...`)
 
-    const bodyPayload = buildTemplateBody(tpl.mime_hint)
-    bodyPayload.friendly_name = tpl.friendly_name
-
     let created
     try {
-      created = await contentPost(bodyPayload)
+      created = await contentPost(buildTemplateBody(tpl.friendly_name, tpl.sample_path))
       console.log(`  ✓ Creada: SID = ${created.sid}`)
     } catch (err) {
       console.error(`  ❌ Error creando ${tpl.friendly_name}: ${err.message}`)
@@ -152,10 +216,7 @@ async function main() {
       console.warn(`     Puedes reenviarla manualmente desde Dashboard → Plantillas → "Enviar a Meta"`)
     }
 
-    const settingsKey = tpl.mime_hint === 'image'
-      ? 'event_template_image_sid'
-      : 'event_template_video_sid'
-    results[settingsKey] = created.sid
+    results[tpl.settings_key] = created.sid
     console.log()
   }
 

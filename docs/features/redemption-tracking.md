@@ -60,3 +60,8 @@ Códigos: `409 already_redeemed`, `400 invalid_result`, `404` cliente no encontr
 - `src/components/dashboard/RedemptionsTable.tsx`, `RedemptionSummaryCards.tsx`
 - `src/components/features/staff/RewardAlert.tsx`
 - Wiring: `src/app/api/check-in/status/route.ts` (`pending_reward`, `customer.id`), `src/app/api/mystery-box/resolve/route.ts` + `src/services/mystery-box.service.ts` (`result_id`)
+
+> **Nota (v2.5.0):** la página de redenciones también monta `ReviewFunnelCard` (embudo de reseñas de
+> Google: mostrado → click → premio redimido). Esa métrica pertenece a **[review-flow.md](review-flow.md)**,
+> no a este doc. La v2.5.1 endureció `recordRedemption` con filtro `tenant_id` en la rama de mystery box
+> (ver [reward-grants.md](reward-grants.md) → *Correcciones de auditoría*).

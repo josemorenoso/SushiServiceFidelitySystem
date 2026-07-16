@@ -7,6 +7,7 @@ import { getNextReward, getRewardTitle, getRewardById } from '@/services/reward.
 import { FREQUENCY_CAP_DAYS, RECOVERY_ZONE_START_DAYS, RECOVERY_ZONE_END_DAYS } from '@/constants/rewards'
 import { filterByMonthlyCap, getActiveBlackouts } from '@/services/campaign.service'
 import { buildTiersRoadmap, getNextTier } from '@/services/reward-tiers.service'
+import { canSendBulk } from '@/services/wallet.service'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -140,6 +141,31 @@ export async function POST(request: NextRequest) {
     const { eligible: finalEligible, excluded: excludedMonthlyCap } = await filterByMonthlyCap(eligible)
     const skippedMonthlyCap = excludedMonthlyCap.length
 
+    // ─── Bloqueo por saldo (spec W-D6) ───
+    // Las campañas masivas SÍ se bloquean sin saldo: son las que queman el
+    // presupuesto del tenant. Se valida contra el número real a enviar
+    // (finalEligible), después de todos los filtros. No se envía parcial: media
+    // campaña es peor que ninguna y deja al tenant en negativo.
+    if (finalEligible.length > 0) {
+      const budget = await canSendBulk(tenantId, finalEligible.length)
+      if (!budget.ok) {
+        // Deshacer la campaña vacía para no dejar un registro fantasma "running".
+        await db.from('campaigns').delete().eq('id', campaign.id)
+        return NextResponse.json(
+          {
+            error: 'Saldo insuficiente para esta campaña',
+            reason: 'insufficient_balance',
+            balanceCop: budget.balanceCop,
+            pricePerMessage: budget.pricePerMessage,
+            messagesAvailable: budget.messagesAvailable,
+            recipients: finalEligible.length,
+            shortfallCop: budget.shortfallCop,
+          },
+          { status: 409 }
+        )
+      }
+    }
+
     // Pre-compute reward titles según rewardId:
     //  - 'auto': título de próxima recompensa por total_visits (1 query por valor único)
     //  - 'none': sin {{3}}
@@ -183,7 +209,7 @@ export async function POST(request: NextRequest) {
             if (useReward3) {
               variables['3'] = fixedRewardTitle ?? titleByVisits[customer.total_visits] ?? 'más beneficios'
             }
-            const result = await sendTemplateMessage(customer.phone, templateSid, variables, tenant, undefined, { customerId: customer.id, messageType: 'manual' })
+            const result = await sendTemplateMessage(customer.phone, templateSid, variables, tenant, { customerId: customer.id, messageType: 'manual' })
             return { customer, result, error: null as string | null }
           } catch (err) {
             return {

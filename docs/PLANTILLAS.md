@@ -424,8 +424,22 @@ _Responde SALIR para no recibir más mensajes._
 **Key en admin_settings:** `event_template_image_sid`
 **Tipo Twilio:** `twilio/media`
 **Categoría Meta:** `MARKETING`
-**Variables:** `{{1}}`=Nombre · `{{2}}`=Restaurante · `{{3}}`=Título evento · `{{4}}`=Fecha · `{{5}}`=CTA · `{{6}}`=URL imagen
-**Sin cambios respecto a v0.35.**
+**Variables:** `{{1}}`=Nombre · `{{2}}`=Restaurante · `{{3}}`=Título evento · `{{4}}`=Fecha · `{{5}}`=CTA · `{{6}}`=**path del archivo dentro del bucket `event-media`** (NO la URL completa)
+
+### Media dinámica — cómo funciona (v2.4.5)
+
+Twilio solo admite variables en la URL de media **después del dominio**. Por eso la plantilla se aprueba con el dominio del bucket como parte **fija** y `{{6}}` como el **path** del archivo:
+
+```
+media: ["https://<proj>.supabase.co/storage/v1/object/public/event-media/{{6}}"]
+→ al enviar: contentVariables { "6": "<event_id>/1720000000_flyer.jpg" }
+```
+
+Meta aprueba la **estructura** (header de imagen + texto), no la imagen concreta: una vez aprobada, cada evento manda su propia imagen **sin re-aprobar nada**.
+
+⚠️ `ContentSid` y `MediaUrl` son **mutuamente excluyentes**: la media sale únicamente de la plantilla y no se puede sobreescribir al enviar.
+
+⚠️ El **sample** de `{{6}}` debe ser un archivo real y público del bucket — Meta lo descarga para revisar la plantilla.
 
 ```
 ¡Hola {{1}}! 🎉 *{{2}}* te invita a *{{3}}* — {{4}}.

@@ -87,3 +87,20 @@
 | `src/components/features/staff/*` | `docs/features/reward-grants.md` + `docs/features/staff-qr-scan.md` |
 | `src/app/(dashboard)/dashboard/campaign-rewards/*` | `docs/features/reward-grants.md` |
 | `src/app/(dashboard)/dashboard/redemptions/*` | `docs/features/reward-grants.md` + `docs/features/redemption-tracking.md` |
+| `src/services/review.service.ts` | `docs/features/review-flow.md` + `docs/DB_SCHEMA.md` |
+| `src/app/api/check-in/review-prompt/*` | `docs/features/review-flow.md` + `docs/API_DOCS.md` |
+| `src/app/api/check-in/review-action/*` | `docs/features/review-flow.md` + `docs/features/reward-grants.md` |
+| `src/components/features/check-in/GoogleReviewModal.tsx` | `docs/features/review-flow.md` |
+| `src/app/api/dashboard/review-metrics/*` | `docs/features/review-flow.md` + `docs/API_DOCS.md` |
+| `src/app/api/dashboard/tenant-config/*` | `docs/features/review-flow.md` + `docs/02-architecture.md` |
+| `src/components/dashboard/ReviewFunnelCard.tsx` | `docs/features/review-flow.md` |
+| `src/services/wallet.service.ts` | `docs/features/wallet-billing.md` + `docs/DB_SCHEMA.md` |
+| `src/lib/admin.ts` | `docs/features/wallet-billing.md` + `docs/03-security.md` |
+| `src/constants/wallet.ts` | `docs/features/wallet-billing.md` |
+| `src/app/api/admin/wallet/*` | `docs/features/wallet-billing.md` + `docs/API_DOCS.md` + `docs/03-security.md` |
+| `src/app/api/admin/wallets/*` | `docs/features/wallet-billing.md` + `docs/API_DOCS.md` |
+| `src/app/api/dashboard/wallet/*` | `docs/features/wallet-billing.md` + `docs/API_DOCS.md` |
+| `src/app/api/dashboard/twilio-balance/*` | `docs/features/wallet-billing.md` + `docs/03-security.md` |
+| `src/components/dashboard/SuperAdminWallets.tsx` | `docs/features/wallet-billing.md` |
+| `src/components/dashboard/WalletCard.tsx` | `docs/features/wallet-billing.md` |
+| `src/app/(dashboard)/dashboard/admin/wallets/*` | `docs/features/wallet-billing.md` |

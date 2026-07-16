@@ -1,6 +1,7 @@
 'use client'
 
 import { Gift, Clock } from 'lucide-react'
+import { expiryLabelWithDate } from '@/lib/format/grant-expiry'
 
 export interface ActiveGrant {
   id: string
@@ -15,18 +16,6 @@ export interface ActiveGrant {
 interface Props {
   grants: ActiveGrant[]
   staffLabel: string
-}
-
-/** "vence en 3 días · 18 de julio". Null si el premio no vence. */
-function expiryText(iso: string | null): string | null {
-  if (!iso) return null
-  const expires = new Date(iso)
-  const days = Math.ceil((expires.getTime() - Date.now()) / 86400000)
-  const date = expires.toLocaleDateString('es-CO', { day: 'numeric', month: 'long' })
-
-  if (days <= 0) return `Vence hoy · ${date}`
-  if (days === 1) return `Vence mañana · ${date}`
-  return `Vence en ${days} días · ${date}`
 }
 
 /**
@@ -44,7 +33,7 @@ export function AvailableRewardBanner({ grants, staffLabel }: Props) {
   return (
     <div className="mt-4 w-full space-y-2">
       {grants.map((grant) => {
-        const expiry = expiryText(grant.expires_at)
+        const expiry = expiryLabelWithDate(grant.expires_at)
         return (
           <div
             key={grant.id}

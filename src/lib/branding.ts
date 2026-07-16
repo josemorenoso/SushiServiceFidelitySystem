@@ -41,6 +41,9 @@ export interface Branding {
 const DEFAULT_CARD_BG = 'linear-gradient(160deg, #7B0D1E 0%, #C1121F 35%, #E63946 75%, #FF6B6B 100%)'
 const DEFAULT_PAGE_BG = 'linear-gradient(160deg, #2D0000 0%, #5A0A15 50%, #8B1A2A 100%)'
 
+/** Centinela de "sin link de reseñas" cuando ni el tenant ni el entorno lo definen. */
+export const NO_GOOGLE_REVIEW_URL = '#'
+
 /** Marca por defecto del sistema, tomada de variables de entorno. */
 export const DEFAULT_BRANDING: Branding = {
   name: process.env.NEXT_PUBLIC_BRAND_NAME || 'Constelarys Fidelity System',
@@ -51,7 +54,7 @@ export const DEFAULT_BRANDING: Branding = {
     'Registra tus visitas, acumula premios y disfruta de beneficios exclusivos.',
   staffLabel: process.env.NEXT_PUBLIC_STAFF_ROLE_LABEL || 'Mesero',
   staffLabelPlural: `${process.env.NEXT_PUBLIC_STAFF_ROLE_LABEL || 'Mesero'}s`,
-  googleReviewUrl: process.env.NEXT_PUBLIC_GOOGLE_MAPS_REVIEW_URL || '#',
+  googleReviewUrl: process.env.NEXT_PUBLIC_GOOGLE_MAPS_REVIEW_URL || NO_GOOGLE_REVIEW_URL,
   whatsappLink: process.env.RESTAURANT_WHATSAPP_LINK || null,
   deliveryPhone: process.env.DELIVERY_PHONE_NUMBER || null,
   cardBg: DEFAULT_CARD_BG,

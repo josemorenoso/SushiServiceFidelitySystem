@@ -35,7 +35,7 @@ import {
   CartesianGrid,
   Legend,
 } from 'recharts'
-import { TwilioWallet } from '@/components/dashboard/TwilioWallet'
+import { WalletCard } from '@/components/dashboard/WalletCard'
 
 interface TimelinePoint {
   date: string
@@ -387,7 +387,7 @@ export function TwilioMessagesPanel() {
             </div>
           )}
 
-          <TwilioWallet />
+          <WalletCard />
         </CardContent>
       )}
     </Card>

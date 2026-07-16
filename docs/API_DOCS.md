@@ -42,6 +42,8 @@ Webhooks validan origen por número autorizado o `x-webhook-secret`. Cron jobs v
 | GET | /api/health/twilio | Test conexión Twilio (saldo) | NO |
 | POST | /api/check-in | Registrar visita (QR) + conversión Golden Bullet | NO (público) |
 | GET | /api/check-in/status | Estado del cliente + visita reciente + `pending_reward` + `active_grants[]` | NO (público) |
+| GET | /api/check-in/review-prompt | ¿Se le muestra el pop-up de reseña? Sella el evento `shown` (dedupe 12h) | NO (público) |
+| POST | /api/check-in/review-action | `clicked` (sella + **otorga el premio**) o `postponed` | NO (público, rate-limited) |
 | GET | /api/public/customer-card | Datos de tarjeta del cliente (puntos, tiers) por teléfono | NO (público) |
 | POST | /api/reward-redeem | Registrar entrega física de un premio (acepta `grant_id`, `tier_id` opcional) | Staff (Bearer/X-Device-Token) |
 | POST | /api/webhook/delivery | Recibir datos de domicilio (n8n/Twilio) | x-webhook-secret |
@@ -55,14 +57,20 @@ Webhooks validan origen por número autorizado o `x-webhook-secret`. Cron jobs v
 | POST | /api/dashboard/campaigns | Crear campaña manual | Admin Cookie |
 | POST | /api/dashboard/campaigns/:id/send | Ejecutar campaña | Admin Cookie |
 | GET | /api/dashboard/campaigns/estimate | Estimar audiencia con filtros | Admin Cookie |
-| POST | /api/dashboard/campaigns/manual | Crear y ejecutar campaña manual | Admin Cookie |
-| GET | /api/dashboard/twilio-balance | Saldo Twilio + costo por mensaje | Admin Cookie |
+| POST | /api/dashboard/campaigns/manual | Crear y ejecutar campaña manual (**409 si saldo insuficiente**) | Admin Cookie |
+| GET | /api/dashboard/twilio-balance | Saldo Twilio matriz + costo/msg (**saldo solo super-admin**; tenants → `restricted`) | Admin Cookie |
+| GET | /api/dashboard/wallet | Saldo COP del tenant actual: balance, mensajes disponibles, consumo del mes, últimos movimientos | Admin Cookie |
+| POST | /api/admin/wallet/topup | Registrar recarga manual de un tenant (asignar saldo) | **Super-admin** |
+| GET | /api/admin/wallets | Estado de la billetera de todos los tenants (saldo, consumo, última recarga) | **Super-admin** |
 | GET | /api/dashboard/redemptions | Listar redenciones con filtros | Admin Cookie |
 | GET | /api/dashboard/redemptions/summary | Resumen de redenciones (premio/hora/mesero) | Admin Cookie |
 | GET | /api/dashboard/campaign-rewards | Listar catálogo de premios de campaña (`?active=true` opcional) | Admin Cookie |
 | POST | /api/dashboard/campaign-rewards | Crear premio de campaña | Admin Cookie |
 | PATCH | /api/dashboard/campaign-rewards | Actualizar premio (título, descripción, `is_active`) | Admin Cookie |
 | DELETE | /api/dashboard/campaign-rewards?id=X | Baja lógica del premio (`is_active=false`, no borra) | Admin Cookie |
+| GET | /api/dashboard/review-metrics | Funnel de reseñas: mostrado → click → premio redimido | Admin Cookie |
+| GET | /api/dashboard/tenant-config | Claves editables de `tenants.config` (hoy: `google_maps_url`) | Admin Cookie |
+| PUT | /api/dashboard/tenant-config | Escribe `tenants.config` con **whitelist** de claves (merge, no reemplazo) | Admin Cookie |
 | POST | /api/dashboard/imported-contacts/validate | Validar CSV de contactos (sin insertar) | Admin Cookie + flag |
 | POST | /api/dashboard/imported-contacts/confirm | Confirmar e importar/enviar Golden Bullet | Admin Cookie + flag |
 | GET | /api/dashboard/imported-contacts | Listar lotes o contactos de un lote | Admin Cookie |
@@ -393,6 +401,105 @@ Endpoint para que la pantalla del cliente (mostrando el QR) detecte automáticam
 
 > **Nota:** Una "visita reciente" se define como una visita `source = 'staff_scan'` creada en los últimos 30 minutos. El endpoint busca en la tabla `visits` y, si encuentra una, consulta `point_transactions` filtrando por `reference_id` (id de la visita) y `source IN ('visit_staff','visit_qr','visit_delivery')` para obtener los puntos otorgados.  
 > **Importante:** `point_transactions` usa las columnas `reference_id` y `source` (NO `visit_id`/`type`). Consultar las columnas incorrectas devuelve `points_awarded = 0` aunque el saldo sea correcto.
+
+---
+
+### Reseñas de Google: ¿se muestra el pop-up?
+
+**`GET /api/check-in/review-prompt?phone=3001234567`** — Sin autenticación (ruta pública)
+
+Lo llama la pantalla de éxito del check-in. **Quién ve el pop-up lo decide el servidor**: el navegador del
+cliente es *stateless* y no tiene forma de saber si este teléfono ya dejó una reseña.
+
+**Response 200 (elegible):**
+```json
+{ "show": true, "reward_title": "1/2 sushi gratis", "google_url": "https://g.page/r/.../review" }
+```
+
+**Response 200 (no elegible — ya reseñó, o el tenant no tiene link configurado):**
+```json
+{ "show": false, "reward_title": null, "google_url": "" }
+```
+
+`reward_title: null` con `show: true` significa que el dueño **no eligió recompensa**: el pop-up sale
+igual, pero pide el favor en vez de ofrecer algo.
+
+**Efecto secundario:** si `show: true`, registra el evento `shown` en `review_events`, **deduplicado a 12
+horas** (recargar la pantalla no cuenta como una segunda impresión: inflaría el denominador del funnel).
+
+> **Por qué es un endpoint propio y no parte del check-in:** en el flujo real
+> (`checkin_mode = staff_verified`) el `POST /api/check-in` lo hace el celular **del mesero**, mientras que
+> la pantalla del cliente la alimenta el polling de `/api/check-in/status`. Colgarlo de ese polling —que
+> corre cada 5 segundos— dispararía una impresión por segundo.
+
+**Nunca devuelve 5xx:** ante cualquier error (p. ej. la migración 00032 sin aplicar) responde
+`{ "show": false }`. Un fallo del pop-up jamás debe romper el check-in del cliente.
+
+---
+
+### Reseñas de Google: acción del cliente
+
+**`POST /api/check-in/review-action`** — Sin autenticación (rate-limited: 10/min por teléfono)
+
+**Request:**
+```json
+{ "phone": "3001234567", "action": "clicked" }
+```
+
+`action` ∈ `'clicked' | 'postponed'`.
+
+- **`clicked`** → sella `customers.google_review_clicked_at` (no se le vuelve a mostrar nunca),
+  **otorga el premio** (`grantReward` con `source: 'review'`, `grant_type: 'campaign_prize'`) y registra
+  el evento con su `grant_id`.
+- **`postponed`** → sella `customers.google_review_postponed_at`. Se le vuelve a mostrar en su próximo
+  check-in.
+
+**Response 200 (`clicked` con premio):**
+```json
+{ "ok": true, "prize_title": "1/2 sushi gratis", "expires_at": "2026-08-12T18:30:00.000Z" }
+```
+
+**Response 200 (`clicked` sin premio configurado):**
+```json
+{ "ok": true, "prize_title": null, "expires_at": null }
+```
+
+> **El premio se otorga sin verificar que la reseña exista.** No es un agujero: el paso 1 que el cliente
+> lee en pantalla es *"muéstrale la reseña al mesero"*, y **el mesero es el verificador**. Google no expone
+> ninguna API para confirmarlo. El abuso ya está acotado por partida triple: la columna solo se sella una
+> vez, el índice único parcial de la 00031 impide un segundo premio de reseña activo, y el rate limit.
+
+---
+
+### Dashboard: Funnel de reseñas
+
+**`GET /api/dashboard/review-metrics?from=&to=`** — Admin Cookie
+
+```json
+{ "shown": 240, "clicked": 38, "postponed": 96, "redeemed": 29, "click_rate": 16, "redemption_rate": 76 }
+```
+
+Las dos tasas miden cosas distintas: `click_rate` es el **gancho** (¿convence el premio?),
+`redemption_rate` es la **operación** (¿el mesero cierra el ciclo?). Un solo número agregado escondería
+cuál de los dos está roto.
+
+---
+
+### Dashboard: Config del tenant (link de Google)
+
+**`GET /api/dashboard/tenant-config`** — Admin Cookie → `{ "google_maps_url": "https://..." }`
+
+**`PUT /api/dashboard/tenant-config`** — Admin Cookie
+
+```json
+{ "google_maps_url": "https://g.page/r/.../review" }
+```
+
+Escribe sobre `tenants.config` (jsonb) con **lectura → merge → escritura** y una **whitelist de claves
+editables** (hoy solo `google_maps_url`). Un `UPDATE` directo de la columna borraría el branding entero del
+tenant. Un valor vacío es válido: apaga el pop-up de reseñas.
+
+**Response 400:** si el link no empieza por `http://` o `https://`.
 
 ---
 

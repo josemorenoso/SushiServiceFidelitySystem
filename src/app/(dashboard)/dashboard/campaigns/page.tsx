@@ -24,7 +24,7 @@ import {
 import Link from 'next/link'
 import { Megaphone, Cake, UserX, Send, Zap, Clock, CheckCircle, AlertTriangle, Settings2, MessageSquareText, BarChart3, CalendarClock } from 'lucide-react'
 import { ManualCampaigns } from '@/components/dashboard/ManualCampaigns'
-import { TwilioWallet } from '@/components/dashboard/TwilioWallet'
+import { WalletCard } from '@/components/dashboard/WalletCard'
 import { SegmentRadar } from '@/components/dashboard/SegmentRadar'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 
@@ -328,7 +328,7 @@ export default function CampaignsPage() {
         })}
       </div>
 
-          <TwilioWallet />
+          <WalletCard />
 
         </TabsContent>
 

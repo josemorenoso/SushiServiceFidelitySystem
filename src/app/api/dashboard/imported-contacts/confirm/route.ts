@@ -63,6 +63,18 @@ export async function POST(request: NextRequest) {
       tenant,
     })
 
+    // Saldo insuficiente: nada se envió (spec W-D6).
+    if (result.insufficient_balance) {
+      return NextResponse.json(
+        {
+          error: 'Saldo insuficiente para esta importación',
+          reason: 'insufficient_balance',
+          ...result.insufficient_balance,
+        },
+        { status: 409 }
+      )
+    }
+
     return NextResponse.json(result)
   } catch (error) {
     console.error('[GoldenBullet] Error confirmando importación:', error)

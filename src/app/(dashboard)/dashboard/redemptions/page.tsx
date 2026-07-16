@@ -9,6 +9,7 @@ import { Gift, Download } from 'lucide-react'
 import { toast } from 'sonner'
 import { RedemptionSummaryCards, type RedemptionSummaryData } from '@/components/dashboard/RedemptionSummaryCards'
 import { GrantMetricsCards, type GrantMetricsData } from '@/components/dashboard/GrantMetricsCards'
+import { ReviewFunnelCard, type ReviewFunnelData } from '@/components/dashboard/ReviewFunnelCard'
 import { RedemptionsTable, type RedemptionRow } from '@/components/dashboard/RedemptionsTable'
 
 function todayISO() {
@@ -20,6 +21,7 @@ export default function RedemptionsPage() {
   const [to, setTo] = useState(todayISO())
   const [summary, setSummary] = useState<RedemptionSummaryData | null>(null)
   const [grantMetrics, setGrantMetrics] = useState<GrantMetricsData | null>(null)
+  const [reviewFunnel, setReviewFunnel] = useState<ReviewFunnelData | null>(null)
   const [rows, setRows] = useState<RedemptionRow[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -42,12 +44,20 @@ export default function RedemptionsPage() {
       listParams.set('page', String(page))
       listParams.set('limit', String(limit))
 
-      const [summaryRes, listRes] = await Promise.all([
+      const [summaryRes, listRes, reviewRes] = await Promise.all([
         fetch(`/api/dashboard/redemptions/summary?${summaryParams}`),
         fetch(`/api/dashboard/redemptions?${listParams}`),
+        // El funnel de reseñas degrada solo: si falta la migración 00032, la card no se
+        // renderiza y el resto de la página sigue funcionando.
+        fetch(`/api/dashboard/review-metrics?${rangeParams()}`).catch(() => null),
       ])
       const summaryData = summaryRes.ok ? await summaryRes.json() : null
       const listData = listRes.ok ? await listRes.json() : null
+      const reviewData = reviewRes?.ok ? await reviewRes.json() : null
+
+      setReviewFunnel(
+        reviewData && typeof reviewData.shown === 'number' ? reviewData : null
+      )
 
       // Solo aceptamos un summary con la forma esperada (arrays). Si la API falló
       // (p.ej. falta correr la migración 00022) degradamos a null/vacío sin reventar.
@@ -66,6 +76,7 @@ export default function RedemptionsPage() {
     } catch {
       setSummary(null)
       setGrantMetrics(null)
+      setReviewFunnel(null)
       setRows([])
       toast.error('Error cargando redenciones')
     } finally {
@@ -150,6 +161,8 @@ export default function RedemptionsPage() {
       </div>
 
       <GrantMetricsCards metrics={grantMetrics} loading={loading} />
+
+      <ReviewFunnelCard funnel={reviewFunnel} loading={loading} />
 
       <RedemptionSummaryCards summary={summary} loading={loading} />
 

@@ -114,46 +114,60 @@ async function processTenant(tenant: Tenant): Promise<TenantCronResult> {
   let failed = 0
   const remindedGrantIds: string[] = []
 
-  for (const candidate of eligible) {
-    try {
-      const result = await sendTemplateMessage(
-        candidate.customer_phone,
-        templateSid,
-        {
-          '1': candidate.customer_name,
-          '2': candidate.prize_title,
-          '3': String(candidate.days_left),
-        },
-        tenant,
-        { customerId: candidate.customer_id, messageType: 'reward_reminder' }
-      )
+  // Envío en paralelo por lotes (mismo patrón que campaigns/manual): antes era un loop
+  // secuencial con un `await` de red por candidato, así que 20-50 premios convertían un
+  // job de sub-segundo en 10-25 s de latencia en serie. Los lotes acotan la concurrencia
+  // para no saturar Twilio.
+  const BATCH_SIZE = 10
+  for (let i = 0; i < eligible.length; i += BATCH_SIZE) {
+    const batch = eligible.slice(i, i + BATCH_SIZE)
+    const results = await Promise.all(
+      batch.map(async (candidate) => {
+        try {
+          const result = await sendTemplateMessage(
+            candidate.customer_phone,
+            templateSid,
+            {
+              '1': candidate.customer_name,
+              '2': candidate.prize_title,
+              '3': String(candidate.days_left),
+            },
+            tenant,
+            { customerId: candidate.customer_id, messageType: 'reward_reminder' }
+          )
 
-      await recordCampaignMessage({
-        campaignId: campaign.id,
-        customerId: candidate.customer_id,
-        status: result ? 'sent' : 'failed',
-        tenantId: tenant.id,
-        twilioSid: result?.sid ?? null,
-        errorMessage: result ? null : 'Twilio no configurado o error de envío',
+          await recordCampaignMessage({
+            campaignId: campaign.id,
+            customerId: candidate.customer_id,
+            status: result ? 'sent' : 'failed',
+            tenantId: tenant.id,
+            twilioSid: result?.sid ?? null,
+            errorMessage: result ? null : 'Twilio no configurado o error de envío',
+          })
+
+          // Se sella solo si el mensaje SALIÓ. Si Twilio falló, el premio sigue siendo
+          // candidato en la próxima corrida — todavía le queda ventana.
+          return { grantId: candidate.grant_id, ok: !!result }
+        } catch (error) {
+          await recordCampaignMessage({
+            campaignId: campaign.id,
+            customerId: candidate.customer_id,
+            status: 'failed',
+            tenantId: tenant.id,
+            errorMessage: error instanceof Error ? error.message : 'Error desconocido',
+          })
+          return { grantId: candidate.grant_id, ok: false }
+        }
       })
+    )
 
-      if (result) {
+    for (const r of results) {
+      if (r.ok) {
         sent++
-        // Se sella solo si el mensaje SALIÓ. Si Twilio falló, el premio sigue siendo
-        // candidato en la próxima corrida — todavía le queda ventana.
-        remindedGrantIds.push(candidate.grant_id)
+        remindedGrantIds.push(r.grantId)
       } else {
         failed++
       }
-    } catch (error) {
-      failed++
-      await recordCampaignMessage({
-        campaignId: campaign.id,
-        customerId: candidate.customer_id,
-        status: 'failed',
-        tenantId: tenant.id,
-        errorMessage: error instanceof Error ? error.message : 'Error desconocido',
-      })
     }
   }
 

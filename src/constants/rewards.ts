@@ -46,6 +46,23 @@ export const DEFAULT_REWARD_REMINDER_DAYS_BEFORE = 2
  *  conflictivas para reservar cupo del cap mensual. */
 export const DEFAULT_PRE_EVENT_BLACKOUT_DAYS = 5
 
+// ═══════════════════════════════════════════════════════════════
+// Reseñas de Google (Bloque 3, migración 00032)
+// ═══════════════════════════════════════════════════════════════
+
+/** Días de ventana del premio por dejar reseña, desde el click al link.
+ *
+ *  El flujo esperado es que lo redima en la MISMA visita (el cliente está en el local
+ *  cuando deja la reseña), pero si se va, el premio no debe quedar vivo para siempre
+ *  inflando el contador de "activos". Configurable en `admin_settings.review_reward_window_days`. */
+export const DEFAULT_REVIEW_REWARD_WINDOW_DAYS = 30
+
+/** Ventana de deduplicación del evento `shown`.
+ *
+ *  Recargar la pantalla de éxito no debe contar como una segunda impresión: si lo hiciera,
+ *  el denominador del funnel se infla y la tasa de conversión miente hacia abajo. */
+export const REVIEW_SHOWN_DEDUPE_HOURS = 12
+
 export const VISIT_SOURCES = {
   QR: 'qr',
   DELIVERY: 'delivery',

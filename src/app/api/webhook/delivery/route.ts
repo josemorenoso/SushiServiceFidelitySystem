@@ -48,7 +48,7 @@ async function sendDeliveryTemplate(
   }
   try {
     // logContext para que el envío quede trazado en message_logs (auditoría 18-Junio, CR-03).
-    await sendTemplateMessage(phone, templateSid, variables, tenant, undefined, {
+    await sendTemplateMessage(phone, templateSid, variables, tenant, {
       customerId,
       messageType: templateType,
     })

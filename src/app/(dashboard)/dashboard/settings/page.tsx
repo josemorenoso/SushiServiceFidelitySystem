@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { Settings, DollarSign, Save, Loader2, CheckCircle, Crown, CalendarHeart, Mail, RefreshCw, Gift, UserPlus, X, Plus, Zap, MapPin, Sparkles, Package, TrendingUp, Flame, ScanLine } from 'lucide-react'
+import { Settings, DollarSign, Save, Loader2, CheckCircle, Crown, CalendarHeart, Mail, RefreshCw, Gift, UserPlus, X, Plus, Zap, MapPin, Sparkles, Package, TrendingUp, Flame, ScanLine, Star } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { PointsCalibrator } from '@/components/dashboard/PointsCalibrator'
@@ -167,6 +167,14 @@ export default function SettingsPage() {
   const [grantError, setGrantError] = useState<string | null>(null)
 
   // Location config
+  // Reseñas de Google (Bloque 3, migración 00032)
+  const [googleReviewUrl, setGoogleReviewUrl] = useState('')
+  const [reviewRewardId, setReviewRewardId] = useState('')
+  const [reviewWindowDays, setReviewWindowDays] = useState('30')
+  const [reviewSaving, setReviewSaving] = useState(false)
+  const [reviewSaved, setReviewSaved] = useState(false)
+  const [reviewError, setReviewError] = useState<string | null>(null)
+
   const [locationLat, setLocationLat] = useState('')
   const [locationLon, setLocationLon] = useState('')
   const [locationRadius, setLocationRadius] = useState('20')
@@ -216,8 +224,9 @@ export default function SettingsPage() {
       fetch('/api/dashboard/location').then((r) => r.ok ? r.json() : null).catch(() => null),
       fetch('/api/dashboard/campaign-rewards?active=true').then((r) => r.ok ? r.json() : []).catch(() => []),
       fetch('/api/dashboard/reward-tiers').then((r) => r.ok ? r.json() : []).catch(() => []),
+      fetch('/api/dashboard/tenant-config').then((r) => r.ok ? r.json() : null).catch(() => null),
     ])
-      .then(([settingsData, templatesData, rewardsData, locationData, campaignRewardsData, tiersData]) => {
+      .then(([settingsData, templatesData, rewardsData, locationData, campaignRewardsData, tiersData, tenantConfigData]) => {
         setSettings(settingsData)
         if (settingsData.avg_ticket) setAvgTicket(settingsData.avg_ticket)
         if (settingsData.black_benefits) {
@@ -278,6 +287,12 @@ export default function SettingsPage() {
         setReminderEnabled(settingsData.reward_reminder_enabled === 'true')
         if (settingsData.reward_reminder_days_before) setReminderDaysBefore(settingsData.reward_reminder_days_before)
         setReminderTemplateSid(settingsData.reward_reminder_template_sid ?? '')
+
+        // Reseñas de Google (migración 00032). El link vive en tenants.config, no en
+        // admin_settings: es de donde lo lee resolveBranding().
+        if (tenantConfigData?.google_maps_url) setGoogleReviewUrl(tenantConfigData.google_maps_url)
+        setReviewRewardId(settingsData.review_reward_id ?? '')
+        if (settingsData.review_reward_window_days) setReviewWindowDays(settingsData.review_reward_window_days)
 
         if (locationData) {
           setLocationLat(String(locationData.lat ?? ''))
@@ -422,6 +437,45 @@ export default function SettingsPage() {
       setGrantError(err instanceof Error ? err.message : 'Error guardando')
     } finally {
       setGrantSaving(false)
+    }
+  }
+
+  const handleSaveReview = async () => {
+    const windowDays = parseInt(reviewWindowDays, 10)
+    setReviewError(null)
+
+    const url = googleReviewUrl.trim()
+    if (url && !/^https?:\/\//i.test(url)) {
+      setReviewError('El link debe empezar por https://')
+      return
+    }
+    if (!Number.isInteger(windowDays) || windowDays < 1) {
+      setReviewError('La ventana del premio debe ser un número mayor a 0.')
+      return
+    }
+
+    setReviewSaving(true)
+    setReviewSaved(false)
+    try {
+      const [resConfig] = await Promise.all([
+        fetch('/api/dashboard/tenant-config', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ google_maps_url: url }),
+        }),
+        saveSetting('review_reward_id', reviewRewardId),
+        saveSetting('review_reward_window_days', String(windowDays)),
+      ])
+      if (!resConfig.ok) {
+        const data = await resConfig.json()
+        throw new Error(data.error ?? 'Error guardando el link')
+      }
+      setReviewSaved(true)
+      setTimeout(() => setReviewSaved(false), 3000)
+    } catch (err) {
+      setReviewError(err instanceof Error ? err.message : 'Error guardando')
+    } finally {
+      setReviewSaving(false)
     }
   }
 
@@ -903,6 +957,76 @@ export default function SettingsPage() {
 
         <div className="mt-4">
           <SaveButton saving={grantSaving} saved={grantSaved} onClick={handleSaveGrantConfig} disabled={grantSaving || loading} />
+        </div>
+      </div>
+
+      {/* ─── RESEÑAS DE GOOGLE (Bloque 3, migración 00032) ─── */}
+      <div className="dashboard-card p-6 max-w-2xl" style={{ border: '1px solid rgba(66, 133, 244, 0.2)' }}>
+        <div className="flex items-center gap-3 mb-6">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ background: 'rgba(66, 133, 244, 0.15)' }}>
+            <Star className="h-5 w-5" strokeWidth={1.5} style={{ color: '#4285F4' }} />
+          </div>
+          <div>
+            <h2 className="text-base font-bold" style={{ color: '#1a1c1d' }}>Reseñas de Google</h2>
+            <p className="text-xs" style={{ color: '#9ca3af' }}>Tras el check-in, al cliente le sale un pop-up: &ldquo;gánate X por dejarnos una reseña&rdquo;. Al que ya reseñó no se le vuelve a mostrar.</p>
+          </div>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-[11px] font-semibold" style={{ color: '#6b7280' }}>Link de reseñas de Google</label>
+          <Input
+            type="url"
+            value={googleReviewUrl}
+            onChange={(e) => setGoogleReviewUrl(e.target.value)}
+            disabled={loading}
+            placeholder="https://g.page/r/.../review"
+          />
+          <p className="text-[10px]" style={{ color: '#b0b0b0' }}>
+            <span className="font-semibold">Sin este link el pop-up no aparece nunca</span> — no hay a dónde mandar al cliente. Sácalo de tu ficha de Google Business → <em>Pedir reseñas</em>.
+          </p>
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="text-[11px] font-semibold" style={{ color: '#6b7280' }}>Recompensa por reseña</label>
+            <select
+              value={reviewRewardId}
+              onChange={(e) => setReviewRewardId(e.target.value)}
+              disabled={loading}
+              className="h-9 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm transition-colors outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/50"
+            >
+              <option value="">— Sin premio (solo se pide el favor) —</option>
+              {campaignRewards.map((r) => (
+                <option key={r.id} value={r.id}>{r.title}</option>
+              ))}
+            </select>
+            <p className="text-[10px]" style={{ color: '#b0b0b0' }}>
+              Del catálogo de <a href="/dashboard/campaign-rewards" className="underline">Premios de campaña</a>. El {'mesero'} lo entrega desde <em>Premios pendientes</em>, igual que todos los demás.
+            </p>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[11px] font-semibold" style={{ color: '#6b7280' }}>Ventana del premio (días)</label>
+            <Input
+              type="number"
+              min={1}
+              value={reviewWindowDays}
+              onChange={(e) => setReviewWindowDays(e.target.value)}
+              disabled={loading}
+              placeholder="30"
+            />
+            <p className="text-[10px]" style={{ color: '#b0b0b0' }}>
+              Lo normal es que lo reclame en la misma visita. Default: 30 días.
+            </p>
+          </div>
+        </div>
+
+        {reviewError && (
+          <p className="text-xs mt-3 font-medium" style={{ color: '#ef4444' }}>{reviewError}</p>
+        )}
+
+        <div className="mt-4">
+          <SaveButton saving={reviewSaving} saved={reviewSaved} onClick={handleSaveReview} disabled={reviewSaving || loading} />
         </div>
       </div>
 

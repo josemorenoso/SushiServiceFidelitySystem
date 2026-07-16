@@ -57,7 +57,11 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-    if (!body.grant_id && !body.mystery_box_result_id) {
+    // Excepción: `staff_override` es una entrada MANUAL del mesero (registro de auditoría,
+    // p. ej. una integración de POS). No tiene ancla y por eso no goza de la protección de
+    // doble entrega de los índices únicos — es aceptable porque la escribe una persona a mano,
+    // no un flujo automático. El resto de orígenes SÍ deben venir anclados.
+    if (!body.grant_id && !body.mystery_box_result_id && body.source !== 'staff_override') {
       return NextResponse.json(
         { error: 'Datos inválidos', message: 'Se requiere grant_id o mystery_box_result_id' },
         { status: 400 }

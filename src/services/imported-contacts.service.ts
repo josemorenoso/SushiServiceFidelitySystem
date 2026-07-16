@@ -16,6 +16,7 @@ import { randomUUID } from 'crypto'
 import { createClient } from '@supabase/supabase-js'
 import { sendTemplateMessage } from '@/services/whatsapp.service'
 import { getSettingValue } from '@/services/settings.service'
+import { canSendBulk } from '@/services/wallet.service'
 import type { Tenant } from '@/types/tenant.types'
 
 function getServiceClient() {
@@ -214,6 +215,14 @@ export interface ConfirmImportResult {
   failed: number
   blocked_auto: number
   total_cost_usd: number
+  /** Presente si se abortó por saldo insuficiente (spec W-D6). Nada se envió. */
+  insufficient_balance?: {
+    balanceCop: number
+    pricePerMessage: number
+    messagesAvailable: number
+    recipients: number
+    shortfallCop: number
+  }
 }
 
 export async function confirmImport(params: ConfirmImportParams): Promise<ConfirmImportResult> {
@@ -227,6 +236,30 @@ export async function confirmImport(params: ConfirmImportParams): Promise<Confir
   const existing = await getExistingPhones(phones, tenantId)
   const toImport = params.contacts.filter((c) => !existing.has(c.phone))
   const blockedAuto = params.contacts.length - toImport.length
+
+  // ─── Bloqueo por saldo (spec W-D6) ───
+  // Golden Bullet es un envío masivo de un disparo: se bloquea entero sin saldo,
+  // ANTES de crear la campaña o insertar contactos. No se envía parcial.
+  if (toImport.length > 0) {
+    const budget = await canSendBulk(tenantId, toImport.length)
+    if (!budget.ok) {
+      return {
+        campaign_id: '',
+        inserted: 0,
+        sent: 0,
+        failed: 0,
+        blocked_auto: blockedAuto,
+        total_cost_usd: 0,
+        insufficient_balance: {
+          balanceCop: budget.balanceCop,
+          pricePerMessage: budget.pricePerMessage,
+          messagesAvailable: budget.messagesAvailable,
+          recipients: toImport.length,
+          shortfallCop: budget.shortfallCop,
+        },
+      }
+    }
+  }
 
   // 1. Crear campaña (source 'manual' — 'imported' no está en el CHECK de campaigns.source)
   const { data: campaign, error: campaignError } = await supabase
@@ -286,7 +319,7 @@ export async function confirmImport(params: ConfirmImportParams): Promise<Confir
           '1': c.name || fallbackName,
           '2': params.promoText,
         }
-        const res = await sendTemplateMessage(c.phone, params.templateSid, variables, params.tenant, undefined, {
+        const res = await sendTemplateMessage(c.phone, params.templateSid, variables, params.tenant, {
           customerId: null,
           messageType: 'manual',
         })

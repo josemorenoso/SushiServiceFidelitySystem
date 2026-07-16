@@ -82,11 +82,15 @@ export async function recordRedemption(
   }
 
   // Si viene atado a un resultado de mystery box, validar que no esté ya redimido.
+  // Se filtra por `tenant_id` igual que la rama de `grant_id` de arriba: aislar el lookup al
+  // tenant del que llama es la defensa consistente contra IDOR entre restaurantes; confiar
+  // solo en `customer_id` deja la puerta entreabierta si alguna vez ese id se filtra o adivina.
   if (params.mysteryBoxResultId) {
     const { data: mbr, error: mbrErr } = await supabase
       .from('mystery_box_results')
       .select('id, customer_id, prize_title, redeemed')
       .eq('id', params.mysteryBoxResultId)
+      .eq('tenant_id', tenantId)
       .maybeSingle()
 
     if (mbrErr) {

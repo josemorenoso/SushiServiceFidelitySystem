@@ -11,7 +11,7 @@ function getServiceClient() {
 }
 
 const TENANT_COLUMNS =
-  'id, slug, name, business_type, config, domain, twilio_subaccount_sid, twilio_subaccount_auth_token, twilio_messaging_service_sid, twilio_whatsapp_number, is_active, created_at'
+  'id, slug, name, business_type, config, domain, twilio_subaccount_sid, twilio_subaccount_auth_token, twilio_messaging_service_sid, twilio_whatsapp_number, is_active, is_demo, created_at'
 
 /**
  * Normaliza un host header a la forma que guardamos en `tenants.domain`.

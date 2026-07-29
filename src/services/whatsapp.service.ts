@@ -49,6 +49,8 @@ export interface TenantMessagingContext {
   twilio_subaccount_sid: string | null
   twilio_subaccount_auth_token: string | null
   twilio_whatsapp_number: string | null
+  /** true = tenant demo (ventas). Si viene true, este envío se simula — nunca llama a Twilio. */
+  is_demo?: boolean
 }
 
 function getTwilioClient(tenant: TenantMessagingContext) {
@@ -77,6 +79,29 @@ export async function sendTemplateMessage(
   tenant: TenantMessagingContext,
   logContext?: MessageLogContext
 ): Promise<TwilioMessageResponse | null> {
+  // Tenant demo (ventas): nunca se llama a Twilio de verdad. Se simula el éxito y se
+  // deja rastro en message_logs con twilio_sid NULL (para que la UI se sienta real —
+  // contador de campaña, "enviado" — sin que el trigger de billetera lo cobre ni un
+  // WhatsApp real le llegue a un cliente clonado). Único punto de control: cubre
+  // campañas manuales, cron birthday/reactivation/calendar-dispatch, bienvenida QR,
+  // mystery box, etc. sin tocar cada ruta. Ver docs/features/demo-tenant.md.
+  if (tenant.is_demo) {
+    const simulatedSid = `demo_${crypto.randomUUID()}`
+    console.log(`[WhatsApp] Tenant demo — envío simulado (contentSid=${contentSid})`)
+    if (logContext) {
+      await recordMessageLog({
+        ...logContext,
+        tenantId: tenant.id,
+        phone,
+        templateSid: contentSid,
+        variables,
+        status: 'sent',
+        twilioSid: null,
+      })
+    }
+    return { sid: simulatedSid, status: 'delivered' }
+  }
+
   const config = getTwilioClient(tenant)
   if (!config) {
     console.warn('[WhatsApp] Twilio no configurado — mensaje no enviado')

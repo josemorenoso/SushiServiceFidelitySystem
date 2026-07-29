@@ -43,6 +43,8 @@ export interface Tenant {
   twilio_messaging_service_sid: string | null
   twilio_whatsapp_number: string | null
   is_active: boolean
+  /** true = tenant de demostración (ventas). Nunca dispara Twilio real — ver sendTemplateMessage(). */
+  is_demo: boolean
   created_at: string
 }
 

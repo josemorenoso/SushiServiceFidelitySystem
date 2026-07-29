@@ -5,6 +5,39 @@
 
 ---
 
+## [v2.7.0] — 2026-07-29 — feat: tenant demo para el equipo de ventas
+
+> Request: *"necesito agregar un usuario demo que varios vendedores puedan usar al mismo tiempo sin ser
+> capaces de disparar campañas por error a los clientes [...] quiero que tenga los datos de mi cliente
+> más antiguo para que vean cómo funciona."*
+>
+> Feature: `docs/features/demo-tenant.md`
+
+### Added
+
+- **`tenants.is_demo`** (`supabase/migrations/00034_demo_tenant_flag.sql`) — flag boolean, default false.
+- **Guard central de envío** (`src/services/whatsapp.service.ts` `sendTemplateMessage()`) — si
+  `tenant.is_demo`, nunca llama a Twilio; simula el éxito y registra el mensaje en `message_logs` con
+  `twilio_sid=NULL` (no dispara el trigger de débito de billetera). Como es el único embudo de envío de
+  todo el sistema, cubre campañas manuales, crons (birthday/reactivation/calendar-dispatch), bienvenida
+  QR, mystery box y recordatorios sin tocar cada ruta.
+- **`scripts/seed-demo-tenant.sql`** — clona `customers`, `visits`, `reward_tiers`, `campaign_rewards`,
+  `restaurant_events`, `admin_settings`, `staff_users`, `authorized_numbers` desde Sushi Service (cliente
+  más antiguo) hacia un tenant nuevo `demo-ventas`, con billetera pre-cargada. Idempotente: reutilizable
+  como reset (borra lo generado por el uso + lo clonado, y vuelve a clonar).
+- `src/types/tenant.types.ts` / `src/lib/tenant.ts` — `is_demo` se propaga automáticamente a toda
+  resolución de tenant (`TENANT_COLUMNS`), sin tocar los 14 call-sites de `sendTemplateMessage()`.
+
+### Notas de diseño
+
+- Login único compartido (Supabase Auth soporta sesiones concurrentes) — varios vendedores lo usan a la
+  vez sin fricción.
+- Datos reales sin anonimizar (decisión del dueño) — no hay riesgo porque nunca sale un mensaje real.
+- No confundir con `/demo` (`DemoContext.tsx`, `public/demo-data.json`) — esa es la landing-page teaser
+  estática, sin backend real, limitada a Métricas. Este feature es un tenant funcional completo.
+
+---
+
 ## [v2.6.0] — 2026-07-15 — feat: billetera prepagada por tenant (débito, corte y recarga manual)
 
 > Request: *"¿Cómo distribuyo ahora el presupuesto? Un cliente me transfirió 50,000 y recargué 100,000 en

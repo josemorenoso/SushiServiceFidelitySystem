@@ -114,6 +114,32 @@ BEGIN
     created_at, updated_at
   FROM restaurant_events WHERE tenant_id = v_source_tenant;
 
+  -- ─── 7b. Clonar campaigns + campaign_messages (para que "Revenue Atribuido" no salga en $0) ───
+  CREATE TEMP TABLE _campaign_map (old_id uuid, new_id uuid) ON COMMIT DROP;
+  INSERT INTO _campaign_map (old_id, new_id)
+  SELECT id, gen_random_uuid() FROM campaigns WHERE tenant_id = v_source_tenant;
+
+  INSERT INTO campaigns (
+    id, tenant_id, name, type, status, message_template, filters, total_sent,
+    scheduled_at, executed_at, created_at, source, media_url, media_type
+  )
+  SELECT
+    cm.new_id, v_demo_tenant, c.name, c.type, c.status, c.message_template, c.filters, c.total_sent,
+    c.scheduled_at, c.executed_at, c.created_at, c.source, c.media_url, c.media_type
+  FROM campaigns c JOIN _campaign_map cm ON cm.old_id = c.id
+  WHERE c.tenant_id = v_source_tenant;
+
+  INSERT INTO campaign_messages (
+    id, tenant_id, campaign_id, customer_id, status, twilio_sid, sent_at, error_message
+  )
+  SELECT
+    gen_random_uuid(), v_demo_tenant, cm.new_id, custm.new_id, msg.status, msg.twilio_sid,
+    msg.sent_at, msg.error_message
+  FROM campaign_messages msg
+  JOIN _campaign_map cm ON cm.old_id = msg.campaign_id
+  JOIN _customer_map custm ON custm.old_id = msg.customer_id
+  WHERE msg.tenant_id = v_source_tenant;
+
   -- ─── 8. Clonar admin_settings (CRÍTICO: sin esto no hay tiers/plantillas configuradas) ───
   INSERT INTO admin_settings (key, value, tenant_id, updated_at)
   SELECT key, value, v_demo_tenant, now()

@@ -43,16 +43,21 @@ De Sushi Service (`tenants.id = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'`):
 `customers`, `visits`, `reward_tiers`, `campaign_rewards`, `restaurant_events`,
 `admin_settings` (crítico — sin esto no hay tiers ni plantillas configuradas,
 ver `docs/DB_SCHEMA.md` sobre el hallazgo de don-alirio), `staff_users`,
-`authorized_numbers`. Datos reales, sin anonimizar (decisión del dueño: es su
-propio negocio, y de todas formas nunca sale un mensaje real).
+`authorized_numbers`, y **`campaigns` + `campaign_messages`** (historial real
+de campañas ejecutadas — sin esto la tarjeta "Revenue Atribuido" de Métricas
+sale en $0, porque `GET /api/dashboard/campaigns/efficiency` calcula ese
+número a partir de campañas con `executed_at` + mensajes `sent` + visitas
+dentro de la ventana de atribución de 7 días. Se clona con los timestamps
+originales intactos para que la atribución siga cuadrando). Datos reales, sin
+anonimizar (decisión del dueño: es su propio negocio, y de todas formas nunca
+sale un mensaje real).
 
-**Deliberadamente NO se clonan** (arrancan vacíos a propósito, para que el
-vendedor pueda crear una campaña/evento en vivo frente al prospecto):
-`campaigns`, `campaign_messages`, `message_logs`, `reward_redemptions`,
-`mystery_box_results`, `point_transactions`, `reward_grants`, `review_events`,
-`staff_devices` (el device-trust es específico del tablet físico del cliente
-real, no sirve clonado), `rewards` (tabla legacy de milestones, superada por
-`reward_tiers`).
+**Deliberadamente NO se clonan** (arrancan vacíos a propósito):
+`message_logs`, `reward_redemptions`, `mystery_box_results`,
+`point_transactions`, `reward_grants`, `review_events` (historial/eventos que
+el uso normal del demo vuelve a generar solo), `staff_devices` (el
+device-trust es específico del tablet físico del cliente real, no sirve
+clonado), `rewards` (tabla legacy de milestones, superada por `reward_tiers`).
 
 **Billetera:** se siembra un topup único de 50,000,000 COP — nunca se gasta de
 verdad (el trigger de débito solo corre si `twilio_sid` no es NULL), existe

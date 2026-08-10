@@ -94,7 +94,9 @@ export async function createEvent(input: CreateEventInput, tenantId: string): Pr
   }
   if (input.scheduled_send_at) {
     const sendAt = new Date(input.scheduled_send_at)
-    const eventDate = new Date(`${input.event_date}T23:59:59Z`)
+    // Fin del día del evento en hora Colombia (UTC-5), no UTC: con 23:59:59Z un envío
+    // programado el mismo día del evento después de las 6:59pm local se rechazaba.
+    const eventDate = new Date(`${input.event_date}T23:59:59-05:00`)
     if (sendAt.getTime() > eventDate.getTime()) {
       throw new Error('scheduled_send_at no puede ser posterior a event_date')
     }
@@ -277,6 +279,77 @@ export interface ExecuteAutoEventResult {
 }
 
 /**
+ * Verifica contra la Content API de Twilio que la plantilla del evento sirva
+ * para media dinámica ANTES de enviar. Detecta dos configuraciones que en
+ * producción harían daño silencioso:
+ *
+ *   1. Plantilla con media FIJA (sin `{{...}}` en la URL): todos los clientes
+ *      recibirían la imagen de muestra aprobada, no el flyer del evento.
+ *   2. Plantilla no aprobada/rechazada por Meta: el envío fallaría uno a uno.
+ *
+ * Errores de red o credenciales se tratan como no-concluyentes (fail-open):
+ * el envío continúa y fallará con su propio error si algo está mal.
+ */
+async function assertEventTemplateUsable(
+  templateSid: string,
+  tenant: { is_demo?: boolean; twilio_subaccount_sid: string | null; twilio_subaccount_auth_token: string | null }
+): Promise<void> {
+  if (tenant.is_demo) return
+  const accountSid = tenant.twilio_subaccount_sid ?? process.env.TWILIO_ACCOUNT_SID
+  const authToken = tenant.twilio_subaccount_auth_token ?? process.env.TWILIO_AUTH_TOKEN
+  if (!accountSid || !authToken) return
+
+  const auth = 'Basic ' + Buffer.from(`${accountSid}:${authToken}`).toString('base64')
+  let definition: { types?: Record<string, { media?: string[] }> } | null = null
+  let approval: { whatsapp?: { status?: string; rejection_reason?: string } } | null = null
+
+  try {
+    const [defRes, apprRes] = await Promise.all([
+      fetch(`https://content.twilio.com/v1/Content/${templateSid}`, { headers: { Authorization: auth } }),
+      fetch(`https://content.twilio.com/v1/Content/${templateSid}/ApprovalRequests`, { headers: { Authorization: auth } }),
+    ])
+    if (defRes.status === 404) {
+      throw new Error(
+        `La plantilla ${templateSid} no existe en la cuenta Twilio de este tenant. ` +
+        'Revisa event_template_image_sid / event_template_video_sid en Ajustes.'
+      )
+    }
+    if (defRes.ok) definition = await defRes.json()
+    if (apprRes.ok) approval = await apprRes.json()
+  } catch (err) {
+    if (err instanceof Error && err.message.includes('no existe en la cuenta Twilio')) throw err
+    console.warn(`[Calendar] Verificación de plantilla ${templateSid} no concluyente (${err instanceof Error ? err.message : err}) — continuando`)
+    return
+  }
+
+  if (definition) {
+    const media = definition.types?.['twilio/media']?.media
+    if (!media || media.length === 0) {
+      throw new Error(
+        `La plantilla ${templateSid} no es de tipo twilio/media: no puede llevar el flyer del evento. ` +
+        'Crea la plantilla correcta con scripts/twilio-create-media-templates.mjs y actualiza Ajustes.'
+      )
+    }
+    if (!media.some((u) => u.includes('{{'))) {
+      throw new Error(
+        `La plantilla ${templateSid} tiene la media FIJA (sin variable {{6}}): todos los clientes ` +
+        'recibirían la imagen de muestra en vez del flyer de este evento. Crea la plantilla dinámica ' +
+        'con scripts/twilio-create-media-templates.mjs y pon su SID en Ajustes.'
+      )
+    }
+  }
+
+  const waStatus = approval?.whatsapp?.status?.toLowerCase()
+  if (waStatus && waStatus !== 'approved') {
+    const reason = approval?.whatsapp?.rejection_reason
+    throw new Error(
+      `La plantilla ${templateSid} no está aprobada por Meta (status: ${waStatus}${reason ? ` — ${reason}` : ''}). ` +
+      'Espera la aprobación o configura otra plantilla en Ajustes.'
+    )
+  }
+}
+
+/**
  * Executes a scheduled auto-event: resolves template, filters audience,
  * sends messages, records campaign, and marks event as sent/failed.
  *
@@ -321,6 +394,10 @@ export async function executeAutoEvent(eventId: string): Promise<ExecuteAutoEven
         'Agrega event_template_image_sid / event_template_video_sid en Dashboard → Ajustes.'
       )
     }
+
+    // Guard v2.8.1: la plantilla debe ser twilio/media con {{6}} dinámico y estar
+    // aprobada. Evita el desastre silencioso de enviar la imagen de muestra a todos.
+    await assertEventTemplateUsable(templateSid, tenant)
 
     // Build audience
     const candidates = await findCustomersForEvent(event.filters as EventFilters, tenant.id)

@@ -590,6 +590,7 @@ export default function StaffPage() {
 
           <p className="text-xs text-muted-foreground">
             <strong>Dispositivo del local:</strong> El supervisor abre el enlace y toca &quot;Activar este dispositivo&quot; con su PIN una sola vez. Después, cualquier mesero puede escanear sin login.
+            {' '}<strong>Dispositivo de un mesero:</strong> en la misma pantalla, marca &quot;Asignar a un mesero específico&quot; e ingresa el celular del mesero — las visitas que registre ese dispositivo quedarán a su nombre.
           </p>
         </CardContent>
       </Card>

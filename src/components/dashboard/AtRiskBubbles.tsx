@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Dialog,
@@ -8,19 +8,36 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogFooter,
 } from '@/components/ui/dialog'
-import { Send, AlertTriangle, X } from 'lucide-react'
+import { Send, AlertTriangle, FileText, RefreshCw } from 'lucide-react'
+import { RISK_LEVELS } from '@/constants/rankings'
 import type { RiskGroup } from '@/types/analytics.types'
 
-// Colores pasteles desaturados por nivel
-const BUBBLE_STYLES: Record<string, { bg: string; border: string; text: string }> = {
-  'En Riesgo':  { bg: 'rgba(252, 165, 165, 0.55)', border: 'rgba(239, 68, 68, 0.3)',  text: '#b91c1c' },
-  'Perdidos':   { bg: 'rgba(253, 186, 116, 0.55)', border: 'rgba(249, 115, 22, 0.3)', text: '#c2410c' },
-  'Críticos':   { bg: 'rgba(196, 181, 253, 0.55)', border: 'rgba(139, 92, 246, 0.3)', text: '#6d28d9' },
+const FLOAT_DURATIONS = ['3.1s', '3.8s', '4.5s', '4.1s']
+
+interface ApprovedTemplate {
+  sid: string
+  friendly_name: string
+  body: string
+  approval_status: string
+  status: string
+  has_media?: boolean
 }
 
-const FLOAT_DURATIONS = ['3.1s', '3.8s', '4.5s']
+function hexToRgba(hex: string, alpha: number): string {
+  const h = hex.replace('#', '')
+  const r = parseInt(h.slice(0, 2), 16)
+  const g = parseInt(h.slice(2, 4), 16)
+  const b = parseInt(h.slice(4, 6), 16)
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
+/** Rango de días del nivel según RISK_LEVELS (fuente de verdad compartida con analytics). */
+function daysRangeForLevel(level: string): { minDays: number; maxDays: number | null } {
+  const def = RISK_LEVELS.find((r) => r.name === level)
+  if (!def) return { minDays: 7, maxDays: null }
+  return { minDays: def.minDays, maxDays: def.maxDays === Infinity ? null : def.maxDays }
+}
 
 interface AtRiskBubblesProps {
   groups: RiskGroup[]
@@ -32,7 +49,15 @@ export function AtRiskBubbles({ groups, loading, isDemo }: AtRiskBubblesProps) {
   const [selected, setSelected] = useState<RiskGroup | null>(null)
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
+  const [sendSummary, setSendSummary] = useState<string | null>(null)
+  const [sendError, setSendError] = useState<string | null>(null)
   const [poppedKey, setPoppedKey] = useState<string | null>(null)
+
+  const [templates, setTemplates] = useState<ApprovedTemplate[]>([])
+  const [templatesLoaded, setTemplatesLoaded] = useState(false)
+  const [loadingTemplates, setLoadingTemplates] = useState(false)
+  const [selectedTemplate, setSelectedTemplate] = useState<ApprovedTemplate | null>(null)
+  const [eligibleCount, setEligibleCount] = useState<number | null>(null)
 
   const maxCount = Math.max(...groups.map((g) => g.count), 1)
   const totalAtRisk = groups.reduce((sum, g) => sum + g.count, 0)
@@ -49,9 +74,46 @@ export function AtRiskBubbles({ groups, loading, isDemo }: AtRiskBubblesProps) {
     })
   }, [groups])
 
-  const handleBubbleClick = (group: typeof groupStats[0], idx: number) => {
+  const fetchTemplates = useCallback(async () => {
+    setLoadingTemplates(true)
+    try {
+      const res = await fetch('/api/dashboard/templates')
+      const data = await res.json()
+      // Solo texto aprobado (las twilio/media son de eventos y exigen {{6}}).
+      const approved = (data.templates ?? []).filter(
+        (t: ApprovedTemplate) =>
+          (t.approval_status || t.status)?.toLowerCase() === 'approved' && !t.has_media
+      )
+      setTemplates(approved)
+    } catch {
+      setTemplates([])
+    } finally {
+      setLoadingTemplates(false)
+      setTemplatesLoaded(true)
+    }
+  }, [])
+
+  // Al abrir el diálogo (modo real): cargar plantillas y calcular elegibles reales
+  // (después de frequency cap, recovery zone y opt-out) para el rango de días del nivel.
+  useEffect(() => {
+    if (!selected || isDemo) return
+    if (!templatesLoaded) fetchTemplates()
+
+    const { minDays, maxDays } = daysRangeForLevel(selected.level)
+    const params = new URLSearchParams({ minDays: String(minDays) })
+    if (maxDays !== null) params.set('maxDays', String(maxDays))
+
+    let active = true
+    setEligibleCount(null)
+    fetch(`/api/dashboard/campaigns/estimate?${params}`)
+      .then((res) => res.json())
+      .then((data) => { if (active) setEligibleCount(data.count ?? 0) })
+      .catch(() => { if (active) setEligibleCount(null) })
+    return () => { active = false }
+  }, [selected, isDemo, templatesLoaded, fetchTemplates])
+
+  const handleBubbleClick = (group: typeof groupStats[0]) => {
     if (group.count === 0) return
-    // Trigger spring animation
     setPoppedKey(group.level)
     setTimeout(() => setPoppedKey(null), 500)
     setSelected(group)
@@ -60,25 +122,63 @@ export function AtRiskBubbles({ groups, loading, isDemo }: AtRiskBubblesProps) {
   const handleSendCampaign = async () => {
     if (!selected) return
     setSending(true)
+    setSendError(null)
+    setSendSummary(null)
     if (isDemo) {
       await new Promise((r) => setTimeout(r, 1500))
       setSent(true)
       setSending(false)
       return
     }
+    if (!selectedTemplate) {
+      setSendError('Selecciona una plantilla aprobada para enviar.')
+      setSending(false)
+      return
+    }
     try {
-      await fetch('/api/dashboard/campaigns/quick', {
+      const { minDays, maxDays } = daysRangeForLevel(selected.level)
+      const res = await fetch('/api/dashboard/campaigns/manual', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          riskLevel: selected.level,
-          daysRange: selected.daysRange,
-          customerCount: selected.count,
+          name: `Reactivación · ${selected.level} (${selected.daysRange})`,
+          filters: {
+            city: '',
+            minVisits: '',
+            maxVisits: '',
+            minAge: '',
+            maxAge: '',
+            source: 'all',
+            minDays: String(minDays),
+            maxDays: maxDays !== null ? String(maxDays) : '',
+          },
+          templateSid: selectedTemplate.sid,
+          messageTemplate: selectedTemplate.body,
         }),
       })
+      const data = await res.json()
+      if (!res.ok) {
+        if (data.reason === 'insufficient_balance') {
+          setSendError(
+            `Saldo insuficiente: se necesitan ${data.recipients} mensajes y el saldo alcanza para ${data.messagesAvailable}. Recarga tu billetera.`
+          )
+        } else {
+          setSendError(data.error || 'Error enviando la campaña')
+        }
+        return
+      }
+      const skipped =
+        (data.totalSkippedFrequencyCap ?? 0) +
+        (data.totalSkippedRecoveryZone ?? 0) +
+        (data.totalSkippedMonthlyCap ?? 0)
+      setSendSummary(
+        `Enviados: ${data.totalSent}` +
+        (data.totalFailed ? ` · Fallidos: ${data.totalFailed}` : '') +
+        (skipped ? ` · Protegidos por reglas anti-spam: ${skipped}` : '')
+      )
       setSent(true)
-    } catch {
-      // best effort
+    } catch (err) {
+      setSendError(err instanceof Error ? err.message : 'Error de red enviando la campaña')
     } finally {
       setSending(false)
     }
@@ -88,10 +188,17 @@ export function AtRiskBubbles({ groups, loading, isDemo }: AtRiskBubblesProps) {
     setSelected(null)
     setSent(false)
     setSending(false)
+    setSendSummary(null)
+    setSendError(null)
+    setSelectedTemplate(null)
+    setEligibleCount(null)
   }
 
-  const bubbleStyle = (level: string) =>
-    BUBBLE_STYLES[level] ?? { bg: 'rgba(156,163,175,0.45)', border: 'rgba(107,114,128,0.3)', text: '#374151' }
+  const bubbleStyle = (group: RiskGroup) => ({
+    bg: hexToRgba(group.color, 0.28),
+    border: hexToRgba(group.color, 0.35),
+    text: group.color,
+  })
 
   return (
     <>
@@ -116,17 +223,17 @@ export function AtRiskBubbles({ groups, loading, isDemo }: AtRiskBubblesProps) {
         {loading ? (
           <Skeleton className="h-[280px] w-full rounded-xl" />
         ) : (
-          <div className="flex items-end justify-center gap-10 py-8 min-h-[280px]">
+          <div className="flex flex-wrap items-end justify-center gap-x-10 gap-y-6 py-8 min-h-[280px]">
             {groupStats.map((group, idx) => {
               const size = Math.max(72, (group.count / maxCount) * 200)
-              const style = bubbleStyle(group.level)
+              const style = bubbleStyle(group)
               const isPopping = poppedKey === group.level
               const floatDuration = FLOAT_DURATIONS[idx % FLOAT_DURATIONS.length]
 
               return (
                 <button
                   key={group.level}
-                  onClick={() => handleBubbleClick(group, idx)}
+                  onClick={() => handleBubbleClick(group)}
                   className="flex flex-col items-center gap-4 focus:outline-none"
                   disabled={group.count === 0}
                 >
@@ -198,29 +305,29 @@ export function AtRiskBubbles({ groups, loading, isDemo }: AtRiskBubblesProps) {
         </p>
       </div>
 
-      {/* Popover / Dialog premium */}
+      {/* Dialog premium con selector de plantilla y envío real */}
       <Dialog open={!!selected} onOpenChange={handleClose}>
         <DialogContent
           className="border-none p-0 overflow-hidden"
-          style={{ borderRadius: '20px', boxShadow: '0 24px 60px rgba(0,0,0,0.12)', maxWidth: '420px' }}
+          style={{ borderRadius: '20px', boxShadow: '0 24px 60px rgba(0,0,0,0.12)', maxWidth: '460px' }}
         >
           {/* Header del dialog con color de burbuja */}
           <div
             className="px-6 pt-6 pb-4"
             style={{
-              background: selected ? bubbleStyle(selected.level).bg : 'transparent',
-              borderBottom: `1px solid ${selected ? bubbleStyle(selected.level).border : 'transparent'}`,
+              background: selected ? bubbleStyle(selected).bg : 'transparent',
+              borderBottom: `1px solid ${selected ? bubbleStyle(selected).border : 'transparent'}`,
             }}
           >
             <DialogHeader>
               <div className="flex items-center justify-between">
                 <DialogTitle
                   className="font-playfair text-xl font-bold flex items-center gap-2"
-                  style={{ color: selected ? bubbleStyle(selected.level).text : '#1a1c1d', letterSpacing: '-0.02em' }}
+                  style={{ color: selected ? bubbleStyle(selected).text : '#1a1c1d', letterSpacing: '-0.02em' }}
                 >
                   <div
                     className="h-3 w-3 rounded-full"
-                    style={{ background: selected ? bubbleStyle(selected.level).text : '#6b7280' }}
+                    style={{ background: selected ? bubbleStyle(selected).text : '#6b7280' }}
                   />
                   {selected?.level}
                 </DialogTitle>
@@ -232,7 +339,7 @@ export function AtRiskBubbles({ groups, loading, isDemo }: AtRiskBubblesProps) {
           </div>
 
           {/* Contenido */}
-          <div className="px-6 py-4 space-y-4 bg-white">
+          <div className="px-6 py-4 space-y-4 bg-white max-h-[60vh] overflow-y-auto">
             <div
               className="rounded-2xl p-4 space-y-2"
               style={{ background: '#F9F8F6' }}
@@ -248,8 +355,15 @@ export function AtRiskBubbles({ groups, loading, isDemo }: AtRiskBubblesProps) {
                 <span className="font-semibold">{selected?.daysRange}</span> sin visitar
               </p>
 
+              {!isDemo && eligibleCount !== null && selected && eligibleCount < selected.count && (
+                <p className="text-xs" style={{ color: '#9ca3af' }}>
+                  Elegibles hoy: <strong style={{ color: '#374151' }}>{eligibleCount}</strong> — el resto está
+                  protegido por las reglas anti-spam (mensaje reciente o reservado para la reactivación automática).
+                </p>
+              )}
+
               {selected?.customers && selected.customers.length > 0 && (
-                <div className="space-y-1.5 max-h-44 overflow-y-auto">
+                <div className="space-y-1.5 max-h-36 overflow-y-auto">
                   {selected.customers.map((c) => (
                     <div
                       key={c.id}
@@ -269,12 +383,76 @@ export function AtRiskBubbles({ groups, loading, isDemo }: AtRiskBubblesProps) {
               )}
             </div>
 
+            {/* Selector de plantilla (solo modo real, antes de enviar) */}
+            {!isDemo && !sent && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold flex items-center gap-1.5" style={{ color: '#374151' }}>
+                    <FileText className="h-3.5 w-3.5" />
+                    Plantilla del mensaje
+                  </p>
+                  <button
+                    onClick={fetchTemplates}
+                    disabled={loadingTemplates}
+                    className="text-xs flex items-center gap-1 rounded-md px-2 py-1 transition-colors"
+                    style={{ color: '#6b7280' }}
+                  >
+                    <RefreshCw className={`h-3 w-3 ${loadingTemplates ? 'animate-spin' : ''}`} />
+                    Sincronizar
+                  </button>
+                </div>
+
+                {loadingTemplates && (
+                  <p className="text-xs" style={{ color: '#9ca3af' }}>Cargando plantillas…</p>
+                )}
+
+                {!loadingTemplates && templatesLoaded && templates.length === 0 && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                    No hay plantillas aprobadas por WhatsApp. Créalas en <strong>Dashboard → Plantillas</strong> y
+                    espera la aprobación de Meta para poder enviar.
+                  </div>
+                )}
+
+                {templates.length > 0 && (
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                    {templates.map((t) => (
+                      <button
+                        key={t.sid}
+                        onClick={() => setSelectedTemplate(t)}
+                        className="w-full text-left rounded-xl border p-2.5 text-xs transition-all"
+                        style={{
+                          borderColor: selectedTemplate?.sid === t.sid ? '#1a1c1d' : 'rgba(0,0,0,0.08)',
+                          background: selectedTemplate?.sid === t.sid ? '#F9F8F6' : '#fff',
+                        }}
+                      >
+                        <p className="font-medium" style={{ color: '#1a1c1d' }}>{t.friendly_name}</p>
+                        <p className="line-clamp-2 italic mt-0.5" style={{ color: '#9ca3af' }}>
+                          &quot;{t.body}&quot;
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {sent && (
               <div
                 className="rounded-2xl px-4 py-3 text-sm font-medium text-center"
                 style={{ background: 'rgba(16,185,129,0.08)', color: '#059669' }}
               >
-                {isDemo ? '(Demo) Campaña simulada exitosamente ✓' : 'Campaña de reactivación enviada ✓'}
+                {isDemo
+                  ? '(Demo) Campaña simulada exitosamente ✓'
+                  : `Campaña de reactivación enviada ✓${sendSummary ? ` — ${sendSummary}` : ''}`}
+              </div>
+            )}
+
+            {sendError && (
+              <div
+                className="rounded-2xl px-4 py-3 text-sm font-medium"
+                style={{ background: 'rgba(239,68,68,0.08)', color: '#b91c1c' }}
+              >
+                {sendError}
               </div>
             )}
           </div>
@@ -291,14 +469,14 @@ export function AtRiskBubbles({ groups, loading, isDemo }: AtRiskBubblesProps) {
             {!sent && (
               <button
                 onClick={handleSendCampaign}
-                disabled={sending}
-                className="btn-premium flex-1 h-11 flex items-center justify-center gap-2 rounded-xl text-sm font-semibold"
+                disabled={sending || (!isDemo && !selectedTemplate)}
+                className="btn-premium flex-1 h-11 flex items-center justify-center gap-2 rounded-xl text-sm font-semibold disabled:opacity-50"
                 style={{ letterSpacing: '-0.01em' }}
               >
                 <Send className="h-3.5 w-3.5" strokeWidth={1.5} />
                 {sending
                   ? 'Enviando...'
-                  : `WhatsApp → ${selected?.count ?? 0}`}
+                  : `WhatsApp → ${!isDemo && eligibleCount !== null ? eligibleCount : selected?.count ?? 0}`}
               </button>
             )}
           </div>

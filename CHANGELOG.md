@@ -5,6 +5,138 @@
 
 ---
 
+## [v2.8.1] — 2026-08-10 — fix: calendario verificado E2E, redención en hora Bogotá, dispositivos por mesero, plantillas sin fricción
+
+> Request: *"¿Arreglaste el calendario? necesito que funcione correctamente sin ningún problema; revisa
+> que el área de redención sirva; he tenido problemas para agregar dispositivos a nombre de meseros;
+> me causa fricción la creación de plantillas."*
+
+### Calendario — verificado contra producción (Twilio + Vercel)
+
+- **Diagnóstico real**: la plantilla de imagen aprobada (`evento_imagen_sushi_service_barra`,
+  `HX76a64b...`) tenía la **media FIJA** apuntando a `gstatic.com/webp/gallery3/1.png` — sin variable
+  `{{6}}`. Todo evento habría enviado la imagen de muestra de Google, jamás el flyer subido. La de
+  video estaba **rechazada** por Meta (sample de URL externa inválida). Las plantillas `combomundial`
+  y `dia_del_sushi` eran el workaround manual (una plantilla nueva por evento = la fricción reportada).
+- **Fix**: creada y enviada a aprobación la plantilla dinámica correcta
+  `evento_imagen__sushi_service_barra__v2` = **`HXf30219c2b31c3ac1c6eb751d2b4ea689`** con media
+  `<bucket event-media>/{{6}}` y sample real del bucket. **Al aprobarse, pegar ese SID en
+  Dashboard → Ajustes → `event_template_image_sid`.** Video: subir un MP4 al bucket y re-ejecutar
+  `scripts/twilio-create-media-templates.mjs` (nuevo flag `SKIP_VIDEO=1` usado esta vez).
+- **Guard anti-desastre** (`calendar.service.ts` `assertEventTemplateUsable`): antes de cada dispatch
+  se verifica contra la Content API que la plantilla sea `twilio/media`, tenga `{{6}}` dinámico y esté
+  aprobada. Config mala → evento `failed` con mensaje explícito; nunca más media de muestra a todos.
+- **Verificado en producción** (Vercel MCP): n8n dispara `/api/cron/calendar-dispatch` cada 15 min
+  exactos con HTTP 200 (proyecto `sushi-service-fidelity-system`). La infraestructura funciona.
+- Nota: `.env.local` local está VACÍO (plantilla sin credenciales); `.env.twilio` sí tiene las
+  credenciales master usadas para el diagnóstico/creación de plantillas.
+
+### Redención — auditada, 3 fixes de zona horaria
+
+- `getRedemptionSummary.by_hour` usaba la hora del servidor (UTC en Vercel): el análisis de turnos
+  salía corrido 5 horas. Ahora convierte a `America/Bogota` (mismo patrón que el heatmap).
+- Filtro "Hoy" de `/dashboard/redemptions` usaba fecha UTC: después de las 7pm Colombia apuntaba a
+  mañana y la hora pico aparecía vacía. Ahora usa la fecha local del navegador.
+- Export CSV "Cuadrar con POS" exportaba timestamps UTC; ahora hora local (`sv-SE`).
+- El resto del flujo (anti-doble-entrega por índices únicos, carrera entre meseros → 409 manejado,
+  anti-IDOR por tenant, premios pendientes acotados a clientes presentes) se auditó y está correcto.
+
+### Dispositivos a nombre de meseros
+
+- `POST /api/staff/device/register` acepta `assign_staff_phone`: el supervisor sigue autorizando con
+  su PIN, pero el dispositivo queda **atribuido al mesero indicado** (device_name = "Dispositivo de
+  {mesero}"). En `/mesero` hay checkbox "Asignar a un mesero específico" + campo de celular.
+- **Fix de atribución en check-in**: las visitas registradas vía dispositivo de confianza guardaban
+  `registered_by_staff_id = NULL` siempre (las dos ramas de auth por `device_token` no leían
+  `staff_user_id` del dispositivo). Ahora la visita queda a nombre del dueño del dispositivo.
+  `resolveStaffAuth` (redenciones) ya lo hacía bien.
+
+### Plantillas — menos fricción
+
+- `GET /api/dashboard/templates` ahora usa `ContentAndApprovals` (1 llamada en vez de 1+N por
+  plantilla — sincronizar era lentísimo) y devuelve `rejection_reason` + `has_media`.
+- La UI muestra el **motivo del rechazo** de Meta en las plantillas rechazadas.
+- Validación en vivo + server-side de reglas duras de Meta: variable al inicio/fin del cuerpo
+  (motivo del rechazo real de `reactivacion_aggresive_new`) y límite de 1024 caracteres. Preview del
+  nombre normalizado que se enviará a Meta.
+- Los selectores de plantillas de campañas (manuales y burbujas) excluyen las `twilio/media` de
+  eventos: enviarlas como campaña fallaría por la variable `{{6}}`.
+
+### Files
+
+`src/services/{calendar,redemption}.service.ts`, `src/app/api/staff/device/register/route.ts`,
+`src/app/api/check-in/route.ts`, `src/app/api/dashboard/templates/route.ts`,
+`src/app/(public)/mesero/page.tsx`, `src/app/(dashboard)/dashboard/{templates,redemptions,staff}/page.tsx`,
+`src/components/dashboard/{ManualCampaigns,AtRiskBubbles}.tsx`, `scripts/twilio-create-media-templates.mjs`
+
+---
+
+## [v2.8.0] — 2026-08-10 — fix+feat: reactivación real desde burbujas, filtro por días y saneo del calendario
+
+> Request: *"las bolitas [de clientes en riesgo] tienen un botón de enviar por WhatsApp inservible [...]
+> permitir la capacidad de enviar el mensaje real seleccionando una plantilla; agrega a las campañas
+> manuales la forma de filtrar por días sin venir; el calendario no funciona; audita la parte visual y
+> funcional y corrige todo lo que puedas sin dañar el flujo productivo."*
+
+### Fixed
+
+- **Burbujas de riesgo enviaban a un endpoint inexistente** (`src/components/dashboard/AtRiskBubbles.tsx`) —
+  el botón "WhatsApp →" hacía POST a `/api/dashboard/campaigns/quick`, ruta que nunca existió (404
+  silencioso mostrado como éxito). Ahora envía de verdad por `/api/dashboard/campaigns/manual` con el
+  rango de días del nivel como filtro, previa selección de una plantilla aprobada.
+- **Colores de las burbujas siempre en gris** — el mapa de estilos usaba nombres (`'En Riesgo'`,
+  `'Perdidos'`, `'Críticos'`) que no coinciden con los reales de `RISK_LEVELS` (`'Alerta'`, `'En riesgo'`,
+  `'Crítico'`, `'Perdido'`). Ahora el estilo se deriva del `color` que ya trae cada grupo.
+- **"Ejecutar Ahora" de campañas automáticas devolvía 401 silencioso**
+  (`src/app/(dashboard)/dashboard/campaigns/page.tsx`) — hacía POST directo a `/api/cron/*` sin el
+  `CRON_SECRET` y mostraba "ejecutada exitosamente" sin verificar la respuesta. Nuevo puente autenticado
+  `POST /api/dashboard/campaigns/run-auto` (sesión admin → cron del tenant actual con el secret desde el
+  servidor) y el diálogo ahora muestra el resultado real (enviados/fallidos/audiencia) o el error.
+- **Calendario: envío programado rechazado por zona horaria** (`src/services/calendar.service.ts`) — la
+  validación comparaba contra fin de día UTC, así que programar el envío el mismo día del evento después
+  de las 6:59pm (Colombia) fallaba con "scheduled_send_at no puede ser posterior a event_date". Ahora
+  compara contra fin de día América/Bogotá (UTC-5).
+- **Calendario: eventos auto-envío condenados a fallar** — se podían crear eventos `auto` sin
+  imagen/video, que solo reventaban al momento del dispatch (las plantillas de evento son `twilio/media`).
+  `EventCreateDialog` ahora lo bloquea con explicación, y `EventDetailDrawer` advierte en eventos
+  existentes sin media.
+- **Uploader limitaba imágenes a 5 MB** (`MediaUploader.tsx`) cuando el servidor acepta 30 MB y comprime
+  automáticamente a JPEG ≤5MB (límite WhatsApp). Límite del cliente alineado a 30 MB + copy actualizado.
+- **Estimador de audiencia ignoraba el canal** (`estimate/route.ts`) — el filtro Solo QR / Solo Domicilio
+  se aplicaba al enviar pero no al estimar (TODO pendiente); ahora usa el mismo `source_channels`.
+- **Campañas manuales contaban opt-outs como "fallidos"** (`manual/route.ts`) — la query ahora excluye
+  `whatsapp_opt_out_at` igual que el estimador.
+- **Envío manual sin feedback real** (`ManualCampaigns.tsx`) — ignoraba la respuesta (incluido el 409 de
+  saldo insuficiente). Ahora muestra enviados/fallidos/protegidos por reglas anti-spam, o el error de saldo.
+- Copys desactualizados del calendario ("cuando Meta apruebe...") reemplazados por instrucciones vigentes.
+
+### Added
+
+- **Filtro por días sin venir en campañas manuales** — `minDays`/`maxDays` en
+  `estimate/route.ts` + `manual/route.ts` (mín: última visita hace N días o más; máx: hace M días o
+  menos; ambos excluyen clientes sin `last_visit_at`). Inputs nuevos en `ManualCampaigns.tsx` + resumen
+  en el diálogo de confirmación.
+- **Preset "Rescatar Perdidos"** (26+ días, fuera de la zona de recuperación automática) en
+  `ManualCampaigns.tsx`.
+- **Diálogo de burbujas con datos accionables** — elegibles reales del día (estimador con el rango de
+  días del nivel) y desglose post-envío de protegidos por frequency cap / recovery zone / cap mensual.
+- **"Ciclo de recuperación del cliente"** en Campañas → Automáticas: strip visual de 5 etapas (Visita →
+  Protegido → Ventana manual → Recuperación automática → Rescate) con los días reales de
+  `constants/rewards.ts` y los días configurables del tenant.
+- **Audiencia estimada en vivo al crear eventos de calendario** (`EventCreateDialog.tsx`), reusando el
+  estimador de campañas.
+- `POST /api/dashboard/campaigns/run-auto` (`src/app/api/dashboard/campaigns/run-auto/route.ts`).
+
+### Files
+
+`src/components/dashboard/{AtRiskBubbles,ManualCampaigns}.tsx`,
+`src/components/dashboard/Calendar/{MediaUploader,EventCreateDialog,EventDetailDrawer}.tsx`,
+`src/app/(dashboard)/dashboard/{campaigns,calendar}/page.tsx`,
+`src/app/api/dashboard/campaigns/{estimate,manual,run-auto}/route.ts`,
+`src/services/calendar.service.ts`
+
+---
+
 ## [v2.7.0] — 2026-07-29 — feat: tenant demo para el equipo de ventas
 
 > Request: *"necesito agregar un usuario demo que varios vendedores puedan usar al mismo tiempo sin ser

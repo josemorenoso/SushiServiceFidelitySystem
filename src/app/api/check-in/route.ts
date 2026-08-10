@@ -338,7 +338,7 @@ export async function POST(request: NextRequest) {
         } else if (device_token) {
           const { data: device } = await supabase
             .from('staff_devices')
-            .select('id, is_trusted, expires_at')
+            .select('id, staff_user_id, is_trusted, expires_at')
             .eq('device_fingerprint', device_token)
             .eq('is_trusted', true)
             .eq('tenant_id', tenant.id)
@@ -346,6 +346,8 @@ export async function POST(request: NextRequest) {
           if (device) {
             if (!device.expires_at || new Date(device.expires_at) >= new Date()) {
               regStaffAuthValid = true
+              // Atribuir la visita al mesero dueño del dispositivo (si lo tiene).
+              regResolvedStaffId = device.staff_user_id ?? null
             }
           }
         }
@@ -565,7 +567,7 @@ export async function POST(request: NextRequest) {
       } else if (device_token) {
         const { data: device } = await supabase
           .from('staff_devices')
-          .select('id, is_trusted, expires_at')
+          .select('id, staff_user_id, is_trusted, expires_at')
           .eq('device_fingerprint', device_token)
           .eq('is_trusted', true)
           .eq('tenant_id', tenant.id)
@@ -573,6 +575,9 @@ export async function POST(request: NextRequest) {
         if (device) {
           if (!device.expires_at || new Date(device.expires_at) >= new Date()) {
             staffAuthValid = true
+            // Atribuir la visita al mesero dueño del dispositivo (si lo tiene):
+            // sin esto, todo escaneo desde dispositivo quedaba sin mesero en visits.
+            resolvedStaffId = device.staff_user_id ?? null
             // Actualizar last_used_at del dispositivo
             await supabase
               .from('staff_devices')

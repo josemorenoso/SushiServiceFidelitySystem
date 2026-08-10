@@ -12,8 +12,11 @@ export default function MeseroLoginPage() {
   const { session, loading: authLoading, login, verifySession } = useStaffAuth()
   const [phone, setPhone] = useState('')
   const [pin, setPin] = useState('')
+  const [assignPhone, setAssignPhone] = useState('')
+  const [showAssign, setShowAssign] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
 
   // Verificar dispositivo de confianza al cargar
   useEffect(() => {
@@ -66,10 +69,16 @@ export default function MeseroLoginPage() {
       setError('Ingresa número y PIN del supervisor')
       return
     }
+    if (showAssign && assignPhone.length > 0 && assignPhone.length < 10) {
+      setError('El celular del mesero debe tener 10 dígitos')
+      return
+    }
     setLoading(true)
     setError(null)
+    setNotice(null)
     try {
       const fingerprint = getDeviceFingerprint()
+      const assigning = showAssign && assignPhone.length === 10
       const res = await fetch('/api/staff/device/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -77,13 +86,17 @@ export default function MeseroLoginPage() {
           phone,
           pin,
           device_fingerprint: fingerprint,
-          device_name: 'Celular del Local',
+          // Sin asignación explícita se mantiene el nombre genérico del local;
+          // con mesero asignado el backend lo nombra "Dispositivo de {mesero}".
+          device_name: assigning ? null : 'Celular del Local',
+          assign_staff_phone: assigning ? assignPhone : null,
         }),
       })
       const data = await res.json()
       if (!res.ok) {
         throw new Error(data.message || 'Error activando dispositivo')
       }
+      if (data.assigned_to) setNotice(`Dispositivo activado a nombre de ${data.assigned_to}`)
       localStorage.setItem('staff_device_token', fingerprint)
       await verifySession()
     } catch (err) {
@@ -115,6 +128,12 @@ export default function MeseroLoginPage() {
         {error && (
           <div className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
             {error}
+          </div>
+        )}
+
+        {notice && (
+          <div className="mb-4 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">
+            {notice}
           </div>
         )}
 
@@ -170,7 +189,37 @@ export default function MeseroLoginPage() {
           </button>
         </form>
 
-        <div className="mt-6 border-t border-gray-100 pt-6">
+        <div className="mt-6 border-t border-gray-100 pt-6 space-y-3">
+          <label className="flex items-center gap-2 text-xs text-gray-500">
+            <input
+              type="checkbox"
+              checked={showAssign}
+              onChange={(e) => setShowAssign(e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300"
+            />
+            Asignar este dispositivo a un {branding.staffLabel.toLowerCase()} específico
+          </label>
+
+          {showAssign && (
+            <div>
+              <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-gray-500">
+                Celular del {branding.staffLabel.toLowerCase()}
+              </label>
+              <input
+                type="tel"
+                inputMode="numeric"
+                placeholder="3009876543"
+                value={assignPhone}
+                onChange={(e) => setAssignPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                className="w-full rounded-xl border border-gray-200 bg-white py-3 px-4 text-base outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100"
+                maxLength={10}
+              />
+              <p className="mt-1 text-xs text-gray-400">
+                Las visitas registradas desde este dispositivo quedarán a su nombre.
+              </p>
+            </div>
+          )}
+
           <button
             type="button"
             onClick={handleActivateDevice}
@@ -178,10 +227,11 @@ export default function MeseroLoginPage() {
             className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white py-3 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
           >
             <Tablet className="h-4 w-4" />
-            Activar este dispositivo (supervisor)
+            Activar este dispositivo (autoriza el supervisor)
           </button>
-          <p className="mt-2 text-center text-xs text-gray-400">
-            Solo supervisores o admins pueden activar dispositivos de confianza.
+          <p className="text-center text-xs text-gray-400">
+            Arriba van el celular y PIN del <strong>supervisor o admin</strong> que autoriza.
+            {showAssign ? ' El dispositivo quedará a nombre del mesero indicado.' : ''}
           </p>
         </div>
       </div>

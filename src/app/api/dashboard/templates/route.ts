@@ -25,7 +25,10 @@ export async function GET() {
       'Content-Type': 'application/json',
     }
 
-    const res = await fetch(TWILIO_CONTENT_API, {
+    // ContentAndApprovals trae plantillas + estado de aprobación + motivo de rechazo
+    // en UNA llamada. Antes se hacía 1 fetch de ApprovalRequests POR plantilla (N+1):
+    // con 24 plantillas, "Sincronizar" tardaba varios segundos.
+    const res = await fetch(`${TWILIO_CONTENT_API}AndApprovals?PageSize=100`, {
       headers,
       cache: 'no-store',
     })
@@ -37,101 +40,52 @@ export async function GET() {
     }
 
     const data = await res.json()
-    interface TwilioApprovalRequests {
-      status?: string
-      category?: string
-      name?: string
-      channel_type?: string
-      whatsapp?: {
-        status?: string
-        category?: string
-        rejection_reason?: string
-      }
-    }
     interface TwilioContentItem {
       sid: string
       friendly_name: string
       language: string
       date_created: string
       date_updated: string
-      types: Record<string, { body?: string }>
+      types: Record<string, { body?: string; media?: string[] }>
       variables?: Record<string, string>
-      approval_requests?: TwilioApprovalRequests | TwilioApprovalRequests[]
+      approval_requests?: {
+        status?: string
+        category?: string
+        rejection_reason?: string
+      }
     }
 
-    // Fetch approval status for each content item individually for reliability
     const contents: TwilioContentItem[] = data.contents || []
 
-    const templates = await Promise.all(
-      contents.map(async (t) => {
-        let approvalStatus = 'draft'
-        let category = 'MARKETING'
+    const templates = contents.map((t) => {
+      const ar = t.approval_requests
+      const approvalStatus = (ar?.status || 'draft').toLowerCase()
+      const category = ar?.category || 'MARKETING'
+      const rejectionReason = ar?.rejection_reason?.trim() || null
 
-        // Helper to extract status from an approval object (handles multiple Twilio formats)
-        const extractFromApprovalObj = (ar: TwilioApprovalRequests) => {
-          const raw = ar.whatsapp?.status || ar.status || ''
-          if (raw) approvalStatus = raw.toLowerCase()
-          const cat = ar.whatsapp?.category || ar.category || ''
-          if (cat) category = cat
-        }
+      const body = t.types?.['twilio/text']?.body
+        || t.types?.['twilio/media']?.body
+        || t.types?.['twilio/quick-reply']?.body
+        || t.types?.['twilio/card']?.body
+        || t.types?.['twilio/list-picker']?.body
+        || '(tipo no textual)'
 
-        const ar = t.approval_requests
-        if (ar) {
-          // approval_requests may be an array or a plain object depending on API version
-          if (Array.isArray(ar)) {
-            const whatsappEntry = (ar as TwilioApprovalRequests[]).find(
-              (item) => item.whatsapp?.status || item.status
-            )
-            if (whatsappEntry) extractFromApprovalObj(whatsappEntry)
-          } else {
-            extractFromApprovalObj(ar)
-          }
-        }
-
-        // Fetch from the authoritative endpoint: GET /ApprovalRequests (without /whatsapp)
-        // Response structure: { whatsapp: { status: "approved", category: "MARKETING", ... } }
-        try {
-          const approvalRes = await fetch(
-            `${TWILIO_CONTENT_API}/${t.sid}/ApprovalRequests`,
-            { headers, cache: 'no-store' }
-          )
-          if (approvalRes.ok) {
-            const approvalData = await approvalRes.json()
-            const rawStatus = approvalData?.whatsapp?.status || ''
-            if (rawStatus) approvalStatus = rawStatus.toLowerCase()
-            const rawCategory = approvalData?.whatsapp?.category || ''
-            if (rawCategory) category = rawCategory
-          } else {
-            const errText = await approvalRes.text()
-            console.error(
-              `[Templates] ApprovalRequests fetch failed for ${t.sid}: ${approvalRes.status} ${errText}`
-            )
-          }
-        } catch (err) {
-          console.error(`[Templates] ApprovalRequests exception for ${t.sid}:`, err)
-        }
-
-        const body = t.types?.['twilio/text']?.body
-          || t.types?.['twilio/quick-reply']?.body
-          || t.types?.['twilio/card']?.body
-          || t.types?.['twilio/list-picker']?.body
-          || '(tipo no textual)'
-
-        return {
-          sid: t.sid,
-          friendly_name: t.friendly_name,
-          name: t.friendly_name,
-          language: t.language,
-          approval_status: approvalStatus,
-          status: approvalStatus,
-          category,
-          body,
-          variables: t.variables || {},
-          createdAt: t.date_created,
-          updatedAt: t.date_updated,
-        }
-      })
-    )
+      return {
+        sid: t.sid,
+        friendly_name: t.friendly_name,
+        name: t.friendly_name,
+        language: t.language,
+        approval_status: approvalStatus,
+        status: approvalStatus,
+        category,
+        body,
+        has_media: !!t.types?.['twilio/media'],
+        rejection_reason: rejectionReason,
+        variables: t.variables || {},
+        createdAt: t.date_created,
+        updatedAt: t.date_updated,
+      }
+    })
 
     return NextResponse.json({ templates })
   } catch (error) {
@@ -162,6 +116,20 @@ export async function POST(request: NextRequest) {
 
     if (!name || !messageBody) {
       return NextResponse.json({ error: 'Nombre y cuerpo son requeridos' }, { status: 400 })
+    }
+
+    // Reglas que Meta aplica SIEMPRE — validarlas aquí evita quemar un ciclo de
+    // aprobación de 24-72h (y golpes a la reputación del número por rechazos):
+    const trimmedBody = String(messageBody).trim()
+    if (/^\{\{\d+\}\}/.test(trimmedBody) || /\{\{\d+\}\}\s*$/.test(trimmedBody)) {
+      return NextResponse.json({
+        error: 'Meta rechaza plantillas que empiezan o terminan con una variable. Agrega texto antes de la primera variable y después de la última (ej: "¡Hola {{1}}!" en vez de "{{1}} hola").',
+      }, { status: 400 })
+    }
+    if (trimmedBody.length > 1024) {
+      return NextResponse.json({
+        error: `El cuerpo supera el límite de 1024 caracteres de WhatsApp (actual: ${trimmedBody.length}).`,
+      }, { status: 400 })
     }
 
     // WhatsApp template name: lowercase letters, numbers, underscores only (Meta policy)

@@ -17,8 +17,10 @@ const ALLOWED_MIMES: Record<string, 'image' | 'video'> = {
   'video/mp4': 'video',
 }
 
+// La imagen admite hasta 30 MB de entrada: el servidor la comprime a JPEG ≤5MB
+// (límite WhatsApp) automáticamente. El video no se comprime server-side.
 const MAX_BYTES = {
-  image: 5 * 1024 * 1024,
+  image: 30 * 1024 * 1024,
   video: 16 * 1024 * 1024,
 }
 
@@ -159,7 +161,7 @@ export function MediaUploader({ value, onChange, eventId = null, disabled }: Med
             <Upload className="h-8 w-8 text-muted-foreground" />
             <p className="text-sm font-medium">Arrastra o haz click para subir</p>
             <p className="text-xs text-muted-foreground">
-              JPG o PNG (máx 5 MB) · MP4 (máx 16 MB)
+              JPG o PNG (se optimiza automáticamente) · MP4 (máx 16 MB)
             </p>
           </>
         )}

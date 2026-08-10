@@ -13,7 +13,10 @@ import { ReviewFunnelCard, type ReviewFunnelData } from '@/components/dashboard/
 import { RedemptionsTable, type RedemptionRow } from '@/components/dashboard/RedemptionsTable'
 
 function todayISO() {
-  return new Date().toISOString().split('T')[0]
+  // Fecha LOCAL del navegador (en-CA da formato YYYY-MM-DD), no UTC: con
+  // toISOString(), después de las 7pm en Colombia "hoy" apuntaba al día
+  // siguiente y el filtro mostraba vacía la hora pico del restaurante.
+  return new Date().toLocaleDateString('en-CA')
 }
 
 export default function RedemptionsPage() {
@@ -100,7 +103,8 @@ export default function RedemptionsPage() {
 
       const headers = ['fecha_hora', 'premio', 'cliente', 'telefono', 'mesero', 'mesa', 'ref_pos', 'origen', 'notas']
       const csvRows = all.map((r) => [
-        new Date(r.redeemed_at).toISOString(),
+        // Hora local del navegador — el POS del restaurante vive en hora Colombia, no UTC.
+        new Date(r.redeemed_at).toLocaleString('sv-SE'),
         r.prize_title,
         r.customer_name ?? '',
         r.customer_phone ?? '',

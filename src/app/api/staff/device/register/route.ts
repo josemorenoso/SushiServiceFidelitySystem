@@ -25,7 +25,10 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { phone, pin, device_fingerprint, device_name } = body
+    // `assign_staff_phone` (opcional): celular del mesero al que se atribuye este
+    // dispositivo. El supervisor sigue siendo quien autoriza con su PIN; la
+    // atribución determina a nombre de quién quedan las visitas del dispositivo.
+    const { phone, pin, device_fingerprint, device_name, assign_staff_phone } = body
 
     if (!phone || !pin || !device_fingerprint) {
       return NextResponse.json(
@@ -73,6 +76,31 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Resolver a quién queda atribuido el dispositivo: al mesero indicado
+    // (si se pasó assign_staff_phone) o al supervisor que lo activa.
+    let ownerStaff = { id: staff.id, name: staff.name }
+    if (assign_staff_phone && assign_staff_phone !== phone) {
+      const { data: assignee } = await supabase
+        .from('staff_users')
+        .select('id, name, is_active')
+        .eq('phone', assign_staff_phone)
+        .eq('tenant_id', tenant.id)
+        .single()
+
+      if (!assignee || !assignee.is_active) {
+        return NextResponse.json(
+          {
+            error: 'Mesero no encontrado',
+            message: `No hay un mesero activo con el celular ${assign_staff_phone}. Créalo primero en Dashboard → Meseros.`,
+          },
+          { status: 404 }
+        )
+      }
+      ownerStaff = { id: assignee.id, name: assignee.name }
+    }
+
+    const finalDeviceName = device_name || `Dispositivo de ${ownerStaff.name}`
+
     // Verificar si ya existe dispositivo con ese fingerprint
     const { data: existing } = await supabase
       .from('staff_devices')
@@ -82,23 +110,24 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (existing) {
-      // Actualizar existente
+      // Actualizar existente (incluye re-atribuir al nuevo dueño)
       await supabase
         .from('staff_devices')
         .update({
+          staff_user_id: ownerStaff.id,
           is_trusted: true,
           trusted_at: new Date().toISOString(),
           expires_at: null,
           last_used_at: new Date().toISOString(),
-          device_name: device_name || null,
+          device_name: finalDeviceName,
         })
         .eq('id', existing.id)
     } else {
       // Crear nuevo
       await supabase.from('staff_devices').insert({
-        staff_user_id: staff.id,
+        staff_user_id: ownerStaff.id,
         device_fingerprint,
-        device_name: device_name || null,
+        device_name: finalDeviceName,
         is_trusted: true,
         trusted_at: new Date().toISOString(),
         expires_at: null,
@@ -108,7 +137,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: 'Dispositivo activado como de confianza',
+      message: `Dispositivo activado a nombre de ${ownerStaff.name}`,
+      assigned_to: ownerStaff.name,
     })
   } catch (error) {
     console.error('[DeviceRegister] Error:', error)

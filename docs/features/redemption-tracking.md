@@ -61,6 +61,11 @@ Códigos: `409 already_redeemed`, `400 invalid_result`, `404` cliente no encontr
 - `src/components/features/staff/RewardAlert.tsx`
 - Wiring: `src/app/api/check-in/status/route.ts` (`pending_reward`, `customer.id`), `src/app/api/mystery-box/resolve/route.ts` + `src/services/mystery-box.service.ts` (`result_id`)
 
+> **Nota (v2.8.1):** auditoría completa del flujo — correcto en anti-doble-entrega, carrera entre
+> meseros y aislamiento por tenant. 3 fixes de zona horaria: `by_hour` del resumen ahora convierte a
+> `America/Bogota` (antes hora del servidor UTC), el filtro "Hoy" usa fecha local del navegador
+> (antes UTC: tras las 7pm apuntaba a mañana), y el CSV de POS exporta hora local.
+
 > **Nota (v2.5.0):** la página de redenciones también monta `ReviewFunnelCard` (embudo de reseñas de
 > Google: mostrado → click → premio redimido). Esa métrica pertenece a **[review-flow.md](review-flow.md)**,
 > no a este doc. La v2.5.1 endureció `recordRedemption` con filtro `tenant_id` en la rama de mystery box

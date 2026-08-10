@@ -27,6 +27,7 @@ import { ManualCampaigns } from '@/components/dashboard/ManualCampaigns'
 import { WalletCard } from '@/components/dashboard/WalletCard'
 import { SegmentRadar } from '@/components/dashboard/SegmentRadar'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { FREQUENCY_CAP_DAYS, RECOVERY_ZONE_START_DAYS, RECOVERY_ZONE_END_DAYS } from '@/constants/rewards'
 
 interface Campaign {
   id: string
@@ -98,6 +99,8 @@ export default function CampaignsPage() {
   const [manualDialog, setManualDialog] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState<string | null>(null)
+  const [runSummary, setRunSummary] = useState<string | null>(null)
+  const [runError, setRunError] = useState<string | null>(null)
 
   useEffect(() => {
     Promise.all([
@@ -140,17 +143,35 @@ export default function CampaignsPage() {
 
   const handleManualCampaign = async (type: string) => {
     setSending(true)
+    setRunError(null)
+    setRunSummary(null)
     try {
-      const endpoint = type === 'birthday' ? '/api/cron/birthday' : '/api/cron/reactivation'
-      await fetch(endpoint, { method: 'POST' })
+      const res = await fetch('/api/dashboard/campaigns/run-auto', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.ok === false) {
+        setRunError(data.error || 'La campaña no se pudo ejecutar. Revisa la configuración de plantillas en Ajustes.')
+        return
+      }
+      const audience = type === 'birthday'
+        ? (data.total_birthday_customers ?? 0)
+        : (data.total_inactive_customers ?? 0)
+      setRunSummary(
+        `Enviados: ${data.sent ?? 0}` +
+        (data.failed ? ` · Fallidos: ${data.failed}` : '') +
+        ` · Audiencia detectada: ${audience}`
+      )
       setSent(type)
       setTimeout(() => {
         fetch('/api/dashboard/campaigns')
           .then((res) => res.json())
           .then((data) => setCampaigns(Array.isArray(data) ? data : []))
       }, 1000)
-    } catch {
-      // best effort
+    } catch (err) {
+      setRunError(err instanceof Error ? err.message : 'Error de red ejecutando la campaña')
     } finally {
       setSending(false)
     }
@@ -245,6 +266,56 @@ export default function CampaignsPage() {
           Solo asegúrate de que cada una tenga su plantilla configurada (badge verde <strong>Activa</strong>).
         </span>
       </div>
+
+      {/* ─── Ciclo de recuperación del cliente ─── */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Ciclo de recuperación del cliente</CardTitle>
+          <CardDescription>
+            Cada cliente recorre este camino desde su última visita. El sistema coordina los mensajes
+            para traerlo de regreso sin saturarlo.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-2 grid-cols-1 sm:grid-cols-5">
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700">Día 0</p>
+              <p className="text-sm font-semibold text-emerald-900 mt-0.5">Visita</p>
+              <p className="text-xs text-emerald-800/80 mt-1">
+                Escanea el QR o pide domicilio. Gana puntos y arranca el ciclo.
+              </p>
+            </div>
+            <div className="rounded-lg border bg-muted/40 p-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Días 1–{FREQUENCY_CAP_DAYS}</p>
+              <p className="text-sm font-semibold mt-0.5">Protegido</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Cap de frecuencia: no recibe marketing. La experiencia manda.
+              </p>
+            </div>
+            <div className="rounded-lg border border-blue-200 bg-blue-50/60 p-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-700">Días {FREQUENCY_CAP_DAYS}–{RECOVERY_ZONE_START_DAYS - 1}</p>
+              <p className="text-sm font-semibold text-blue-900 mt-0.5">Ventana manual</p>
+              <p className="text-xs text-blue-800/80 mt-1">
+                Burbujas de riesgo y campañas manuales con filtro por días sin venir.
+              </p>
+            </div>
+            <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700">Días {RECOVERY_ZONE_START_DAYS}–{RECOVERY_ZONE_END_DAYS}</p>
+              <p className="text-sm font-semibold text-amber-900 mt-0.5">Recuperación automática</p>
+              <p className="text-xs text-amber-800/80 mt-1">
+                Zona reservada: toque suave al día {softDays} y agresivo al día {aggressiveDays}, sin intervención tuya.
+              </p>
+            </div>
+            <div className="rounded-lg border border-red-200 bg-red-50/60 p-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-red-700">Día {RECOVERY_ZONE_END_DAYS + 1}+</p>
+              <p className="text-sm font-semibold text-red-900 mt-0.5">Rescate</p>
+              <p className="text-xs text-red-800/80 mt-1">
+                Campaña manual &quot;Rescatar Perdidos&quot; con oferta fuerte: última oportunidad.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 md:grid-cols-2">
         {autoCampaigns.map((ac) => {
@@ -396,7 +467,7 @@ export default function CampaignsPage() {
 
       </Tabs>
 
-      <Dialog open={!!manualDialog} onOpenChange={() => { setManualDialog(null); setSent(null) }}>
+      <Dialog open={!!manualDialog} onOpenChange={() => { setManualDialog(null); setSent(null); setRunSummary(null); setRunError(null) }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
@@ -422,13 +493,22 @@ export default function CampaignsPage() {
             ) : null
           })()}
           {sent && (
-            <div className="rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-800 flex items-center gap-2">
-              <CheckCircle className="h-4 w-4" />
-              Campaña ejecutada exitosamente.
+            <div className="rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-800 flex items-start gap-2">
+              <CheckCircle className="h-4 w-4 mt-0.5 shrink-0" />
+              <div>
+                <p className="font-medium">Campaña ejecutada.</p>
+                {runSummary && <p className="mt-0.5 text-xs">{runSummary}</p>}
+              </div>
+            </div>
+          )}
+          {runError && (
+            <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-800 flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+              {runError}
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setManualDialog(null); setSent(null) }}>
+            <Button variant="outline" onClick={() => { setManualDialog(null); setSent(null); setRunSummary(null); setRunError(null) }}>
               Cerrar
             </Button>
             {!sent && (

@@ -58,6 +58,7 @@ Webhooks validan origen por número autorizado o `x-webhook-secret`. Cron jobs v
 | POST | /api/dashboard/campaigns/:id/send | Ejecutar campaña | Admin Cookie |
 | GET | /api/dashboard/campaigns/estimate | Estimar audiencia con filtros | Admin Cookie |
 | POST | /api/dashboard/campaigns/manual | Crear y ejecutar campaña manual (**409 si saldo insuficiente**) | Admin Cookie |
+| POST | /api/dashboard/campaigns/run-auto | Ejecutar cron birthday/reactivation del tenant actual (puente con CRON_SECRET) | Admin Cookie |
 | GET | /api/dashboard/twilio-balance | Saldo Twilio matriz + costo/msg (**saldo solo super-admin**; tenants → `restricted`) | Admin Cookie |
 | GET | /api/dashboard/wallet | Saldo COP del tenant actual: balance, mensajes disponibles, consumo del mes, últimos movimientos | Admin Cookie |
 | POST | /api/admin/wallet/topup | Registrar recarga manual de un tenant (asignar saldo) | **Super-admin** |
@@ -842,7 +843,10 @@ Cuenta clientes que coinciden con los filtros.
 - `city` — Filtro por ciudad (ilike)
 - `minVisits` / `maxVisits` — Rango de visitas
 - `minAge` / `maxAge` — Rango de edad (calculado desde birthday)
-- `source` — `qr_only` | `delivery_only`
+- `source` — `qr_only` | `delivery_only` (mismo `source_channels` que aplica el envío manual)
+- `minDays` / `maxDays` — Días sin venir (v2.8.0). `minDays=N`: última visita hace N días o más;
+  `maxDays=M`: última visita hace M días o menos (día M completo incluido). Ambos excluyen clientes
+  sin `last_visit_at`.
 
 **Response 200:**
 ```json
@@ -867,6 +871,8 @@ Crea y ejecuta campaña manual con filtros.
     "maxVisits": "",
     "minAge": "",
     "maxAge": "",
+    "minDays": "",
+    "maxDays": "",
     "source": "delivery_only"
   },
   "templateSid": "HXxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
@@ -886,6 +892,33 @@ Crea y ejecuta campaña manual con filtros.
 ```json
 { "success": true, "campaignId": "uuid", "totalSent": 45, "totalFailed": 0, "totalSkippedFrequencyCap": 3 }
 ```
+
+**Notas (v2.8.0):**
+
+- `filters.minDays` / `filters.maxDays` — días sin venir, mismo criterio que el estimador.
+- La query excluye clientes con `whatsapp_opt_out_at` (antes se contaban como fallidos al enviar).
+- Las burbujas de riesgo del dashboard (`AtRiskBubbles`) usan este mismo endpoint con el rango de
+  días del nivel como filtro.
+
+---
+
+### Campaigns: Run Auto (v2.8.0)
+
+**`POST /api/dashboard/campaigns/run-auto`** — Admin JWT
+
+Puente autenticado para el botón "Ejecutar Ahora" del dashboard: valida la sesión del admin y llama al
+cron correspondiente (`/api/cron/birthday` o `/api/cron/reactivation`) del tenant actual con el
+`CRON_SECRET` desde el servidor. El navegador nunca ve el secret.
+
+**Request:**
+```json
+{ "type": "birthday" }
+```
+
+**Response 200:** passthrough del resultado del cron (`ok`, `sent`, `failed`,
+`total_birthday_customers` / `total_inactive_customers`, `error?`).
+
+**Errores:** `400` type inválido, `401` sin sesión, `404` tenant no encontrado, `500` CRON_SECRET ausente.
 
 ---
 
@@ -936,6 +969,11 @@ Crea y ejecuta campaña manual con filtros.
 ### Templates (Twilio Content API)
 
 **`GET /api/dashboard/templates`** — Admin JWT
+
+> v2.8.1: usa `ContentAndApprovals` de Twilio (1 llamada, antes 1+N). Cada plantilla incluye ahora
+> `rejection_reason` (motivo de rechazo de Meta, o `null`) y `has_media` (true = `twilio/media`,
+> plantillas de eventos — los selectores de campañas las excluyen). El `POST` valida reglas duras de
+> Meta antes de crear: variable al inicio/fin del cuerpo y máximo 1024 caracteres → 400 con mensaje.
 
 **Response 200:**
 ```json
@@ -1296,11 +1334,17 @@ X-Device-Token: {device_fingerprint}
   "phone": "3001234567",
   "pin": "1234",
   "device_fingerprint": "df_a1b2c3d4",
-  "device_name": "Celular del Local"
+  "device_name": "Celular del Local",
+  "assign_staff_phone": "3009876543"
 }
 ```
 
-**Response 200:** `{ "success": true }`
+- `assign_staff_phone` (opcional, v2.8.1): celular de un mesero activo del tenant al que se
+  atribuye el dispositivo. El supervisor sigue autorizando con su PIN; las visitas registradas
+  desde el dispositivo quedan a nombre del mesero asignado. Sin este campo, el dispositivo queda
+  a nombre del supervisor. Si el celular no corresponde a un mesero activo → 404.
+
+**Response 200:** `{ "success": true, "message": "Dispositivo activado a nombre de <mesero>", "assigned_to": "<mesero>" }`
 **Response 403:** `{ "error": "No autorizado", "message": "Solo supervisores o admins pueden registrar dispositivos." }`
 
 ---

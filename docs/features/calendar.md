@@ -2,7 +2,41 @@
 
 > Estado: 🟢 Auto-envío activo (cron registrado + dispatch manual). Pendiente solo aprobación Meta de plantillas media.
 > Migración: `supabase/migrations/00012_calendar_events_and_media.sql`
-> Última actualización: 2026-06-17
+> Última actualización: 2026-08-10 (v2.8.0)
+
+## Estado real verificado v2.8.1 (2026-08-10)
+
+Diagnóstico E2E contra Twilio y Vercel (no solo código):
+
+- ❌ La plantilla de imagen aprobada (`HX76a64b...`) tenía **media fija** (sample de gstatic, sin
+  `{{6}}`): habría enviado siempre la imagen de muestra. La de video estaba **rechazada** por Meta.
+- ✅ Fix: plantilla dinámica nueva **`HXf30219c2b31c3ac1c6eb751d2b4ea689`**
+  (`evento_imagen__sushi_service_barra__v2`) creada y en revisión de Meta.
+  **Acción pendiente del admin: al aprobarse, pegarla en Ajustes → `event_template_image_sid`.**
+  Video: subir un MP4 de muestra al bucket y correr el script sin `SKIP_VIDEO`.
+- ✅ n8n dispara `/api/cron/calendar-dispatch` cada 15 min con HTTP 200 (verificado en logs de Vercel).
+- ✅ Guard nuevo `assertEventTemplateUsable` en `executeAutoEvent`: verifica contra la Content API que
+  la plantilla resuelta sea `twilio/media`, con `{{6}}` dinámico y aprobada — si no, el evento queda
+  `failed` con mensaje explícito en vez de enviar la imagen equivocada a toda la audiencia.
+- `scripts/twilio-create-media-templates.mjs` acepta `SKIP_VIDEO=1` (crear solo imagen) y
+  `TEMPLATE_SUFFIX` (nombres únicos exigidos por Meta).
+
+## Fixes v2.8.0 (2026-08-10)
+
+- **Zona horaria en `createEvent`**: la validación `scheduled_send_at ≤ event_date` comparaba contra
+  fin de día **UTC** (`T23:59:59Z`), rechazando envíos programados el mismo día del evento después de
+  las 6:59pm hora Colombia. Ahora compara contra fin de día América/Bogotá (`T23:59:59-05:00`).
+- **Eventos `auto` sin media bloqueados en la UI**: `executeAutoEvent` siempre falló para eventos sin
+  imagen/video (las plantillas son `twilio/media`), pero la UI dejaba crearlos y el error aparecía
+  recién en el dispatch. `EventCreateDialog` ahora exige el flyer en modo auto (con explicación) y
+  `EventDetailDrawer` muestra alerta destructiva en eventos existentes sin media.
+- **Límite de imagen del uploader**: el cliente rechazaba >5 MB aunque el servidor acepta hasta 30 MB
+  y comprime a JPEG ≤5MB (sharp, límite WhatsApp). Alineado a 30 MB.
+- **Audiencia estimada en vivo** en `EventCreateDialog` (reusa `/api/dashboard/campaigns/estimate`
+  con city/minVisits/maxVisits, debounce 500ms).
+- Copys actualizados: banner del calendario y descripción del dialog ya no hablan de "cuando Meta
+  apruebe las plantillas" como bloqueante genérico; explican los requisitos reales (flyer + SID de
+  plantilla de eventos en Ajustes).
 
 ---
 

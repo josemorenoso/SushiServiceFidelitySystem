@@ -300,6 +300,19 @@ export function EventDetailDrawer({ open, onOpenChange, event, onUpdated }: Even
               </div>
             )}
 
+            {event.send_mode === 'auto' && !event.media_url && event.status !== 'sent' && event.status !== 'cancelled' && (
+              <div className="rounded-lg bg-destructive/10 border border-destructive/30 p-2.5 text-xs space-y-1">
+                <div className="font-medium text-destructive flex items-center gap-1.5">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  Falta la imagen o video del evento
+                </div>
+                <div className="text-destructive/90 text-[11px]">
+                  Las plantillas de evento son de tipo media: sin imagen o video el envío fallará.
+                  Cancela este evento y créalo de nuevo con su flyer.
+                </div>
+              </div>
+            )}
+
             {templateMissing && (
               <div className="rounded-lg bg-destructive/10 border border-destructive/30 p-2.5 text-xs space-y-1">
                 <div className="font-medium text-destructive flex items-center gap-1.5">

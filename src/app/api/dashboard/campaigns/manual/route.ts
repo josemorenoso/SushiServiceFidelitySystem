@@ -6,7 +6,6 @@ import { sendTemplateMessage } from '@/services/whatsapp.service'
 import { getNextReward, getRewardTitle, getRewardById } from '@/services/reward.service'
 import { FREQUENCY_CAP_DAYS, RECOVERY_ZONE_START_DAYS, RECOVERY_ZONE_END_DAYS } from '@/constants/rewards'
 import { filterByMonthlyCap, getActiveBlackouts } from '@/services/campaign.service'
-import { buildTiersRoadmap, getNextTier } from '@/services/reward-tiers.service'
 import { canSendBulk } from '@/services/wallet.service'
 
 function getServiceClient() {
@@ -25,6 +24,10 @@ interface ManualCampaignBody {
     minAge: string
     maxAge: string
     source: string
+    /** Días mínimos sin venir (última visita hace N días o más) */
+    minDays?: string
+    /** Días máximos sin venir (última visita hace M días o menos) */
+    maxDays?: string
   }
   templateSid: string
   messageTemplate: string
@@ -85,6 +88,7 @@ export async function POST(request: NextRequest) {
     let query = db.from('customers').select('id, phone, name, total_visits, total_points, last_campaign_at, last_visit_at, source_channels, accepts_marketing')
     query = query.eq('tenant_id', tenantId)
     query = query.eq('accepts_marketing', true)
+    query = query.is('whatsapp_opt_out_at', null)
     if (filters.city) query = query.ilike('city', `%${filters.city}%`)
     if (filters.minVisits) query = query.gte('total_visits', parseInt(filters.minVisits))
     if (filters.maxVisits) query = query.lte('total_visits', parseInt(filters.maxVisits))
@@ -104,6 +108,16 @@ export async function POST(request: NextRequest) {
       const minBirthday = new Date()
       minBirthday.setFullYear(minBirthday.getFullYear() - parseInt(filters.maxAge) - 1)
       query = query.gte('birthday', minBirthday.toISOString().split('T')[0])
+    }
+    // Días sin venir (mismo criterio que estimate/route.ts):
+    // ambos filtros excluyen clientes sin last_visit_at (inactividad no medible).
+    if (filters.minDays) {
+      const cutoff = new Date(Date.now() - parseInt(filters.minDays) * 24 * 60 * 60 * 1000).toISOString()
+      query = query.lte('last_visit_at', cutoff)
+    }
+    if (filters.maxDays) {
+      const cutoff = new Date(Date.now() - (parseInt(filters.maxDays) + 1) * 24 * 60 * 60 * 1000).toISOString()
+      query = query.gt('last_visit_at', cutoff)
     }
 
     const { data: customers } = await query
@@ -126,16 +140,11 @@ export async function POST(request: NextRequest) {
     })
     const skippedRecoveryZone = afterFrequencyCap.length - afterRecoveryZone.length
 
-    // Pre-event blackout: excluir clientes que están en ventana de blackout de un evento próximo
-    const blackouts = await getActiveBlackouts(tenantId)
-    const blackoutEventIds = new Set(blackouts.map((ev) => ev.id))
-    const eligible = afterRecoveryZone.filter((c) => {
-      // Si hay blackouts activos, excluir clientes que ya recibieron mensaje de ese evento
-      // Nota: en implementación simple, excluimos TODOS los clientes si hay blackout activo
-      // para reservarles cupo. En implementación avanzada, se filtraría por evento.
-      return true // La lógica de exclusion real se hace por frequency cap + monthly cap
-    })
-    const skippedBlackout = afterRecoveryZone.length - eligible.length
+    // Pre-event blackout: hoy solo informativo — la exclusión real la hacen el
+    // frequency cap + monthly cap. Se mantiene la consulta para trazabilidad.
+    await getActiveBlackouts(tenantId)
+    const eligible = afterRecoveryZone
+    const skippedBlackout = 0
 
     // Monthly cap: máximo 3 mensajes de marketing por mes por cliente
     const { eligible: finalEligible, excluded: excludedMonthlyCap } = await filterByMonthlyCap(eligible)

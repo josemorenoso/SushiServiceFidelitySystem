@@ -31,6 +31,8 @@ interface TwilioTemplate {
   status: string
   category: string
   body: string
+  has_media?: boolean
+  rejection_reason?: string | null
   variables: Record<string, string>
   createdAt: string
   updatedAt: string
@@ -117,6 +119,25 @@ export default function TemplatesPage() {
   })()
 
   const allSamplesFilled = detectedVars.length === 0 || detectedVars.every((v) => (sampleVars[v] ?? '').trim().length > 0)
+
+  // Reglas duras de Meta, validadas en vivo para no quemar un ciclo de aprobación de 24-72h.
+  const bodyIssues = (() => {
+    const issues: string[] = []
+    const trimmed = newBody.trim()
+    if (/^\{\{\d+\}\}/.test(trimmed)) issues.push('El mensaje no puede EMPEZAR con una variable — agrega texto antes (ej: "¡Hola {{1}}!").')
+    if (/\{\{\d+\}\}$/.test(trimmed)) issues.push('El mensaje no puede TERMINAR con una variable — agrega texto después (ej: "...te espera {{3}}. ¡Ven pronto!").')
+    if (trimmed.length > 1024) issues.push(`Supera el límite de 1024 caracteres de WhatsApp (${trimmed.length}).`)
+    return issues
+  })()
+
+  // Meta exige nombres en minúsculas/números/guiones bajos; así se enviará realmente
+  // (misma normalización que hace el backend en templates/route.ts).
+  const normalizedMetaName = newName
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9_]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '')
 
   const handleCreate = async () => {
     if (!newName.trim() || !newBody.trim() || !allSamplesFilled) return
@@ -266,6 +287,12 @@ export default function TemplatesPage() {
                         </div>
                         <p className="text-xs text-muted-foreground line-clamp-2">{t.body}</p>
 
+                        {statusKey === 'rejected' && t.rejection_reason && (
+                          <p className="text-[11px] text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1.5">
+                            <strong>Motivo del rechazo:</strong> {t.rejection_reason}
+                          </p>
+                        )}
+
                         {/* Per-template submit button for drafts */}
                         {needsSubmit && (
                           <div className="flex items-center gap-2 pt-0.5">
@@ -404,7 +431,12 @@ export default function TemplatesPage() {
                 placeholder="Ej: sushi_promo_fin_de_semana"
                 className="h-9"
               />
-              <p className="text-[10px] text-muted-foreground">Sin espacios ni caracteres especiales</p>
+              <p className="text-[10px] text-muted-foreground">
+                Sin espacios ni caracteres especiales
+                {normalizedMetaName && normalizedMetaName !== newName.trim() && (
+                  <span> — se enviará a Meta como <code className="font-mono">{normalizedMetaName}</code></span>
+                )}
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Categoría</Label>
@@ -436,6 +468,17 @@ export default function TemplatesPage() {
                 rows={4}
                 className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none"
               />
+              {bodyIssues.length > 0 && (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-2.5 space-y-1">
+                  {bodyIssues.map((issue) => (
+                    <p key={issue} className="text-[11px] text-red-700 flex items-start gap-1.5">
+                      <XCircle className="h-3 w-3 mt-0.5 shrink-0" />
+                      {issue}
+                    </p>
+                  ))}
+                  <p className="text-[10px] text-red-500">Meta rechazaría esta plantilla — corrígela antes de enviar.</p>
+                </div>
+              )}
             </div>
 
             {detectedVars.length > 0 && (
@@ -462,7 +505,7 @@ export default function TemplatesPage() {
             <div className="flex gap-2">
               <Button
                 onClick={handleCreate}
-                disabled={!newName.trim() || !newBody.trim() || !allSamplesFilled || creating}
+                disabled={!newName.trim() || !newBody.trim() || !allSamplesFilled || bodyIssues.length > 0 || creating}
                 className="gap-2"
               >
                 {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <CloudUpload className="h-4 w-4" />}

@@ -55,6 +55,26 @@ export function EventCreateDialog({
   const [filterCity, setFilterCity] = useState('')
   const [filterMinVisits, setFilterMinVisits] = useState('')
   const [filterMaxVisits, setFilterMaxVisits] = useState('')
+  const [audienceCount, setAudienceCount] = useState<number | null>(null)
+
+  // Estimación en vivo de la audiencia (debounced) con los mismos filtros del evento.
+  useEffect(() => {
+    if (!open) return
+    const timer = setTimeout(async () => {
+      try {
+        const params = new URLSearchParams()
+        if (filterCity.trim()) params.set('city', filterCity.trim())
+        if (filterMinVisits) params.set('minVisits', filterMinVisits)
+        if (filterMaxVisits) params.set('maxVisits', filterMaxVisits)
+        const res = await fetch(`/api/dashboard/campaigns/estimate?${params}`)
+        const data = await res.json()
+        setAudienceCount(typeof data.count === 'number' ? data.count : null)
+      } catch {
+        setAudienceCount(null)
+      }
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [open, filterCity, filterMinVisits, filterMaxVisits])
 
   useEffect(() => {
     if (open && defaultDate) {
@@ -76,6 +96,7 @@ export function EventCreateDialog({
     setFilterCity('')
     setFilterMinVisits('')
     setFilterMaxVisits('')
+    setAudienceCount(null)
   }
 
   function handleClose() {
@@ -97,6 +118,13 @@ export function EventCreateDialog({
     }
     if (sendMode === 'auto' && !scheduledSendAt) {
       setError('Si vas a auto-enviar, indica cuándo')
+      return
+    }
+    if (sendMode === 'auto' && !media) {
+      setError(
+        'Los envíos automáticos usan plantillas de WhatsApp con imagen o video: sube el flyer del evento antes de programarlo. ' +
+        'Si solo quieres un recordatorio en el calendario, usa el modo "Solo recordarme".'
+      )
       return
     }
 
@@ -152,8 +180,8 @@ export function EventCreateDialog({
             Crear evento del calendario
           </DialogTitle>
           <DialogDescription>
-            Planifica una promo, festival o activación. Si subes una imagen o video, queda guardada para cuando
-            las plantillas de envío estén aprobadas.
+            Planifica una promo, festival o activación. En modo auto-envío el flyer (imagen o video)
+            llega por WhatsApp a la audiencia que elijas en la fecha programada.
           </DialogDescription>
         </DialogHeader>
 
@@ -267,8 +295,15 @@ export function EventCreateDialog({
 
           {/* Media */}
           <div className="space-y-2">
-            <Label>Imagen o video (opcional)</Label>
+            <Label>
+              Imagen o video {sendMode === 'auto' ? <span className="text-destructive">*</span> : '(opcional)'}
+            </Label>
             <MediaUploader value={media} onChange={setMedia} disabled={submitting} />
+            {sendMode === 'auto' && !media && (
+              <p className="text-xs text-amber-700">
+                El auto-envío requiere el flyer: la plantilla de WhatsApp del evento lleva la imagen o el video adjunto.
+              </p>
+            )}
           </div>
 
           {/* Audiencia */}
@@ -297,6 +332,11 @@ export function EventCreateDialog({
             </div>
             <p className="text-xs text-muted-foreground">
               Si dejas vacío, el evento aplica a todos los clientes que aceptan marketing.
+              {audienceCount !== null && (
+                <span className="ml-1 font-medium text-foreground">
+                  Audiencia estimada hoy: {audienceCount} clientes.
+                </span>
+              )}
             </p>
           </div>
 

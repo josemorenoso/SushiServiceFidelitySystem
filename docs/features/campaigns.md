@@ -1,6 +1,28 @@
 # Feature: Campañas — Control de Tráfico Centralizado
 
-**Última actualización:** 2026-07-05 (v1.4.1 — disparo unificado en n8n para birthday/reactivation)
+**Última actualización:** 2026-08-10 (v2.8.0 — filtro por días sin venir, envío real desde burbujas, run-auto)
+
+---
+
+## Novedades v2.8.0 (2026-08-10)
+
+- **Filtro por días sin venir** en campañas manuales: `filters.minDays` (última visita hace N días o
+  más) y `filters.maxDays` (hace M días o menos, día M completo incluido). Aplican en
+  `estimate/route.ts` y `manual/route.ts` con el mismo criterio; ambos excluyen clientes sin
+  `last_visit_at`. UI: dos inputs nuevos en `ManualCampaigns.tsx` + preset "Rescatar Perdidos" (26+
+  días, justo después de la Recovery Zone).
+- **Burbujas de riesgo con envío real** (`AtRiskBubbles.tsx`): antes el botón apuntaba a
+  `/api/dashboard/campaigns/quick` (endpoint inexistente → 404 silencioso). Ahora el diálogo pide una
+  plantilla aprobada, muestra los elegibles reales del día (estimador con el rango de días del nivel:
+  Alerta 7-10, En riesgo 11-15, Crítico 16-21, Perdido 22+) y envía por
+  `/api/dashboard/campaigns/manual`, respetando frequency cap, recovery zone, cap mensual y saldo.
+- **`POST /api/dashboard/campaigns/run-auto`**: puente autenticado para "Ejecutar Ahora" (los crons
+  exigen `CRON_SECRET`, que el navegador no conoce; antes el botón recibía 401 y la UI fingía éxito).
+  El diálogo del dashboard ahora muestra enviados/fallidos/audiencia o el error real.
+- **Paridad estimador ↔ envío**: el estimador ahora aplica también el filtro de canal
+  (`source_channels`) y el envío manual excluye opt-outs en la query (antes se contaban como fallidos).
+- **Ciclo de recuperación del cliente**: strip visual de 5 etapas en Campañas → Automáticas
+  (Visita → Protegido 1-7d → Ventana manual 7-17d → Recuperación automática 18-25d → Rescate 26+d).
 
 ---
 

@@ -139,8 +139,9 @@ export default function CalendarPage() {
         <div className="text-sm text-blue-900">
           <p className="font-medium">Planifica el mes aquí.</p>
           <p className="text-blue-800/90 text-xs mt-0.5">
-            Los eventos en modo <strong>Recordatorio</strong> quedan visibles para ti.
-            Los de <strong>Auto-envío</strong> se dispararán automáticamente cuando el path de plantillas con media esté aprobado por Meta.
+            Los eventos en modo <strong>Recordatorio</strong> quedan visibles solo para ti.
+            Los de <strong>Auto-envío</strong> mandan el flyer por WhatsApp a la audiencia elegida en la fecha
+            programada (requieren imagen o video y la plantilla de eventos configurada en Ajustes).
           </p>
         </div>
       </div>

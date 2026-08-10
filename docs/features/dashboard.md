@@ -46,7 +46,7 @@ Los dispositivos del local (celulares/tablets) se activan desde `/mesero` para e
 | `VisitsChart` | Gráfica de área: visitas QR vs Domicilios |
 | `GrowthChart` | Gráfica compuesta: nuevos clientes + acumulado |
 | `CustomerTiers` | Barras de niveles de poder |
-| `AtRiskBubbles` | Burbujas interactivas de clientes en riesgo |
+| `AtRiskBubbles` | Burbujas interactivas de clientes en riesgo. v2.8.0: el diálogo pide plantilla aprobada, muestra elegibles reales del día y envía por `/api/dashboard/campaigns/manual` con el rango de días del nivel (`RISK_LEVELS`) como filtro. Colores derivados del `color` del grupo (antes un mapa con nombres desalineados los dejaba grises) |
 | `PowerRanking` | Top 20 clientes con ranking anime |
 | `DemoToggle` | Toggle modo demostración |
 | `ManualCampaigns` | Campañas manuales con filtros y predefinidas |

@@ -830,6 +830,22 @@ Durante la revisión del documento previo al desarrollo se identificaron y corri
 
 ---
 
+## Dispositivos a nombre de un mesero (v2.8.1 — 2026-08-10)
+
+Antes un dispositivo de confianza solo podía activarse con PIN de supervisor/admin y quedaba
+atribuido al supervisor; las visitas registradas desde él quedaban además con
+`registered_by_staff_id = NULL` (bug: las ramas de auth por `device_token` en `/api/check-in` no
+leían `staff_user_id`).
+
+- `POST /api/staff/device/register` acepta `assign_staff_phone` (opcional): el supervisor autoriza
+  con su PIN, el dispositivo queda atribuido al mesero indicado (`staff_user_id` del mesero,
+  `device_name` = "Dispositivo de {mesero}"). 404 claro si el celular no corresponde a un mesero
+  activo del tenant. Reactivar un dispositivo existente permite re-atribuirlo.
+- UI en `/mesero`: checkbox "Asignar este dispositivo a un mesero específico" + campo de celular.
+- Fix check-in: ambas ramas `device_token` ahora setean `resolvedStaffId = device.staff_user_id`,
+  así la visita queda a nombre del dueño del dispositivo (redenciones vía `resolveStaffAuth` ya lo
+  hacían bien).
+
 ## Bugs de Producción Encontrados y Fixes (2026-05-31)
 
 ### Bug 1: "Error de conexión" con clientes existentes

@@ -316,7 +316,11 @@ export async function getRedemptionSummary(params: {
   for (const row of rows) {
     byPrize.set(row.prize_title, (byPrize.get(row.prize_title) ?? 0) + 1)
 
-    const hour = new Date(row.redeemed_at).getHours()
+    // Hora en America/Bogota, no la del servidor (UTC en Vercel): sin esto el
+    // análisis de turnos sale corrido 5 horas (mismo patrón que el heatmap).
+    const hour = new Date(
+      new Date(row.redeemed_at).toLocaleString('en-US', { timeZone: 'America/Bogota' })
+    ).getHours()
     byHour.set(hour, (byHour.get(hour) ?? 0) + 1)
 
     const staffKey = row.redeemed_by_staff_id ?? 'unassigned'

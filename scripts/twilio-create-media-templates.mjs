@@ -61,6 +61,9 @@ const {
   // crear la nueva en paralelo sin borrar la anterior:
   //   evento_imagen_<brand>_v2
   TEMPLATE_SUFFIX = '',
+  // SKIP_VIDEO=1 → crea solo la plantilla de imagen (útil si aún no hay un MP4
+  // de muestra en el bucket; el sample de video es obligatorio para Meta).
+  SKIP_VIDEO = '',
 } = process.env
 
 const missing = ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'NEXT_PUBLIC_SUPABASE_URL'].filter(
@@ -134,13 +137,15 @@ const templates = [
     sample_path: SAMPLE_IMAGE_PATH,
     description: 'Festival / promo con imagen (JPG/PNG)',
   },
-  {
-    friendly_name: `evento_video_${slug}${suffix}`,
-    meta_name: `evento_video_${slug}${suffix}`,
-    settings_key: 'event_template_video_sid',
-    sample_path: SAMPLE_VIDEO_PATH,
-    description: 'Festival / promo con video (MP4)',
-  },
+  ...(SKIP_VIDEO
+    ? []
+    : [{
+        friendly_name: `evento_video_${slug}${suffix}`,
+        meta_name: `evento_video_${slug}${suffix}`,
+        settings_key: 'event_template_video_sid',
+        sample_path: SAMPLE_VIDEO_PATH,
+        description: 'Festival / promo con video (MP4)',
+      }]),
 ]
 
 function buildTemplateBody(friendlyName, samplePath) {

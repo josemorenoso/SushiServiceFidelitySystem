@@ -30,6 +30,8 @@ import {
   FileText,
   Crown,
   Gift,
+  UserX,
+  History,
 } from 'lucide-react'
 import { CampaignCostEstimate } from './TwilioWallet'
 
@@ -39,6 +41,8 @@ interface CampaignFilters {
   maxVisits: string
   minAge: string
   maxAge: string
+  minDays: string
+  maxDays: string
   source: 'all' | 'qr_only' | 'delivery_only'
 }
 
@@ -49,6 +53,8 @@ interface TwilioTemplate {
   approval_status: string
   status: string
   category: string
+  /** true = plantilla twilio/media (eventos del calendario) — no sirve para campañas de texto */
+  has_media?: boolean
 }
 
 interface PresetCampaign {
@@ -103,6 +109,16 @@ const PRESETS: PresetCampaign[] = [
     border: 'border-purple-200',
     filters: { minVisits: '2', maxVisits: '9' },
   },
+  {
+    id: 'rescue_lost',
+    name: 'Rescatar Perdidos',
+    description: 'Clientes con 26+ días sin venir (ya fuera del radar automático de reactivación). Última oportunidad con una oferta fuerte.',
+    icon: UserX,
+    color: 'text-red-600',
+    bg: 'bg-red-50',
+    border: 'border-red-200',
+    filters: { minDays: '26' },
+  },
 ]
 
 const emptyFilters: CampaignFilters = {
@@ -111,6 +127,8 @@ const emptyFilters: CampaignFilters = {
   maxVisits: '',
   minAge: '',
   maxAge: '',
+  minDays: '',
+  maxDays: '',
   source: 'all',
 }
 
@@ -125,15 +143,19 @@ export function ManualCampaigns() {
   const [confirmDialog, setConfirmDialog] = useState(false)
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
+  const [sendSummary, setSendSummary] = useState<string | null>(null)
+  const [sendError, setSendError] = useState<string | null>(null)
 
   const fetchTemplates = useCallback(async () => {
     setLoadingTemplates(true)
     try {
       const res = await fetch('/api/dashboard/templates')
       const data = await res.json()
+      // Solo texto aprobado: las plantillas twilio/media (eventos del calendario)
+      // exigen la variable de media {{6}} y fallarían enviadas como campaña.
       const approved = (data.templates ?? []).filter(
         (t: TwilioTemplate) =>
-          (t.approval_status || t.status)?.toLowerCase() === 'approved'
+          (t.approval_status || t.status)?.toLowerCase() === 'approved' && !t.has_media
       )
       setTemplates(approved)
     } catch {
@@ -156,6 +178,8 @@ export function ManualCampaigns() {
       if (f.maxVisits) params.set('maxVisits', f.maxVisits)
       if (f.minAge) params.set('minAge', f.minAge)
       if (f.maxAge) params.set('maxAge', f.maxAge)
+      if (f.minDays) params.set('minDays', f.minDays)
+      if (f.maxDays) params.set('maxDays', f.maxDays)
       if (f.source !== 'all') params.set('source', f.source)
 
       const res = await fetch(`/api/dashboard/campaigns/estimate?${params}`)
@@ -184,8 +208,10 @@ export function ManualCampaigns() {
   const handleSend = async () => {
     if (!selectedTemplate) return
     setSending(true)
+    setSendError(null)
+    setSendSummary(null)
     try {
-      await fetch('/api/dashboard/campaigns/manual', {
+      const res = await fetch('/api/dashboard/campaigns/manual', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -195,9 +221,29 @@ export function ManualCampaigns() {
           messageTemplate: selectedTemplate.body,
         }),
       })
+      const data = await res.json()
+      if (!res.ok) {
+        if (data.reason === 'insufficient_balance') {
+          setSendError(
+            `Saldo insuficiente: la campaña necesita ${data.recipients} mensajes y el saldo alcanza para ${data.messagesAvailable}. Recarga tu billetera para continuar.`
+          )
+        } else {
+          setSendError(data.error || 'Error enviando la campaña')
+        }
+        return
+      }
+      const skipped =
+        (data.totalSkippedFrequencyCap ?? 0) +
+        (data.totalSkippedRecoveryZone ?? 0) +
+        (data.totalSkippedMonthlyCap ?? 0)
+      setSendSummary(
+        `Enviados: ${data.totalSent}` +
+        (data.totalFailed ? ` · Fallidos: ${data.totalFailed}` : '') +
+        (skipped ? ` · Protegidos por reglas anti-spam: ${skipped}` : '')
+      )
       setSent(true)
-    } catch {
-      // best effort
+    } catch (err) {
+      setSendError(err instanceof Error ? err.message : 'Error de red enviando la campaña')
     } finally {
       setSending(false)
     }
@@ -209,6 +255,8 @@ export function ManualCampaigns() {
     setSelectedTemplate(null)
     setConfirmDialog(false)
     setSent(false)
+    setSendSummary(null)
+    setSendError(null)
   }
 
   const updateFilter = (key: keyof CampaignFilters, value: string) => {
@@ -326,6 +374,34 @@ export function ManualCampaigns() {
 
             <div className="space-y-1.5">
               <Label className="text-xs flex items-center gap-1">
+                <History className="h-3 w-3" /> Días sin venir (mín)
+              </Label>
+              <Input
+                type="number"
+                placeholder="Ej: 15"
+                value={filters.minDays}
+                onChange={(e) => updateFilter('minDays', e.target.value)}
+                className="h-9"
+                min={0}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs flex items-center gap-1">
+                <History className="h-3 w-3" /> Días sin venir (máx)
+              </Label>
+              <Input
+                type="number"
+                placeholder="∞"
+                value={filters.maxDays}
+                onChange={(e) => updateFilter('maxDays', e.target.value)}
+                className="h-9"
+                min={0}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs flex items-center gap-1">
                 <Users className="h-3 w-3" /> Tipo de cliente
               </Label>
               <select
@@ -425,7 +501,7 @@ export function ManualCampaigns() {
         </CardContent>
       </Card>
 
-      <Dialog open={confirmDialog} onOpenChange={() => { setConfirmDialog(false); setSent(false) }}>
+      <Dialog open={confirmDialog} onOpenChange={() => { setConfirmDialog(false); setSent(false); setSendError(null); setSendSummary(null) }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Confirmar Campaña Manual</DialogTitle>
@@ -440,6 +516,8 @@ export function ManualCampaigns() {
               {filters.city && <p>Ciudad: {filters.city}</p>}
               {filters.minVisits && <p>Visitas mín: {filters.minVisits}</p>}
               {filters.maxVisits && <p>Visitas máx: {filters.maxVisits}</p>}
+              {filters.minDays && <p>Días sin venir mín: {filters.minDays}</p>}
+              {filters.maxDays && <p>Días sin venir máx: {filters.maxDays}</p>}
               {filters.source !== 'all' && <p>Tipo: {filters.source === 'qr_only' ? 'Solo QR' : 'Solo Domicilio'}</p>}
               {filters.minAge && <p>Edad mín: {filters.minAge}</p>}
               {filters.maxAge && <p>Edad máx: {filters.maxAge}</p>}
@@ -455,9 +533,19 @@ export function ManualCampaigns() {
             )}
 
             {sent && (
-              <div className="rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-800 flex items-center gap-2">
-                <CheckCircle className="h-4 w-4" />
-                Campaña enviada exitosamente.
+              <div className="rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-800 flex items-start gap-2">
+                <CheckCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                <div>
+                  <p className="font-medium">Campaña enviada.</p>
+                  {sendSummary && <p className="mt-0.5 text-xs">{sendSummary}</p>}
+                </div>
+              </div>
+            )}
+
+            {sendError && (
+              <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-800 flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                {sendError}
               </div>
             )}
           </div>

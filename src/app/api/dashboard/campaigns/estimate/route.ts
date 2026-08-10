@@ -26,6 +26,8 @@ export async function GET(request: NextRequest) {
     const minAge = searchParams.get('minAge')
     const maxAge = searchParams.get('maxAge')
     const source = searchParams.get('source')
+    const minDays = searchParams.get('minDays')
+    const maxDays = searchParams.get('maxDays')
 
     const tenantId = await requireTenantId()
     const db = getServiceClient()
@@ -54,8 +56,25 @@ export async function GET(request: NextRequest) {
       query = query.gte('birthday', minBirthday.toISOString().split('T')[0])
     }
 
-    // Source filter requires a subquery via visits — simplified to customer-level for now
-    // TODO: Add source-based filtering via visits join when needed
+    // Días sin venir: minDays=N → última visita hace N días o más;
+    // maxDays=M → última visita hace M días o menos (día M completo incluido).
+    // Ambos excluyen clientes sin last_visit_at (no se puede medir su inactividad).
+    if (minDays) {
+      const cutoff = new Date(Date.now() - parseInt(minDays) * 24 * 60 * 60 * 1000).toISOString()
+      query = query.lte('last_visit_at', cutoff)
+    }
+    if (maxDays) {
+      const cutoff = new Date(Date.now() - (parseInt(maxDays) + 1) * 24 * 60 * 60 * 1000).toISOString()
+      query = query.gt('last_visit_at', cutoff)
+    }
+
+    // Canal de origen: mismo criterio que manual/route.ts para que el estimado
+    // coincida con lo que realmente se envía.
+    if (source === 'qr_only') {
+      query = query.eq('source_channels', 'qr')
+    } else if (source === 'delivery_only') {
+      query = query.eq('source_channels', 'delivery')
+    }
 
     // Frequency cap: excluir clientes contactados en los últimos FREQUENCY_CAP_DAYS días
     const capCutoff = new Date(Date.now() - FREQUENCY_CAP_DAYS * 24 * 60 * 60 * 1000).toISOString()

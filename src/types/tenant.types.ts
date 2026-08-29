@@ -17,6 +17,7 @@ export interface TenantConfig {
   station_label?: string // 'mesa' | 'silla' | 'cabina'
   has_delivery_webhook?: boolean
   whatsapp_link?: string
+  instagram_url?: string // perfil de Instagram — contacto alterno si el negocio no da WhatsApp
   google_maps_url?: string // URL de reseña en Google Maps
   delivery_phone?: string // teléfono de domicilios (fallback del link de WhatsApp)
   card_bg?: string // gradiente CSS de la tarjeta digital

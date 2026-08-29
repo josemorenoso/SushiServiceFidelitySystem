@@ -123,11 +123,18 @@ export async function POST(request: NextRequest) {
       uploadExt = '.mp4'
     }
 
-    // Construir path final (extensión forzada según tipo efectivo)
-    const folder = eventId ?? `_temp/${crypto.randomUUID()}`
+    // Construir path final PLANO, sin subcarpetas (extensión forzada según tipo).
+    //
+    // El path es exactamente el valor que viaja en `{{6}}` de la plantilla
+    // `twilio/media` aprobada, sustituido por Twilio DENTRO de una URL ya formada
+    // (`<bucket>/{{6}}`). Una barra ahí depende de que Twilio no escape el valor al
+    // sustituirlo — y el sample con el que Meta aprobó la plantilla es plano. Un path
+    // plano hace el envío determinista en vez de depender de ese detalle.
+    // La trazabilidad al evento se conserva en el propio nombre del archivo.
+    const scope = eventId ? sanitizeFilename(eventId) : `tmp_${crypto.randomUUID()}`
     const baseNameRaw = (file.name || `upload${uploadExt}`).replace(/\.[^.]+$/, '')
-    const safeName = sanitizeFilename(baseNameRaw) + uploadExt
-    const path = `${folder}/${Date.now()}_${safeName}`
+    const safeName = sanitizeFilename(baseNameRaw)
+    const path = `${scope}_${Date.now()}_${safeName}${uploadExt}`
 
     const db = getServiceClient()
     const { error: uploadError } = await db.storage

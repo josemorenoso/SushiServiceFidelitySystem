@@ -63,6 +63,7 @@
 | `src/hooks/useDashboardAnalytics.ts` | `docs/features/dashboard.md` |
 | `src/lib/supabase/*` | `docs/02-architecture.md` + `docs/03-security.md` |
 | `src/lib/twilio/*` | `docs/02-architecture.md` + `docs/04-deployment.md` |
+| `src/lib/zernio/*` | `docs/requerimientos/REQUERIMIENTOS_AGOSTO_2026.md` §1 (migración de Twilio a Zernio, en curso — módulo aislado, todavía NO conectado a `whatsapp.service.ts` ni a ningún call-site de negocio) |
 | `src/services/*` | `docs/features/[feature].md` correspondiente |
 | `src/constants/rewards.ts` | `docs/features/campaigns.md` + `docs/features/calendar.md` + `docs/features/points-mystery-box.md` |
 | `src/lib/points-engine.ts` | `docs/features/points-mystery-box.md` |

@@ -20,6 +20,7 @@
 4. [Plataforma: Twilio](#4-plataforma-twilio)
 5. [Plataforma: n8n (self-hosted)](#5-plataforma-n8n-self-hosted)
 6. [Onboarding de nuevo cliente](#6-onboarding-de-nuevo-cliente)
+6-bis. [Onboarding de un cliente SIN Twilio/WhatsApp](#6-bis-onboarding-de-un-cliente-sin-twiliowhatsapp-10-min)
 7. [Checklist pre-launch](#7-checklist-pre-launch)
 8. [Costos por cliente](#8-costos-por-cliente)
 9. [Riesgos técnicos activos](#9-riesgos-técnicos-activos)
@@ -136,7 +137,7 @@ fila en `tenants` (ver §6) con:
 
 | Columna | Reemplaza a la env var... | Notas |
 |---------|---------------------------|-------|
-| `config.brand_name`, `brand_short`, `brand_tagline`, `staff_role_label`, `google_maps_url`, `whatsapp_link`, `delivery_phone`, `card_bg`, `page_bg` | `NEXT_PUBLIC_BRAND_*`, `RESTAURANT_WHATSAPP_LINK`, `NEXT_PUBLIC_GOOGLE_MAPS_REVIEW_URL` | Resuelto por dominio en cada request — ver `src/lib/branding.ts` (`resolveBranding()`) y `src/lib/branding-server.ts` |
+| `config.brand_name`, `brand_short`, `brand_tagline`, `staff_role_label`, `google_maps_url`, `whatsapp_link`, `instagram_url`, `delivery_phone`, `card_bg`, `page_bg` | `NEXT_PUBLIC_BRAND_*`, `RESTAURANT_WHATSAPP_LINK`, `NEXT_PUBLIC_GOOGLE_MAPS_REVIEW_URL` | Resuelto por dominio en cada request — ver `src/lib/branding.ts` (`resolveBranding()`) y `src/lib/branding-server.ts` |
 | `twilio_subaccount_sid`, `twilio_subaccount_auth_token`, `twilio_messaging_service_sid`, `twilio_whatsapp_number` | `TWILIO_*` | Si están vacías, el sistema cae al fallback master (columna de arriba) — útil solo en pruebas, en producción cada tenant real tiene su propia subcuenta |
 | `domain` | — (nuevo) | Dominio custom del tenant, agregado también como Domain en Vercel — ver §6 paso 3 |
 | `slug` | — (nuevo) | Usado por n8n (`tenant_slug`) y por los crons (`?tenant=`) — ver §5 |
@@ -662,6 +663,42 @@ credenciales para todos los envíos de este tenant — no las del master.
 5. Número de mesero autorizado escribe pedido → verificar que llega a n8n → a la API (con el
    `tenant_slug` correcto) → WhatsApp al cliente
 6. Crear evento en calendario con `send_mode='auto'` → verificar que en máx 15 min llega el WhatsApp
+
+---
+
+## 6-bis. Onboarding de un cliente SIN Twilio/WhatsApp (~10 min)
+
+Caso real: el cliente entra ya al producto (check-in QR, puntos, tiers, Mystery Box,
+calendario, meseros, redenciones, dashboard) pero su número de WhatsApp todavía no está
+aprobado. Todo el paso 2/3/7 de §6 se pospone.
+
+**Script:** `scripts/seed-new-tenant.sql` — editar el bloque de parámetros y correrlo en el
+SQL Editor. Crea el tenant + tiers default + `admin_settings` base + sede opcional. Es
+idempotente.
+
+> 🔴 **Trampa a evitar — el fallback al master.** `getTwilioClient()`
+> (`src/services/whatsapp.service.ts`) usa las env `TWILIO_*` (cuenta **master** = Sushi
+> Service) cuando el tenant no tiene credenciales propias. Un tenant sin Twilio que TENGA
+> algún `*_template_sid` en `admin_settings` enviaría WhatsApp **desde el número de Sushi
+> Service**, cobrado a la cuenta master y debitado de la billetera del cliente nuevo.
+>
+> Por eso, mientras no haya Twilio propio: **cero claves `*_template_sid`** para ese
+> `tenant_id`. Sin plantilla configurada, el envío se corta antes de llamar a Twilio
+> (`sendCheckinTemplate` → `no_template_configured`; mismo guard en delivery, crons y
+> calendario) y no se envía ni se cobra nada. **Nunca clonar `admin_settings` de otro
+> tenant** para un cliente sin Twilio — se copiarían esos SIDs.
+>
+> Corolario operativo: no dar de alta plantillas en Dashboard → Ajustes hasta el paso D.
+
+**Qué SÍ funciona sin WhatsApp:** check-in por QR, puntos y tiers, Mystery Box, tarjeta
+digital, calendario (eventos quedan planificados), app de meseros, redención de premios,
+todo el dashboard y sus analíticas.
+**Qué NO:** mensajes de bienvenida/puntos, cumpleaños, reactivación, campañas, recordatorios
+de premio, auto-respuesta y domicilios por WhatsApp (`has_delivery_webhook: false`).
+
+**Encender WhatsApp después** (paso D del script): cargar credenciales Twilio en la fila
+`tenants` → recargar billetera → recién entonces cargar los `*_template_sid` en Ajustes.
+El orden importa: al revés se envía desde el master.
 
 ---
 

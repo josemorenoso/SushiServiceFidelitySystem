@@ -163,6 +163,9 @@ export async function getEvent(id: string): Promise<RestaurantEvent | null> {
   return (data as RestaurantEvent) ?? null
 }
 
+/** Estados desde los que ya no se recalcula nada: el evento cerró su ciclo. */
+const TERMINAL_STATUSES: EventStatus[] = ['sent', 'cancelled']
+
 export async function updateEvent(
   id: string,
   patch: UpdateEventInput,
@@ -175,12 +178,22 @@ export async function updateEvent(
     updatePayload.filters = patch.filters as Record<string, unknown>
   }
 
-  // Si cambia a send_mode='auto' o se actualiza scheduled_send_at, alinear status
-  if (
-    (patch.send_mode === 'auto' && patch.scheduled_send_at) ||
-    (patch.scheduled_send_at && patch.send_mode === undefined)
-  ) {
-    updatePayload.status = patch.status ?? 'scheduled'
+  // Realineación de status. La invariante es simple: un evento está 'scheduled'
+  // si y solo si quedará en auto-envío CON fecha; en cualquier otro caso vuelve a
+  // 'planned'. La versión anterior solo cubría el caso de activar auto junto con la
+  // fecha en el mismo PATCH, así que dejaba dos estados inconsistentes:
+  //   - auto → remind: el evento seguía 'scheduled' y el cron lo enviaba igual.
+  //   - activar auto sin fecha: quedaba 'planned' y no salía nunca.
+  const touchesDispatch = patch.send_mode !== undefined || patch.scheduled_send_at !== undefined
+  if (touchesDispatch && patch.status === undefined) {
+    const current = await getEvent(id)
+    if (current && current.tenant_id === tenantId && !TERMINAL_STATUSES.includes(current.status)) {
+      const nextSendMode = patch.send_mode ?? current.send_mode
+      const nextSendAt = patch.scheduled_send_at !== undefined
+        ? patch.scheduled_send_at
+        : current.scheduled_send_at
+      updatePayload.status = nextSendMode === 'auto' && nextSendAt ? 'scheduled' : 'planned'
+    }
   }
 
   const { data, error } = await supabase
@@ -197,6 +210,43 @@ export async function updateEvent(
 
 export async function cancelEvent(id: string, tenantId: string): Promise<RestaurantEvent> {
   return updateEvent(id, { status: 'cancelled' }, tenantId)
+}
+
+/**
+ * Deja cualquier evento vivo en el único estado que `executeAutoEvent` acepta
+ * (`send_mode='auto'` + `status='scheduled'`) para poder enviarlo bajo demanda.
+ *
+ * Existe porque el modo por defecto del dialog es "Solo recordarme", que nace
+ * `send_mode='remind'` + `status='planned'`: sin esto, un evento creado por el
+ * camino por defecto no se podía enviar desde NINGÚN punto de la aplicación —
+ * ni cron (filtra por auto+scheduled), ni "Enviar ahora" (exigía auto), ni el
+ * drawer (solo editaba título y descripción). Era un callejón sin salida y la
+ * razón principal de que el calendario "no hiciera nada".
+ *
+ * `scheduled_send_at` se reescribe a ahora: el envío es inmediato, la fecha
+ * planeada deja de aplicar y así queda el registro real de cuándo salió.
+ */
+export async function armEventForDispatch(id: string, tenantId: string): Promise<RestaurantEvent> {
+  const event = await getEvent(id)
+  if (!event || event.tenant_id !== tenantId) {
+    throw new Error('Evento no encontrado')
+  }
+  if (event.status === 'sent') {
+    throw new Error('Este evento ya se envió. Duplícalo si quieres volver a invitar.')
+  }
+  if (event.status === 'cancelled') {
+    throw new Error('Este evento está cancelado. Créalo de nuevo si quieres enviarlo.')
+  }
+
+  return updateEvent(
+    id,
+    {
+      send_mode: 'auto',
+      scheduled_send_at: new Date().toISOString(),
+      status: 'scheduled',
+    },
+    tenantId
+  )
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -399,6 +449,28 @@ export async function executeAutoEvent(eventId: string): Promise<ExecuteAutoEven
     // aprobada. Evita el desastre silencioso de enviar la imagen de muestra a todos.
     await assertEventTemplateUsable(templateSid, tenant)
 
+    // La plantilla es `twilio/media`: su URL de media es `<bucket público>/{{6}}`,
+    // así que {{6}} debe ser el PATH dentro del bucket, no la URL completa. Sin
+    // media no hay nada que enviar por esta plantilla.
+    //
+    // Estas dos validaciones van ANTES de crear la campaña: cuando estaban después,
+    // cada intento fallido dejaba una fila `campaigns` huérfana en estado pendiente
+    // que ensuciaba las métricas y el cap mensual.
+    if (!event.media_url) {
+      throw new Error(
+        'El evento no tiene media_url. Las plantillas de evento son twilio/media ' +
+        'y requieren una imagen o video: súbelo desde el dashboard antes de enviar.'
+      )
+    }
+    const mediaPath = eventMediaPathFromPublicUrl(event.media_url)
+    if (!mediaPath) {
+      throw new Error(
+        `media_url no pertenece al bucket '${EVENT_MEDIA_BUCKET}' (${event.media_url}). ` +
+        'La plantilla aprobada tiene el dominio fijo, así que solo puede servir archivos ' +
+        'de ese bucket: vuelve a subir el archivo desde el dashboard.'
+      )
+    }
+
     // Build audience
     const candidates = await findCustomersForEvent(event.filters as EventFilters, tenant.id)
     const { eligible, excluded } = await filterByMonthlyCap(candidates)
@@ -417,24 +489,6 @@ export async function executeAutoEvent(eventId: string): Promise<ExecuteAutoEven
     const eventDate = formatEventDate(event.event_date)
     const cta = event.description?.trim() || '¡Te esperamos!'
 
-    // La plantilla es `twilio/media`: su URL de media es
-    // `<bucket público>/{{6}}`, así que {{6}} debe ser el PATH dentro del bucket,
-    // no la URL completa. Sin media no hay nada que enviar por esta plantilla.
-    if (!event.media_url) {
-      throw new Error(
-        'El evento no tiene media_url. Las plantillas de evento son twilio/media ' +
-        'y requieren una imagen o video: súbelo desde el dashboard antes de enviar.'
-      )
-    }
-    const mediaPath = eventMediaPathFromPublicUrl(event.media_url)
-    if (!mediaPath) {
-      throw new Error(
-        `media_url no pertenece al bucket '${EVENT_MEDIA_BUCKET}' (${event.media_url}). ` +
-        'La plantilla aprobada tiene el dominio fijo, así que solo puede servir archivos ' +
-        'de ese bucket: vuelve a subir el archivo desde el dashboard.'
-      )
-    }
-
     let sent = 0
     let failed = 0
     const sentCustomerIds: string[] = []
@@ -449,7 +503,17 @@ export async function executeAutoEvent(eventId: string): Promise<ExecuteAutoEven
         '6': mediaPath,
       }
 
-      const result = await sendTemplateMessage(customer.phone, templateSid, variables, tenant, { customerId: customer.id, messageType: 'calendar_event' })
+      // `keepAllVariables`: el reintento por 21665 suelta la variable más alta
+      // primero — aquí {{6}} = el path del flyer. Sin ella la plantilla media
+      // sale rota para toda la audiencia; mejor fallar con el error visible.
+      const result = await sendTemplateMessage(
+        customer.phone,
+        templateSid,
+        variables,
+        tenant,
+        { customerId: customer.id, messageType: 'calendar_event' },
+        { keepAllVariables: true }
+      )
       await recordCampaignMessage({
         campaignId: campaign.id,
         customerId: customer.id,

@@ -8,7 +8,10 @@ export const metadata = {
 
 export default async function PrivacidadPage() {
   const branding = await getBrandingForHost()
-  const whatsappLink = branding.whatsappLink
+  // Canal de contacto: WhatsApp si el negocio lo tiene; si no, Instagram (negocios
+  // que solo atienden por redes). Sin ninguno, se remite al establecimiento.
+  const contactLink = branding.whatsappLink ?? branding.instagramUrl
+  const contactLabel = branding.whatsappLink ? 'WhatsApp' : 'Instagram'
 
   return (
     <div className="min-h-screen bg-gray-50 px-4 py-10">
@@ -102,16 +105,16 @@ export default async function PrivacidadPage() {
             <p>
               Para ejercer tus derechos o resolver dudas sobre el tratamiento de tus datos,
               comunícate con nosotros
-              {whatsappLink ? (
+              {contactLink ? (
                 <>
                   {' '}por{' '}
                   <a
-                    href={whatsappLink}
+                    href={contactLink}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="font-medium text-green-600 underline"
                   >
-                    WhatsApp
+                    {contactLabel}
                   </a>.
                 </>
               ) : (

@@ -93,7 +93,7 @@ Webhooks validan origen por número autorizado o `x-webhook-secret`. Cron jobs v
 | POST | /api/dashboard/calendar/events | Crear evento del calendario | Admin Cookie |
 | GET | /api/dashboard/calendar/events/:id | Detalle de un evento | Admin Cookie |
 | PATCH | /api/dashboard/calendar/events/:id | Actualizar evento | Admin Cookie |
-| POST | /api/dashboard/calendar/events/:id/dispatch | Disparar/reintentar auto-envío del evento (manual) | Admin Cookie |
+| POST | /api/dashboard/calendar/events/:id/dispatch | Enviar/reintentar el evento bajo demanda (cualquier evento vivo) | Admin Cookie |
 | DELETE | /api/dashboard/calendar/events/:id | Cancelar evento (soft-delete) | Admin Cookie |
 | POST | /api/dashboard/calendar/media-upload | Subir imagen/video a `event-media` | Admin Cookie |
 | DELETE | /api/dashboard/calendar/media-upload?path=X | Borrar asset del bucket | Admin Cookie |
@@ -1187,7 +1187,9 @@ Devuelve los eventos cuyo `event_date` cae en el rango (inclusive en ambos extre
 
 **Request body:** cualquier subconjunto de los campos de creación + `status` (`'planned' | 'scheduled' | 'sent' | 'cancelled' | 'failed'`).
 
-Si se actualiza `scheduled_send_at` (o `send_mode='auto'` + `scheduled_send_at`), el `status` se alinea a `'scheduled'` automáticamente.
+Si el PATCH toca `send_mode` o `scheduled_send_at` (y no manda `status` explícito), el `status` se
+realinea solo a la invariante: `'scheduled'` si el evento queda en `send_mode='auto'` **con** fecha,
+`'planned'` en cualquier otro caso. Los eventos `sent` / `cancelled` no se tocan.
 
 **Response 200:** `{ "event": { ... } }`
 
@@ -1197,20 +1199,27 @@ Si se actualiza `scheduled_send_at` (o `send_mode='auto'` + `scheduled_send_at`)
 
 **`POST /api/dashboard/calendar/events/:id/dispatch`** — Admin JWT
 
-Ejecuta `executeAutoEvent` bajo demanda. Red de seguridad si el cron de n8n falla o aún no corre.
+Ejecuta `executeAutoEvent` bajo demanda. Es el camino normal para enviar un evento del calendario
+(el cron es solo para los que se programaron con fecha).
 
-**Reglas:**
-- Solo eventos con `send_mode='auto'`.
-- Acepta `status='scheduled'` (envío anticipado) o `status='failed'` (reintento — se rearma a `scheduled` antes de ejecutar para pasar el guard de idempotencia).
-- `sent`, `cancelled` y `planned` → 400.
+**Reglas (v2.8.3):**
+- Acepta **cualquier evento vivo**: `planned`, `scheduled` o `failed`, en modo `auto` **o** `remind`.
+  El endpoint llama a `armEventForDispatch`, que lo normaliza a `send_mode='auto'` +
+  `scheduled_send_at=now()` + `status='scheduled'` antes de ejecutar.
+- Solo `sent` y `cancelled` → 400.
 - Requiere `event_template_image_sid` / `event_template_video_sid` en `admin_settings` según `media_type`; si falta, devuelve el error de `executeAutoEvent`.
+- Requiere que el evento tenga `media_url` en el bucket `event-media` (las plantillas son `twilio/media`).
+
+> Antes de v2.8.3 exigía `send_mode='auto'` y `status` ∈ {`scheduled`,`failed`}. Como el dialog crea
+> los eventos en modo "Solo recordarme" (`remind` → `planned`) por defecto, el camino por defecto no
+> se podía enviar desde ningún lado: ni cron, ni este endpoint, ni el drawer.
 
 **Response 200:**
 ```json
 { "ok": true, "sent": 42, "failed": 1, "excluded_monthly_cap": 7, "campaign_id": "uuid" }
 ```
 
-**Response 400:** `{ "error": "El evento no se puede enviar en estado 'sent'." }`
+**Response 400:** `{ "error": "Este evento ya se envió. Duplícalo si quieres volver a invitar." }`
 
 ---
 

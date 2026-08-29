@@ -35,6 +35,8 @@
  * El sample de {{6}} debe ser un archivo REAL y público en el bucket: Meta lo
  * descarga para revisar la plantilla. Sube uno desde el dashboard (o Supabase
  * Storage) y pásalo en SAMPLE_IMAGE_PATH / SAMPLE_VIDEO_PATH.
+ * Usa un path PLANO (raíz del bucket, sin subcarpetas): es la forma que produce
+ * /api/dashboard/calendar/media-upload y con la que se aprueba la plantilla.
  * El script verifica que sea accesible ANTES de crear nada.
  *
  * Uso:
@@ -54,8 +56,11 @@ const {
   TWILIO_AUTH_TOKEN: TOKEN,
   NEXT_PUBLIC_SUPABASE_URL: SUPABASE_URL,
   NEXT_PUBLIC_BRAND_NAME: BRAND_NAME = 'El Restaurante',
-  SAMPLE_IMAGE_PATH = '_samples/sample.jpg',
-  SAMPLE_VIDEO_PATH = '_samples/sample.mp4',
+  // Paths PLANOS a propósito (sin subcarpetas): el sample debe tener la misma forma
+  // que lo que genera /api/dashboard/calendar/media-upload, porque ese valor se
+  // sustituye dentro de una URL ya formada. Ver el comentario en media-upload/route.ts.
+  SAMPLE_IMAGE_PATH = 'sample.jpg',
+  SAMPLE_VIDEO_PATH = 'sample.mp4',
   // Meta exige nombres de plantilla ÚNICOS. Si ya existe una plantilla con el
   // nombre base (p.ej. la vieja de media fija), pasa TEMPLATE_SUFFIX=_v2 para
   // crear la nueva en paralelo sin borrar la anterior:

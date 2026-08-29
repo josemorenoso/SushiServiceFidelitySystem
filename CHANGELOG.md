@@ -5,6 +5,187 @@
 
 ---
 
+## [v2.9.1] — 2026-08-29 — fix: endurecimiento tras code review del WIP (rol AIOS + cliente Zernio)
+
+> Request: *"[antes de commitear el WIP] le paso un code-review con subagentes y te reporto hallazgos."*
+
+### Contexto
+
+Revisión con 3 revisores + verificación adversarial (2 refutadores por hallazgo) sobre todo el
+trabajo sin commitear (v2.8.2, v2.8.3, v2.9.0). 6 hallazgos confirmados; los 2 de severidad **alta**
+estaban en `supabase/migrations/00035_aios_constelarys_role.sql` (aún sin aplicar en ninguna base,
+por eso se corrige el archivo en el sitio en vez de crear una migración correctiva).
+
+### Fixed
+
+- **`00035` (ALTA ×2, reescrita como v2):**
+  - El `GRANT SELECT ON tenants` sin lista de columnas dejaba leer
+    `twilio_subaccount_auth_token`/`_sid`, `twilio_messaging_service_sid`, `owner_email` y
+    `owner_phone` de TODOS los tenants desde el CRM externo → ahora es `GRANT SELECT` **por columnas**
+    (id, slug, name, business_type, is_active, is_demo, domain, price_per_message_cop, created_at).
+  - Los `GRANT INSERT` + políticas `WITH CHECK (true)` en 4 tablas permitían insertar
+    `admin_settings`/`reward_tiers`/`restaurant_locations` apuntando a `tenant_id` de tenants
+    EXISTENTES (p. ej. sembrar un `*_template_sid` ajeno y disparar envíos desde el número master) →
+    se eliminan los INSERT directos; la escritura pasa a funciones `SECURITY DEFINER` con validación
+    interna (`aios_provision_tenant`, `aios_activate_whatsapp`, `aios_set_template_settings`),
+    definidas en la migración 00036.
+- **`src/lib/zernio/client.ts` (MEDIA ×2):** `zernioFetch()` ahora tiene timeout duro (10 s,
+  `AbortController`) y un 2xx con body no-JSON lanza `ZernioApiError` en vez de devolver `null`
+  tipado como `T`. También se corrigió el comentario que afirmaba una verificación fechada
+  2026-08-30 (fecha futura imposible).
+
+### Conocido y aceptado (sin tocar)
+
+- **BAJA — TOCTOU en `updateEvent()`** (`calendar.service.ts`): dos PATCH concurrentes al mismo
+  evento pueden pisarse el `status` recalculado (SELECT previo + UPDATE separado). Probabilidad baja
+  (doble clic / dos pestañas); queda anotado para resolver con un UPDATE de una sola sentencia o
+  bloqueo optimista cuando se vuelva a tocar el calendario.
+
+### Infra
+
+- `.gitignore`: se ignora `Level 2.0/` (el AIOS Constelarys es un proyecto separado con su propio
+  repo/Supabase; la carpeta vive aquí solo como espacio de trabajo).
+
+---
+
+## [v2.9.0] — 2026-08-30 — feat: primer módulo de la migración Twilio → Zernio (aislado, sin conectar todavía)
+
+> Request: *"Vamos a resolver todo lo de la migración a Zernio... necesito que empieces a Desarrollar."*
+
+### Contexto
+
+Primer código real de la migración de mensajería documentada en
+`docs/requerimientos/REQUERIMIENTOS_AGOSTO_2026.md` §1. Antes de escribir esto se investigó a fondo
+`docs.zernio.com` (doc pública + spec OpenAPI) y se hicieron llamadas de solo lectura contra la API
+real con la key del dueño, confirmando la forma exacta del request de envío
+(`POST /v1/inbox/conversations`), el modelo de cuentas (`Team → Profile → Account`, sin subcuentas
+tipo Twilio) y que la firma de webhooks es opcional en Zernio (aquí se exige siempre).
+
+### Added
+
+- **`src/lib/zernio/client.ts`** — cliente base (`zernioFetch`), auth Bearer, `ZernioApiError`.
+- **`src/lib/zernio/messaging.ts`** — `sendZernioTemplateMessage()` y `listZernioTemplates()`. Las
+  variables de plantilla van como array plano (`templateParams: [...]`), a diferencia del diccionario
+  `{'1': ..., '2': ...}` que usa `whatsapp.service.ts` con Twilio — es la diferencia que obliga a
+  tocar los ~10 call-sites de negocio cuando se haga el swap real.
+- **`src/lib/zernio/webhooks.ts`** — `verifyZernioSignature()` (HMAC-SHA256, `X-Zernio-Signature`,
+  comparación en tiempo constante) + tipos del payload (`message.received/delivered/read/failed`,
+  `webhook.test`).
+- **`ZERNIO_API_KEY`, `ZERNIO_WEBHOOK_SECRET`** en `.env.example`.
+- Fila nueva en la tabla de lookup de `CLAUDE.md` para `src/lib/zernio/*`.
+
+### Explícitamente NO incluido en esta entrega (a propósito)
+
+- **Cero conexión con el resto de la app.** `whatsapp.service.ts` y los ~10 call-sites que lo llaman
+  siguen usando Twilio sin ningún cambio — nada del flujo real de negocio pasa por Zernio todavía.
+- **No se probó el envío real de un mensaje** (`sendZernioTemplateMessage`) — falta un número de
+  destino verificado para probar contra el sandbox de Zernio (`+12029087457`) sin arriesgar mandarle
+  un WhatsApp a alguien sin autorización.
+- **No se decidió** si los tenants de Cada1 van en la misma cuenta/Team de Zernio del dueño (ya
+  compartida con otro proyecto) o en una cuenta aparte — ver la decisión pendiente en
+  `docs/requerimientos/REQUERIMIENTOS_AGOSTO_2026.md` §1.
+
+### Verificado
+
+`npx tsc --noEmit` — 0 errores en los archivos nuevos (el repo ya tenía 157 errores preexistentes sin
+relación, no tocados). `npx eslint src/lib/zernio/` — limpio.
+
+---
+
+## [v2.8.3] — 2026-08-21 — fix: el calendario se puede enviar de verdad (callejón sin salida del modo recordatorio)
+
+> Request: *"Anda e inspecciona porque es que el calendario no funciona, arreglalo y dime que plantilla
+> debo crear para que empecemos a usarlo, los dueños de negocio necesitan esto ya que es la manera más
+> fácil de crear una campaña sin necesidad de crear una plantilla completa."*
+
+### Causa raíz — el camino por defecto no tenía salida
+
+Tercer reporte seguido del mismo síntoma (v2.8.0 y v2.8.1 arreglaron otras piezas). Lo que veía el
+dueño del negocio: crea el evento, y no pasa nada, nunca, sin ningún mensaje que lo explique.
+
+`EventCreateDialog` arranca en **"Solo recordarme"** (`send_mode='remind'` → `status='planned'`), y
+desde ese estado el evento **no se podía enviar desde ningún punto de la aplicación**: el cron filtra
+`auto`+`scheduled`; `POST .../dispatch` devolvía 400 para `remind` y para `planned`; el botón "Enviar
+ahora" del drawer ni se renderizaba; y el drawer solo dejaba editar título y descripción, así que
+tampoco se podía convertir a auto. Callejón sin salida perfecto.
+
+### Fixed
+
+- **`armEventForDispatch()` en `calendar.service.ts`** — normaliza cualquier evento vivo a
+  `send_mode='auto'` + `scheduled_send_at=now()` + `status='scheduled'`, el único estado que
+  `executeAutoEvent` acepta. `POST .../events/:id/dispatch` ahora acepta `planned`, `scheduled` y
+  `failed`, en modo `auto` o `remind`; solo rechaza `sent` y `cancelled`.
+- **`EventDetailDrawer`** — "Enviar ahora" se muestra para **todo evento vivo**, deshabilitado con el
+  motivo concreto (falta el flyer / falta `event_template_*_sid`) en vez de esconderse sin explicar.
+  Los eventos en modo recordatorio muestran un aviso de que no salen solos.
+- **`updateEvent()` realineaba mal el status** — solo cubría "activar auto + fecha en el mismo PATCH".
+  Consecuencias reales: pasar de `auto`→`remind` dejaba el evento `scheduled` y **el cron lo enviaba
+  igual**; activar `auto` sin fecha lo dejaba `planned` y no salía nunca. Ahora la invariante es
+  explícita: `scheduled` ⟺ queda en `auto` **con** fecha; si no, `planned`. `sent`/`cancelled` intactos.
+- **Campañas huérfanas** — las validaciones de `media_url` y del path del bucket corrían *después* de
+  `createCalendarCampaign`, así que cada dispatch fallido dejaba una fila `campaigns` pendiente
+  ensuciando métricas y cap mensual. Ahora validan antes de crear nada.
+- **El reintento de variables podía tirar `{{6}}`** — ante un 21665 `sendTemplateMessage` suelta la
+  variable de número más alto primero, que en las plantillas de evento es justo el path del flyer:
+  habría mandado la plantilla media con la URL sin resolver a toda la audiencia. Nueva opción
+  `SendTemplateOptions.keepAllVariables`, activada por el calendario.
+- **Path de media plano** (endurecimiento) — `media-upload` generaba `_temp/<uuid>/<ts>_<archivo>.jpg`,
+  con barras. Ese valor viaja en `{{6}}` sustituido dentro de una URL ya formada, y el sample que Meta
+  aprobó es plano. Ahora genera `<event_id>_<ts>_<archivo>.jpg` para que el primer envío real no
+  dependa de si Twilio escapa la barra. Las URLs de eventos viejos siguen resolviendo igual.
+
+### Estado real verificado contra la Content API de Twilio (2026-08-21)
+
+- ✅ **`HXf30219c2b31c3ac1c6eb751d2b4ea689`** (`evento_imagen__sushi_service_barra__v2`) está
+  **aprobada** por Meta: `twilio/media`, media `…/event-media/{{6}}` dinámica, sample descargable
+  (HTTP 206). **Falta pegarla en Dashboard → Ajustes → `event_template_image_sid`.**
+- ⚠️ `HX76a64b…` (v1), `combomundial` y `dia_del_sushi` están approved pero con **media FIJA**: no
+  sirven como `event_template_image_sid` (el guard `assertEventTemplateUsable` las rechaza).
+- ❌ `evento_video_sushi_service_barra` sigue **rejected** por Meta.
+- ❌ La subcuenta de **Don Alirio** (`ACf551…8576`) no tiene **ninguna** plantilla `twilio/media`:
+  sus 10 plantillas son `twilio/text`. Para ese tenant hay que crear la de eventos.
+
+### Files
+
+`src/services/calendar.service.ts`, `src/services/whatsapp.service.ts`,
+`src/app/api/dashboard/calendar/events/[id]/dispatch/route.ts`,
+`src/app/api/dashboard/calendar/media-upload/route.ts`,
+`src/components/dashboard/Calendar/EventDetailDrawer.tsx`,
+`docs/features/calendar.md`, `docs/API_DOCS.md`.
+
+---
+
+## [v2.8.2] — 2026-08-15 — feat: alta de cliente sin Twilio/WhatsApp en un solo script
+
+> Request: *"Necesito urgente incluir a un nuevo cliente pero ya, este cliente no va a tener
+> twilio ni whatsapp aun pero debe acceder a todo lo demás."*
+
+- **Nuevo `scripts/seed-new-tenant.sql`** — alta completa de un tenant parametrizada en un
+  solo bloque: fila en `tenants` (twilio_* en NULL), 4 tiers default, `admin_settings` base
+  (puntos, check-in, ticket promedio, reactivación) y sede opcional para geolocalización.
+  Idempotente. No clona datos de otro tenant.
+- **Hallazgo que motivó el diseño:** `getTwilioClient()` cae a las env `TWILIO_*` (cuenta
+  master = Sushi Service) cuando el tenant no tiene credenciales propias. Un tenant sin
+  Twilio con algún `*_template_sid` cargado enviaría WhatsApp desde el número de Sushi
+  Service, cobrado al master y debitado de la billetera del cliente nuevo. El script por eso
+  **no siembra ninguna clave `*_template_sid`** (y advierte de no clonar `admin_settings`,
+  que es justo lo que hace `seed-demo-tenant.sql` para el demo). Sin plantilla configurada el
+  envío se corta antes de llamar a Twilio y no se cobra nada.
+- **`docs/04-deployment.md` §6-bis** — procedimiento del cliente sin WhatsApp, qué funciona y
+  qué no, y el orden correcto para encender Twilio después (credenciales → billetera →
+  plantillas).
+- **`config.instagram_url` (nuevo campo de `TenantConfig`)** — contacto alterno para negocios
+  que no atienden por WhatsApp. `resolveBranding()` lo expone como `branding.instagramUrl` y
+  la página de privacidad usa WhatsApp si existe, si no Instagram, si no remite al
+  establecimiento. Antes, un tenant sin WhatsApp no tenía dónde poner su canal de contacto
+  (poner el link de Instagram en `whatsapp_link` habría rotulado el enlace como "WhatsApp").
+- **Primer cliente con este flujo:** Frangal.mde (`cafe-frangal`), sin Twilio.
+
+Archivos: `scripts/seed-new-tenant.sql` (nuevo), `docs/04-deployment.md`,
+`src/types/tenant.types.ts`, `src/lib/branding.ts`, `src/app/(public)/privacidad/page.tsx`.
+
+---
+
 ## [v2.8.1] — 2026-08-10 — fix: calendario verificado E2E, redención en hora Bogotá, dispositivos por mesero, plantillas sin fricción
 
 > Request: *"¿Arreglaste el calendario? necesito que funcione correctamente sin ningún problema; revisa

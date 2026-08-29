@@ -29,6 +29,8 @@ export interface Branding {
   googleReviewUrl: string
   /** Link de WhatsApp del negocio (respuestas automáticas / privacidad). */
   whatsappLink: string | null
+  /** Perfil de Instagram. Contacto alterno cuando el negocio no atiende por WhatsApp. */
+  instagramUrl: string | null
   /** Teléfono de domicilios (fallback para armar el link de WhatsApp). */
   deliveryPhone: string | null
   /** Gradiente de fondo de la tarjeta digital. */
@@ -56,6 +58,7 @@ export const DEFAULT_BRANDING: Branding = {
   staffLabelPlural: `${process.env.NEXT_PUBLIC_STAFF_ROLE_LABEL || 'Mesero'}s`,
   googleReviewUrl: process.env.NEXT_PUBLIC_GOOGLE_MAPS_REVIEW_URL || NO_GOOGLE_REVIEW_URL,
   whatsappLink: process.env.RESTAURANT_WHATSAPP_LINK || null,
+  instagramUrl: null,
   deliveryPhone: process.env.DELIVERY_PHONE_NUMBER || null,
   cardBg: DEFAULT_CARD_BG,
   pageBg: DEFAULT_PAGE_BG,
@@ -79,6 +82,7 @@ export function resolveBranding(config?: TenantConfig | null): Branding {
     staffLabelPlural: `${staffLabel}s`,
     googleReviewUrl: c?.google_maps_url || DEFAULT_BRANDING.googleReviewUrl,
     whatsappLink: c?.whatsapp_link || DEFAULT_BRANDING.whatsappLink,
+    instagramUrl: c?.instagram_url || DEFAULT_BRANDING.instagramUrl,
     deliveryPhone: c?.delivery_phone || DEFAULT_BRANDING.deliveryPhone,
     cardBg: c?.card_bg || DEFAULT_BRANDING.cardBg,
     pageBg: c?.page_bg || DEFAULT_BRANDING.pageBg,

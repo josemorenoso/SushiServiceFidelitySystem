@@ -1,8 +1,81 @@
 # Calendario Operativo de Eventos
 
-> Estado: 🟢 Auto-envío activo (cron registrado + dispatch manual). Pendiente solo aprobación Meta de plantillas media.
+> Estado: 🟢 Operativo. Plantilla de imagen **aprobada por Meta** en la cuenta master.
 > Migración: `supabase/migrations/00012_calendar_events_and_media.sql`
-> Última actualización: 2026-08-10 (v2.8.0)
+> Última actualización: 2026-08-21 (v2.8.3)
+
+## Fixes v2.8.3 (2026-08-21) — por qué el calendario "no hacía nada"
+
+Tercer reporte seguido de "el calendario no funciona" (v2.8.0, v2.8.1, v2.8.3). Los dos anteriores
+arreglaron piezas reales (blackout de zona horaria, plantilla con media fija) pero no la causa que
+veía el dueño del negocio. Diagnóstico de esta ronda:
+
+### 1. Callejón sin salida en el camino por defecto (causa principal)
+
+`EventCreateDialog` arranca en **"Solo recordarme"** (`send_mode='remind'`), que nace con
+`status='planned'`. Desde ese estado el evento **no se podía enviar desde ningún punto de la app**:
+
+| Camino de envío | Filtro que lo bloqueaba |
+|---|---|
+| Cron `calendar-dispatch` | `findDueAutoEvents` filtra `send_mode='auto'` + `status='scheduled'` |
+| `POST .../dispatch` | rechazaba `send_mode !== 'auto'` y `status='planned'` con 400 |
+| `EventDetailDrawer` | `canDispatch` exigía `auto` + `scheduled\|failed` → el botón ni aparecía |
+| Editar el evento | el drawer solo editaba título y descripción |
+
+Es decir: el modo por defecto creaba eventos **imposibles de enviar**, y sin ningún mensaje que lo
+dijera. El dueño creaba eventos y no pasaba nada nunca.
+
+**Fix:** `armEventForDispatch(id, tenantId)` normaliza cualquier evento vivo a
+`auto` + `scheduled_send_at=now()` + `scheduled`, y el endpoint de dispatch lo usa. "Enviar ahora"
+funciona sobre `planned`, `scheduled` y `failed`, en modo `auto` o `remind`. Solo `sent` y
+`cancelled` se rechazan. El drawer muestra el botón para todo evento vivo y lo deshabilita con el
+motivo concreto (falta flyer / falta plantilla) en vez de esconderlo.
+
+### 2. `updateEvent` dejaba dos estados inconsistentes
+
+La realineación de `status` solo cubría "activar auto junto con la fecha en el mismo PATCH":
+
+- `auto → remind` dejaba el evento en `scheduled` → **el cron lo enviaba igual**, pese a estar en
+  modo recordatorio.
+- Activar `auto` sin fecha en el mismo PATCH lo dejaba en `planned` → no salía nunca.
+
+**Fix:** invariante explícita — `scheduled` si y solo si el evento queda en `auto` **con** fecha;
+si no, `planned`. `sent` y `cancelled` no se recalculan.
+
+### 3. Campañas huérfanas en cada intento fallido
+
+Las validaciones de `media_url` / path del bucket corrían **después** de `createCalendarCampaign`,
+así que cada dispatch fallido dejaba una fila `campaigns` en estado pendiente que ensuciaba métricas
+y cap mensual. **Fix:** validar antes de crear la campaña.
+
+### 4. El reintento de variables podía tirar `{{6}}`
+
+`sendTemplateMessage` reintenta ante un 21665 soltando la variable de número **más alto** primero —
+en las plantillas de evento esa es justo `{{6}}` = el path del flyer. Habría enviado la plantilla
+media con la URL sin resolver a toda la audiencia. **Fix:** nueva opción
+`SendTemplateOptions.keepAllVariables`, que el calendario activa: mejor fallar con el error de
+Twilio a la vista que enviar un mensaje mutilado.
+
+### 5. Path de media plano (endurecimiento)
+
+`media-upload` generaba `_temp/<uuid>/<ts>_<archivo>.jpg` — con barras. Ese valor va en `{{6}}`,
+sustituido por Twilio **dentro de una URL ya formada**, y el sample con el que Meta aprobó la
+plantilla es plano (`5103017800669793459.jpg`). Ahora el path se genera plano
+(`<event_id>_<ts>_<archivo>.jpg`) para que el primer envío real no dependa de si Twilio escapa la
+barra al sustituir. Las URLs de eventos viejos siguen resolviendo igual.
+
+### Estado verificado contra Twilio (2026-08-21)
+
+| Cuenta | Plantilla de evento | Estado |
+|---|---|---|
+| Master `ACa5e3…dd7d` (Sushi Service) | `HXf30219c2b31c3ac1c6eb751d2b4ea689` `evento_imagen__sushi_service_barra__v2` | ✅ **approved**, `twilio/media`, `{{6}}` dinámico, sample descargable (HTTP 206) |
+| Master | `HX76a64b…` (v1), `combomundial`, `dia_del_sushi` | ⚠️ approved pero **media FIJA** — no usar como `event_template_image_sid` |
+| Master | `evento_video_sushi_service_barra` | ❌ rejected por Meta |
+| Sub `ACf551…8576` (Don Alirio) | — | ❌ **ninguna plantilla `twilio/media`**: 10 plantillas, todas `twilio/text` |
+
+**Acción pendiente del admin:** pegar `HXf30219c2b31c3ac1c6eb751d2b4ea689` en
+Dashboard → Ajustes → `event_template_image_sid` del tenant Sushi Service, y crear la plantilla
+equivalente en la subcuenta de cada tenant nuevo (ver `docs/PLANTILLAS.md` §12).
 
 ## Estado real verificado v2.8.1 (2026-08-10)
 

@@ -65,6 +65,19 @@ function getTwilioClient(tenant: TenantMessagingContext) {
   return { accountSid, authToken, whatsappNumber }
 }
 
+export interface SendTemplateOptions {
+  /**
+   * Desactiva el reintento progresivo que va soltando variables ante un 21665.
+   *
+   * Ese reintento suelta SIEMPRE la variable de número más alto primero, y en las
+   * plantillas `twilio/media` del calendario la más alta es justamente `{{6}}` = el
+   * path del flyer. Soltarla dejaría la URL de media sin resolver y el evento saldría
+   * roto para toda la audiencia. En esas plantillas preferimos fallar con el error de
+   * Twilio a la vista antes que enviar un mensaje mutilado.
+   */
+  keepAllVariables?: boolean
+}
+
 /**
  * NO recibe `mediaUrl` a propósito: en la API de Mensajes de Twilio `ContentSid` y
  * `MediaUrl` son mutuamente excluyentes. Al enviar una plantilla, la media sale
@@ -77,7 +90,8 @@ export async function sendTemplateMessage(
   contentSid: string,
   variables: Record<string, string>,
   tenant: TenantMessagingContext,
-  logContext?: MessageLogContext
+  logContext?: MessageLogContext,
+  options?: SendTemplateOptions
 ): Promise<TwilioMessageResponse | null> {
   // Tenant demo (ventas): nunca se llama a Twilio de verdad. Se simula el éxito y se
   // deja rastro en message_logs con twilio_sid NULL (para que la UI se sienta real —
@@ -185,7 +199,7 @@ export async function sendTemplateMessage(
       const errMsg = error instanceof Error ? error.message : String(error)
       // Only retry on 21665 (variable COUNT mismatch) — NOT on 21656 (invalid format)
       const isCountMismatch = errMsg.includes('21665')
-      if (isCountMismatch && maxVars > 1) {
+      if (isCountMismatch && maxVars > 1 && !options?.keepAllVariables) {
         console.warn(`[WhatsApp] Variable count mismatch (${maxVars} vars), reintentando con ${maxVars - 1}…`)
         continue
       }

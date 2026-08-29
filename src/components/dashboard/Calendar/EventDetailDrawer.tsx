@@ -103,8 +103,10 @@ export function EventDetailDrawer({ open, onOpenChange, event, onUpdated }: Even
   }, [event])
 
   // Carga las plantillas Twilio para advertir si falta la requerida por el evento.
+  // Se consulta para cualquier evento vivo, no solo los 'auto': ahora también se
+  // pueden enviar a mano los que están en modo recordatorio.
   useEffect(() => {
-    if (!open || event?.send_mode !== 'auto') return
+    if (!open || !event || event.status === 'sent' || event.status === 'cancelled') return
     let active = true
     fetch('/api/dashboard/settings')
       .then((res) => (res.ok ? res.json() : null))
@@ -113,7 +115,7 @@ export function EventDetailDrawer({ open, onOpenChange, event, onUpdated }: Even
       })
       .catch(() => { /* la alerta de plantilla es best-effort */ })
     return () => { active = false }
-  }, [open, event?.send_mode])
+  }, [open, event])
 
   if (!event) return null
 
@@ -123,8 +125,15 @@ export function EventDetailDrawer({ open, onOpenChange, event, onUpdated }: Even
     ? 'event_template_video_sid'
     : 'event_template_image_sid'
   const templateMissing = settings !== null && !settings[requiredTemplateKey]
-  const canDispatch = event.send_mode === 'auto'
-    && (event.status === 'scheduled' || event.status === 'failed')
+
+  // Cualquier evento vivo se puede enviar a mano: el endpoint lo normaliza a
+  // auto+scheduled. Antes solo aparecía el botón para eventos ya en modo auto,
+  // así que los creados como "Solo recordarme" no tenían salida.
+  const isLive = event.status !== 'sent' && event.status !== 'cancelled'
+  const blockers: string[] = []
+  if (!event.media_url) blockers.push('Falta el flyer (imagen o video) del evento')
+  if (templateMissing) blockers.push(`Falta ${requiredTemplateKey} en Dashboard → Ajustes`)
+  const canDispatch = isLive && blockers.length === 0
 
   async function dispatchNow() {
     if (!event) return
@@ -300,20 +309,32 @@ export function EventDetailDrawer({ open, onOpenChange, event, onUpdated }: Even
               </div>
             )}
 
-            {event.send_mode === 'auto' && !event.media_url && event.status !== 'sent' && event.status !== 'cancelled' && (
+            {isLive && event.send_mode === 'remind' && (
+              <div className="rounded-lg bg-muted/50 border p-2.5 text-xs space-y-1">
+                <div className="font-medium flex items-center gap-1.5">
+                  <Send className="h-3.5 w-3.5" />
+                  Evento en modo recordatorio
+                </div>
+                <div className="text-muted-foreground text-[11px]">
+                  No sale solo. Cuando quieras invitar a la audiencia, usa &ldquo;Enviar ahora&rdquo;.
+                </div>
+              </div>
+            )}
+
+            {isLive && !event.media_url && (
               <div className="rounded-lg bg-destructive/10 border border-destructive/30 p-2.5 text-xs space-y-1">
                 <div className="font-medium text-destructive flex items-center gap-1.5">
                   <AlertTriangle className="h-3.5 w-3.5" />
                   Falta la imagen o video del evento
                 </div>
                 <div className="text-destructive/90 text-[11px]">
-                  Las plantillas de evento son de tipo media: sin imagen o video el envío fallará.
-                  Cancela este evento y créalo de nuevo con su flyer.
+                  Las plantillas de evento son de tipo media: sin flyer no hay nada que enviar.
+                  Cancela este evento y créalo de nuevo con su imagen.
                 </div>
               </div>
             )}
 
-            {templateMissing && (
+            {isLive && templateMissing && (
               <div className="rounded-lg bg-destructive/10 border border-destructive/30 p-2.5 text-xs space-y-1">
                 <div className="font-medium text-destructive flex items-center gap-1.5">
                   <AlertTriangle className="h-3.5 w-3.5" />
@@ -394,11 +415,12 @@ export function EventDetailDrawer({ open, onOpenChange, event, onUpdated }: Even
             </>
           ) : (
             <>
-              {canDispatch && (
+              {isLive && (
                 <Button
                   size="sm"
                   onClick={dispatchNow}
-                  disabled={dispatching || busy}
+                  disabled={dispatching || busy || !canDispatch}
+                  title={canDispatch ? undefined : blockers.join(' · ')}
                 >
                   <Send className="h-3.5 w-3.5 mr-1" />
                   {dispatching

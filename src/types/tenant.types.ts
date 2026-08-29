@@ -46,6 +46,18 @@ export interface Tenant {
   is_active: boolean
   /** true = tenant de demostración (ventas). Nunca dispara Twilio real — ver sendTemplateMessage(). */
   is_demo: boolean
+  /**
+   * Proveedor de mensajería (migración 00036). Default 'twilio' — los tenants
+   * existentes no cambian de comportamiento. sendTemplateMessage() rutea por
+   * este campo, no por presencia de credenciales.
+   */
+  messaging_provider: 'twilio' | 'zernio'
+  /** Profile de Zernio — informativo/trazabilidad, el envío usa zernio_account_id. */
+  zernio_profile_id: string | null
+  /** Account de Zernio (el número/canal). Requerido junto a zernio_phone_number para enviar. */
+  zernio_account_id: string | null
+  /** E.164 CON '+', ej. +573001234567. SIN el prefijo whatsapp: que usa Twilio. */
+  zernio_phone_number: string | null
   created_at: string
 }
 

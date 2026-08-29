@@ -34,13 +34,24 @@ const REQUIRED = [
   ['NEXT_PUBLIC_SUPABASE_URL',      'URL del proyecto Supabase'],
   ['NEXT_PUBLIC_SUPABASE_ANON_KEY', 'Clave anónima Supabase (pública)'],
   ['SUPABASE_SERVICE_ROLE_KEY',     'Clave service_role Supabase (privada)'],
-  ['TWILIO_ACCOUNT_SID',            'Account SID de Twilio'],
-  ['TWILIO_AUTH_TOKEN',             'Auth Token de Twilio'],
-  ['TWILIO_WHATSAPP_NUMBER',        'Número WhatsApp — debe empezar con whatsapp:'],
   ['CRON_SECRET',                   'Secret para proteger rutas /api/cron/*'],
   ['STAFF_JWT_SECRET',              'Secret JWT sesiones de staff (mín 32 chars)'],
   ['STAFF_QR_JWT_SECRET',           'Secret JWT QR dinámico del cliente (mín 32 chars)'],
   ['NEXT_PUBLIC_BRAND_NAME',        'Nombre del negocio'],
+]
+
+// Migración Zernio (docs/requerimientos/REQUERIMIENTOS_AGOSTO_2026.md §1): un proyecto
+// puede tener tenants en cualquiera de los dos proveedores (o ambos, mientras dura la
+// migración), así que ya no se exige Twilio a secas — se exige AL MENOS UN proveedor
+// completo. Las credenciales del proveedor NO usado quedan en OPTIONAL más abajo.
+const TWILIO_PROVIDER_VARS = [
+  ['TWILIO_ACCOUNT_SID',     'Account SID de Twilio'],
+  ['TWILIO_AUTH_TOKEN',      'Auth Token de Twilio'],
+  ['TWILIO_WHATSAPP_NUMBER', 'Número WhatsApp — debe empezar con whatsapp:'],
+]
+const ZERNIO_PROVIDER_VARS = [
+  ['ZERNIO_API_KEY',        'API key de Zernio (Bearer)'],
+  ['ZERNIO_WEBHOOK_SECRET', 'Secreto para firmar/verificar el webhook de Zernio'],
 ]
 
 const OPTIONAL = [
@@ -75,7 +86,48 @@ for (const [key, desc] of REQUIRED) {
   }
 }
 
-// ── 2. Validaciones de formato ───────────────────────────────────────────────
+// ── 2. Proveedor de mensajería (Twilio o Zernio — se exige al menos uno completo) ──
+console.log('\n📡 Proveedor de mensajería:\n')
+
+const missingTwilio = TWILIO_PROVIDER_VARS.filter(([key]) => !process.env[key])
+const missingZernio = ZERNIO_PROVIDER_VARS.filter(([key]) => !process.env[key])
+const twilioComplete = missingTwilio.length === 0
+const zernioComplete = missingZernio.length === 0
+const twilioAttempted = missingTwilio.length < TWILIO_PROVIDER_VARS.length
+const zernioAttempted = missingZernio.length < ZERNIO_PROVIDER_VARS.length
+
+function printProviderVar(key, desc, attempted) {
+  if (process.env[key]) {
+    const preview = isSensitive(key) ? '••••••••' : process.env[key].slice(0, 50)
+    console.log(`  ✅  ${key.padEnd(38)} ${preview}`)
+  } else {
+    console.log(`  ${attempted ? '❌' : '⚪'}  ${key.padEnd(38)} ← ${desc}`)
+  }
+}
+
+for (const [key, desc] of TWILIO_PROVIDER_VARS) printProviderVar(key, desc, twilioAttempted)
+for (const [key, desc] of ZERNIO_PROVIDER_VARS) printProviderVar(key, desc, zernioAttempted)
+
+if (!twilioComplete && !zernioComplete) {
+  errors++
+  if (!twilioAttempted && !zernioAttempted) {
+    console.log('\n  ❌  Ningún proveedor de mensajería configurado. Configura UNO completo:')
+    console.log('      Opción A (Twilio): TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN + TWILIO_WHATSAPP_NUMBER')
+    console.log('      Opción B (Zernio): ZERNIO_API_KEY + ZERNIO_WEBHOOK_SECRET')
+  } else {
+    if (twilioAttempted) {
+      console.log(`\n  ❌  Twilio incompleto — falta: ${missingTwilio.map(([key]) => key).join(', ')}`)
+    }
+    if (zernioAttempted) {
+      console.log(`  ❌  Zernio incompleto — falta: ${missingZernio.map(([key]) => key).join(', ')}`)
+    }
+  }
+} else {
+  const active = [twilioComplete && 'Twilio', zernioComplete && 'Zernio'].filter(Boolean).join(' + ')
+  console.log(`\n  ✅  Proveedor completo: ${active}`)
+}
+
+// ── 3. Validaciones de formato ───────────────────────────────────────────────
 console.log('\n🔍 Validaciones de formato:\n')
 
 const whatsapp = process.env.TWILIO_WHATSAPP_NUMBER
@@ -102,7 +154,7 @@ if (qrSecret && qrSecret.length < 32) {
   console.log(`  ✅  STAFF_QR_JWT_SECRET tiene longitud adecuada (${qrSecret.length} chars)`)
 }
 
-// ── 3. Variables opcionales ──────────────────────────────────────────────────
+// ── 4. Variables opcionales ──────────────────────────────────────────────────
 console.log('\n💡 Variables opcionales:\n')
 let warnings = 0
 for (const [key, desc] of OPTIONAL) {
@@ -114,7 +166,7 @@ for (const [key, desc] of OPTIONAL) {
   }
 }
 
-// ── 4. Conexión Supabase ─────────────────────────────────────────────────────
+// ── 5. Conexión Supabase ─────────────────────────────────────────────────────
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
@@ -143,7 +195,7 @@ if (supabaseUrl && serviceKey) {
   console.log('\n⚪  Saltando test de Supabase (variables no configuradas)\n')
 }
 
-// ── 5. Resultado final ───────────────────────────────────────────────────────
+// ── 6. Resultado final ───────────────────────────────────────────────────────
 console.log('\n══════════════════════════════════════════')
 if (errors === 0) {
   console.log(`✅  Listo para deploy`)

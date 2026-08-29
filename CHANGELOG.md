@@ -5,6 +5,124 @@
 
 ---
 
+## [v2.10.0] — 2026-08-29 — feat: swap real Twilio → Zernio + funciones de alta del AIOS
+
+> Request original: *"...necesito dar de alta a 25 clientes nuevos... [integración Zernio completa:
+> migración de proveedor, funciones de aprovisionamiento del AIOS, webhook entrante, validaciones de
+> entorno]."*
+
+### Contexto
+
+Primer swap real de la migración documentada en `docs/requerimientos/REQUERIMIENTOS_AGOSTO_2026.md` §1.
+Hasta v2.9.1, `src/lib/zernio/*` era un módulo aislado sin ningún call-site de negocio conectado. Esta
+entrega conecta ese módulo a `whatsapp.service.ts` (el único choke-point de envío de todo el sistema) y
+deja lista la escritura del AIOS Constelarys (§11) como funciones `SECURITY DEFINER`, cerrando lo que
+`00035_aios_constelarys_role.sql` (v2) había dejado pendiente a propósito.
+
+### Added
+
+- **`supabase/migrations/00036_zernio_provider.sql`** — `tenants` gana `messaging_provider` (default
+  `'twilio'`, sin cambiar comportamiento de los tenants actuales), `zernio_profile_id`,
+  `zernio_account_id` (índice único parcial, routing de webhooks), `zernio_phone_number`. GRANT SELECT
+  de esas 4 columnas a `aios_constelarys` (se suma al de 00035 v2). Tres funciones `SECURITY DEFINER`
+  — única vía de escritura del AIOS: `aios_provision_tenant()` (port fiel de
+  `scripts/seed-new-tenant.sql`, sin upsert), `aios_activate_whatsapp()`, `aios_set_template_settings()`
+  (bloquea sembrar `*_template_sid` en tenants Twilio — el vector de ataque documentado en el propio
+  seed).
+- **`src/app/api/webhook/zernio/route.ts`** (nuevo) — firma HMAC-SHA256 obligatoria
+  (`X-Zernio-Signature`/`X-Late-Signature`), `webhook.test` → 200, `message.received` → resuelve tenant
+  por `zernio_account_id`, opt-out/opt-in (mismo criterio que `twilio-incoming`), reenvío a n8n con el
+  mismo formato plano `Body`/`From`/`To`/`tenant_slug`; `message.delivered/read/failed` → actualiza
+  `message_logs` por `twilio_sid` (primera vez que algo alimenta el status de entrega ahí — Twilio
+  nunca tuvo webhook de status conectado).
+- **`scripts/zernio-sandbox-test.mjs`** (nuevo, node puro sin imports de `src/`) — prueba manual de
+  envío contra el sandbox compartido de Zernio (`+12029087457`), con banner de advertencia de que ese
+  número es compartido entre desarrolladores.
+- **`docs/features/zernio-messaging.md`** (nuevo) — arquitectura del ruteo por proveedor, contrato con
+  el AIOS, invariantes de seguridad, pendientes.
+
+### Changed
+
+- **`src/services/whatsapp.service.ts`** — `sendTemplateMessage()` rutea por
+  `tenant.messaging_provider` sin cambiar su firma. Camino Twilio **byte a byte igual** (mismo orden de
+  checks: `is_demo` → credenciales → opt-out → envío → reintento 21665). Camino Zernio nuevo
+  (`sendViaZernio()`): invariante de seguridad — sin `zernio_account_id`/`zernio_phone_number` NUNCA
+  cae al fallback Twilio master, falla con `zernio_not_configured` y no cobra (sin `twilio_sid`).
+  `SendTemplateOptions` gana `headerMediaUrl`/`headerMediaType`/`templateLanguage` (solo los usa el
+  camino Zernio).
+- **`src/services/calendar.service.ts`** — `assertEventTemplateUsable()` provider-aware
+  (`listZernioTemplates()` para Zernio, Content API sin cambios para Twilio). El envío del evento pasa
+  `options.headerMediaUrl`/`headerMediaType` en vez de la variable `{{6}}` cuando el tenant es Zernio;
+  Twilio sigue exactamente igual.
+- **`src/types/tenant.types.ts`** — `Tenant` gana `messaging_provider`/`zernio_profile_id`/
+  `zernio_account_id`/`zernio_phone_number`. `TenantMessagingContext` (en `whatsapp.service.ts`) gana
+  los mismos campos, opcionales.
+- **`src/lib/tenant.ts`** — `TENANT_COLUMNS` incluye las 4 columnas nuevas (todos los resolvers de
+  tenant las traen automáticamente); nuevo `getTenantByZernioAccountId()` para el webhook.
+- **`scripts/validate-env.mjs`** — ya no exige `TWILIO_*` a secas: exige AL MENOS UN proveedor completo
+  (Twilio o Zernio); ninguno completo → error explicando ambas opciones; uno parcial → error nombrando
+  lo que falta.
+- **`.env.example`** — `ZERNIO_*` documentadas como activas (ya no "en evaluación"); nueva
+  `ZERNIO_TEMPLATE_LANGUAGE` (opcional, default `'es'`).
+
+### Decisiones tomadas donde la spec dejaba margen
+
+- Orden de checks en `sendTemplateMessage()`: se preservó el orden EXACTO del camino Twilio
+  (`is_demo` → config → opt-out → envío) moviendo el opt-out check hacia el branch Zernio en vez de
+  hoistearlo por completo, para no alterar por accidente qué error gana cuando dos condiciones
+  aplicarían a la vez en un tenant Twilio.
+- `assertEventTemplateUsable()` en el camino Zernio es fail-open ante errores de red (mismo criterio
+  que el camino Twilio existente), y no valida "media dinámica" (`{{...}}` en la URL) porque esa
+  restricción es específica de la Content API de Twilio — Zernio no tiene ese problema (la media viaja
+  completa en cada envío, no fija en la plantilla).
+- El webhook de Zernio solo reenvía a n8n cuando el remitente es un mesero autorizado
+  (`authorized_numbers`), igual que `twilio-incoming` — no se reenvía CUALQUIER mensaje entrante,
+  porque el workflow de n8n está diseñado para pedidos de domicilio, no para texto libre de clientes.
+- El detector de intención (pedido/horario/ubicación) del webhook de Zernio se dejó solo para logging,
+  sin auto-reply real — no existe una función de envío de texto libre vía Zernio en este repo (el
+  sistema es "solo plantillas aprobadas" de punta a punta) y crear una estaba fuera del alcance dado.
+
+### Sin poder verificar
+
+- **Envío real de un mensaje vía Zernio de punta a punta** — no hay todavía un tenant real con
+  `messaging_provider='zernio'` ni un `zernio_account_id` de un número comprado; `sendViaZernio()` y
+  `scripts/zernio-sandbox-test.mjs` están escritos contra el contrato documentado
+  (`src/lib/zernio/messaging.ts`, confirmado contra el spec OpenAPI público) pero no probados contra la
+  API real en este commit.
+- **`Level 2.0/aios-constelarys/docs/zernio-api-contract.md`** se leyó (ya existía, no se modificó —
+  regla explícita de no tocar `Level 2.0/`) para confirmar el shape de `account` en los eventos de
+  webhook de Zernio; solo está confirmado para `whatsapp.template.status_updated` y eventos de número
+  (`{accountId, profileId, ...}`) — el shape exacto para `message.received` no aparece documentado en
+  el spec público, así que `extractAccountId()` en el webhook nuevo asume la misma convención con un
+  fallback defensivo (`account.id`).
+- **npx tsc --noEmit / eslint** no se corrieron en esta sesión (rol de especificación/documentación,
+  no de ejecución de build — ver memoria del usuario). Pendiente de que el desarrollador que aplique
+  este commit corra la validación de build normal del repo.
+
+### Post-review (7 hallazgos corregidos)
+
+- **F1 (alta, `route.ts`):** `handleDeliveryStatus()` ya no puede degradar un estado más avanzado con un
+  webhook fuera de orden — jerarquía `sent < delivered < read`: `read` sin condición, `delivered` con
+  `.neq('status','read')`, `failed` con `.not('status','in','(delivered,read)')`.
+- **F2 (media, `calendar.service.ts`):** el `errorMessage` fijo `'Twilio error o número no configurado'`
+  (falso para tenants Zernio) pasa a un texto neutral de proveedor.
+- **F3 (baja, `whatsapp.service.ts`):** `toZernioTemplateParams()` filtra las claves a solo
+  `/^\d+$/` antes de calcular el máximo — una clave no numérica ya no produce `NaN` → `[]` silencioso;
+  ahora loguea con `console.warn` qué se descartó.
+- **F4 (media, `route.ts`):** `handleMessageReceived()` ya no usa `message.sender.id` (BSUID opaco de
+  Meta) como fallback de teléfono cuando `phoneNumber` viene null/vacío — corta con log y 200 sin
+  opt-out ni forward.
+- **F5 (media, `route.ts` + `00036_zernio_provider.sql`):** dedup de webhooks por `event_id` en la
+  tabla nueva `webhook_events_seen` (PK `(provider, event_id)`) antes de opt-out/forward — evento
+  repetido responde `200 {received:true, duplicate:true}`; fail-open si la tabla no existe (`42P01`).
+- **F6 (media, `00036_zernio_provider.sql`):** `aios_set_template_settings()` acepta también
+  `event_template_image_sid`/`event_template_video_sid` explícitamente — el regex `_template_sid$` no
+  las cubría (terminan en `_image_sid`/`_video_sid`).
+- **F7 (baja, `route.ts`):** `POST` revisa `content-length` antes de leer el body — más de 64 KiB
+  responde `413 {error:'payload_too_large'}` sin materializarlo en memoria.
+
+---
+
 ## [v2.9.1] — 2026-08-29 — fix: endurecimiento tras code review del WIP (rol AIOS + cliente Zernio)
 
 > Request: *"[antes de commitear el WIP] le paso un code-review con subagentes y te reporto hallazgos."*

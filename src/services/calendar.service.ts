@@ -30,7 +30,8 @@ import {
 } from '@/services/campaign.service'
 import { sendTemplateMessage } from '@/services/whatsapp.service'
 import { getTenantById } from '@/lib/tenant'
-import { EVENT_MEDIA_BUCKET, eventMediaPathFromPublicUrl } from '@/lib/twilio/media'
+import { EVENT_MEDIA_BUCKET, eventMediaPathFromPublicUrl, getEventMediaBaseUrl } from '@/lib/twilio/media'
+import { listZernioTemplates } from '@/lib/zernio/messaging'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -329,12 +330,14 @@ export interface ExecuteAutoEventResult {
 }
 
 /**
- * Verifica contra la Content API de Twilio que la plantilla del evento sirva
- * para media dinámica ANTES de enviar. Detecta dos configuraciones que en
- * producción harían daño silencioso:
+ * Verifica que la plantilla del evento sirva para media dinámica ANTES de
+ * enviar. Provider-aware (migración 00036): para tenants Zernio valida contra
+ * `listZernioTemplates()` que la plantilla exista y esté `APPROVED`; para
+ * Twilio (sin cambios) valida además que la media no sea fija, contra la
+ * Content API. Detecta configuraciones que en producción harían daño silencioso:
  *
- *   1. Plantilla con media FIJA (sin `{{...}}` en la URL): todos los clientes
- *      recibirían la imagen de muestra aprobada, no el flyer del evento.
+ *   1. (Solo Twilio) Plantilla con media FIJA (sin `{{...}}` en la URL): todos
+ *      los clientes recibirían la imagen de muestra aprobada, no el flyer del evento.
  *   2. Plantilla no aprobada/rechazada por Meta: el envío fallaría uno a uno.
  *
  * Errores de red o credenciales se tratan como no-concluyentes (fail-open):
@@ -342,9 +345,46 @@ export interface ExecuteAutoEventResult {
  */
 async function assertEventTemplateUsable(
   templateSid: string,
-  tenant: { is_demo?: boolean; twilio_subaccount_sid: string | null; twilio_subaccount_auth_token: string | null }
+  tenant: {
+    is_demo?: boolean
+    twilio_subaccount_sid: string | null
+    twilio_subaccount_auth_token: string | null
+    messaging_provider?: 'twilio' | 'zernio'
+    zernio_account_id?: string | null
+  }
 ): Promise<void> {
   if (tenant.is_demo) return
+
+  if (tenant.messaging_provider === 'zernio') {
+    // Sin cuenta configurada no hay nada que listar aquí — sendTemplateMessage()
+    // ya bloquea el envío con 'zernio_not_configured' (invariante de seguridad,
+    // ver whatsapp.service.ts). No duplicamos ese error aquí, fail-open.
+    if (!tenant.zernio_account_id) return
+    try {
+      const { templates } = await listZernioTemplates(tenant.zernio_account_id)
+      const match = templates.find((t) => t.name === templateSid)
+      if (!match) {
+        throw new Error(
+          `La plantilla '${templateSid}' no existe en la cuenta Zernio de este tenant. ` +
+          'Revisa event_template_image_sid / event_template_video_sid en Ajustes.'
+        )
+      }
+      if (match.status !== 'APPROVED') {
+        throw new Error(
+          `La plantilla '${templateSid}' no está aprobada por Meta (status: ${match.status}). ` +
+          'Espera la aprobación o configura otra plantilla en Ajustes.'
+        )
+      }
+    } catch (err) {
+      if (err instanceof Error && (err.message.includes('no existe en la cuenta Zernio') || err.message.includes('no está aprobada por Meta'))) {
+        throw err
+      }
+      console.warn(`[Calendar] Verificación de plantilla Zernio '${templateSid}' no concluyente (${err instanceof Error ? err.message : err}) — continuando`)
+    }
+    return
+  }
+
+  // Camino Twilio — SIN CAMBIOS.
   const accountSid = tenant.twilio_subaccount_sid ?? process.env.TWILIO_ACCOUNT_SID
   const authToken = tenant.twilio_subaccount_auth_token ?? process.env.TWILIO_AUTH_TOKEN
   if (!accountSid || !authToken) return
@@ -489,6 +529,12 @@ export async function executeAutoEvent(eventId: string): Promise<ExecuteAutoEven
     const eventDate = formatEventDate(event.event_date)
     const cta = event.description?.trim() || '¡Te esperamos!'
 
+    // Zernio: la media viaja en `options.headerMediaUrl` con la URL pública
+    // COMPLETA (no el path suelto que exige la plantilla twilio/media). Twilio
+    // sigue exactamente igual — variable {{6}} = el path dentro del bucket.
+    const isZernio = tenant.messaging_provider === 'zernio'
+    const zernioHeaderMediaUrl = `${getEventMediaBaseUrl()}/${mediaPath}`
+
     let sent = 0
     let failed = 0
     const sentCustomerIds: string[] = []
@@ -500,19 +546,24 @@ export async function executeAutoEvent(eventId: string): Promise<ExecuteAutoEven
         '3': event.title,
         '4': eventDate,
         '5': cta,
-        '6': mediaPath,
+      }
+      if (!isZernio) {
+        variables['6'] = mediaPath
       }
 
       // `keepAllVariables`: el reintento por 21665 suelta la variable más alta
       // primero — aquí {{6}} = el path del flyer. Sin ella la plantilla media
       // sale rota para toda la audiencia; mejor fallar con el error visible.
+      // (Zernio no tiene ese reintento — ver whatsapp.service.ts.)
       const result = await sendTemplateMessage(
         customer.phone,
         templateSid,
         variables,
         tenant,
         { customerId: customer.id, messageType: 'calendar_event' },
-        { keepAllVariables: true }
+        isZernio
+          ? { headerMediaUrl: zernioHeaderMediaUrl, headerMediaType: event.media_type ?? 'image' }
+          : { keepAllVariables: true }
       )
       await recordCampaignMessage({
         campaignId: campaign.id,
@@ -520,7 +571,10 @@ export async function executeAutoEvent(eventId: string): Promise<ExecuteAutoEven
         status: result ? 'sent' : 'failed',
         tenantId: tenant.id,
         twilioSid: result?.sid ?? null,
-        errorMessage: result ? null : 'Twilio error o número no configurado',
+        // F2 (post-review): texto neutral de proveedor — desde v2.10.0 este envío
+        // puede ser Zernio, no solo Twilio (el detalle real del proveedor ya queda
+        // registrado en message_logs por sendTemplateMessage()).
+        errorMessage: result ? null : 'Envío fallido o número no configurado (detalle del proveedor en message_logs)',
       })
 
       if (result) {

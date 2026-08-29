@@ -48,6 +48,7 @@ Webhooks validan origen por número autorizado o `x-webhook-secret`. Cron jobs v
 | POST | /api/reward-redeem | Registrar entrega física de un premio (acepta `grant_id`, `tier_id` opcional) | Staff (Bearer/X-Device-Token) |
 | POST | /api/webhook/delivery | Recibir datos de domicilio (n8n/Twilio) | x-webhook-secret |
 | POST | /api/webhook/twilio-incoming | Auto-responder mensajes entrantes al número | Twilio Signature |
+| POST | /api/webhook/zernio | Webhook Zernio: mensajes entrantes (tenants `messaging_provider='zernio'`) + status de entrega (`message_logs`) | X-Zernio-Signature (HMAC-SHA256, obligatoria) |
 | GET/POST | /api/cron/birthday | Enviar felicitaciones de cumpleaños | CRON_SECRET |
 | GET/POST | /api/cron/reactivation | Enviar reactivaciones (días configurables, default 21/25) + otorga premio de campaña con `expires_at` | CRON_SECRET |
 | GET/POST | /api/cron/calendar-dispatch | Auto-enviar eventos del calendario vencidos (disparado por n8n) | CRON_SECRET |

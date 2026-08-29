@@ -11,7 +11,7 @@ function getServiceClient() {
 }
 
 const TENANT_COLUMNS =
-  'id, slug, name, business_type, config, domain, twilio_subaccount_sid, twilio_subaccount_auth_token, twilio_messaging_service_sid, twilio_whatsapp_number, is_active, is_demo, created_at'
+  'id, slug, name, business_type, config, domain, twilio_subaccount_sid, twilio_subaccount_auth_token, twilio_messaging_service_sid, twilio_whatsapp_number, is_active, is_demo, messaging_provider, zernio_profile_id, zernio_account_id, zernio_phone_number, created_at'
 
 /**
  * Normaliza un host header a la forma que guardamos en `tenants.domain`.
@@ -100,6 +100,20 @@ export async function getTenantByWhatsappNumber(number: string): Promise<Tenant 
     .from('tenants')
     .select(TENANT_COLUMNS)
     .eq('twilio_whatsapp_number', number)
+    .eq('is_active', true)
+    .single()
+  if (error || !data) return null
+  return data as Tenant
+}
+
+/** Resolver tenant por zernio_account_id — webhook entrante de Zernio (payload.account.id). */
+export async function getTenantByZernioAccountId(accountId: string): Promise<Tenant | null> {
+  if (!accountId) return null
+  const supabase = getServiceClient()
+  const { data, error } = await supabase
+    .from('tenants')
+    .select(TENANT_COLUMNS)
+    .eq('zernio_account_id', accountId)
     .eq('is_active', true)
     .single()
   if (error || !data) return null

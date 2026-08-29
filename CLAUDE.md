@@ -63,8 +63,10 @@
 | `src/hooks/useDashboardAnalytics.ts` | `docs/features/dashboard.md` |
 | `src/lib/supabase/*` | `docs/02-architecture.md` + `docs/03-security.md` |
 | `src/lib/twilio/*` | `docs/02-architecture.md` + `docs/04-deployment.md` |
-| `src/lib/zernio/*` | `docs/requerimientos/REQUERIMIENTOS_AGOSTO_2026.md` §1 (migración de Twilio a Zernio, en curso — módulo aislado, todavía NO conectado a `whatsapp.service.ts` ni a ningún call-site de negocio) |
+| `src/lib/zernio/*` | `docs/features/zernio-messaging.md` (conectado a `whatsapp.service.ts` desde v2.10.0 — ya NO es un módulo aislado) |
+| `src/app/api/webhook/zernio/*` | `docs/features/zernio-messaging.md` + `docs/03-security.md` |
 | `src/services/*` | `docs/features/[feature].md` correspondiente |
+| `src/services/whatsapp.service.ts` | `docs/features/zernio-messaging.md` (ruteo por proveedor) + `docs/features/campaigns.md` |
 | `src/constants/rewards.ts` | `docs/features/campaigns.md` + `docs/features/calendar.md` + `docs/features/points-mystery-box.md` |
 | `src/lib/points-engine.ts` | `docs/features/points-mystery-box.md` |
 | `src/services/points.service.ts` | `docs/features/points-mystery-box.md` |
@@ -75,7 +77,7 @@
 | `src/app/(dashboard)/dashboard/calendar/*` | `docs/features/calendar.md` |
 | `src/components/dashboard/Calendar/*` | `docs/features/calendar.md` |
 | `src/app/api/dashboard/calendar/*` | `docs/features/calendar.md` + `docs/API_DOCS.md` |
-| `src/services/calendar.service.ts` | `docs/features/calendar.md` + `docs/DB_SCHEMA.md` |
+| `src/services/calendar.service.ts` | `docs/features/calendar.md` + `docs/DB_SCHEMA.md` + `docs/features/zernio-messaging.md` (validación de plantilla y media provider-aware) |
 | `src/app/api/cron/calendar-dispatch/*` | `docs/features/calendar.md` |
 | `src/services/reward-grant.service.ts` | `docs/features/reward-grants.md` + `docs/DB_SCHEMA.md` |
 | `src/services/campaign-reward.service.ts` | `docs/features/reward-grants.md` |

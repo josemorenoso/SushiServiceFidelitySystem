@@ -30,6 +30,12 @@
 - **Fecha de nacimiento:** Formato válido, no futura
 - **Webhook de domicilios:** Valida que el número remitente esté en `authorized_numbers`
 - **Cron jobs:** Valida header `Authorization: Bearer {CRON_SECRET}`
+- **Webhook de Zernio** (`/api/webhook/zernio`, tenants `messaging_provider='zernio'`): firma HMAC-SHA256
+  obligatoria (`X-Zernio-Signature`, alias `X-Late-Signature`) contra `ZERNIO_WEBHOOK_SECRET`, comparación
+  en tiempo constante. Zernio trata su propia firma como OPCIONAL (solo firma si se configuró un
+  `secret` al crear el webhook) — este proyecto la exige SIEMPRE: sin header o sin
+  `ZERNIO_WEBHOOK_SECRET` configurado, se rechaza con 401 en vez de aceptar el webhook sin firmar. Ver
+  `src/lib/zernio/webhooks.ts` y `docs/features/zernio-messaging.md`.
 
 ## Rate Limiting
 

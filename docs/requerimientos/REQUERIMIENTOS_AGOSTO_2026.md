@@ -369,6 +369,12 @@ El sistema de branding por tenant **ya existe** (`src/lib/branding.ts` + `Tenant
 
 ## 6. Sistema de branding + generación de plantillas ("wizard" de paleta/logo/tono)
 
+> ⚠️ **La parte de "plantillas + tono" de esta sección se adelantó y se convirtió en la PRIMERA
+> PRIORIDAD del proyecto — ver §12.** Lo que sigue aquí abajo describe el problema original
+> (incluido el diagnóstico de que el concepto de tono no existe en absoluto); §12 lo acota a solo
+> plantillas (sin logo ni paleta) y agrega el requisito de "editar = borrar y recrear". Lo de
+> logo/paleta de esta sección sigue en su prioridad original, después de §12–§13 y de §3–§9.
+
 Existe una base de datos parcial (`tenants.config` + `TenantConfig`) y una pieza de UI suelta con
 paletas por tipo de negocio (`QR_THEMES` en `src/lib/utils/qr-poster.ts`, 8 temas completos con
 bg/gradiente/paleta/emojis), pero **nada está conectado a un flujo de onboarding**, y el concepto de
@@ -623,18 +629,119 @@ línea de la app (ni del AIOS ni de Zernio) está escrita todavía.**
 
 ---
 
+## 12. Plantillas de WhatsApp — mismo set para todos + 3 estilos + edición (decidido PRIMERA PRIORIDAD, 2026-08-29 noche)
+
+**Decisión del dueño, textual:** *"desde el principio me han cargado como un loco"* (las plantillas).
+Se reprioriza por encima de TODO lo demás en esta lista, incluidas las 7 mejoras de §3–§9 y por
+delante de seguir puliendo la migración a Zernio. Antes de tocar cualquier otra cosa de producto, se
+resuelve esto.
+
+### Qué se pide
+
+1. **Un solo set base de plantillas, igual para todos los tenants.** Hoy cada alta termina con un
+   conjunto de plantillas ligeramente distinto según quién lo haya armado a mano al momento de crear
+   el tenant — eso es lo que "carga como loco" al dueño. Se necesita UN catálogo estándar (las 13
+   plantillas ya identificadas en `scripts/twilio-create-text-templates.mjs` /
+   `twilio-create-media-templates.mjs`, y ya portadas para Zernio en
+   `Level 2.0/aios-constelarys/src/lib/zernio/templates-catalog.ts`) que se cree siempre igual para
+   cualquier tenant nuevo.
+2. **Tono por defecto: cálido** — el actual, documentado en `docs/PLANTILLAS.md`. Sin cambios en el
+   default.
+3. **Agregar 2 estilos nuevos, seleccionables además de *cálido*:** un estilo ***elegante*** y un
+   estilo ***urbano***. Quien dé de alta el tenant elige uno de los 3 y el catálogo completo (las 13
+   plantillas) se crea con ese estilo.
+4. **Edición desde el dashboard, con una experiencia de usuario específica** — textual del dueño:
+   - **Para el dueño del restaurante:** entra al apartado de Plantillas, ve una plantilla existente,
+     la edita como si fuera un documento — cambia texto, tal vez el estilo — y guarda. Debe sentirse
+     como una edición simple, nunca como "estoy creando algo nuevo".
+   - **Para el sistema:** por debajo, NO es una edición — es **borrar la plantilla anterior y crear
+     una nueva** en su lugar. Las plantillas de WhatsApp, una vez aprobadas por Meta, no se pueden
+     editar in-place (ni en Twilio ni en Zernio) — solo se puede crear una plantilla nueva y volver a
+     someterla a aprobación. El sistema debe ocultarle esa complejidad al usuario.
+5. **El apartado de "Plantillas" del dashboard cambia** para soportar todo lo anterior — hoy
+   (`src/app/(dashboard)/dashboard/templates/page.tsx`) es un `<textarea>` de texto libre por
+   plantilla, sin concepto de estilo ni de catálogo estándar. Esto ya estaba señalado como gap en §6
+   ("el concepto de tono/estilo comunicativo... no existe en absoluto") — este pedido lo saca de ahí y
+   lo prioriza aparte, acotado solo a plantillas (sin logo ni paleta todavía).
+
+### ⚠️ URGENTE — antes de implementar, esto necesita respuesta del dueño
+
+> El propio dueño pidió dejar esto anotado explícitamente: *"el usuario para completar el apartado de
+> plantillas requiere de cambios, preguntar cuáles son para implementar."* Estas son las preguntas
+> concretas que hay que resolver antes de que cualquier IA empiece a codear este frente (Mandamiento
+> I: ante duda, preguntar — no asumir ninguna de estas respuestas):
+
+1. **¿Qué pasa con el envío mientras la plantilla nueva está pendiente de aprobación** (24–72h en
+   Twilio; puede ser instantáneo si es "library template" en Zernio, ver §1)? ¿Se sigue enviando con
+   la plantilla vieja hasta que la nueva quede aprobada, o se bloquea ese tipo de mensaje mientras
+   tanto?
+2. **¿El estilo se elige una sola vez por tenant** (las 13 plantillas van todas con el mismo estilo) **o
+   se puede mezclar** — por ejemplo, bienvenida en tono cálido y campañas en tono urbano?
+3. **¿Quién puede cambiar el estilo o editar una plantilla puntual:** ¿el dueño de cada restaurante
+   desde su propio dashboard, o solo el equipo de Cada1? Cambia por completo el diseño de permisos del
+   apartado.
+4. **¿El estilo se guarda como configuración del tenant** (para que si más adelante se agrega una
+   plantilla nueva al catálogo, nazca ya con el estilo correcto sin que nadie tenga que elegirlo de
+   nuevo)?
+5. **¿Cómo se redactan los textos de los 2 estilos nuevos (elegante, urbano)?** ¿Un humano los escribe
+   una vez y quedan fijos, se generan con LLM con revisión humana antes de someter a Meta (ver el
+   prompt P4 ya preparado en `docs/requerimientos/PROMPTS_SESIONES_BARATAS.md`), o es un banco de
+   textos fijos por combinación estilo × tipo de negocio (restaurant/barbershop/beauty_salon)? Cada
+   texto nuevo es una aprobación de Meta aparte.
+6. **¿Esto aplica retroactivamente a los 4 tenants que ya tienen plantillas en Twilio** (recrearlas
+   con el catálogo estándar) **o solo a los tenants que se den de alta de aquí en adelante** (vía
+   Zernio)?
+
+### Relación con lo ya documentado
+
+Este pedido recorta, con prioridad máxima, lo que ya estaba planteado en **§6** (el wizard de
+branding/tono) — pero acotado solo a las plantillas de mensajería (sin logo ni paleta de colores por
+ahora) y con el requisito nuevo de "editar = borrar y recrear" que §6 no contemplaba. Cuando esto se
+implemente, §6 debe actualizarse para no duplicar el trabajo.
+
+---
+
+## 13. Apartado de Campañas — modificación pendiente de especificar (decidido SEGUNDA PRIORIDAD, 2026-08-29 noche)
+
+El dueño pidió modificar el apartado de Campañas
+(`src/app/(dashboard)/dashboard/campaigns/*`, `src/app/api/dashboard/campaigns/*` — ver
+`docs/features/campaigns.md`), en segundo lugar de prioridad: inmediatamente después de §12
+(Plantillas) y antes de §3–§9.
+
+**Sin detalles todavía.** El dueño no especificó qué cambios necesita — queda pendiente que los
+describa antes de que cualquier IA empiece a investigar o codear este frente (Mandamiento I: ante
+duda, preguntar — no asumir alcance).
+
+**Preguntas:**
+- ¿Qué de la pantalla o el flujo actual de Campañas no funciona o no alcanza?
+- ¿Es una queja de UI (cómo se ve o se usa) o de funcionalidad (qué puede o no puede hacer una
+  campaña hoy)?
+- ¿Tiene relación con el cambio de plantillas de §12 (por ejemplo, elegir el estilo de una campaña
+  puntual) o es un problema aparte?
+
+---
+
 ## Handoff — cómo continuar sin releer el repo entero
 
-**Orden de trabajo acordado con el dueño:** primero la migración a Zernio (§1, con §2 como contexto
-obligatorio de arquitectura), después las 7 mejoras (§3–§9) en el orden en que fueron pedidas salvo
-que el dueño priorice distinto.
+**Orden de trabajo acordado con el dueño (actualizado 2026-08-29, noche):** la migración a Zernio
+(§1, con §2 como contexto obligatorio de arquitectura) ya tiene código implementado y commiteado —
+ver el propio §1 y §11 — pendiente de que el dueño complete el checklist de despliegue (Supabase del
+AIOS, migraciones 00035/00036, activar el rol, variables de entorno) y una prueba piloto con un
+número real. **La prioridad de lo que sigue cambió: §12 (Plantillas) primero, §13 (Campañas) segundo,
+y solo después las mejoras §3–§9** en el orden en que fueron pedidas, salvo que el dueño vuelva a
+priorizar distinto.
 
 **Antes de escribir código en cualquier frente:**
-1. Resolver el housekeeping de §10 (especialmente el WIP sin commitear de calendario/Frangal).
-2. Conseguir acceso real a la cuenta Zernio (API key) y leer `docs.zernio.com` a fondo — las 6
-   preguntas de §1 son las que definen el diseño de la interfaz de mensajería nueva.
-3. Para cada una de las 7 mejoras, las preguntas listadas en su sección son decisiones del dueño, no
-   ambigüedad técnica — no asumir la respuesta.
+1. ✅ Housekeeping de §10 resuelto (el WIP de calendario/Frangal se revisó con code review y se
+   commiteó — ver CHANGELOG v2.8.2/v2.8.3/v2.9.1).
+2. ✅ Acceso a la cuenta Zernio obtenido y las 6 preguntas técnicas de §1 respondidas — ver la
+   investigación completa y el código escrito dentro de §1.
+3. **§12 (Plantillas) tiene preguntas URGENTES sin responder — no empezar a codear ese frente hasta
+   tener las respuestas del dueño** (ver la lista numerada en §12).
+4. **§13 (Campañas) no tiene alcance definido todavía** — preguntarle al dueño antes de investigar o
+   codear.
+5. Para cada una de las 7 mejoras §3–§9, las preguntas listadas en su sección son decisiones del
+   dueño, no ambigüedad técnica — no asumir la respuesta.
 
 **Todo lo que dice "sin trackear en git" o "sin commitear" en este documento** (`scripts/seed-new-tenant.sql`,
 `scripts/alta-frangal.sql`, `Level 2.0/` [irrelevante, ignorar], y los ~10 archivos con diff pendiente)

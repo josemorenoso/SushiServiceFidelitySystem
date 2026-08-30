@@ -123,6 +123,33 @@ deja lista la escritura del AIOS Constelarys (§11) como funciones `SECURITY DEF
 
 ---
 
+## [v2.10.1] — 2026-08-29 — docs: reprioridad — Plantillas primero, Campañas segundo
+
+> Request: *"Lo primero que quiero solucionar y ponglo en la lista de § de primerito son las
+> plantillas... el apartado de campañas necesito modificarlo también, ese lo dejamos como segundo
+> más importante."*
+
+### Contexto
+
+El dueño reprioriza el trabajo pendiente: por encima de las 7 mejoras ya documentadas (§3–§9) y por
+delante de seguir puliendo Zernio, van primero **Plantillas** (unificar el catálogo entre tenants +
+3 estilos seleccionables — cálido/elegante/urbano — + que editar una plantilla se sienta como editar
+para el dueño aunque por debajo el sistema borre y recree) y segundo **Campañas** (sin alcance
+definido todavía). Solo documentación — cero código en esta entrada, a pedido explícito.
+
+### Added
+
+- **`docs/requerimientos/REQUERIMIENTOS_AGOSTO_2026.md` §12** — requisitos de la unificación de
+  plantillas, con un bloque **URGENTE** de 6 preguntas sin responder que bloquean cualquier código en
+  ese frente (aprobación pendiente de Meta, si el estilo es por tenant o por plantilla, quién puede
+  editar, cómo se redactan los 2 estilos nuevos, si aplica a los tenants Twilio existentes).
+- **§13** — placeholder de Campañas, marcado explícitamente sin alcance (a la espera de que el dueño
+  lo describa).
+- Handoff actualizado: nuevo orden de prioridad (§12 → §13 → §3–§9) y estado real de §1/§10 (ya
+  resueltos, con puntero a dónde).
+
+---
+
 ## [v2.9.1] — 2026-08-29 — fix: endurecimiento tras code review del WIP (rol AIOS + cliente Zernio)
 
 > Request: *"[antes de commitear el WIP] le paso un code-review con subagentes y te reporto hallazgos."*

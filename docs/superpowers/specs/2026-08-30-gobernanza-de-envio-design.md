@@ -544,9 +544,14 @@ Cada bloque es entregable y verificable por sí solo. No empezar el siguiente si
    `aios_line_health()`, `aios_set_line_status()`, endpoints de super-admin.
 7. **Bloque 7 — Frecuencia configurable.**
    Matriz de cooldown por clase, `min_spacing_hours`, UI en Ajustes.
+8. **Bloque 8 — Retiro de la billetera para Zernio (D-2, bloqueante de la primera alta Zernio).**
+   Excepción en `debit_wallet_on_message_sent()`, `WalletCard` oculta para tenants Zernio, reporte de
+   volumen mensual por tenant para sustentar el escalón de suscripción. **La billetera de los 4
+   tenants Twilio no se toca.**
 
-Los bloques 1–4 son prerrequisito de las 25 altas. El 5 es prerrequisito de **usar Golden Bullet**, no
-del alta. El 6 y el 7 pueden ir después del piloto.
+Los bloques 1–4 son prerrequisito de las 25 altas. El 8 es prerrequisito de la **primera alta Zernio**
+y es pequeño — puede adelantarse en cuanto el Bloque 1 esté en pie. El 5 es prerrequisito de **usar
+Golden Bullet**, no del alta. El 6 y el 7 pueden ir después del piloto.
 
 ---
 
@@ -595,10 +600,24 @@ invariante que ya exige `zernio-messaging.md` §"Invariantes de seguridad" punto
 - ~~**D-1 · Golden Bullet y coexistencia (§2.1).**~~ ✅ **RESUELTA (2026-08-30):** se permite, con
   advertencia explícita y envío diario bajo. Diseño implementado en **§3.4.1** (puerta de entrada por
   salud de línea, sub-cap del 15 %, congelamiento al primer amarillo, confirmación escrita).
-- **D-2 · La billetera (decisión "B", todavía abierta).** Con Meta cobrándole directo al restaurante,
-  `trg_debit_wallet` sigue cobrando $100 COP por mensaje: el restaurante **paga dos veces**. ¿La
-  billetera se apaga para tenants Zernio, se re-tarifa, o pasa a ser cuota de plataforma? Afecta el
-  precio que se les cotiza a los 25 y **debe resolverse antes de la primera alta Zernio**.
+- ~~**D-2 · La billetera.**~~ ✅ **RESUELTA (2026-08-30): se apaga el débito para tenants Zernio.**
+  Con Meta facturándole directo al restaurante, cobrarle además $100 COP por mensaje sería cobrarle
+  dos veces. El modelo pasa a **suscripción mensual variable según el flujo de clientes del
+  restaurante** (decisión comercial del dueño: al subir de escalón de volumen, el incremento se
+  traslada a la suscripción).
+
+  **Qué implica en código** (Bloque 8, ver §8):
+  1. `debit_wallet_on_message_sent()` (migración `00033`) se salta cuando el tenant es
+     `messaging_provider = 'zernio'`. La billetera sigue **intacta y viva** para los 4 tenants Twilio
+     (Sushi Service, Don Alirio, Frangal, Demo) hasta que migren — no se demuele nada.
+  2. El corte por saldo insuficiente deja de aplicar a tenants Zernio. **Esto no los deja sin freno:**
+     el presupuesto de línea (§3.1) lo reemplaza, y frena contra el límite real de Meta en vez de
+     contra la plata — que es más seguro y es la razón de que este cambio sea posible ahora y no antes.
+  3. `WalletCard` y el estimador de costo de campañas no se muestran para tenants Zernio: en su lugar
+     va la tarjeta de presupuesto de línea (§5, `/api/dashboard/line-budget`).
+  4. El dato que sustenta el escalón de suscripción (volumen mensual de mensajes por tenant) **ya
+     existe** en `message_logs` — no hace falta instrumentación nueva, solo una consulta de reporte
+     para el super-admin.
 - **D-3 · Reserva transaccional en el alta.** ¿`reserve_floor = 70` es el default para todos, o el
   equipo de ventas lo ajusta por tamaño de restaurante?
 - **D-4 · Señales de calidad en Zernio.** ¿Zernio expone quality rating y límite de mensajería por API

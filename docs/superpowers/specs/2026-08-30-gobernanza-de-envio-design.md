@@ -108,9 +108,12 @@ tipo de violación de política que produce **restricción del número** — el 
 no el leve. Y con la decisión de coexistencia, ese número es la **línea principal de atención al
 cliente del restaurante**.
 
-Esto no lo resuelve un cap diario. Requiere una decisión del dueño (§10, D-1). El spec lo trata como
-la clase de menor prioridad y con freno propio, pero **la mitigación técnica no elimina el riesgo de
-política.**
+Esto no lo resuelve un cap diario, y **ninguna mitigación técnica elimina el riesgo de política.**
+
+**Decisión del dueño (2026-08-30): se permite, con advertencia explícita y envío diario bajo.** El
+diseño que implementa esa decisión está en §3.4.1 — puerta de entrada por salud de línea, sub-cap
+diario propio, y congelamiento al primer amarillo. La advertencia no es decorativa: es el mecanismo
+por el cual el riesgo queda documentadamente aceptado por quien lo asume.
 
 ---
 
@@ -181,7 +184,7 @@ clases de presupuesto y cinco niveles de prioridad:
 | **P1** | `campaign` | `birthday`, `reward_reminder`, `calendar_event` | Sí, con `expires_at` corto. |
 | **P2** | `campaign` | `reactivation` | Sí. |
 | **P3** | `campaign` | `manual` | Sí. |
-| **P4** | `campaign` | `import` (Golden Bullet) | Sí, y es la primera en congelarse. |
+| **P4** | `campaign` | `import` (Golden Bullet) | Sí, bajo el régimen especial de **§3.4.1**: sub-cap propio, puerta de entrada por salud de línea, y la primera en congelarse. |
 
 **P1 es sensible al tiempo, no "importante".** Un cumpleaños entregado mañana no vale nada; un
 recordatorio de premio entregado después de que venció la ventana tampoco. Por eso van arriba de
@@ -225,11 +228,49 @@ dashboard muestra *"180 de 380 enviados · 200 en cola · termina aprox. el 1 de
 
 **Anti-duplicado:** índice único parcial sobre `(tenant_id, phone, campaign_id) WHERE status='queued'`.
 
-**Golden Bullet a escala — hay que ser honesto:** con `presupuesto_campana = 180`, una base de 5.000
-contactos tarda **28 días** en drenar. No es un defecto de la cola: es el límite físico de una línea
-sin verificar. Golden Bullet a esa escala solo tiene sentido con la WABA en un escalón alto (a
-~2.000/día el mismo lote drena en ~3 días). El wizard debe **mostrar la fecha estimada de finalización
-antes de confirmar**, para que nadie cargue 5.000 contactos esperando que salgan hoy.
+### 3.4.1 Golden Bullet: régimen especial (decisión del dueño, 2026-08-30)
+
+Golden Bullet **se permite**, pero no comparte el régimen de las demás campañas. Es la única clase que
+envía a personas que **no dieron consentimiento** (§2.1), así que corre bajo tres restricciones propias:
+
+**1 · Puerta de entrada por salud de línea.** El wizard solo deja confirmar si se cumplen las tres:
+
+```
+line_status        = 'active'
+quality_rating     = 'green'
+messaging_daily_limit > 250      -- la línea ya subió de escalón: tiene historial probado
+```
+
+Si alguna falla, el wizard **bloquea** y explica cuál. Esto impide lo más peligroso del producto:
+disparar una base fría desde una línea recién creada, sin reputación, el día del alta — que es
+justamente cuando un tenant nuevo tiene más ganas de hacerlo.
+
+**2 · Sub-cap diario propio**, dentro del presupuesto de campaña y más bajo que él:
+
+```
+cap_golden_bullet = GREATEST(10, floor(presupuesto_campana * golden_bullet_pct))
+```
+
+`admin_settings.golden_bullet_pct`, default **0.15**. A escalón 2.000 (presupuesto ≈ 1.900) da
+~285/día. El 85 % restante queda para las campañas a clientes que **sí** consintieron: nunca se
+canibaliza la comunicación legítima por una base fría.
+
+**3 · Congelamiento al primer amarillo.** A diferencia de las demás clases, Golden Bullet **no espera
+dos snapshots** (§3.5): en cuanto `quality_rating` deja de ser verde, sus items en cola pasan a
+`status='cancelled'`. Es la causa más probable de una caída de calidad, así que es el primer
+sospechoso y el primero en apagarse.
+
+**La advertencia.** Antes de confirmar, el wizard exige que el usuario **escriba** una frase de
+confirmación (no un checkbox — un checkbox se marca sin leer). El texto debe decir, sin suavizar: que
+esos contactos no dieron consentimiento, que el envío se hace desde la línea principal de atención del
+restaurante, y que una restricción de Meta afectaría también su atención al cliente. Lo aceptado queda
+en `consent_events` con `channel='import'` y el texto exacto de la advertencia como evidencia.
+
+**A escala — hay que ser honesto:** con el sub-cap del 15 %, una base de 5.000 contactos tarda
+**~18 días** en escalón 2.000. En escalón 250 ni siquiera arranca (la puerta de entrada lo impide).
+**Golden Bullet dejó de ser una bala y pasó a ser un goteo de semanas** — el wizard debe mostrar la
+fecha estimada de finalización **antes** de confirmar, y el equipo de ventas tiene que saberlo para no
+prometer resultados el mismo día.
 
 ### 3.5 Salud de línea y frenos automáticos
 
@@ -441,7 +482,8 @@ cron del drenador.
 | [`src/app/api/dashboard/campaigns/manual/route.ts`](../../../src/app/api/dashboard/campaigns/manual/route.ts) | Partir `finalEligible` en "cabe hoy" / "va a la cola". No cambiar `BATCH_SIZE`. |
 | [`src/services/campaign.service.ts`](../../../src/services/campaign.service.ts) | Cooldown por clase (§3.6). `finalizeCampaign()` deja de marcar `completed` si queda cola. |
 | [`src/constants/rewards.ts`](../../../src/constants/rewards.ts) | `FREQUENCY_CAP_DAYS` y `MONTHLY_MARKETING_CAP` pasan a ser **defaults** de `admin_settings`, no valores fijos. Mantener el export para compatibilidad. |
-| [`src/services/imported-contacts.service.ts`](../../../src/services/imported-contacts.service.ts) | `messageType: 'manual'` → `'import'`. Encolar en vez de enviar de golpe. Mostrar días estimados en el estimador de costo. |
+| [`src/services/imported-contacts.service.ts`](../../../src/services/imported-contacts.service.ts) | `messageType: 'manual'` → `'import'`. Encolar en vez de enviar de golpe. Puerta de entrada, sub-cap y confirmación escrita de **§3.4.1**. Mostrar días estimados en el estimador de costo. |
+| `src/components/dashboard/ImportedContactsUploader.tsx` + `ImportedContactsCostEstimator.tsx` | Bloqueo con motivo cuando la línea no pasa la puerta de entrada; fecha estimada de finalización; confirmación escrita en vez de checkbox (§3.4.1). |
 | `src/app/api/cron/{birthday,reactivation,reward-reminder}/route.ts` | Encolar con `expires_at` en vez de fallar cuando no hay cupo. |
 | [`src/services/calendar.service.ts`](../../../src/services/calendar.service.ts) | Igual: encolar con `expires_at` = fecha del evento. |
 | `src/app/api/check-in/route.ts` | Escribir el evento `opt_in` en `consent_events` con el texto exacto mostrado. |
@@ -492,12 +534,19 @@ Cada bloque es entregable y verificable por sí solo. No empezar el siguiente si
    alertas.
 4. **Bloque 4 — Consentimiento (bloqueante del alta de los 25).**
    `consent_events`, escritura en check-in y webhooks, backfill, libro exportable.
-5. **Bloque 5 — Superficie AIOS.**
+5. **Bloque 5 — Régimen de Golden Bullet (§3.4.1).**
+   Depende del Bloque 3 (necesita `quality_rating` real para la puerta de entrada) y del Bloque 4
+   (la confirmación escrita se guarda en `consent_events`). Sub-cap, bloqueo del wizard con motivo,
+   confirmación escrita, congelamiento al primer amarillo.
+   *Hasta que este bloque exista, Golden Bullet queda apagado con su feature flag
+   (`admin_settings.golden_bullet_enabled = 'false'`, que ya es el default).*
+6. **Bloque 6 — Superficie AIOS.**
    `aios_line_health()`, `aios_set_line_status()`, endpoints de super-admin.
-6. **Bloque 6 — Frecuencia configurable.**
+7. **Bloque 7 — Frecuencia configurable.**
    Matriz de cooldown por clase, `min_spacing_hours`, UI en Ajustes.
 
-Los bloques 1–4 son prerrequisito de las 25 altas. El 5 y el 6 pueden ir después del piloto.
+Los bloques 1–4 son prerrequisito de las 25 altas. El 5 es prerrequisito de **usar Golden Bullet**, no
+del alta. El 6 y el 7 pueden ir después del piloto.
 
 ---
 
@@ -526,6 +575,13 @@ Aplica TDD (`superpowers:test-driven-development`): la prueba primero, en cada p
 - Un rojo → `frozen` inmediato.
 - No existe ninguna ruta de código que devuelva `frozen` → `active` sin intervención humana.
 
+**De Golden Bullet (§3.4.1):**
+- Línea en escalón 250 → el wizard bloquea, con el motivo correcto.
+- Línea verde en escalón alto → permite, y el sub-cap enviado es el 15 % del presupuesto de campaña.
+- Un **solo** amarillo → los items `import` en cola pasan a `cancelled`, mientras las clases P1–P3
+  siguen (esas sí esperan dos snapshots).
+- La confirmación escrita queda en `consent_events` con el texto exacto de la advertencia.
+
 **Regresión obligatoria:** los cuatro tenants Twilio existentes (Sushi Service, Don Alirio, Frangal,
 Demo) deben comportarse **igual que antes** salvo por la nueva guarda de presupuesto. Es la misma
 invariante que ya exige `zernio-messaging.md` §"Invariantes de seguridad" punto 5.
@@ -536,9 +592,9 @@ invariante que ya exige `zernio-messaging.md` §"Invariantes de seguridad" punto
 
 **No implementar ninguna de estas por suposición** (Mandamiento I).
 
-- **D-1 · Golden Bullet y coexistencia (§2.1).** ¿Golden Bullet queda **prohibido** en líneas de
-  coexistencia (solo permitido en número dedicado), permitido con advertencia explícita, o se elimina
-  del producto? Es la decisión de mayor riesgo del spec.
+- ~~**D-1 · Golden Bullet y coexistencia (§2.1).**~~ ✅ **RESUELTA (2026-08-30):** se permite, con
+  advertencia explícita y envío diario bajo. Diseño implementado en **§3.4.1** (puerta de entrada por
+  salud de línea, sub-cap del 15 %, congelamiento al primer amarillo, confirmación escrita).
 - **D-2 · La billetera (decisión "B", todavía abierta).** Con Meta cobrándole directo al restaurante,
   `trg_debit_wallet` sigue cobrando $100 COP por mensaje: el restaurante **paga dos veces**. ¿La
   billetera se apaga para tenants Zernio, se re-tarifa, o pasa a ser cuota de plataforma? Afecta el

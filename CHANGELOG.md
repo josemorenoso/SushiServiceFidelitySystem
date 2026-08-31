@@ -5,6 +5,322 @@
 
 ---
 
+## [v2.14.0] — 2026-08-30 — feat(UI): limpieza del panel, campañas fantasma y tarjeta Black
+
+> Request original: *"§14.1 + §17.1 mover la sección de clientes Black · §14.2 el resumen baja de 20
+> a 15 · §15.3 mover las burbujas flotantes a campañas · §15.2 campañas fantasma · §17.2 tarjeta
+> Black negra y dorada"*.
+> Requerimientos: `docs/requerimientos/REQUERIMIENTOS_AGOSTO_2026.md` §14, §15.2, §15.3, §17.1, §17.2.
+> **UI pura.** No toca base de datos, ni envío, ni plantillas. Sin migración.
+
+### El panel de métricas se vació de lo que no se mira a diario
+
+Dos secciones se **movieron enteras** —mismos datos, mismo comportamiento— al apartado donde
+realmente se actúa sobre ellas. Ninguna se borró.
+
+- **`BlackTierSection` → `/dashboard/customers`** (§14.1 la saca, §17.1 la pone; es una sola cosa
+  pedida dos veces). Textual: *"la pantalla negra de clientes VIP tiene que quedar dentro del
+  apartado de clientes"*. Va arriba del buscador, con los mismos `topCustomers` de analytics y los
+  mismos beneficios de `admin_settings.black_benefits`. Al hacer clic en un Black se abre su ficha,
+  igual que antes.
+- **`AtRiskBubbles` → `/dashboard/campaigns`, pestaña Manuales** (§15.3). Textual: *"considerando el
+  día a día del cliente deberíamos eliminar las burbujas flotantes catalogadas por días en el
+  dashboard y meterla en el área de campañas"*. Queda encima de `ManualCampaigns` porque hace
+  exactamente lo mismo que ella: publicar en `/api/dashboard/campaigns/manual`. Las campañas de
+  reactivación que dispara siguen funcionando sin un cambio.
+
+`GrowthChart` pasó a ancho completo en el panel (compartía rejilla con las burbujas).
+
+### El resumen de clientes bajó de 20 a 15 (§14.2)
+
+`customers.slice(0, 20)` → `TOP_CUSTOMERS_LIMIT` (15) en `src/constants/rankings.ts`. Se cambió en
+los **dos** sitios que producen ese resumen: `dashboard.service.ts` (datos reales) y
+`demo-analytics.ts` (modo demo) — si solo se cambiara el primero, la demo de ventas enseñaría un
+panel de 20 filas que el cliente no va a tener. Verificado: ningún componente asumía 20
+(`PowerRanking` solo distingue las 3 primeras posiciones).
+
+### Campañas fantasma: la regla genérica de la plantilla (§15.2)
+
+Textual: *"hay campañas como invitar a restaurante los que piden domi o invitar a que pidan domi los
+que van a restaurante, que no tienen plantillas y no van a poder usarse, son básicamente de
+mentira"*. Los filtros de esos dos presets sí estaban implementados; faltaba la plantilla aprobada.
+
+**No se borró ninguno de los dos**, porque la decisión de fondo (15.b: ¿eliminarlos o crearles
+plantilla?) sigue abierta. En su lugar hay una regla que sirve para las dos salidas:
+
+- un preset que declara `templateSettingKey` se dibuja **solo** si esa clave de `admin_settings`
+  apunta a un SID que existe y está aprobado;
+- un preset sin esa clave es un atajo de segmentación que funciona con cualquier plantilla aprobada
+  y se muestra siempre.
+
+`invite_restaurant` y `invite_delivery` apuntan a `campaign_domicilio_to_presencial_template_sid` y
+`campaign_presencial_to_domicilio_template_sid` (catálogo estándar de §12). Efecto: **hoy
+desaparecen solos**; el día que se les cree y apruebe la plantilla, reaparecen sin tocar código. Si
+al final se decide eliminarlos, se borran dos entradas de `PRESETS` y la regla sigue sirviendo.
+
+La predicción es una función pura fuera del JSX (`isPresetSendable()`). Si ningún preset es enviable
+la pantalla lo dice y deja los filtros manuales disponibles: no se queda en blanco.
+
+### La tarjeta Black — negra y dorada (§17.2)
+
+Textual: *"al entrar a Black, la tarjeta del cliente en su celular cambia a negro y dorado"*, con
+distintivo claro. Fondo negro, borde y halo dorados, pastilla con corona **«Miembro Black»**, nombre
+/ puntos / barra / sellos en oro viejo (`#D4AF37`–`#F2D479`; el `#FFD700` puro sobre negro se lee
+barato y vibra en AMOLED). Los sellos llenos pasan de blanco con ✓ rojo a dorado con ✓ casi negro,
+que sobre negro sí se lee.
+
+Partido en tres para no mezclar lógica con estilos (Mandamiento II):
+
+| Archivo | Qué decide |
+|---------|------------|
+| `src/lib/black-tier.ts` (nuevo) | Quién es Black. Cero colores |
+| `src/constants/wallet-card-theme.ts` (nuevo) | Los colores. Cero negocio |
+| `WalletCard.tsx` / `StampsGrid.tsx` | Solo layout |
+
+**El aspecto por defecto no cambió:** la refactorización movió los colores literales que ya tenía la
+tarjeta (`text-white/50` → `rgba(255,255,255,0.5)`, …) a `brandWalletCardTheme()`, valor por valor.
+
+⚠️ **Definición de Black usada, y por qué.** Conviven dos: por **visitas** (`POWER_RANKS`, 10+, la
+del dashboard y del preset `black_exclusive`) y por **puntos** (`reward_tiers.is_black`). La tarjeta
+usa la de puntos porque enseña la escalera de premios por puntos: pintarla de negro por visitas haría
+que un cliente con 10 visitas y pocos puntos viera una tarjeta Black encima de una lista que le dice
+que Black sigue bloqueado (🔒). **Cuál manda a nivel de producto es la pregunta 17.b, abierta** — por
+eso la regla vive en una sola función. El umbral de 10 visitas de `ManualCampaigns.tsx` **no se
+tocó**: §17.4 sigue congelado.
+
+**Fuera de alcance por preguntas abiertas, como se pidió:** §17.3 (beneficio permanente, 17.a–17.d),
+§17.4 (umbral configurable), §15.1 (rediseño de usabilidad, 15.a) y §16 completo.
+
+### Archivos
+
+| Archivo | Cambio |
+|---------|--------|
+| `src/app/(dashboard)/dashboard/page.tsx` | 🔄 Salen `BlackTierSection` y `AtRiskBubbles`; `GrowthChart` a ancho completo |
+| `src/app/(dashboard)/dashboard/customers/page.tsx` | 🔄 Entra `BlackTierSection` + `useDashboardAnalytics` + beneficios |
+| `src/app/(dashboard)/dashboard/campaigns/page.tsx` | 🔄 Entra `AtRiskBubbles` en la pestaña Manuales |
+| `src/components/dashboard/ManualCampaigns.tsx` | 🔄 `templateSettingKey` + `isPresetSendable()` + rejilla filtrada |
+| `src/constants/rankings.ts` | 🔄 `TOP_CUSTOMERS_LIMIT = 15` |
+| `src/services/dashboard.service.ts` | 🔄 `slice(0, TOP_CUSTOMERS_LIMIT)` |
+| `src/lib/demo-analytics.ts` | 🔄 `slice(0, TOP_CUSTOMERS_LIMIT)` (espejo del anterior) |
+| `src/lib/black-tier.ts` | ✅ Nuevo — `isBlackMember()` / `findBlackTier()` |
+| `src/constants/wallet-card-theme.ts` | ✅ Nuevo — paletas de marca y Black |
+| `src/components/features/wallet/WalletCard.tsx` | 🔄 Tema por props del tema; distintivo Black |
+| `src/components/features/wallet/StampsGrid.tsx` | 🔄 `theme` opcional (default: el de siempre) |
+| `docs/features/dashboard.md` | 🔄 Reordenamiento + regla de presets |
+| `docs/features/wallet-card.md` | 🔄 Tarjeta Black |
+| `CLAUDE.md` | 🔄 Tabla de lookup |
+
+Verificado con `npx tsc --noEmit` (exit 0) y `npx eslint` sobre los archivos tocados (exit 0, sin
+avisos). `src/app/(public)/tarjeta/page.tsx` no necesitó cambios: ya le pasaba `tiers` y
+`totalPoints` a `WalletCard`.
+
+---
+
+## [v2.13.0] — 2026-08-30 — feat: cola de goteo (Bloque 2) + infraestructura de pruebas
+
+> Request original: *"TAREA 2: montar infraestructura de pruebas... la prueba más importante del spec
+> sigue sin existir. TAREA 3: Bloque 2 (cola de goteo)."*
+> Spec: `docs/superpowers/specs/2026-08-30-gobernanza-de-envio-design.md` §3.4, §7 y §9.
+
+### Infraestructura de pruebas — el proyecto no tenía ninguna
+
+`package.json` solo exponía `lint` y `build`. No había vitest, ni jest, ni un solo test — y sin
+embargo dos comentarios del código (`src/constants/messaging.ts:11` y el bloque 2 de `00037`)
+afirmaban que existía un test `message-class-map.test.ts` verificando que el mapa de clases no
+divergiera entre TypeScript y SQL. No existía.
+
+- **vitest + `embedded-postgres`.** Sin Docker, sin `psql`, sin Supabase CLI (esta máquina no tiene
+  ninguno): se descarga un binario real de Postgres como dependencia de npm y se arranca en un puerto
+  local. La suite entera corre en ~7 s.
+- **Las 38 migraciones se replican de verdad** sobre esa base, con un `bootstrap.sql` que recrea el
+  trozo de Supabase del que dependen (`auth.jwt()`, `auth.role()`, `auth.users`, `storage.*`, los
+  roles `anon`/`authenticated` y las *default privileges*). Efecto lateral valioso: la suite valida
+  la migración **antes** de que el dueño la pegue en el SQL Editor.
+- **85 pruebas**, incluida la que el spec §9 llama «la prueba más importante»: `reserve_send_slot()`
+  con 20 llamadas concurrentes y presupuesto 10 concede **exactamente 10**.
+- **Con control negativo.** Una prueba hermana crea la misma función SIN el `pg_advisory_xact_lock`
+  y exige que se pase del límite. Sin ella, «exactamente 10» podría salir por accidente si algo
+  estuviera serializando las llamadas, y la prueba principal no demostraría nada.
+
+Ver `docs/features/testing.md`.
+
+### 🔒 Agujero de seguridad encontrado y cerrado — `anon` podía llamar las funciones del núcleo
+
+`REVOKE ALL ... FROM PUBLIC` **no basta en Supabase**. Todo proyecto trae
+`ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO postgres, anon, authenticated,
+service_role`, así que cada función nace además con un GRANT EXECUTE **nominal** a `anon` y
+`authenticated`. Revocar PUBLIC borra un ACE y deja los otros dos.
+
+Como son `SECURITY DEFINER`, corrían con los privilegios del dueño y la RLS no las frenaba. Con la
+`NEXT_PUBLIC_SUPABASE_ANON_KEY` —que viaja en el bundle del navegador— se podía:
+
+- `send_queue_pending_tenants()` → listar los tenants con cola pendiente;
+- `claim_send_queue(tenant, 1000)` → **leer la cola completa de cualquier tenant** (teléfonos,
+  plantilla, variables) y arrendarla, dejándola sin drenar;
+- `enqueue_send_queue(...)` → **inyectar envíos** que el drenador manda de verdad;
+- y, en `00036` —**ya aplicada en producción**— `aios_provision_tenant(jsonb)`, que **crea tenants**.
+
+Corregido nombrando los roles (`FROM PUBLIC, anon, authenticated`) en `00037` y `00038`. El bloque 10
+de `00038` cierra además las funciones de `00035`/`00036`, porque una migración ya aplicada no se
+vuelve a correr. Fijado con `tests/db/permisos.test.ts` — que solo detecta el agujero porque el
+bootstrap replica las *default privileges* de Supabase.
+
+### Bloque 2 — la cola de goteo
+
+Antes: una campaña de 380 con presupuesto 180 enviaba 180 y **perdía** los otros 200, marcados
+`failed` con `campaign_budget_exhausted`. Ahora se encolan y gotean en los días siguientes.
+
+- **`00038_send_queue_drain.sql`** — arriendo (`claimed_at`), `claim_send_queue()` con
+  `FOR UPDATE SKIP LOCKED` (dos drenadores simultáneos se reparten la cola en vez de duplicar
+  envíos), `expire_send_queue()`, `send_queue_pending_tenants()`, `send_queue_depth()`,
+  `send_queue_finished_campaigns()`, `enqueue_send_queue()` e índices para el round-robin.
+- **Anti-duplicado arreglado:** el índice de `00037` era `(tenant_id, phone, campaign_id)` y en
+  Postgres dos NULL nunca colisionan, así que los items encolados por un cron **no tenían
+  protección**. Ahora usa `COALESCE(campaign_id, centinela)` + `message_type`.
+- **`/api/cron/queue-drain`** — vence, lista tenants por urgencia, round-robin con presupuesto de
+  ~50 s, re-evalúa las guardas de demanda al enviar (opt-out, frequency cap, Recovery Zone, cap
+  mensual), backoff 15 min → 1 h → 4 h y `failed` al tercer intento.
+- **Workflow W4** (`n8n/cron_queue-drain.json`), cada 15 min. **No es un cron de Vercel:**
+  `vercel.json` tiene `"crons": []` a propósito desde 2026-07-05.
+- **`GET /api/dashboard/send-queue`** y **`DELETE /api/dashboard/send-queue/[id]`** (que cancela, no
+  borra; y responde 409 si el drenador ya está enviando ese item).
+- **La campaña queda `running` mientras gotea** y solo pasa a `completed` cuando su cola se vacía.
+
+### Fix: la otra mitad de D-2 — los tenants Zernio no podían lanzar campañas
+
+`00037` apagó el **cobro** a tenants Zernio, pero `canSendBulk()` seguía **bloqueándolos** por saldo
+insuficiente. Como su saldo se queda en 0 para siempre (no entran recargas ni salen débitos),
+**toda campaña masiva de todo tenant Zernio se habría rechazado con 409 «Saldo insuficiente»** — un
+bloqueo de lanzamiento para los 25. `canSendBulk()` ahora los exime.
+
+### Fix: `npm run build` y `npm run lint` estaban rotos en local
+
+`tsconfig.json` declaraba `exclude: ["node_modules"]`, lo que **reemplaza** la exclusión por defecto
+de TypeScript y solo ancla el `node_modules` de la raíz. Con `include: ["**/*.ts"]`, el proyecto
+anidado `Level 2.0/aios-constelarys` (repo SEPARADO, en `.gitignore`) entraba al proyecto raíz:
+`npm run build` fallaba con `Cannot find module '@/lib/actions/clients'` (un archivo del AIOS) y
+`npm run lint` reportaba **11.727 problemas** ajenos. Ahora build pasa y lint reporta 43.
+
+### Investigación: D-4 resuelta (Zernio expone calidad y escalón, pero no por webhook)
+
+Verificado contra la API real con la `ZERNIO_API_KEY`, **solo lectura**:
+`GET /v1/whatsapp/number-info` devuelve `quality_rating`, `messaging_limit_tier`, `throughput` y
+`health_status`. **No existe evento de webhook para el quality rating** en el catálogo de 50 eventos
+— el poll del Bloque 3 es la única fuente. Tres consecuencias documentadas en §10 del spec, incluida
+que el congelamiento de Golden Bullet «al primer amarillo» tendrá la latencia del poll.
+
+### Archivos
+
+`supabase/migrations/00038_send_queue_drain.sql` (nuevo), `00037_send_governance.sql` (permisos),
+`src/services/send-queue.service.ts` (nuevo), `src/app/api/cron/queue-drain/route.ts` (nuevo),
+`src/app/api/dashboard/send-queue/{route.ts,[id]/route.ts}` (nuevos),
+`src/app/api/dashboard/line-budget/route.ts`, `src/app/api/dashboard/campaigns/manual/route.ts`,
+`src/services/campaign.service.ts`, `src/services/wallet.service.ts`,
+`n8n/cron_queue-drain.json` (nuevo), `vitest.config.mts` + `tests/**` (nuevos),
+`docs/features/testing.md` (nuevo), `docs/features/send-governance.md`, `tsconfig.json`,
+`eslint.config.mjs`, `package.json`.
+
+### Lo que este bloque NO hace
+
+Los crons (`birthday`, `reactivation`, `reward-reminder`, `calendar-dispatch`) **todavía no encolan**.
+Tienen variables que caducan (`days_left`, fechas límite) y efectos posteriores (`grantReward()`,
+`markReminderSent()`) cuyo diseño exige decisiones del dueño que no se asumieron (Mandamiento I). La
+pregunta abierta está al final de `docs/features/send-governance.md`.
+
+---
+
+## [v2.12.0] — 2026-08-30 — feat: catálogo estándar de plantillas + 3 estilos + edición sin huecos
+
+> Request original: *"desde el principio me han cargado como un loco"* (las plantillas). Repriorizado
+> por encima de TODO lo demás — primera prioridad del proyecto.
+> Requerimiento: `docs/requerimientos/REQUERIMIENTOS_AGOSTO_2026.md` §12, incluidas las 6 respuestas
+> del dueño del 2026-08-30.
+
+### Contexto
+
+Tres problemas en un solo pedido: cada alta terminaba con un set de plantillas distinto según quién lo
+armara a mano; no existía el concepto de tono; y editar una plantilla era imposible sin dejar un hueco
+de 24-72h, porque Meta no deja editar in-place una plantilla aprobada.
+
+**La decisión que ordena todo el diseño**, textual del dueño: *"que se cree primero la nueva y una vez
+quede aprobada se cambie y automáticamente se modifique, pero luego de aprobarla, para nunca
+arriesgarnos a perder un mensaje"*. De ahí el invariante del que cuelga la feature entera:
+
+> `promoteVersion()` es el **único** punto del sistema que escribe `admin_settings.<settings_key>`, y
+> solo corre cuando Meta ya dijo `APPROVED`. Mientras Meta revisa, los envíos siguen saliendo con la
+> plantilla vieja. Si Meta rechaza, no se toca nada.
+
+Doc de feature: `docs/features/whatsapp-templates.md`.
+
+### Agregado
+
+- **`supabase/migrations/00039_template_catalog.sql`** — tabla `template_versions` (vigente +
+  pendiente + historial + quién editó y cuándo), seed de `admin_settings.template_style` solo para
+  tenants Zernio, RLS por tenant. Tres índices parciales únicos que hacen cumplir los invariantes en
+  la base y no solo en la UI. Ver `docs/DB_SCHEMA.md`.
+- **`src/constants/template-catalog.ts`** — las 13 plantillas estándar: estructura, contrato de
+  variables, validación contra las reglas duras de Meta y render de vista previa.
+- **`src/constants/template-texts.ts`** — el banco de 39 textos (13 × 3 estilos). `calido` es un port
+  literal del catálogo en producción; `elegante` y `urbano` son nuevos.
+- **`src/services/template.service.ts`** — estado del catálogo, guardado de ediciones, re-aplicación
+  de estilo y el detector de aprobación.
+- **`src/lib/zernio/templates.ts`** — adaptador REST de Zernio (crear / consultar estado).
+- **`src/app/api/dashboard/templates/catalog/route.ts`**, **`catalog/[key]/route.ts`**,
+  **`style/route.ts`** — los 3 endpoints del dashboard. Ver `docs/API_DOCS.md`.
+- **`src/components/dashboard/templates/`** — `TemplateCatalogEditor`, `TemplateEditorDialog`,
+  `StyleSelector`, y `TwilioTemplateManager` (la pantalla anterior, movida intacta).
+- **`tests/unit/template-catalog.test.ts`** — 27 pruebas. Las 39 combinaciones contra las reglas de
+  Meta, sin base de datos ni red.
+- **`docs/features/whatsapp-templates.md`** — doc de la feature.
+
+### Modificado
+
+- **`src/app/api/webhook/zernio/route.ts`** — maneja `whatsapp.template.status_updated`. Es el
+  disparador del cambio de puntero. Toda la decisión vive en `applyProviderTemplateStatus()`; el
+  webhook no escribe ni una fila y siempre responde 200 (un 4xx acumulado hace que Zernio desactive el
+  webhook entero tras 10 fallos, y perder los eventos de mensajes sería mucho peor).
+- **`src/lib/zernio/webhooks.ts`** — tipo `ZernioWebhookPayloadTemplateStatus`, tomado literal del
+  contrato verificado.
+- **`src/app/(dashboard)/dashboard/templates/page.tsx`** — se bifurca por proveedor: Zernio ve el
+  catálogo nuevo, Twilio ve exactamente la pantalla de antes.
+
+### Decisiones
+
+- **D-1 — el detector de aprobación es un WEBHOOK, no un poll.** El contrato verificado de Zernio
+  documenta `whatsapp.template.status_updated` con su payload exacto, incluido el `accountId` que
+  resuelve el tenant. **No se implementó poll**: montar un cron duplicado antes de ver fallar el
+  webhook en producción es trabajo que puede no hacer falta. `applyProviderTemplateStatus()` es la
+  puerta única para que el **Bloque 3 de gobernanza de envío** lo reuse en vez de duplicar la
+  promoción; `refreshTemplateStatusFromProvider()` ya deja armado ese camino.
+- **D-2 — el versionado va en tabla propia, no en más claves de `admin_settings`.** El puntero vigente
+  sigue en `admin_settings.<settings_key>` con el contrato intacto: **no se tocó una sola línea del
+  camino de envío**. `admin_settings` es key-value y no tiene dónde registrar autor ni fecha, que es
+  requisito duro de la decisión 3 del dueño. Con `template_versions` vacía, el sistema envía como hoy.
+- **D-3 — no se borra la plantilla vieja del proveedor.** §12 dice "se borra la vieja" al aprobar la
+  nueva, pero el contrato verificado de Zernio **no expone un DELETE de plantillas** y esa doc prohíbe
+  inventar rutas. Dejar de apuntarla y marcarla `retired` resuelve el problema real; queda huérfana en
+  la WABA, sin costo ni efecto sobre el envío. El gancho para cuando exista el endpoint es
+  `retired_at`.
+- **D-4 — el estilo `calido` no se tocó,** ni siquiera el 🍣 horneado que arrastra de Sushi Service.
+  §12 respuesta 2 es explícita: "sin cambios en el default". Queda anotado como observación para el
+  dueño en `docs/features/whatsapp-templates.md` — cambiarlo es decisión suya, no nuestra.
+- **D-5 — los 4 tenants Twilio no se tocan.** El guardarraíl (`assertZernioTenant()`) está en el
+  servicio, no en la UI, para que ninguna ruta pueda saltárselo.
+
+### Hallazgo durante la implementación
+
+- **10 de los textos `elegante` empezaban con `{{1}}`** — Meta rechaza toda plantilla que empiece con
+  una variable. Lo detectó `tests/unit/template-catalog.test.ts` antes de que llegara a Meta, que es
+  exactamente para lo que se escribió esa prueba: el fallo real habría aparecido 48 horas después,
+  contra la reputación del número del cliente.
+
+### Nota de numeración
+
+La migración es la **00039**, no la 00038: esa numeración ya la tomó `00038_send_queue_drain.sql`
+(Bloque 2 de la gobernanza de envío, frente paralelo).
+
+---
+
 ## [v2.11.0] — 2026-08-30 — feat: gobernanza de envío — presupuesto de línea + retiro de billetera Zernio
 
 > Request original: *"hay que traer de alguna forma el límite del número para mensajes diarios y tener

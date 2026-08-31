@@ -60,6 +60,14 @@
 | `src/app/(dashboard)/dashboard/campaigns/*` | `docs/features/campaigns.md` |
 | `src/app/(dashboard)/*` | `docs/features/dashboard.md` |
 | `src/components/dashboard/*` | `docs/features/dashboard.md` |
+| `src/components/dashboard/BlackTierSection.tsx` | `docs/features/dashboard.md` (lo renderiza `/dashboard/customers`, NO el panel de métricas — §14.1/§17.1) |
+| `src/components/dashboard/AtRiskBubbles.tsx` | `docs/features/dashboard.md` + `docs/features/campaigns.md` (lo renderiza `/dashboard/campaigns` → pestaña Manuales, NO el panel — §15.3) |
+| `src/components/dashboard/ManualCampaigns.tsx` | `docs/features/dashboard.md` (§15.2: un preset solo se dibuja si su plantilla está aprobada) + `docs/features/campaigns.md` |
+| `src/constants/rankings.ts` | `docs/features/dashboard.md` (`TOP_CUSTOMERS_LIMIT` = tamaño del resumen de clientes) |
+| `src/app/(public)/tarjeta/*` | `docs/features/wallet-card.md` + `docs/features/design-system.md` |
+| `src/components/features/wallet/*` | `docs/features/wallet-card.md` + `docs/features/design-system.md` |
+| `src/lib/black-tier.ts` | `docs/features/wallet-card.md` (única definición de "quién es Black" en la tarjeta — ojo: el dashboard usa `POWER_RANKS`, 10+ visitas; la 17.b sigue abierta) |
+| `src/constants/wallet-card-theme.ts` | `docs/features/wallet-card.md` + `docs/features/design-system.md` (solo colores — nada de lógica) |
 | `src/hooks/useDashboardAnalytics.ts` | `docs/features/dashboard.md` |
 | `src/lib/supabase/*` | `docs/02-architecture.md` + `docs/03-security.md` |
 | `src/lib/twilio/*` | `docs/02-architecture.md` + `docs/04-deployment.md` |
@@ -68,10 +76,23 @@
 | `src/services/*` | `docs/features/[feature].md` correspondiente |
 | `src/services/whatsapp.service.ts` | `docs/features/zernio-messaging.md` (ruteo por proveedor) + `docs/features/campaigns.md` |
 | `src/services/line-budget.service.ts` | `docs/features/send-governance.md` + `docs/DB_SCHEMA.md` |
+| `src/services/template.service.ts` | `docs/features/whatsapp-templates.md` + `docs/DB_SCHEMA.md` (⚠️ `promoteVersion()` es el ÚNICO escritor de `admin_settings.*_template_sid`) |
+| `src/constants/template-catalog.ts` | `docs/features/whatsapp-templates.md` + `docs/PLANTILLAS.md` (⚠️ el contrato de variables `{{n}}` es fijo — cambiarlo rompe el envío de los 3 estilos) |
+| `src/constants/template-texts.ts` | `docs/features/whatsapp-templates.md` (banco de 39 textos; `calido` NO se toca sin decisión del dueño) |
+| `src/lib/zernio/templates.ts` | `docs/features/whatsapp-templates.md` + `Level 2.0/aios-constelarys/docs/zernio-api-contract.md` §4 (NO inventar rutas) |
+| `src/app/api/dashboard/templates/catalog/*` | `docs/features/whatsapp-templates.md` + `docs/API_DOCS.md` |
+| `src/app/api/dashboard/templates/style/*` | `docs/features/whatsapp-templates.md` + `docs/API_DOCS.md` |
+| `src/app/(dashboard)/dashboard/templates/*` | `docs/features/whatsapp-templates.md` (Zernio) — la pantalla Twilio de `TwilioTemplateManager.tsx` NO se toca |
+| `src/components/dashboard/templates/*` | `docs/features/whatsapp-templates.md` |
 | `src/constants/messaging.ts` | `docs/features/send-governance.md` (espejo de `message_class_map` — cambiar SIEMPRE los dos lados) |
 | `src/app/api/dashboard/line-budget/*` | `docs/features/send-governance.md` + `docs/API_DOCS.md` |
 | `src/app/api/cron/queue-drain/*` | `docs/features/send-governance.md` + `docs/04-deployment.md` (lo dispara n8n, NO Vercel) |
 | `src/app/api/cron/line-health/*` | `docs/features/send-governance.md` + `docs/04-deployment.md` |
+| `src/services/send-queue.service.ts` | `docs/features/send-governance.md` + `docs/DB_SCHEMA.md` (cola de goteo, Bloque 2) |
+| `src/app/api/cron/queue-drain/*` | `docs/features/send-governance.md` + `docs/04-deployment.md` §5 W4 (lo dispara n8n, NO Vercel) |
+| `src/app/api/dashboard/send-queue/*` | `docs/features/send-governance.md` + `docs/API_DOCS.md` |
+| `tests/**` | `docs/features/testing.md` (ANTES de tocar el harness de Postgres o el bootstrap) |
+| `vitest.config.mts` | `docs/features/testing.md` |
 | `src/constants/rewards.ts` | `docs/features/campaigns.md` + `docs/features/calendar.md` + `docs/features/points-mystery-box.md` |
 | `src/lib/points-engine.ts` | `docs/features/points-mystery-box.md` |
 | `src/services/points.service.ts` | `docs/features/points-mystery-box.md` |

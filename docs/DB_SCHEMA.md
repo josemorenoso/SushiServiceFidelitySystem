@@ -155,6 +155,7 @@ erDiagram
 | 18 | [send_queue](#send_queue) | Cola de goteo de envios que no cupieron hoy | SI | Admin: CRUD (via service role, filtrado por tenant en codigo) |
 | 19 | [line_health_snapshots](#line_health_snapshots) | Historial de quality rating y limite de cada linea | SI | Admin: CRUD (via service role, filtrado por tenant en codigo) |
 | 20 | [consent_events](#consent_events) | Libro de evidencia de opt-in/opt-out. **APPEND-ONLY** | SI | SELECT + INSERT unicamente; UPDATE/DELETE revocados |
+| 21 | [template_versions](#template_versions) | Versiones de cada plantilla del catálogo: la vigente, la pendiente de Meta y el historial | SI | Admin: CRUD (vía service role, filtrado por tenant en código) |
 
 ---
 
@@ -349,15 +350,16 @@ CREATE POLICY "admin_update_customers" ON customers
 
 | Columna | Tipo | Nullable | Default | Descripción |
 |---------|------|----------|---------|-------------|
-| `key` | `text` | NO | - | PK — clave de configuración (ej: 'avg_ticket') |
+| `key` | `text` | NO | - | Clave de configuración (ej: 'avg_ticket'). Parte del PK compuesto |
 | `value` | `text` | NO | - | Valor de la configuración |
+| `tenant_id` | `uuid` | NO | - | **(00025/00028)** FK → `tenants(id)`. Parte del PK compuesto: la misma clave existe una vez por negocio |
 | `updated_at` | `timestamptz` | NO | `now()` | Última actualización |
 
 **Índices:**
 
 | Nombre | Columnas | Tipo |
 |--------|----------|------|
-| `admin_settings_pkey` | `key` | PRIMARY KEY |
+| `admin_settings_pkey` | `(key, tenant_id)` | PRIMARY KEY — compuesto desde la 00028 (antes era solo `key`) |
 
 **Seed data:**
 
@@ -378,7 +380,13 @@ CREATE POLICY "admin_update_customers" ON customers
 | `reactivation_aggressive_days` | _(vacío inicial — fallback `25`)_ | Días de inactividad para reactivación agresiva (configurable v1.4.0, debe ser > suave) |
 | `review_reward_id` | _(vacío inicial)_ | **(00032)** Id de `campaign_rewards` que se otorga por dejar reseña. Vacío = el pop-up sale igual, pero sin premio |
 | `review_reward_window_days` | _(vacío inicial — fallback `30`)_ | **(00032)** Días que tiene el cliente para reclamar el premio por reseña |
+| `template_style` | `calido` | **(00039)** Estilo del catálogo de plantillas: `calido` \| `elegante` \| `urbano`. Es **SUGERENCIA, no candado**: el default con el que nace cada plantilla nueva, no una restricción. Cambiarlo NO reescribe nada — re-aplicarlo a las 13 es una acción explícita aparte. **Solo se siembra en tenants `messaging_provider='zernio'`**: los 4 tenants Twilio no se tocan. Ver `docs/features/whatsapp-templates.md` |
 
+> Las claves `*_template_sid` (`welcome_template_sid`, `birthday_template_sid`, `event_template_image_sid`,
+> …) son el **puntero a la plantilla vigente** de cada mensaje: un ContentSid en tenants Twilio, un
+> `name` de plantilla en tenants Zernio. Desde la 00039, en tenants Zernio el **único** código que las
+> escribe es `promoteVersion()`, y solo cuando Meta aprueba la nueva versión.
+>
 > ⚠️ El **link de reseñas de Google** NO vive aquí: vive en `tenants.config.google_maps_url` (jsonb),
 > que es de donde lo lee `resolveBranding()`. Duplicarlo crearía dos fuentes de verdad. Se edita con
 > `PUT /api/dashboard/tenant-config` (whitelist de claves).
@@ -783,6 +791,74 @@ descarta la impresión si ya hay una del mismo cliente en las últimas `REVIEW_S
 
 ---
 
+### template_versions
+
+> **(00039)** Versiones de cada plantilla del catálogo estándar de WhatsApp, por tenant: la que se está
+> enviando, la que Meta está revisando y todo el historial, con quién editó y cuándo.
+> Ver `docs/features/whatsapp-templates.md`.
+
+**Por qué existe.** Meta no deja editar in-place una plantilla aprobada: una "edición" es crear otra y
+volver a someterla. La decisión del dueño (REQUERIMIENTOS_AGOSTO_2026.md §12, "Pregunta 1 — RESUELTA")
+es que **la vieja no se deja de usar hasta que Meta apruebe la nueva**, para no perder ni un mensaje.
+Eso exige guardar la vigente y la pendiente a la vez. `admin_settings` es key-value y además no tiene
+dónde registrar autor ni fecha, que es requisito duro de la decisión 3 del dueño.
+
+> ⚠️ **`admin_settings.<settings_key>` sigue siendo el puntero vigente y su contrato NO cambia.** Todo
+> el camino de envío (check-in, crons, campañas, calendario) lo lee igual que siempre. Esta tabla es
+> aditiva: con `template_versions` vacía, el sistema envía exactamente como antes de la 00039.
+
+| Columna | Tipo | Nullable | Default | Descripción |
+|---------|------|----------|---------|-------------|
+| `id` | `uuid` | NO | `gen_random_uuid()` | PK |
+| `tenant_id` | `uuid` | NO | - | FK → `tenants(id)` ON DELETE CASCADE |
+| `template_key` | `text` | NO | - | Cuál de las 13 (espejo de `src/constants/template-catalog.ts`) |
+| `settings_key` | `text` | NO | - | Clave de `admin_settings` que apunta al vigente (ej. `welcome_template_sid`) |
+| `provider` | `text` | NO | - | CHECK `twilio` \| `zernio` |
+| `provider_ref` | `text` | NO | - | `name` de Zernio (`bienvenida_v2`) o ContentSid de Twilio. Es el valor que se copia a `admin_settings` al promover |
+| `provider_template_id` | `text` | SI | - | Id de la plantilla en Meta, si el proveedor lo devuelve |
+| `language` | `text` | NO | `'es'` | Idioma de la plantilla |
+| `category` | `text` | NO | - | CHECK `AUTHENTICATION` \| `MARKETING` \| `UTILITY` |
+| `style` | `text` | NO | - | CHECK `calido` \| `elegante` \| `urbano` \| `personalizado`. `personalizado` = el dueño lo editó a mano |
+| `body` | `text` | NO | - | El texto exacto que se sometió |
+| `status` | `text` | NO | `'pending'` | CHECK `pending` \| `approved` \| `rejected` \| `retired` \| `failed` |
+| `rejection_reason` | `text` | SI | - | Motivo de Meta, o el error del proveedor si `failed` |
+| `is_current` | `boolean` | NO | `false` | **true = es la que apunta `admin_settings`** |
+| `edited_by` | `uuid` | SI | - | FK → `auth.users(id)` ON DELETE SET NULL |
+| `edited_by_email` | `text` | SI | - | Copia del email: sobrevive al borrado del usuario |
+| `disclaimer_accepted_at` | `timestamptz` | SI | - | Cuándo aceptó la advertencia de responsabilidad |
+| `created_at` | `timestamptz` | NO | `now()` | - |
+| `submitted_at` | `timestamptz` | SI | - | Cuándo se envió a Meta |
+| `resolved_at` | `timestamptz` | SI | - | Cuándo Meta dio veredicto |
+| `retired_at` | `timestamptz` | SI | - | Cuándo dejó de ser la vigente |
+
+**Índices — los tres primeros son invariantes, no optimizaciones:**
+
+| Nombre | Columnas | Tipo | Qué garantiza |
+|--------|----------|------|---------------|
+| `idx_template_versions_one_current` | `(tenant_id, settings_key) WHERE is_current` | UNIQUE parcial | Una sola vigente por slot: `admin_settings` nunca queda ambiguo |
+| `idx_template_versions_one_pending` | `(tenant_id, settings_key) WHERE status='pending'` | UNIQUE parcial | Una sola edición en revisión por slot: dos pendientes competirían por el mismo puntero al aprobarse |
+| `idx_template_versions_provider_ref` | `(tenant_id, provider_ref, language)` | UNIQUE | El `name` es único por WABA en Meta; reusarlo hace fallar la creación |
+| `idx_template_versions_lookup` | `(provider_ref, language, status)` | INDEX | Lookup del webhook `whatsapp.template.status_updated` |
+| `idx_template_versions_tenant` | `(tenant_id, template_key, created_at DESC)` | INDEX | Historial por plantilla |
+
+**El único escritor de `admin_settings.<settings_key>`** es `promoteVersion()` en
+`src/services/template.service.ts`, y solo corre cuando Meta ya respondió `APPROVED`. Orden deliberado:
+retirar la vigente → promover la nueva → mover el puntero. Si algo falla a mitad de camino, el puntero
+sigue apuntando a la plantilla vieja (que sigue existiendo en la WABA) y los mensajes siguen saliendo.
+
+**No se borra la plantilla vieja del proveedor:** el contrato verificado de Zernio no expone un DELETE
+de plantillas. `retired_at` es el gancho para cuando exista. Ver `docs/features/whatsapp-templates.md`.
+
+**Políticas RLS:**
+
+```sql
+CREATE POLICY "tenant_all_template_versions" ON template_versions FOR ALL
+  USING      (tenant_id = current_tenant_id() OR is_super_admin())
+  WITH CHECK (tenant_id = current_tenant_id() OR is_super_admin());
+```
+
+---
+
 ## Storage Buckets
 
 ### event-media
@@ -841,6 +917,8 @@ descarta la impresión si ya hay una del mismo cliente en las últimas `REVIEW_S
 | 35 | `00035_aios_constelarys_role.sql` (v2) | 2026-08-29 | Rol de Postgres `aios_constelarys` (sin LOGIN hasta activarlo a mano) para el AIOS Constelarys — un proyecto SEPARADO (repo + Supabase propios, ver `docs/requerimientos/REQUERIMIENTOS_AGOSTO_2026.md` §11). v2 (tras code review): SELECT **por columnas** sobre `tenants` (sin credenciales Twilio/owner_*) y sobre `tenant_wallet_transactions`; CERO INSERT directo — la escritura queda para las funciones `SECURITY DEFINER` de la migración 00036. Cero acceso a `customers`/`visits`/cualquier otra tabla — doble candado (GRANT + RLS), no solo uno. | Pendiente |
 | 36 | `00036_zernio_provider.sql` | 2026-08-29 | `tenants` gana `messaging_provider text DEFAULT 'twilio'` (CHECK `twilio`\|`zernio`), `zernio_profile_id`, `zernio_account_id` (índice único parcial — routing de webhooks), `zernio_phone_number` (E.164 con `+`, sin prefijo `whatsapp:`). GRANT SELECT de esas 4 columnas a `aios_constelarys` (se suma al de 00035 v2). Tres funciones `SECURITY DEFINER` — la ÚNICA vía de escritura del AIOS: `aios_provision_tenant(payload jsonb)` (alta completa, port fiel de `scripts/seed-new-tenant.sql`, sin upsert), `aios_activate_whatsapp(slug, profile, account, phone)` (activa Zernio en un tenant existente), `aios_set_template_settings(slug, settings jsonb)` (carga `*_template_sid`/`zernio_template_language` en `admin_settings`, **solo si el tenant ya es `messaging_provider='zernio'`** — bloquea el vector de ataque de sembrar SIDs en un tenant que cae al fallback de credenciales Twilio master). Requiere 00035 v2 aplicada antes. **Post-review:** tabla nueva `webhook_events_seen (provider, event_id, received_at)` PK compuesta `(provider, event_id)` + RLS habilitada sin políticas (solo `service_role`) — dedup de webhooks de `src/app/api/webhook/zernio/route.ts` (hallazgo F5); el regex de `aios_set_template_settings` ahora también acepta `event_template_image_sid`/`event_template_video_sid` explícitamente (hallazgo F6, el regex `_template_sid$` no las cubría). Migración a Zernio (v2.10.0). | Pendiente |
 | 37 | `00037_send_governance.sql` | 2026-08-30 | **Gobernanza de envio.** `tenants` gana `messaging_daily_limit` (**NULL para los tenants que ya existian** = limite desconocido, se mide pero no se bloquea; DEFAULT 250 se agrega DESPUES del ADD COLUMN para que aplique solo a tenants nuevos — un DEFAULT en el ADD COLUMN habria capado en 250 a Sushi Service, que mueve ~2.000/dia), `messaging_limit_synced_at`, `quality_rating` (CHECK green|yellow|red|unknown), `line_status` (CHECK active|throttled|frozen), `line_status_reason`, `line_status_changed_at`. Tablas nuevas: `message_class_map` (catalogo: tipo -> clase de presupuesto + prioridad, espejo de `src/constants/messaging.ts`), `send_reservations` (ventana RODANTE de 24h, se cuenta `COUNT(DISTINCT phone)` porque Meta limita destinatarios unicos, no mensajes), `send_queue` (cola de goteo, indice unico parcial anti-duplicado), `line_health_snapshots`, `consent_events` (**append-only**: REVOKE UPDATE/DELETE, sin politica de UPDATE ni DELETE). Funciones: `line_budget(uuid)` (presupuesto derivado; el p95 se calcula sobre `message_logs`, NO sobre `send_reservations`, que se poda a 7 dias), `reserve_send_slot(uuid,text,text)` (**atomica via `pg_advisory_xact_lock` por tenant** — sin ese lock, el envio en paralelo se pasa del limite), `release_send_slot()`, `aios_line_health(text)`, `aios_set_line_status(text,text,text)`, `prune_send_governance()`. **`debit_wallet_on_message_sent()` se reescribe** (copia fiel de la 00033, incluido su `EXCEPTION WHEN OTHERS`) con UNA guarda nueva: los tenants `messaging_provider='zernio'` ya no se cobran, porque Meta les factura directo (decision D-2). Gobernanza de envio (v2.11.0, Bloques 1 y 8). | Pendiente |
+| 38 | `00038_send_queue_drain.sql` | 2026-08-30 | **Cola de goteo (Bloque 2).** `send_queue` gana `claimed_at` — un **arriendo**, no un estado nuevo en el CHECK: dos invocaciones del drenador (n8n reintentando, o una corrida lenta solapándose) leerían los mismos items y el cliente recibiria el mensaje dos veces. **Anti-duplicado arreglado:** el indice de la 00037 era `(tenant_id, phone, campaign_id)` y en Postgres dos NULL nunca colisionan, asi que los items encolados por un cron (sin `campaign_id`) NO estaban protegidos; ahora es `(tenant_id, phone, COALESCE(campaign_id, centinela), message_type)`. Indices nuevos `idx_send_queue_drain_tenant` (el de la 00037 no llevaba `tenant_id`, asi que el round-robin del spec no lo podia usar) e `idx_send_queue_expires`. Funciones: `claim_send_queue()` (**atomica via `FOR UPDATE SKIP LOCKED`** — dos drenadores se reparten la cola en vez de duplicar; el UPDATE va dentro de un CTE porque el RETURNING de un UPDATE no respeta el ORDER BY del subselect), `expire_send_queue()`, `send_queue_pending_tenants()`, `send_queue_depth()`, `send_queue_finished_campaigns()` (cierra campanas cuya cola se vacio por cancelacion o vencimiento, caminos que no pasan por el envio), `enqueue_send_queue(jsonb)` (**va en SQL y no en `.upsert()` porque el `onConflict` de supabase-js solo admite listas de columnas y jamas podria apuntar a un indice parcial sobre expresion — caeria en la PK y el anti-duplicado no se aplicaria, en silencio**). **Bloque 9-10: blindaje de permisos.** `REVOKE ... FROM PUBLIC` **no basta en Supabase**: las default privileges conceden EXECUTE **nominal** a `anon` y `authenticated`, asi que toda funcion SECURITY DEFINER quedaba llamable con la anon key del navegador. Se nombran los roles, y el bloque 10 cierra tambien las de la 00035/00036 — incluida `aios_provision_tenant()`, que **crea tenants** y estaba abierta en produccion. Cola de goteo (v2.13.0, Bloque 2). | Pendiente |
+| 39 | `00039_template_catalog.sql` | 2026-08-30 | **Catálogo estándar de plantillas.** Tabla nueva `template_versions`: guarda a la vez la plantilla **vigente** (`is_current`) y la **pendiente** de aprobación de Meta (`status='pending'`) de cada uno de los 13 mensajes, más el historial y **quién editó, cuándo y si aceptó la advertencia** (`edited_by`, `edited_by_email`, `disclaimer_accepted_at`) — requisito duro de la decisión 3 del dueño. Tres índices que son **invariantes, no optimizaciones**: `idx_template_versions_one_current` (una sola vigente por slot — `admin_settings` nunca queda ambiguo), `idx_template_versions_one_pending` (una sola edición en revisión por slot — dos pendientes competirían por el mismo puntero al aprobarse) y `idx_template_versions_provider_ref` (el `name` es único por WABA en Meta). Seed de `admin_settings.template_style='calido'` **solo en tenants `messaging_provider='zernio'`** — los 4 tenants Twilio no se tocan (decisión 6, textual: "déjalos así, ni los toques"). RLS por tenant. **`admin_settings.*_template_sid` sigue siendo el puntero vigente y su contrato NO cambia**: el camino de envío no se tocó, y con `template_versions` vacía el sistema envía igual que antes. Plantillas de WhatsApp (v2.12.0, §12). **Numeración: es la 00039 y no la 00038 porque esa la tomó `00038_send_queue_drain.sql`.** | Pendiente |
 
 ### `tenant_id` en las 18 tablas de negocio
 

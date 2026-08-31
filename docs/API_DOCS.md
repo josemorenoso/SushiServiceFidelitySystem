@@ -48,12 +48,15 @@ Webhooks validan origen por número autorizado o `x-webhook-secret`. Cron jobs v
 | POST | /api/reward-redeem | Registrar entrega física de un premio (acepta `grant_id`, `tier_id` opcional) | Staff (Bearer/X-Device-Token) |
 | POST | /api/webhook/delivery | Recibir datos de domicilio (n8n/Twilio) | x-webhook-secret |
 | POST | /api/webhook/twilio-incoming | Auto-responder mensajes entrantes al número | Twilio Signature |
-| POST | /api/webhook/zernio | Webhook Zernio: mensajes entrantes (tenants `messaging_provider='zernio'`) + status de entrega (`message_logs`) | X-Zernio-Signature (HMAC-SHA256, obligatoria) |
+| POST | /api/webhook/zernio | Webhook Zernio: mensajes entrantes (tenants `messaging_provider='zernio'`) + status de entrega (`message_logs`) + **aprobación de plantillas** (`whatsapp.template.status_updated` → cambio de puntero, ver `docs/features/whatsapp-templates.md`) | X-Zernio-Signature (HMAC-SHA256, obligatoria) |
 | GET/POST | /api/cron/birthday | Enviar felicitaciones de cumpleaños | CRON_SECRET |
 | GET/POST | /api/cron/reactivation | Enviar reactivaciones (días configurables, default 21/25) + otorga premio de campaña con `expires_at` | CRON_SECRET |
 | GET/POST | /api/cron/calendar-dispatch | Auto-enviar eventos del calendario vencidos (disparado por n8n) | CRON_SECRET |
 | GET/POST | /api/cron/reward-reminder | Barrido de vencidos + recordatorio de premio por vencer (disparado por n8n) | CRON_SECRET |
+| GET/POST | /api/cron/queue-drain | Drena la cola de goteo respetando presupuesto y prioridad (disparado por n8n, W4, cada 15 min) | CRON_SECRET |
 | GET | /api/dashboard/metrics | Métricas generales | Admin Cookie |
+| GET | /api/dashboard/send-queue | Cola de goteo del tenant, filtrable por `campaign_id`/`status`, paginada | Admin Cookie |
+| DELETE | /api/dashboard/send-queue/:id | Cancela un item de la cola (`status='cancelled'`, no lo borra) | Admin Cookie |
 | GET | /api/dashboard/customers | Lista de clientes | Admin Cookie |
 | POST | /api/dashboard/campaigns | Crear campaña manual | Admin Cookie |
 | POST | /api/dashboard/campaigns/:id/send | Ejecutar campaña | Admin Cookie |
@@ -83,6 +86,9 @@ Webhooks validan origen por número autorizado o `x-webhook-secret`. Cron jobs v
 | GET | /api/dashboard/analytics | Analytics completos del dashboard | Admin Cookie |
 | GET | /api/dashboard/templates | Listar plantillas Twilio Content API | Admin Cookie |
 | POST | /api/dashboard/templates | Crear plantilla + submit aprobación WhatsApp | Admin Cookie |
+| GET | /api/dashboard/templates/catalog | Estado del catálogo estándar (13 plantillas) — **solo Zernio** | Admin Cookie |
+| PUT | /api/dashboard/templates/catalog/:key | Editar una plantilla del catálogo | Admin Cookie |
+| PUT | /api/dashboard/templates/style | Cambiar estilo (± re-aplicar a las 13) | Admin Cookie |
 | POST | /api/dashboard/check-in-override | Registrar visita extra (admin override) | Admin Cookie |
 | GET | /api/dashboard/settings | Obtener configuración del admin | Admin Cookie |
 | PUT | /api/dashboard/settings | Actualizar configuración | Admin Cookie |
@@ -1014,6 +1020,119 @@ cron correspondiente (`/api/cron/birthday` o `/api/cron/reactivation`) del tenan
   "ok": true,
   "template": { "sid": "HXxxxxxxxxxx", "...": "..." },
   "approval": { "sid": "HXxxxxxxxxxx", "status": "received" }
+}
+```
+
+---
+
+### Templates — catálogo estándar (Zernio)
+
+> **Solo tenants `messaging_provider='zernio'`.** Los 4 tenants Twilio siguen usando los dos endpoints
+> de arriba, sin cambios (decisión del dueño: "déjalos así, ni los toques"). El guardarraíl vive en
+> `assertZernioTenant()` dentro de `template.service.ts`, no en la UI.
+>
+> Doc de feature: `docs/features/whatsapp-templates.md`.
+
+#### `GET /api/dashboard/templates/catalog` — Admin JWT
+
+Estado de las 13 plantillas del catálogo: qué se está enviando, qué está en revisión de Meta, y qué
+texto propone el estilo del negocio.
+
+**Response 200:**
+```json
+{
+  "provider": "zernio",
+  "style": "calido",
+  "brandName": "Sabor Urbano",
+  "entries": [
+    {
+      "definition": {
+        "key": "welcome",
+        "settingsKey": "welcome_template_sid",
+        "baseName": "bienvenida",
+        "category": "UTILITY",
+        "label": "Bienvenida",
+        "whenSent": "La primera vez que un cliente se registra, por QR o por domicilio.",
+        "variables": [{ "index": 1, "label": "Nombre del cliente", "sample": "María" }]
+      },
+      "current":  { "provider_ref": "bienvenida", "body": "...", "status": "approved", "is_current": true },
+      "pending":  null,
+      "lastRejected": null,
+      "suggestedBody": "¡Hola {{1}}! 🎉…",
+      "adoptedRef": null
+    }
+  ]
+}
+```
+
+`adoptedRef` no-nulo con `current: null` = el mensaje **está activo** pero se cargó fuera del panel
+(alta por el AIOS o SQL directo) y no tenemos su texto. La pantalla lo dice tal cual.
+
+**Response 409:** `{ "provider": "twilio" }` — el negocio no es Zernio. El frontend cae al gestor Twilio.
+
+#### `PUT /api/dashboard/templates/catalog/:key` — Admin JWT
+
+Guarda la edición de una plantilla. `:key` es el `definition.key` (ej. `welcome`, `birthday`).
+
+> **No es una edición in-place.** Crea una plantilla nueva en Zernio y la somete a Meta.
+> **`admin_settings.<settings_key>` NO se toca**: la plantilla vieja sigue vigente y los envíos siguen
+> saliendo con ella hasta que Meta apruebe la nueva. Ver `docs/features/whatsapp-templates.md`.
+
+**Body:**
+```json
+{
+  "body": "¡Hola {{1}}! Bienvenid@ a nuestro club. Empiezas con {{2}} puntos.\n\n{{3}}\n\n¡Te esperamos!",
+  "acceptedDisclaimer": true
+}
+```
+
+`acceptedDisclaimer` es **obligatorio** (`true`). Sin él → 400. Queda registrado quién aceptó y cuándo
+(`template_versions.edited_by` / `disclaimer_accepted_at`): la decisión del dueño ("si se las llegan a
+bloquear va a ser su culpa") no se sostiene sin ese registro.
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "message": "Guardado. WhatsApp está revisando el cambio (suele tardar entre 1 y 3 días). Mientras tanto tus clientes siguen recibiendo el mensaje anterior, sin interrupciones.",
+  "version": { "id": "…", "provider_ref": "bienvenida_v2", "status": "pending" }
+}
+```
+
+**Errores:**
+
+| Código | Cuándo |
+|---|---|
+| 400 | Texto inválido para Meta (empieza/termina con variable, >1024 chars, falta o sobra un `{{n}}`, falta el opt-out en MARKETING) o falta `acceptedDisclaimer` |
+| 404 | `:key` no existe en el catálogo |
+| 409 | Ya hay una edición de esa plantilla en revisión, el negocio no es Zernio, o no tiene WhatsApp conectado |
+| 502 | Zernio rechazó la creación. **La plantilla actual sigue funcionando**; el intento queda registrado con `status='failed'` |
+
+#### `PUT /api/dashboard/templates/style` — Admin JWT
+
+**Body:**
+```json
+{ "style": "elegante", "reapplyAll": false, "acceptedDisclaimer": false }
+```
+
+| `reapplyAll` | Qué hace |
+|---|---|
+| `false` | **Solo cambia el default.** Ninguna plantilla se toca, nada va a Meta. Es el punto de partida de la próxima que se cree o edite |
+| `true` | Además reescribe las 13 con el banco del estilo nuevo. **Son 13 aprobaciones nuevas de Meta.** Exige `acceptedDisclaimer: true` |
+
+Tolerante a fallos parciales a propósito: si una plantilla falla, las ya sometidas siguen su curso.
+Abortar a la mitad dejaría el catálogo peor que al empezar y no hay forma de deshacer lo ya enviado.
+
+**Response 200 (`reapplyAll: true`):**
+```json
+{
+  "success": true,
+  "style": "elegante",
+  "reapplied": true,
+  "submitted": ["welcome", "birthday"],
+  "skipped": [{ "key": "reward_safe", "reason": "ya tenía un cambio en revisión" }],
+  "failed": [],
+  "message": "Se enviaron 2 mensajes a revisión de WhatsApp. Mientras los revisan, tus clientes siguen recibiendo los actuales."
 }
 ```
 

@@ -169,9 +169,12 @@ duplicados y fuera de orden:
 
 - **Métricas de Zernio:** `docs/features/twilio-metrics.md` (`twilio-metrics`, `twilio-balance`) no
   tiene contraparte Zernio — el dashboard de entregabilidad/opt-outs solo cubre Twilio hoy.
-- **UI de plantillas Zernio:** `dashboard/templates` (creación + auto-submit a Meta) sigue siendo
-  100% Twilio Content API. Cargar plantillas de Zernio hoy es manual, vía
-  `aios_set_template_settings()` desde el AIOS o directo en SQL.
+- ~~**UI de plantillas Zernio:** `dashboard/templates` sigue siendo 100% Twilio Content API.~~
+  **RESUELTO (v2.12.0, 2026-08-30)** — ver `docs/features/whatsapp-templates.md`. `dashboard/templates`
+  se bifurca por proveedor: los tenants Zernio ven el catálogo estándar de 13 plantillas con estilo y
+  edición desde el panel; los 4 tenants Twilio ven exactamente la pantalla anterior. El alta por
+  `aios_set_template_settings()` sigue funcionando y el catálogo la reconoce (los punteros cargados
+  fuera del panel se muestran como "activo, sin texto guardado" en vez de inventarles un cuerpo).
 - **Balance/saldo de Zernio:** no hay endpoint equivalente a `/api/dashboard/twilio-balance` — el
   saldo de Zernio se factura a nivel de Team completo (no por profile/tenant), y el dueño del proyecto
   aún no decidió si los tenants de Cada1 van en su cuenta Zernio ya existente (compartida con otro

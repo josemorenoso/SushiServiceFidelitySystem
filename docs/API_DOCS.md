@@ -1425,6 +1425,7 @@ la de billetera: desde la migración `00037` (decisión D-2) esos tenants ya no 
 ```json
 {
   "available": true,
+  "enforced": true,
   "limit": 250,
   "used24h": 42,
   "reserve": 70,
@@ -1443,6 +1444,24 @@ la de billetera: desde la migración `00037` (decisión D-2) esos tenants ya no 
 | `reserve` | Cupos apartados para lo transaccional. Existe porque en Meta una bienvenida pesa igual que una promo. |
 | `campaignBudget` | Techo total que las campañas pueden alcanzar (`limit - reserve`, x0.5 si `throttled`, 0 si `frozen`). |
 | `lineStatus` | `active` \| `throttled` \| `frozen`. Volver a `active` es **siempre** manual. |
+| `enforced` | `false` = no se conoce el límite de esa línea: se **mide** el consumo pero no se bloquea nada. Es el estado de los tenants anteriores a la migración 00037. Con `false`, todos los campos de cupo llegan en `null` salvo `used24h`. |
+
+**Respuesta cuando el límite no se conoce:**
+
+```json
+{
+  "available": true,
+  "enforced": false,
+  "limit": null,
+  "used24h": 1240,
+  "reserve": null,
+  "campaignBudget": null,
+  "campaignAvailable": null,
+  "transactionalAvailable": null,
+  "qualityRating": "unknown",
+  "lineStatus": "active"
+}
+```
 
 **Errores:** `401` sin sesión · `500` si no se pudo calcular el presupuesto.
 

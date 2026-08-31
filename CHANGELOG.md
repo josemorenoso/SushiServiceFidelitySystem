@@ -53,6 +53,19 @@ Esta entrega cubre el **Bloque 1** (presupuesto) y el **Bloque 8** (billetera).
   posible: la billetera también era el freno de gasto, y el presupuesto de línea la reemplaza en esa
   función — frenando contra el límite real de Meta en vez de contra el saldo.
 
+### Corrección antes de aplicar (misma fecha)
+
+- **`messaging_daily_limit` ya NO trae `DEFAULT 250` en el `ADD COLUMN`.** Un default en el `ADD COLUMN`
+  rellena también las filas existentes: habría capado de golpe en 250 a Sushi Service, Don Alirio,
+  Frangal y Demo — y Sushi Service mueve del orden de **2.000 mensajes diarios**. Aplicar la migración
+  así le habría cortado las campañas a un cliente en producción.
+  Ahora la columna nace sin default (existentes → `NULL`) y el `DEFAULT 250` se agrega en una segunda
+  sentencia, de modo que solo alcanza a los tenants **nuevos**, donde 250 sí es el valor real de una
+  WABA recién creada.
+- **`NULL` = límite desconocido:** `line_budget()` devuelve `enforced: false` y `reserve_send_slot()`
+  **concede siempre**, pero igual registra la reserva — así se mide el consumo real de esos tenants sin
+  bloquearles nada. Es el dato que hace falta para elegir bien su límite después.
+
 ### Notas de diseño
 
 - **La reserva es atómica en Postgres, no en TypeScript.** Las campañas envían en paralelo; un patrón

@@ -32,16 +32,23 @@ export type LineStatus = 'active' | 'throttled' | 'frozen'
 export type QualityRating = 'green' | 'yellow' | 'red' | 'unknown'
 
 export interface LineBudget {
-  /** Límite de Meta: destinatarios únicos por 24h rodantes. */
-  limit: number
-  /** Destinatarios únicos ya consumidos en la ventana. */
+  /**
+   * false = no conocemos el límite de esta línea: se contabiliza el consumo
+   * pero NO se bloquea ningún envío. Es el estado de los tenants Twilio
+   * anteriores a la migración 00037 — imponerles un tope inventado les
+   * cortaría campañas que hoy salen sin problema.
+   */
+  enforced: boolean
+  /** Límite de Meta: destinatarios únicos por 24h rodantes. `null` si no se conoce. */
+  limit: number | null
+  /** Destinatarios únicos ya consumidos en la ventana. Siempre disponible. */
   used24h: number
   /** Cupos apartados para lo transaccional (bienvenidas, check-in, premios). */
-  reserve: number
+  reserve: number | null
   /** Techo de consumo total que las campañas pueden alcanzar. */
-  campaignBudget: number
-  campaignAvailable: number
-  transactionalAvailable: number
+  campaignBudget: number | null
+  campaignAvailable: number | null
+  transactionalAvailable: number | null
   qualityRating: QualityRating
   lineStatus: LineStatus
 }
@@ -56,17 +63,20 @@ export interface ReservationResult {
   granted: boolean
   /** true = el teléfono ya se había contado en la ventana; no consumió cupo nuevo. */
   free: boolean
+  /** false = el tenant no tiene límite conocido; se midió pero no se aplicó tope. */
+  enforced: boolean
   reservationId: string | null
   reason: ReservationDenialReason | null
 }
 
 interface RawBudget {
-  limit: number
+  enforced: boolean
+  limit: number | null
   used_24h: number
-  reserve: number
-  campaign_budget: number
-  campaign_available: number
-  transactional_available: number
+  reserve: number | null
+  campaign_budget: number | null
+  campaign_available: number | null
+  transactional_available: number | null
   quality_rating: QualityRating
   line_status: LineStatus
 }
@@ -74,6 +84,7 @@ interface RawBudget {
 interface RawReservation {
   granted: boolean
   free?: boolean
+  enforced?: boolean
   reservation_id?: string
   reason?: ReservationDenialReason
 }
@@ -103,24 +114,25 @@ export async function reserveSendSlot(
 
     if (error) {
       console.error(`[LineBudget] reserve_send_slot falló para tenant ${tenantId}: ${error.message}`)
-      return { granted: false, free: false, reservationId: null, reason: 'budget_check_failed' }
+      return { granted: false, free: false, enforced: true, reservationId: null, reason: 'budget_check_failed' }
     }
 
     const raw = data as RawReservation | null
     if (!raw || typeof raw.granted !== 'boolean') {
       console.error(`[LineBudget] reserve_send_slot devolvió una forma inesperada para tenant ${tenantId}`)
-      return { granted: false, free: false, reservationId: null, reason: 'budget_check_failed' }
+      return { granted: false, free: false, enforced: true, reservationId: null, reason: 'budget_check_failed' }
     }
 
     return {
       granted: raw.granted,
       free: raw.free ?? false,
+      enforced: raw.enforced ?? true,
       reservationId: raw.reservation_id ?? null,
       reason: raw.reason ?? null,
     }
   } catch (err) {
     console.error('[LineBudget] Excepción reservando cupo:', err instanceof Error ? err.message : err)
-    return { granted: false, free: false, reservationId: null, reason: 'budget_check_failed' }
+    return { granted: false, free: false, enforced: true, reservationId: null, reason: 'budget_check_failed' }
   }
 }
 
@@ -160,6 +172,7 @@ export async function getLineBudget(tenantId: string): Promise<LineBudget> {
 
   const raw = data as RawBudget
   return {
+    enforced: raw.enforced ?? false,
     limit: raw.limit,
     used24h: raw.used_24h,
     reserve: raw.reserve,

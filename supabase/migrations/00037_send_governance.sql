@@ -19,13 +19,29 @@
 -- ─────────────────────────────────────────────────────────────
 -- 1. Estado de la línea, en tenants
 -- ─────────────────────────────────────────────────────────────
+-- OJO con el orden de estas dos sentencias: es deliberado y NO se puede colapsar
+-- en un "ADD COLUMN ... DEFAULT 250".
+--
+-- ADD COLUMN con DEFAULT rellena TAMBIEN las filas que ya existen. Eso habria
+-- capado de golpe en 250 a los tenants que hoy operan sin tope (Sushi Service,
+-- Don Alirio, Frangal, Demo) — y Sushi Service mueve del orden de 2.000/dia.
+-- Cortarle las campanas a un cliente en produccion por un default nuestro es
+-- exactamente lo que esta migracion existe para evitar.
+--
+-- Por eso: la columna nace SIN default (los tenants existentes quedan en NULL =
+-- "limite desconocido, no se aplica tope") y el DEFAULT 250 se agrega DESPUES,
+-- de modo que solo aplica a los tenants NUEVOS — donde 250 si es el valor real
+-- de una WABA recien creada sin verificar.
 ALTER TABLE tenants
-  ADD COLUMN IF NOT EXISTS messaging_daily_limit     integer     NOT NULL DEFAULT 250,
+  ADD COLUMN IF NOT EXISTS messaging_daily_limit     integer,
   ADD COLUMN IF NOT EXISTS messaging_limit_synced_at timestamptz,
   ADD COLUMN IF NOT EXISTS quality_rating            text        NOT NULL DEFAULT 'unknown',
   ADD COLUMN IF NOT EXISTS line_status               text        NOT NULL DEFAULT 'active',
   ADD COLUMN IF NOT EXISTS line_status_reason        text,
   ADD COLUMN IF NOT EXISTS line_status_changed_at    timestamptz;
+
+-- El default aplica solo a filas futuras (ver comentario de arriba).
+ALTER TABLE tenants ALTER COLUMN messaging_daily_limit SET DEFAULT 250;
 
 DO $$
 BEGIN
@@ -40,7 +56,7 @@ BEGIN
 END $$;
 
 COMMENT ON COLUMN tenants.messaging_daily_limit IS
-  'Destinatarios ÚNICOS permitidos por Meta en 24h RODANTES. Se sincroniza del proveedor; NO se codifica como constante (Meta cambia los escalones). Default conservador: 250 (WABA sin verificar).';
+  'Destinatarios ÚNICOS permitidos por Meta en 24h RODANTES. NULL = límite desconocido: se contabiliza el consumo pero NO se bloquea ningún envío (es el estado de los tenants Twilio previos a esta migración). Se sincroniza del proveedor; NO se codifica como constante (Meta cambia los escalones). Default para tenants nuevos: 250 (WABA sin verificar).';
 COMMENT ON COLUMN tenants.line_status IS
   'active = presupuesto completo | throttled = campañas al 50% | frozen = campañas a 0, transaccional sigue. Volver a active es SIEMPRE manual (ver spec §3.5).';
 
@@ -212,8 +228,35 @@ BEGIN
     FROM tenants t
    WHERE t.id = p_tenant;
 
-  IF v_limit IS NULL THEN
+  -- line_status es NOT NULL DEFAULT 'active': si viene NULL, el tenant no existe.
+  IF v_status IS NULL THEN
     RAISE EXCEPTION 'tenant_no_encontrado: %', p_tenant;
+  END IF;
+
+  -- Consumo de la ventana rodante: se calcula SIEMPRE, incluso sin límite
+  -- conocido, para poder medir a los tenants antes de imponerles un tope.
+  SELECT COUNT(DISTINCT sr.phone)
+    INTO v_used
+    FROM send_reservations sr
+   WHERE sr.tenant_id = p_tenant
+     AND sr.released_at IS NULL
+     AND sr.reserved_at > now() - interval '24 hours';
+
+  -- Límite desconocido (tenants anteriores a esta migración): se contabiliza
+  -- pero no se bloquea nada. Inventar un tope aquí le cortaría las campañas a
+  -- un cliente que hoy opera sin problema.
+  IF v_limit IS NULL THEN
+    RETURN jsonb_build_object(
+      'enforced',                false,
+      'limit',                   NULL,
+      'used_24h',                v_used,
+      'reserve',                 NULL,
+      'campaign_budget',         NULL,
+      'campaign_available',      NULL,
+      'transactional_available', NULL,
+      'quality_rating',          v_quality,
+      'line_status',             v_status
+    );
   END IF;
 
   SELECT
@@ -252,15 +295,8 @@ BEGIN
     v_campaign_budget := 0;
   END IF;
 
-  -- Destinatarios ÚNICOS en la ventana rodante de 24h.
-  SELECT COUNT(DISTINCT sr.phone)
-    INTO v_used
-    FROM send_reservations sr
-   WHERE sr.tenant_id = p_tenant
-     AND sr.released_at IS NULL
-     AND sr.reserved_at > now() - interval '24 hours';
-
   RETURN jsonb_build_object(
+    'enforced',                true,
     'limit',                   v_limit,
     'used_24h',                v_used,
     'reserve',                 v_reserve,
@@ -330,6 +366,16 @@ BEGIN
   END IF;
 
   v_budget := line_budget(p_tenant);
+
+  -- Límite desconocido: se registra la reserva (para poder medir el consumo
+  -- real de ese tenant) pero NUNCA se deniega. Los tenants Twilio previos a
+  -- esta migración caen aquí y su comportamiento no cambia en nada.
+  IF (v_budget->>'enforced')::boolean IS NOT TRUE THEN
+    INSERT INTO send_reservations (tenant_id, phone, message_class)
+    VALUES (p_tenant, p_phone, p_class)
+    RETURNING id INTO v_id;
+    RETURN jsonb_build_object('granted', true, 'free', false, 'enforced', false, 'reservation_id', v_id);
+  END IF;
 
   IF p_class = 'transactional' THEN
     IF (v_budget->>'used_24h')::integer >= (v_budget->>'limit')::integer THEN

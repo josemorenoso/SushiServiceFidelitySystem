@@ -48,6 +48,34 @@ presupuesto_campana = limite - reserva
 ```
 
 Con los defaults (`limite = 250`, `piso = 70`) y un tenant sin historial: **180 de campaña libre**.
+El 180 **no está hardcodeado** — es `250 - 70`. Si la línea está en un escalón de 2.000, el mismo
+cálculo da ~1.930 de campaña libre, porque la reserva se calibra contra el consumo transaccional real
+y no contra un porcentaje del límite.
+
+### Límite desconocido (`enforced: false`)
+
+`tenants.messaging_daily_limit` admite **NULL = no sabemos cuál es el límite de esta línea**. En ese
+estado el sistema **contabiliza el consumo pero no bloquea ningún envío**.
+
+Es el estado en el que quedan los tenants que ya existían cuando se aplicó la 00037 (Sushi Service,
+Don Alirio, Frangal, Demo). **Es deliberado y es importante:** un `ADD COLUMN ... DEFAULT 250` rellena
+también las filas existentes, y eso habría capado de golpe en 250 a líneas que hoy mueven del orden de
+2.000 mensajes diarios — cortándoles las campañas a clientes en producción por un default nuestro.
+
+Por eso la columna nace sin default y el `DEFAULT 250` se agrega **después**, de modo que solo aplica a
+los tenants **nuevos**, donde 250 sí es el valor real de una WABA recién creada sin verificar.
+
+**Para activar el tope en un tenant existente**, hay que poner su límite real:
+
+```sql
+-- Solo cuando conozcas el escalón real de esa WABA en Meta.
+UPDATE tenants SET messaging_daily_limit = 2000, messaging_limit_synced_at = now()
+ WHERE slug = 'sushi-service';
+```
+
+Mientras tanto, `GET /api/dashboard/line-budget` devuelve `enforced: false` y el consumo medido — que
+es justamente el dato que hace falta para elegir bien ese número. Cuando exista el Bloque 3, el poll de
+salud sincroniza el valor solo.
 
 | Parámetro (`admin_settings`) | Default | Qué hace |
 |---|---|---|

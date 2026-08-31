@@ -5,6 +5,16 @@ export const POWER_RANKS = [
   { name: 'Plata', minVisits: 0, emoji: '\ud83e\udd48', gradient: 'from-gray-300 to-gray-500', bg: 'bg-gray-50', border: 'border-gray-400', text: 'text-gray-600', glow: 'shadow-gray-400/50', color: '#6B7280', labelColor: '#ffffff' },
 ] as const
 
+/**
+ * Cuántos clientes entran en el resumen del dashboard (`topCustomers`).
+ *
+ * REQUERIMIENTOS_AGOSTO_2026.md §14.2 — el dueño pidió bajarlo de 20 a 15:
+ * *"Reducir el resumen de clientes a 15"*. Lo consumen `dashboard.service.ts`
+ * (datos reales) y `demo-analytics.ts` (modo demo); tienen que decir lo mismo,
+ * o el demo enseñaría un panel que el cliente nunca va a ver.
+ */
+export const TOP_CUSTOMERS_LIMIT = 15
+
 export const LEVEL_THRESHOLDS = {
   plata: 1,
   oro: 4,

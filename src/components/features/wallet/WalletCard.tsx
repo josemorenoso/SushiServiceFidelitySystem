@@ -1,7 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { Crown } from 'lucide-react'
 import { useBranding } from '@/lib/branding-context'
+import { isBlackMember } from '@/lib/black-tier'
+import { BLACK_WALLET_CARD_THEME, brandWalletCardTheme } from '@/constants/wallet-card-theme'
 import { StampsGrid } from './StampsGrid'
 
 interface TierItem {
@@ -19,6 +22,14 @@ interface WalletCardProps {
   tiers: TierItem[]
 }
 
+/**
+ * Tarjeta digital del cliente (`/tarjeta`).
+ *
+ * REQUERIMIENTOS_AGOSTO_2026.md §17.2 — al entrar a Black la tarjeta pasa a negro
+ * y dorado, con distintivo claro. Quién es Black lo decide `isBlackMember()`
+ * (`src/lib/black-tier.ts`); los colores viven en `wallet-card-theme.ts`. Aquí
+ * solo se arma el layout (Mandamiento II).
+ */
 export function WalletCard({ name, totalPoints, totalVisits, tiers }: WalletCardProps) {
   const branding = useBranding()
   const sorted = [...tiers].sort((a, b) => a.point_threshold - b.point_threshold)
@@ -29,6 +40,9 @@ export function WalletCard({ name, totalPoints, totalVisits, tiers }: WalletCard
     ? Math.min((totalPoints / nextThreshold) * 100, 100)
     : 100
 
+  const isBlack = isBlackMember(tiers, totalPoints)
+  const theme = isBlack ? BLACK_WALLET_CARD_THEME : brandWalletCardTheme(branding)
+
   const [barWidth, setBarWidth] = useState(0)
   useEffect(() => {
     const t = setTimeout(() => setBarWidth(progressPercent), 200)
@@ -38,70 +52,98 @@ export function WalletCard({ name, totalPoints, totalVisits, tiers }: WalletCard
   return (
     <div
       className="min-h-screen flex flex-col items-center justify-start py-8 px-4"
-      style={{ background: branding.pageBg }}
+      style={{ background: theme.pageBg }}
     >
       <div
         className="w-full max-w-sm animate-fade-in-up"
         style={{
-          background: branding.cardBg,
+          background: theme.cardBg,
           borderRadius: '2rem',
-          border: '1.5px solid rgba(255,255,255,0.22)',
-          boxShadow: '0 25px 60px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.15)',
+          border: theme.cardBorder,
+          boxShadow: theme.cardShadow,
           overflow: 'hidden',
         }}
       >
         <div className="px-5 pt-7 pb-8 flex flex-col items-center">
           {/* Brand */}
-          <p className="text-xs font-bold tracking-[0.2em] uppercase text-white/50">
+          <p
+            className="text-xs font-bold tracking-[0.2em] uppercase"
+            style={{ color: theme.brand }}
+          >
             {branding.name}
           </p>
-          <p className="text-[11px] text-white/30 mt-0.5 tracking-wide">Tarjeta de Fidelidad</p>
+          <p className="text-[11px] mt-0.5 tracking-wide" style={{ color: theme.subtitle }}>
+            Tarjeta de Fidelidad
+          </p>
+
+          {/* Distintivo Black (§17.2) */}
+          {theme.badge && (
+            <div
+              className="mt-3 flex items-center gap-1.5 rounded-full px-3.5 py-1.5"
+              style={{ background: theme.badge.bg, border: theme.badge.border }}
+            >
+              <Crown className="h-3.5 w-3.5" strokeWidth={1.5} style={{ color: theme.badge.text }} />
+              <span
+                className="text-[11px] font-bold uppercase tracking-[0.18em]"
+                style={{ color: theme.badge.text }}
+              >
+                {theme.badge.label}
+              </span>
+            </div>
+          )}
 
           {/* Name */}
-          <h1 className="mt-4 font-playfair text-4xl font-bold text-white text-center leading-tight">
+          <h1
+            className="mt-4 font-playfair text-4xl font-bold text-center leading-tight"
+            style={{ color: theme.name }}
+          >
             {name}
           </h1>
 
           {/* Points */}
           <div className="mt-3 flex items-end justify-center gap-2">
-            <span className="text-6xl font-bold text-white leading-none">{totalPoints}</span>
-            <span className="text-white/60 text-2xl mb-1">pts</span>
+            <span className="text-6xl font-bold leading-none" style={{ color: theme.points }}>
+              {totalPoints}
+            </span>
+            <span className="text-2xl mb-1" style={{ color: theme.pointsUnit }}>pts</span>
           </div>
 
           {/* Stamps */}
           <div className="mt-6 w-full">
-            <StampsGrid totalVisits={totalVisits} />
+            <StampsGrid totalVisits={totalVisits} theme={theme.stamps} />
           </div>
 
           {/* Points progress bar */}
           <div className="mt-4 w-full">
             <div
               className="relative h-7 rounded-full overflow-hidden"
-              style={{ background: 'rgba(0,0,0,0.25)' }}
+              style={{ background: theme.barTrack }}
             >
               <div
                 className="absolute inset-y-0 left-0 rounded-full transition-all duration-1000 ease-out"
-                style={{ width: `${barWidth}%`, background: 'rgba(255,255,255,0.5)' }}
+                style={{ width: `${barWidth}%`, background: theme.barFill }}
               />
               <div className="absolute inset-0 flex items-center justify-center">
                 <span
-                  className="text-xs font-bold text-white"
-                  style={{ textShadow: '0 1px 3px rgba(0,0,0,0.35)' }}
+                  className="text-xs font-bold"
+                  style={{ color: theme.barLabel, textShadow: theme.barLabelShadow }}
                 >
                   {totalPoints}{nextTier ? ` / ${nextThreshold}` : ''} pts
                 </span>
               </div>
             </div>
             {nextTier ? (
-              <p className="text-[11px] text-white/50 mt-1.5 text-center">
+              <p className="text-[11px] mt-1.5 text-center" style={{ color: theme.hint }}>
                 Faltan{' '}
-                <span className="text-white/75 font-semibold">{remaining} pts</span>{' '}
+                <span className="font-semibold" style={{ color: theme.hintStrong }}>
+                  {remaining} pts
+                </span>{' '}
                 para {nextTier.safe_reward_title}
               </p>
             ) : (
               tiers.length > 0 && (
-                <p className="text-[11px] text-white/60 mt-1.5 text-center">
-                  🎉 ¡Nivel máximo alcanzado!
+                <p className="text-[11px] mt-1.5 text-center" style={{ color: theme.hintStrong }}>
+                  {isBlack ? '🖤 Estás en el nivel Black' : '🎉 ¡Nivel máximo alcanzado!'}
                 </p>
               )
             )}
@@ -110,13 +152,16 @@ export function WalletCard({ name, totalPoints, totalVisits, tiers }: WalletCard
           {/* Divider */}
           <div
             className="w-full mt-6 mb-5"
-            style={{ height: '1px', background: 'rgba(255,255,255,0.12)' }}
+            style={{ height: '1px', background: theme.divider }}
           />
 
           {/* Tiers list */}
           {sorted.length > 0 && (
             <div className="w-full space-y-2">
-              <p className="text-[11px] text-white/40 uppercase tracking-[0.15em] text-center mb-3">
+              <p
+                className="text-[11px] uppercase tracking-[0.15em] text-center mb-3"
+                style={{ color: theme.sectionLabel }}
+              >
                 Tu camino de recompensas
               </p>
               {sorted.map((tier) => {
@@ -126,18 +171,23 @@ export function WalletCard({ name, totalPoints, totalVisits, tiers }: WalletCard
                     key={tier.tier_name}
                     className="flex items-center gap-3 rounded-xl px-3 py-2.5"
                     style={{
-                      background: reached ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.07)',
-                      border: reached
-                        ? '1px solid rgba(255,255,255,0.35)'
-                        : '1px solid rgba(255,255,255,0.12)',
+                      background: reached ? theme.tierReachedBg : theme.tierLockedBg,
+                      border: reached ? theme.tierReachedBorder : theme.tierLockedBorder,
                     }}
                   >
                     <span className="text-lg shrink-0">{reached ? '✅' : '🔒'}</span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-white">{tier.tier_name}</p>
-                      <p className="text-xs text-white/50 truncate">{tier.safe_reward_title}</p>
+                      <p className="text-sm font-semibold" style={{ color: theme.tierName }}>
+                        {tier.tier_name}
+                      </p>
+                      <p className="text-xs truncate" style={{ color: theme.tierReward }}>
+                        {tier.safe_reward_title}
+                      </p>
                     </div>
-                    <span className="text-xs text-white/40 font-medium shrink-0">
+                    <span
+                      className="text-xs font-medium shrink-0"
+                      style={{ color: theme.tierPts }}
+                    >
                       {tier.point_threshold} pts
                     </span>
                   </div>
@@ -149,21 +199,19 @@ export function WalletCard({ name, totalPoints, totalVisits, tiers }: WalletCard
           {/* CTA al check-in */}
           <div
             className="mt-6 w-full rounded-2xl px-5 py-4 text-center"
-            style={{
-              background: 'rgba(255,255,255,0.1)',
-              border: '1px solid rgba(255,255,255,0.18)',
-            }}
+            style={{ background: theme.ctaBg, border: theme.ctaBorder }}
           >
-            <p className="text-sm text-white/55">¿Estás en el restaurante?</p>
+            <p className="text-sm" style={{ color: theme.ctaLabel }}>¿Estás en el restaurante?</p>
             <a
               href="/check-in"
-              className="mt-1 block text-sm font-bold text-white transition-opacity hover:opacity-80"
+              className="mt-1 block text-sm font-bold transition-opacity hover:opacity-80"
+              style={{ color: theme.ctaLink }}
             >
               Escanea el QR en mesa para ganar puntos →
             </a>
           </div>
 
-          <p className="mt-6 text-[11px] text-white/20 text-center">
+          <p className="mt-6 text-[11px] text-center" style={{ color: theme.footer }}>
             {branding.name} · Programa de Fidelidad
           </p>
         </div>

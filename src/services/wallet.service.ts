@@ -54,6 +54,28 @@ export async function getBalanceCop(tenantId: string): Promise<number> {
   return Number(data ?? 0)
 }
 
+/**
+ * ¿Este tenant factura por Zernio?
+ *
+ * Falla CERRADO hacia la billetera: ante un error de consulta devuelve `false`,
+ * o sea "trátalo como Twilio y cóbrale". Equivocarse hacia el cobro es
+ * recuperable (se reembolsa); equivocarse hacia el no-cobro le regala mensajes
+ * a la plataforma sin dejar rastro.
+ */
+async function isZernioTenant(tenantId: string): Promise<boolean> {
+  const db = getServiceClient()
+  const { data, error } = await db
+    .from('tenants')
+    .select('messaging_provider')
+    .eq('id', tenantId)
+    .single()
+  if (error) {
+    console.error('[Wallet] No se pudo leer messaging_provider:', error.message)
+    return false
+  }
+  return data?.messaging_provider === 'zernio'
+}
+
 /** Tarifa del tenant (COP/mensaje). Fallback al default si la fila no existe. */
 export async function getPricePerMessage(tenantId: string): Promise<number> {
   const db = getServiceClient()
@@ -97,6 +119,30 @@ export interface BulkSendCheck {
  * (bienvenida, check-in, premio) NO llaman esto: siempre salen.
  */
 export async function canSendBulk(tenantId: string, count: number): Promise<BulkSendCheck> {
+  // ═══ Tenants Zernio: la billetera no aplica (decisión D-2, 00037) ═══
+  // Con Zernio, Meta le factura los mensajes DIRECTO al restaurante contra el
+  // método de pago de su propia WABA, así que el trigger `debit_wallet_on_
+  // message_sent()` los excluye y su saldo se queda en 0 para siempre —
+  // no entran recargas ni salen débitos.
+  //
+  // Sin esta guarda, ese 0 permanente hace que TODA campaña masiva de TODO
+  // tenant Zernio se rechace con 409 "Saldo insuficiente". El trigger de la
+  // migración solo apagó el cobro; este es el otro lado de la misma decisión.
+  //
+  // Esto NO los deja sin freno: el presupuesto de línea (00037 §3.1) lo
+  // reemplaza, y frena contra el límite real de Meta en vez de contra la plata
+  // — que es más seguro. Ver spec §10, D-2, punto 2.
+  if (await isZernioTenant(tenantId)) {
+    return {
+      ok: true,
+      balanceCop: 0,
+      pricePerMessage: 0,
+      messagesAvailable: count,
+      needed: count,
+      shortfallCop: 0,
+    }
+  }
+
   const [balanceCop, pricePerMessage] = await Promise.all([
     getBalanceCop(tenantId),
     getPricePerMessage(tenantId),

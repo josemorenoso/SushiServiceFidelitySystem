@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import { useDemo } from '@/contexts/DemoContext'
 import { useDashboardAnalytics } from '@/hooks/useDashboardAnalytics'
 import { DemoToggle } from '@/components/dashboard/DemoToggle'
@@ -9,34 +9,31 @@ import { ROICard } from '@/components/dashboard/ROICard'
 import { VisitsChart } from '@/components/dashboard/VisitsChart'
 import { GrowthChart } from '@/components/dashboard/GrowthChart'
 import { CustomerTiers } from '@/components/dashboard/CustomerTiers'
-import { AtRiskBubbles } from '@/components/dashboard/AtRiskBubbles'
 import { PowerRanking } from '@/components/dashboard/PowerRanking'
 import { VisitHeatmap } from '@/components/dashboard/VisitHeatmap'
 import { AcquisitionChannelChart } from '@/components/dashboard/AcquisitionChannelChart'
 import { ReactivationRateChart } from '@/components/dashboard/ReactivationRateChart'
 import { CampaignEfficiencyChart } from '@/components/dashboard/CampaignEfficiencyChart'
-import { BlackTierSection } from '@/components/dashboard/BlackTierSection'
 import { TwilioMessagesPanel } from '@/components/dashboard/TwilioMessagesPanel'
 import { CustomerDetailDialog } from '@/components/dashboard/CustomerDetailDialog'
 import type { Customer } from '@/types/database.types'
 
+/**
+ * Panel de métricas.
+ *
+ * REQUERIMIENTOS_AGOSTO_2026.md §14.1 y §15.3 — dos secciones SALIERON de aquí
+ * (no se borraron, se mudaron al apartado donde se actúa sobre ellas):
+ *   - `BlackTierSection`  → `/dashboard/customers`  (§14.1 la saca, §17.1 la pone)
+ *   - `AtRiskBubbles`     → `/dashboard/campaigns`, pestaña Manuales (§15.3)
+ * Textual del dueño sobre las burbujas: *"considerando el día a día del cliente
+ * deberíamos eliminar las burbujas flotantes catalogadas por días en el dashboard
+ * y meterla en el área de campañas"*.
+ */
 export default function DashboardPage() {
   const { isDemo, demoError } = useDemo()
   const { data, loading, refetch } = useDashboardAnalytics()
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
-  const [blackBenefits, setBlackBenefits] = useState<string[] | undefined>(undefined)
-
-  useEffect(() => {
-    fetch('/api/dashboard/settings')
-      .then((r) => r.json())
-      .then((s) => {
-        if (s.black_benefits) {
-          try { setBlackBenefits(JSON.parse(s.black_benefits)) } catch { /* ignore */ }
-        }
-      })
-      .catch(() => {})
-  }, [])
 
   const handleCustomerClick = useCallback(async (customerId: string) => {
     try {
@@ -74,16 +71,11 @@ export default function DashboardPage() {
         <ROICard />
       </div>
 
-      <BlackTierSection customers={data?.topCustomers ?? []} loading={loading} benefits={blackBenefits} onCustomerClick={handleCustomerClick} />
-
       <VisitsChart data={data?.visitsPerDay ?? []} loading={loading} />
 
       <PowerRanking customers={data?.topCustomers ?? []} loading={loading} onCustomerClick={handleCustomerClick} />
 
-      <div className="grid gap-8 lg:grid-cols-2">
-        <GrowthChart data={data?.newCustomersPerDay ?? []} loading={loading} />
-        <AtRiskBubbles groups={data?.atRiskGroups ?? []} loading={loading} isDemo={isDemo} />
-      </div>
+      <GrowthChart data={data?.newCustomersPerDay ?? []} loading={loading} />
 
       <VisitHeatmap data={data?.heatmap ?? []} loading={loading} />
 

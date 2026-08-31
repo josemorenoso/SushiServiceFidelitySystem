@@ -24,9 +24,12 @@ import {
 import Link from 'next/link'
 import { Megaphone, Cake, UserX, Send, Zap, Clock, CheckCircle, AlertTriangle, Settings2, MessageSquareText, BarChart3, CalendarClock } from 'lucide-react'
 import { ManualCampaigns } from '@/components/dashboard/ManualCampaigns'
+import { AtRiskBubbles } from '@/components/dashboard/AtRiskBubbles'
 import { WalletCard } from '@/components/dashboard/WalletCard'
 import { SegmentRadar } from '@/components/dashboard/SegmentRadar'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { useDemo } from '@/contexts/DemoContext'
+import { useDashboardAnalytics } from '@/hooks/useDashboardAnalytics'
 import { FREQUENCY_CAP_DAYS, RECOVERY_ZONE_START_DAYS, RECOVERY_ZONE_END_DAYS } from '@/constants/rewards'
 
 interface Campaign {
@@ -91,7 +94,19 @@ const statusLabels: Record<string, string> = {
   failed: 'Fallida',
 }
 
+/**
+ * Apartado de Campañas.
+ *
+ * REQUERIMIENTOS_AGOSTO_2026.md §15.3 — textual del dueño: *"considerando el día
+ * a día del cliente deberíamos eliminar las burbujas flotantes catalogadas por
+ * días en el dashboard y meterla en el área de campañas"*. `AtRiskBubbles` se
+ * mudó desde `/dashboard` a la pestaña **Manuales**, que es donde vive el resto
+ * de lo que dispara envíos a mano: el diálogo de la burbuja publica en
+ * `/api/dashboard/campaigns/manual`, igual que `ManualCampaigns`.
+ */
 export default function CampaignsPage() {
+  const { isDemo } = useDemo()
+  const { data: analytics, loading: analyticsLoading } = useDashboardAnalytics()
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [settings, setSettings] = useState<Record<string, string>>({})
   const [templates, setTemplates] = useState<TwilioTemplate[]>([])
@@ -403,7 +418,12 @@ export default function CampaignsPage() {
 
         </TabsContent>
 
-        <TabsContent value="manuales" className="pt-4">
+        <TabsContent value="manuales" className="space-y-4 pt-4">
+          <AtRiskBubbles
+            groups={analytics?.atRiskGroups ?? []}
+            loading={analyticsLoading}
+            isDemo={isDemo}
+          />
           <ManualCampaigns />
         </TabsContent>
 

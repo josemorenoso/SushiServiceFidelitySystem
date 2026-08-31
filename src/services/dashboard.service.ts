@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import type { Customer, Reward } from '@/types/database.types'
-import { POWER_RANKS, RISK_LEVELS, getCustomerRank } from '@/constants/rankings'
+import { POWER_RANKS, RISK_LEVELS, TOP_CUSTOMERS_LIMIT, getCustomerRank } from '@/constants/rankings'
 import type {
   DashboardAnalytics,
   DailyVisits,
@@ -267,7 +267,9 @@ export async function getFullAnalytics(tenantId: string): Promise<DashboardAnaly
     customers: riskBuckets[r.name].slice(0, 10),
   }))
 
-  const topCustomers: RankedCustomer[] = customers.slice(0, 20).map((c, i) => {
+  // 15 y no 20: REQUERIMIENTOS_AGOSTO_2026.md §14.2 — el resumen de clientes del
+  // dashboard se acortó a 15 filas. Espejo en `src/lib/demo-analytics.ts` (modo demo).
+  const topCustomers: RankedCustomer[] = customers.slice(0, TOP_CUSTOMERS_LIMIT).map((c, i) => {
     const rank = getCustomerRank(c.total_visits)
     return {
       id: c.id,

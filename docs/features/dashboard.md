@@ -23,8 +23,8 @@ Dar al administrador visibilidad completa del programa de fidelidad: cuántos cl
 | Ruta | Descripción |
 |------|-------------|
 | `/login` | Login del admin |
-| `/dashboard` | Métricas gamificadas (analytics, rankings, burbujas de riesgo) |
-| `/dashboard/customers` | Lista de clientes con búsqueda y paginación |
+| `/dashboard` | Métricas gamificadas (analytics, rankings, gráficas) |
+| `/dashboard/customers` | Sección Black arriba + lista de clientes con búsqueda, filtros y paginación |
 | `/dashboard/rewards` | Configuración de recompensas por visitas |
 | `/dashboard/campaigns` | Campañas automáticas (birthday/reactivation) + ejecución manual + historial |
 | `/dashboard/qr` | Generación y descarga de código QR para mesas |
@@ -46,10 +46,11 @@ Los dispositivos del local (celulares/tablets) se activan desde `/mesero` para e
 | `VisitsChart` | Gráfica de área: visitas QR vs Domicilios |
 | `GrowthChart` | Gráfica compuesta: nuevos clientes + acumulado |
 | `CustomerTiers` | Barras de niveles de poder |
-| `AtRiskBubbles` | Burbujas interactivas de clientes en riesgo. v2.8.0: el diálogo pide plantilla aprobada, muestra elegibles reales del día y envía por `/api/dashboard/campaigns/manual` con el rango de días del nivel (`RISK_LEVELS`) como filtro. Colores derivados del `color` del grupo (antes un mapa con nombres desalineados los dejaba grises) |
-| `PowerRanking` | Top 20 clientes con ranking anime |
+| `AtRiskBubbles` | Burbujas interactivas de clientes en riesgo. **Desde v2.14.0 vive en `/dashboard/campaigns` → pestaña Manuales**, no en el panel de métricas (§15.3). v2.8.0: el diálogo pide plantilla aprobada, muestra elegibles reales del día y envía por `/api/dashboard/campaigns/manual` con el rango de días del nivel (`RISK_LEVELS`) como filtro. Colores derivados del `color` del grupo (antes un mapa con nombres desalineados los dejaba grises) |
+| `BlackTierSection` | Panel negro/dorado de clientes Black (`rank === 'Black'`, 10+ visitas) + beneficios de `admin_settings.black_benefits`. **Desde v2.14.0 vive en `/dashboard/customers`**, no en el panel de métricas (§14.1 / §17.1) |
+| `PowerRanking` | Top clientes con ranking anime (`TOP_CUSTOMERS_LIMIT` = 15 desde v2.14.0) |
 | `DemoToggle` | Toggle modo demostración |
-| `ManualCampaigns` | Campañas manuales con filtros y predefinidas |
+| `ManualCampaigns` | Campañas manuales con filtros y predefinidas. Un preset predefinido solo se dibuja si su plantilla está aprobada (ver «Campañas predefinidas» abajo) |
 | `TwilioWallet` | Saldo Twilio + calculadora de costos |
 | `GoogleReviewPopup` | Popup post check-in para reseñas Google Maps |
 | `LoginForm` | Formulario de login |
@@ -59,6 +60,65 @@ Los dispositivos del local (celulares/tablets) se activan desde `/mesero` para e
 - Tema: Rojo japonés + blanco (oklch primary hue 25)
 - Icono: `UtensilsCrossed` de Lucide
 - QR color: rojo oscuro (#991B1B) sobre blanco
+
+## Reordenamiento del panel — v2.14.0 (`REQUERIMIENTOS_AGOSTO_2026.md` §14, §15, §17)
+
+El dueño pidió vaciar el panel de métricas de lo que no se mira a diario y llevarlo al apartado
+donde se **actúa** sobre eso. Nada se borró: las dos secciones se movieron enteras, con los mismos
+datos y el mismo comportamiento.
+
+| Sección | Antes | Ahora | Requerimiento |
+|---------|-------|-------|---------------|
+| `BlackTierSection` | `/dashboard`, entre ROI y la gráfica de visitas | `/dashboard/customers`, arriba del buscador | §14.1 la saca, §17.1 la pone — *"la pantalla negra de clientes VIP tiene que quedar dentro del apartado de clientes"* |
+| `AtRiskBubbles` | `/dashboard`, en rejilla con `GrowthChart` | `/dashboard/campaigns` → pestaña **Manuales**, encima de `ManualCampaigns` | §15.3 — *"deberíamos eliminar las burbujas flotantes catalogadas por días en el dashboard y meterla en el área de campañas"* |
+
+**Por qué la pestaña Manuales y no otro sitio:** el diálogo de la burbuja publica en
+`/api/dashboard/campaigns/manual`, exactamente igual que `ManualCampaigns`. Es un envío manual a un
+segmento; queda al lado del resto de envíos manuales. Moverla a otra pestaña es cambiar de sitio un
+bloque JSX, si el dueño la prefiere en otro lado.
+
+**Consecuencias técnicas del movimiento:**
+- `/dashboard/customers` y `/dashboard/campaigns` ahora llaman `useDashboardAnalytics()`. Es el
+  mismo hook y el mismo endpoint que ya usaba el panel: los Black salen de `topCustomers` y las
+  burbujas de `atRiskGroups`, no de la lista paginada ni del historial de campañas.
+- `GrowthChart` quedó a ancho completo en `/dashboard` (era media rejilla junto a las burbujas).
+- El resumen de clientes bajó de 20 a 15 filas (§14.2): `TOP_CUSTOMERS_LIMIT` en
+  `src/constants/rankings.ts`, consumido por `dashboard.service.ts` y `demo-analytics.ts` — los dos,
+  para que el modo demo no enseñe un panel que el cliente no va a tener. Ningún componente asumía 20.
+
+## Campañas predefinidas — la regla de la plantilla (§15.2)
+
+El dueño detectó dos campañas que se ofrecían sin poder enviar nada: *"hay campañas como invitar a
+restaurante los que piden domi o invitar a que pidan domi los que van a restaurante, que no tienen
+plantillas y no van a poder usarse, son básicamente de mentira"*. Los **filtros** de esos presets sí
+estaban implementados; lo que faltaba era la plantilla aprobada por Meta con ese mensaje.
+
+La regla implementada es genérica a propósito, porque la decisión de fondo (**15.b: ¿se eliminan los
+dos presets o se les crea plantilla?**) sigue abierta y esta regla sirve para las dos salidas:
+
+- Un preset que declara `templateSettingKey` se muestra **solo** si esa clave de `admin_settings`
+  apunta a un SID que existe y está **aprobado** (y no es de media — el camino de campañas no puede
+  enviar plantillas `twilio/media`).
+- Un preset **sin** `templateSettingKey` no depende de ninguna plantilla propia: es un atajo de
+  segmentación que funciona con cualquier plantilla aprobada que el operador elija abajo, así que
+  siempre se muestra.
+
+| Preset | `templateSettingKey` | Estado hoy |
+|--------|----------------------|------------|
+| `invite_restaurant` (filtro `source: 'delivery_only'`) | `campaign_domicilio_to_presencial_template_sid` | Oculto hasta que exista y se apruebe la plantilla |
+| `invite_delivery` (filtro `source: 'qr_only'`) | `campaign_presencial_to_domicilio_template_sid` | Oculto hasta que exista y se apruebe la plantilla |
+| `black_exclusive` | — | Visible |
+| `near_reward` | — | Visible |
+| `rescue_lost` | — | Visible |
+
+Los dos SIDs son los del catálogo estándar de §12 (`campaign_domicilio_to_presencial` y
+`campaign_presencial_to_domicilio`). Efecto: hoy los dos presets fantasma desaparecen solos y el día
+que se les cree y apruebe la plantilla **reaparecen sin tocar código**. Si al final se decide
+eliminarlos, se borran las dos entradas de `PRESETS` y la regla sigue sirviendo para el resto.
+
+La predicción vive en `isPresetSendable()` (`src/components/dashboard/ManualCampaigns.tsx`), función
+pura y fuera del JSX. Si ningún preset es enviable, la pantalla lo dice y deja los filtros manuales
+disponibles: no se queda en blanco.
 
 ## Notas de implementación
 

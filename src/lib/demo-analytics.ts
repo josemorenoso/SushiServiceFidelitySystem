@@ -1,4 +1,4 @@
-import { POWER_RANKS, RISK_LEVELS, getCustomerRank } from '@/constants/rankings'
+import { POWER_RANKS, RISK_LEVELS, TOP_CUSTOMERS_LIMIT, getCustomerRank } from '@/constants/rankings'
 import type {
   DashboardAnalytics,
   DemoCustomer,
@@ -133,7 +133,7 @@ export function computeDemoAnalytics(customers: DemoCustomer[]): DashboardAnalyt
   }))
 
   const sorted = [...customers].sort((a, b) => b.total_visits - a.total_visits)
-  const topCustomers: RankedCustomer[] = sorted.slice(0, 20).map((c, i) => {
+  const topCustomers: RankedCustomer[] = sorted.slice(0, TOP_CUSTOMERS_LIMIT).map((c, i) => {
     const rank = getCustomerRank(c.total_visits)
     return {
       id: `demo-top-${i}`,

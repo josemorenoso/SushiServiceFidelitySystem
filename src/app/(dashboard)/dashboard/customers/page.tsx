@@ -17,8 +17,18 @@ import {
 import { Search, ChevronLeft, ChevronRight, Users, MessageCircleOff, Download, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { CustomerDetailDialog } from '@/components/dashboard/CustomerDetailDialog'
+import { BlackTierSection } from '@/components/dashboard/BlackTierSection'
+import { useDashboardAnalytics } from '@/hooks/useDashboardAnalytics'
 import type { Customer } from '@/types/database.types'
 
+/**
+ * Apartado de Clientes.
+ *
+ * REQUERIMIENTOS_AGOSTO_2026.md §17.1 (contraparte de §14.1) — textual del dueño:
+ * *"la pantalla negra de clientes VIP tiene que quedar dentro del apartado de
+ * clientes"*. `BlackTierSection` vivía en `/dashboard` y se mudó aquí tal cual:
+ * mismos datos (`topCustomers` de analytics) y mismo comportamiento al hacer clic.
+ */
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [total, setTotal] = useState(0)
@@ -31,7 +41,35 @@ export default function CustomersPage() {
   const [sourceFilter, setSourceFilter] = useState('all')
   const [tierFilter, setTierFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [blackBenefits, setBlackBenefits] = useState<string[] | undefined>(undefined)
   const limit = 15
+
+  // Los clientes Black salen del mismo `topCustomers` que alimentaba la sección
+  // en el dashboard — no de la lista paginada de abajo, que va filtrada.
+  const { data: analytics, loading: analyticsLoading } = useDashboardAnalytics()
+
+  useEffect(() => {
+    fetch('/api/dashboard/settings')
+      .then((r) => r.json())
+      .then((s) => {
+        if (s.black_benefits) {
+          try { setBlackBenefits(JSON.parse(s.black_benefits)) } catch { /* ignore */ }
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  /** Abre la ficha completa desde la sección Black (allí solo hay el id). */
+  const handleBlackCustomerClick = useCallback(async (customerId: string) => {
+    try {
+      const res = await fetch(`/api/dashboard/customers/${customerId}`)
+      if (res.ok) {
+        const customer = await res.json()
+        setSelectedCustomer(customer)
+        setDetailOpen(true)
+      }
+    } catch { /* best effort */ }
+  }, [])
 
   const handleExportCSV = async () => {
     try {
@@ -193,6 +231,13 @@ export default function CustomersPage() {
           </label>
         </div>
       </div>
+
+      <BlackTierSection
+        customers={analytics?.topCustomers ?? []}
+        loading={analyticsLoading}
+        benefits={blackBenefits}
+        onCustomerClick={handleBlackCustomerClick}
+      />
 
       <form onSubmit={handleSearch} className="flex gap-2">
         <div className="relative flex-1 max-w-sm">

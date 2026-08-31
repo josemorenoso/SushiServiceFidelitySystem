@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -66,6 +66,17 @@ interface PresetCampaign {
   bg: string
   border: string
   filters: Partial<CampaignFilters>
+  /**
+   * Clave de `admin_settings` con el SID de la plantilla propia de este preset.
+   *
+   * Solo la declaran los presets cuyo mensaje NO existe en ninguna otra
+   * plantilla — los que sin ella no pueden enviar nada. Los que no la declaran
+   * son atajos de segmentación: sirven con cualquier plantilla aprobada que el
+   * operador elija abajo, así que siempre se muestran.
+   *
+   * Ver `isPresetSendable()` y REQUERIMIENTOS_AGOSTO_2026.md §15.2.
+   */
+  templateSettingKey?: string
 }
 
 const PRESETS: PresetCampaign[] = [
@@ -78,6 +89,8 @@ const PRESETS: PresetCampaign[] = [
     bg: 'bg-emerald-50',
     border: 'border-emerald-200',
     filters: { source: 'delivery_only', minVisits: '1' },
+    // Plantilla "Campaña — invitar a visitar el local" del catálogo estándar (§12).
+    templateSettingKey: 'campaign_domicilio_to_presencial_template_sid',
   },
   {
     id: 'invite_delivery',
@@ -88,6 +101,8 @@ const PRESETS: PresetCampaign[] = [
     bg: 'bg-blue-50',
     border: 'border-blue-200',
     filters: { source: 'qr_only', minVisits: '1' },
+    // Plantilla "Campaña — invitar a pedir a domicilio" del catálogo estándar (§12).
+    templateSettingKey: 'campaign_presencial_to_domicilio_template_sid',
   },
   {
     id: 'black_exclusive',
@@ -132,6 +147,40 @@ const emptyFilters: CampaignFilters = {
   source: 'all',
 }
 
+/**
+ * ¿Este preset puede enviar algo de verdad hoy?
+ *
+ * REQUERIMIENTOS_AGOSTO_2026.md §15.2 — el dueño detectó dos campañas que se
+ * ofrecían sin tener plantilla aprobada detrás: *"hay campañas como invitar a
+ * restaurante los que piden domi o invitar a que pidan domi los que van a
+ * restaurante, que no tienen plantillas y no van a poder usarse, son básicamente
+ * de mentira"*.
+ *
+ * La regla es genérica a propósito, porque la decisión de fondo (15.b: ¿se
+ * eliminan esos dos presets o se les crea plantilla?) sigue abierta y esta regla
+ * sirve para las dos salidas:
+ *
+ *   - un preset que declara `templateSettingKey` se muestra SOLO si esa clave de
+ *     `admin_settings` apunta a una plantilla que existe y está aprobada;
+ *   - un preset sin `templateSettingKey` no depende de ninguna plantilla propia
+ *     y se muestra siempre.
+ *
+ * Efecto hoy: los dos presets fantasma desaparecen solos. El día que se les cree
+ * y apruebe la plantilla, reaparecen sin tocar una línea de código.
+ *
+ * @param approvedSids SIDs de plantillas aprobadas y sin media (las únicas que
+ *                     el camino de campañas puede enviar).
+ */
+function isPresetSendable(
+  preset: PresetCampaign,
+  settings: Record<string, string>,
+  approvedSids: Set<string>
+): boolean {
+  if (!preset.templateSettingKey) return true
+  const sid = settings[preset.templateSettingKey]
+  return !!sid && approvedSids.has(sid)
+}
+
 export function ManualCampaigns() {
   const [filters, setFilters] = useState<CampaignFilters>(emptyFilters)
   const [matchCount, setMatchCount] = useState<number | null>(null)
@@ -140,6 +189,8 @@ export function ManualCampaigns() {
   const [templates, setTemplates] = useState<TwilioTemplate[]>([])
   const [selectedTemplate, setSelectedTemplate] = useState<TwilioTemplate | null>(null)
   const [loadingTemplates, setLoadingTemplates] = useState(false)
+  const [templatesLoaded, setTemplatesLoaded] = useState(false)
+  const [settings, setSettings] = useState<Record<string, string> | null>(null)
   const [confirmDialog, setConfirmDialog] = useState(false)
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
@@ -162,12 +213,42 @@ export function ManualCampaigns() {
       setTemplates([])
     } finally {
       setLoadingTemplates(false)
+      setTemplatesLoaded(true)
     }
   }, [])
 
   useEffect(() => {
     fetchTemplates()
   }, [fetchTemplates])
+
+  // `admin_settings` dice qué plantilla tiene asignada cada preset (§15.2).
+  useEffect(() => {
+    fetch('/api/dashboard/settings')
+      .then((res) => res.json())
+      .then((data) => setSettings(data && typeof data === 'object' ? data : {}))
+      .catch(() => setSettings({}))
+  }, [])
+
+  const approvedSids = useMemo(() => new Set(templates.map((t) => t.sid)), [templates])
+
+  /** Presets que hoy pueden enviar de verdad. El resto ni se dibuja (§15.2). */
+  const visiblePresets = useMemo(
+    () => (settings === null ? [] : PRESETS.filter((p) => isPresetSendable(p, settings, approvedSids))),
+    [settings, approvedSids]
+  )
+
+  // "Listo" es la PRIMERA carga, no cada sincronización: re-sincronizar no debe
+  // hacer desaparecer la rejilla de presets a mitad de uso.
+  const presetsReady = settings !== null && templatesLoaded
+
+  // Si el preset elegido deja de ser enviable (p. ej. tras "Sincronizar" porque
+  // Meta revocó la plantilla), se deselecciona para no enviar a ciegas.
+  useEffect(() => {
+    if (!presetsReady || !selectedPreset) return
+    if (!visiblePresets.some((p) => p.id === selectedPreset.id)) {
+      setSelectedPreset(null)
+    }
+  }, [presetsReady, selectedPreset, visiblePresets])
 
   const fetchCount = useCallback(async (f: CampaignFilters) => {
     setLoadingCount(true)
@@ -265,8 +346,26 @@ export function ManualCampaigns() {
 
   return (
     <div className="space-y-4">
+      {!presetsReady && (
+        <p className="text-xs text-muted-foreground">Cargando campañas predefinidas...</p>
+      )}
+
+      {presetsReady && visiblePresets.length === 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 flex items-start gap-2">
+          <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+          <div>
+            <p className="font-medium">No hay campañas predefinidas disponibles</p>
+            <p className="mt-1">
+              Cada campaña predefinida necesita su plantilla aprobada por Meta. Asígnalas en{' '}
+              <strong>Plantillas</strong> y volverán a aparecer aquí solas. Mientras tanto puedes
+              enviar con los filtros de abajo.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="grid gap-4 md:grid-cols-2">
-        {PRESETS.map((preset) => (
+        {visiblePresets.map((preset) => (
           <Card
             key={preset.id}
             className={`border cursor-pointer transition-all hover:shadow-md ${

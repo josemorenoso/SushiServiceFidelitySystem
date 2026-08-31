@@ -206,7 +206,7 @@ El sistema funciona como un **CRM automatizado con gamificación** que conecta t
 
 #### Power Ranking
 
-- Top 20 clientes con ranking estilo "anime" (los más fieles).
+- Top 15 clientes con ranking estilo "anime" (los más fieles).
 
 ### 3.6 Verificación Presencial con Mesero (Anti-fraude)
 

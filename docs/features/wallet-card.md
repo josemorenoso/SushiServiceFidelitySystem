@@ -63,6 +63,56 @@ Tarjeta visual pura para la ruta `/tarjeta`. Vista de solo lectura (sin QR de ch
 6. Lista compacta de tiers (alcanzados/pendientes)
 7. CTA → link al check-in QR
 
+### Tarjeta Black — negra y dorada (v2.14.0, `REQUERIMIENTOS_AGOSTO_2026.md` §17.2)
+
+Textual del dueño: *"al entrar a Black, la tarjeta del cliente en su celular cambia a negro y
+dorado"*, con distintivo claro. Es **solo visual**: no cambia ni un dato, ni un cálculo, ni un envío.
+
+**Cómo está partido** (Mandamiento II — la lógica y los estilos no comparten archivo):
+
+| Archivo | Responsabilidad |
+|---------|-----------------|
+| `src/lib/black-tier.ts` | **Quién es Black.** `isBlackMember(tiers, totalPoints)` + `findBlackTier(tiers)`. Nada de colores |
+| `src/constants/wallet-card-theme.ts` | **Los colores.** `brandWalletCardTheme(branding)` (el de siempre) y `BLACK_WALLET_CARD_THEME`. Nada de negocio |
+| `WalletCard.tsx` / `StampsGrid.tsx` | Solo layout: eligen tema y lo aplican |
+
+**La definición de Black que usa la tarjeta.** Hoy conviven dos nociones distintas en el producto:
+
+1. **Por visitas** — `POWER_RANKS` llama Black a quien tiene **10+ visitas**. Es lo que usan el
+   ranking del dashboard, `BlackTierSection` y el preset `black_exclusive` de campañas manuales.
+2. **Por puntos** — `reward_tiers.is_black` marca **uno** de los niveles de premios del tenant (la
+   API garantiza que solo haya uno); se alcanza cruzando su `point_threshold`.
+
+La tarjeta usa la **segunda**, y no por capricho: la tarjeta enseña la escalera de premios por
+puntos. Si se pintara de negro por visitas, un cliente con 10 visitas y pocos puntos vería una
+tarjeta Black encima de una lista que le dice que el nivel Black sigue bloqueado (🔒) — la tarjeta se
+contradiría sola. Sin nivel `is_black` configurado en el tenant, nadie es Black y la tarjeta se ve
+como siempre.
+
+⚠️ **Cuál de las dos manda a nivel de producto es la pregunta 17.b, que sigue abierta** (*"¿El umbral
+de Black se define por visitas, por puntos, o por cualquiera de los dos?"*). Por eso la regla vive en
+una sola función: cuando el dueño responda, se cambia `isBlackMember()` y nada más. El umbral de 10
+visitas de `ManualCampaigns.tsx` **no se tocó** — §17.4 (umbral configurable por tenant) sigue
+congelado a propósito.
+
+**Qué cambia visualmente** cuando `isBlackMember()` da `true`:
+
+- Fondo de página y de tarjeta en negros (`#000 → #141210` y `#0a0a0a → #131211`), borde y halo dorados.
+- Distintivo nuevo bajo la marca: pastilla dorada con corona y **«Miembro Black»**.
+- Nombre, puntos, barra de progreso y sellos en dorado (`#D4AF37` / `#F2D479`, oro viejo — el
+  `#FFD700` puro sobre negro se lee barato y vibra en AMOLED; mismo criterio que la regla «sin negro
+  puro» del sistema de diseño, aplicada al otro extremo).
+- Sellos llenos con gradiente dorado y ✓ casi negro (antes: blanco con ✓ rojo, que sobre negro choca).
+- En el nivel máximo el texto pasa de «🎉 ¡Nivel máximo alcanzado!» a «🖤 Estás en el nivel Black».
+
+**El aspecto por defecto no cambió.** La refactorización pasó los colores literales que ya tenía la
+tarjeta (`text-white/50` → `rgba(255,255,255,0.5)`, etc.) a `brandWalletCardTheme()`, valor por valor.
+
+**Alcance:** solo la tarjeta permanente de `/tarjeta` (`WalletCard`). La `CustomerCard` del check-in
+sigue con el gradiente de marca — §17.2 habla de *"la tarjeta del cliente en su celular"* y no pidió
+tocar el flujo de check-in. `src/app/(public)/tarjeta/page.tsx` **no necesitó cambios**: ya le pasaba
+`tiers` (con `is_black`) y `totalPoints` a `WalletCard`.
+
 ### CustomerCard (rediseñada, `src/components/features/check-in/CustomerCard.tsx`)
 
 Misma lógica de polling, nuevo look de tarjeta wallet. Ocupa pantalla completa (`fixed inset-0 z-50`).
@@ -152,8 +202,10 @@ Endpoint JSON alternativo (útil para integraciones futuras). Mismos datos que e
 
 | Archivo | Acción | Descripción |
 |---------|--------|-------------|
-| `src/components/features/wallet/StampsGrid.tsx` | ✅ Nuevo | Grid de sellos circulares |
-| `src/components/features/wallet/WalletCard.tsx` | ✅ Nuevo | Tarjeta wallet para /tarjeta (view mode) |
+| `src/lib/black-tier.ts` | ✅ Nuevo (v2.14.0) | Quién es Black: `isBlackMember()` / `findBlackTier()` |
+| `src/constants/wallet-card-theme.ts` | ✅ Nuevo (v2.14.0) | Paletas de la tarjeta: marca y Black |
+| `src/components/features/wallet/StampsGrid.tsx` | ✅ Nuevo · 🔄 v2.14.0 | Grid de sellos circulares; acepta `theme` opcional |
+| `src/components/features/wallet/WalletCard.tsx` | ✅ Nuevo · 🔄 v2.14.0 | Tarjeta wallet para /tarjeta (view mode); tema Black |
 | `src/components/features/wallet/index.ts` | ✅ Nuevo | Barrel exports |
 | `src/app/(public)/tarjeta/page.tsx` | ✅ Nuevo | Tarjeta digital permanente |
 | `src/app/api/public/customer-card/route.ts` | ✅ Nuevo | API JSON de tarjeta |

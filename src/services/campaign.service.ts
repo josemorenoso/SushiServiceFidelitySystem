@@ -1,6 +1,13 @@
 import { createClient } from '@supabase/supabase-js'
 import type { Customer, Campaign, CampaignMessage, RestaurantEvent } from '@/types/database.types'
-import { REACTIVATION_DAYS, FREQUENCY_CAP_DAYS, MONTHLY_CAP_SOURCES, MONTHLY_MARKETING_CAP } from '@/constants/rewards'
+import {
+  REACTIVATION_DAYS,
+  FREQUENCY_CAP_DAYS,
+  MONTHLY_CAP_SOURCES,
+  MONTHLY_MARKETING_CAP,
+  RECOVERY_ZONE_START_DAYS,
+  RECOVERY_ZONE_END_DAYS,
+} from '@/constants/rewards'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -291,6 +298,50 @@ export async function filterByMonthlyCap<T extends { id: string }>(
     else eligible.push(c)
   }
   return { eligible, excluded }
+}
+
+// ═══════════════════════════════════════════════════════════
+// GUARDAS DE DEMANDA REUTILIZABLES
+// ═══════════════════════════════════════════════════════════
+// Estas dos reglas estaban copiadas inline en tres sitios con implementaciones
+// distintas (JS en campaigns/manual, SQL `.or()` en campaigns/estimate, SQL en
+// findInactiveCustomers). Con la cola de goteo hacía falta una CUARTA copia —
+// el drenador tiene que re-evaluarlas en el momento del envío, no del encolado
+// (spec §3.4) — así que se extraen aquí para que no puedan divergir más.
+//
+// Ver docs/features/send-governance.md.
+
+/**
+ * Frequency cap: ¿pasó ya el mínimo de días desde la última campaña?
+ *
+ * Un cliente sin `last_campaign_at` nunca ha recibido nada: pasa.
+ */
+export function passesFrequencyCap(
+  lastCampaignAt: string | null | undefined,
+  days: number = FREQUENCY_CAP_DAYS,
+  now: Date = new Date()
+): boolean {
+  if (!lastCampaignAt) return true
+  const corte = new Date(now.getTime() - days * 24 * 60 * 60 * 1000).toISOString()
+  return lastCampaignAt < corte
+}
+
+/**
+ * Recovery Zone: los clientes entre RECOVERY_ZONE_START_DAYS y
+ * RECOVERY_ZONE_END_DAYS sin visitar están reservados para el cron de
+ * reactivación personalizado; las campañas manuales no los tocan.
+ *
+ * Un cliente sin `last_visit_at` NO está en la zona (mismo criterio que
+ * campaigns/manual, que lo deja pasar).
+ */
+export function isInRecoveryZone(
+  lastVisitAt: string | null | undefined,
+  now: Date = new Date()
+): boolean {
+  if (!lastVisitAt) return false
+  const cerca = new Date(now.getTime() - RECOVERY_ZONE_START_DAYS * 24 * 60 * 60 * 1000).toISOString()
+  const lejos = new Date(now.getTime() - RECOVERY_ZONE_END_DAYS * 24 * 60 * 60 * 1000).toISOString()
+  return lastVisitAt < cerca && lastVisitAt >= lejos
 }
 
 // ═══════════════════════════════════════════════════════════

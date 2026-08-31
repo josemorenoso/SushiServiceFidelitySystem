@@ -4,9 +4,15 @@ import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { requireTenantId, getTenantById } from '@/lib/tenant'
 import { sendTemplateMessage } from '@/services/whatsapp.service'
 import { getNextReward, getRewardTitle, getRewardById } from '@/services/reward.service'
-import { FREQUENCY_CAP_DAYS, RECOVERY_ZONE_START_DAYS, RECOVERY_ZONE_END_DAYS } from '@/constants/rewards'
-import { filterByMonthlyCap, getActiveBlackouts } from '@/services/campaign.service'
+import {
+  filterByMonthlyCap,
+  getActiveBlackouts,
+  passesFrequencyCap,
+  isInRecoveryZone,
+} from '@/services/campaign.service'
 import { canSendBulk } from '@/services/wallet.service'
+import { getLineBudget } from '@/services/line-budget.service'
+import { enqueueSendBatch, type EnqueueItem } from '@/services/send-queue.service'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -122,22 +128,15 @@ export async function POST(request: NextRequest) {
 
     const { data: customers } = await query
 
-    // Frequency cap: excluir clientes contactados en los últimos FREQUENCY_CAP_DAYS días
-    const capCutoff = new Date(Date.now() - FREQUENCY_CAP_DAYS * 24 * 60 * 60 * 1000).toISOString()
-    const afterFrequencyCap = (customers ?? []).filter(
-      (c) => !c.last_campaign_at || c.last_campaign_at < capCutoff
-    )
+    // Frequency cap: excluir clientes contactados en los últimos FREQUENCY_CAP_DAYS días.
+    // La regla vive en campaign.service.ts para que el drenador de la cola use
+    // EXACTAMENTE la misma al re-evaluarla en el momento del envío.
+    const afterFrequencyCap = (customers ?? []).filter((c) => passesFrequencyCap(c.last_campaign_at))
     const skipped = (customers?.length ?? 0) - afterFrequencyCap.length
 
     // Recovery Zone: excluir clientes entre RECOVERY_ZONE_START_DAYS y RECOVERY_ZONE_END_DAYS días
     // sin visitar — están reservados para el cron de reactivación personalizado.
-    const zoneCutoffNear = new Date(Date.now() - RECOVERY_ZONE_START_DAYS * 24 * 60 * 60 * 1000).toISOString()
-    const zoneCutoffFar = new Date(Date.now() - RECOVERY_ZONE_END_DAYS * 24 * 60 * 60 * 1000).toISOString()
-    const afterRecoveryZone = afterFrequencyCap.filter((c) => {
-      if (!c.last_visit_at) return true
-      const inRecoveryZone = c.last_visit_at < zoneCutoffNear && c.last_visit_at >= zoneCutoffFar
-      return !inRecoveryZone
-    })
+    const afterRecoveryZone = afterFrequencyCap.filter((c) => !isInRecoveryZone(c.last_visit_at))
     const skippedRecoveryZone = afterFrequencyCap.length - afterRecoveryZone.length
 
     // Pre-event blackout: hoy solo informativo — la exclusión real la hacen el
@@ -198,6 +197,44 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // ─── Partir la campaña: lo que cabe HOY y lo que va a la cola ───
+    // Spec §3.4. Antes del Bloque 2, los destinatarios que no cabían en el
+    // presupuesto de línea se intentaban igual y se perdían: el choke-point los
+    // marcaba `failed` con error_code='campaign_budget_exhausted'. Ahora se
+    // guardan y gotean en los días siguientes.
+    //
+    // Se pregunta el cupo ANTES de enviar nada, no se descubre agotándolo.
+    let cabenHoy = finalEligible
+    let aLaCola: typeof finalEligible = []
+    let presupuestoNota: string | null = null
+
+    try {
+      const linea = await getLineBudget(tenantId)
+      if (linea.lineStatus === 'frozen') {
+        // Línea congelada por calidad: no sale ninguna campaña. Todo a la cola,
+        // a esperar que un humano la reactive (no hay des-congelamiento
+        // automático — spec §3.5).
+        cabenHoy = []
+        aLaCola = finalEligible
+        presupuestoNota = 'La línea está congelada por calidad: la campaña queda entera en cola.'
+      } else if (linea.enforced && linea.campaignAvailable !== null) {
+        if (finalEligible.length > linea.campaignAvailable) {
+          cabenHoy = finalEligible.slice(0, linea.campaignAvailable)
+          aLaCola = finalEligible.slice(linea.campaignAvailable)
+          presupuestoNota = `Hoy caben ${cabenHoy.length}; los otros ${aLaCola.length} se envían solos en los próximos días.`
+        }
+      }
+      // `enforced: false` (tenants anteriores a 00037, sin límite conocido):
+      // se envía todo, como siempre. Imponerles un tope inventado les cortaría
+      // campañas que hoy salen sin problema.
+    } catch (err) {
+      // No se pudo leer el presupuesto. Se sigue con el comportamiento de
+      // antes del Bloque 2 (intentarlo todo): el choke-point vuelve a mirar el
+      // cupo por cada envío y falla cerrado si tampoco puede confirmarlo, así
+      // que no se puede pasar del límite por esta rama.
+      console.error('[ManualCampaign] No se pudo leer el presupuesto de línea:', err)
+    }
+
     // Send en paralelo en batches para evitar timeout + saturar Twilio
     const BATCH_SIZE = 10
     const now = new Date().toISOString()
@@ -205,9 +242,11 @@ export async function POST(request: NextRequest) {
     let failed = 0
     const messageRecords: { campaign_id: string; customer_id: string; status: string; tenant_id: string; twilio_sid: string | null; sent_at: string | null; error_message: string | null }[] = []
     const sentCustomerIds: string[] = []
+    /** Los que no salieron hoy y se mandan a la cola en vez de darlos por perdidos. */
+    const reintentar: { customer: (typeof finalEligible)[number]; error: string | null }[] = []
 
-    for (let i = 0; i < finalEligible.length; i += BATCH_SIZE) {
-      const batch = finalEligible.slice(i, i + BATCH_SIZE)
+    for (let i = 0; i < cabenHoy.length; i += BATCH_SIZE) {
+      const batch = cabenHoy.slice(i, i + BATCH_SIZE)
       const results = await Promise.all(
         batch.map(async (customer) => {
           try {
@@ -244,16 +283,19 @@ export async function POST(request: NextRequest) {
             error_message: null,
           })
         } else {
-          failed++
-          messageRecords.push({
-            campaign_id: campaign.id,
-            customer_id: customer.id,
-            status: 'failed',
-            tenant_id: tenantId,
-            twilio_sid: null,
-            sent_at: null,
-            error_message: error || 'Twilio no configurado o error de envío',
-          })
+          // NO se marca `failed` todavía: se manda a la cola para reintentarlo.
+          //
+          // `sendTemplateMessage()` devuelve `null` para todos sus modos de
+          // fallo, y uno de ellos es justamente que el cupo se agotó entre que
+          // se leyó el presupuesto y que salió este envío (una bienvenida o un
+          // check-in pueden habérselo comido). Marcarlos `failed` aquí perdía a
+          // esos clientes en silencio — exactamente lo que el Bloque 2 existe
+          // para evitar.
+          //
+          // El drenador los reintenta con backoff y se rinde a los 3 intentos,
+          // así que un número realmente malo termina igual en `failed`, solo
+          // que unas horas más tarde y dejando rastro en `send_queue`.
+          reintentar.push({ customer, error })
         }
       }
     }
@@ -266,15 +308,73 @@ export async function POST(request: NextRequest) {
         .in('id', sentCustomerIds)
     }
 
-    // Bulk insert message records
+    // ─── Encolar lo que no salió hoy ───
+    // Dos grupos: los que el presupuesto dejó fuera de entrada (`aLaCola`) y los
+    // que se intentaron y no salieron (`reintentar`). Se encola DESPUÉS de
+    // enviar, para que un fallo aquí no impida que salgan los de hoy.
+    const aEncolar = [
+      ...aLaCola.map((customer) => ({ customer, error: null as string | null })),
+      ...reintentar,
+    ]
+
+    let queued = 0
+    let queueError: string | null = null
+
+    if (aEncolar.length > 0) {
+      try {
+        const items: EnqueueItem[] = aEncolar.map(({ customer }) => {
+          const variables: Record<string, string> = {
+            '1': customer.name,
+            '2': String(customer.total_points ?? 0),
+          }
+          if (useReward3) {
+            variables['3'] = fixedRewardTitle ?? titleByVisits[customer.total_visits] ?? 'más beneficios'
+          }
+          return {
+            tenantId,
+            phone: customer.phone,
+            customerId: customer.id,
+            campaignId: campaign.id,
+            messageType: 'manual',
+            templateSid,
+            variables,
+          }
+        })
+        queued = (await enqueueSendBatch(items)).enqueued
+      } catch (err) {
+        // El encolado falló: estos clientes NO van a recibir nada y nadie los va
+        // a reintentar. Se registran como `failed` con el motivo real —
+        // perderlos en silencio mientras la respuesta promete "se envían solos"
+        // es el peor desenlace posible.
+        queueError = err instanceof Error ? err.message : 'Error desconocido al encolar'
+        console.error('[ManualCampaign] No se pudo encolar el resto:', err)
+        for (const { customer, error } of aEncolar) {
+          failed++
+          messageRecords.push({
+            campaign_id: campaign.id,
+            customer_id: customer.id,
+            status: 'failed',
+            tenant_id: tenantId,
+            twilio_sid: null,
+            sent_at: null,
+            error_message: error ?? `No se pudo encolar: ${queueError}`,
+          })
+        }
+      }
+    }
+
+    // Bulk insert message records — va DESPUÉS del encolado porque el catch de
+    // arriba puede añadir filas.
     if (messageRecords.length > 0) {
       await db.from('campaign_messages').insert(messageRecords)
     }
 
     // Update campaign status
+    // Una campaña con cola pendiente sigue `running`: marcarla `completed`
+    // mientras gotea le miente al operador (spec §3.4).
     await db
       .from('campaigns')
-      .update({ status: 'completed', total_sent: sent })
+      .update({ status: queued > 0 ? 'running' : 'completed', total_sent: sent })
       .eq('id', campaign.id)
 
     return NextResponse.json({
@@ -282,6 +382,10 @@ export async function POST(request: NextRequest) {
       campaignId: campaign.id,
       totalSent: sent,
       totalFailed: failed,
+      totalQueued: queued,
+      totalEligible: finalEligible.length,
+      budgetNote: presupuestoNota,
+      queueError,
       totalSkippedFrequencyCap: skipped,
       totalSkippedRecoveryZone: skippedRecoveryZone,
       totalSkippedMonthlyCap: skippedMonthlyCap,

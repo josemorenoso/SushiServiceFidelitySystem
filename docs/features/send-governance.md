@@ -166,29 +166,205 @@ Patrón de `00035`/`00036`: el rol `aios_constelarys` no gana acceso directo a n
 | `aios_line_health(p_slug)` | Lectura. Sin `p_slug` devuelve **todas** las líneas: calidad, estado, límite, consumo 24h, cupo disponible, profundidad de cola. Es el tablero de emergencia. |
 | `aios_set_line_status(p_slug, p_status, p_reason)` | Congela o reactiva una línea. **Exige motivo no vacío**, que queda en el historial. |
 
+---
+
+# La cola de goteo (Bloque 2)
+
+**Agregado:** v2.13.0 — 2026-08-30 · **Migración:** `00038_send_queue_drain.sql`
+
+## Qué cambia
+
+Antes del Bloque 2, una campaña de 380 destinatarios con presupuesto 180 enviaba 180 y marcaba los
+otros 200 como `failed` con `error_code = 'campaign_budget_exhausted'`. **Se perdían.**
+
+Ahora:
+
+```
+380 elegibles (ya filtrados por opt-out, cooldown, cap mensual)
+   ├─ presupuesto de campaña hoy: 180
+   ├─ 180 se envían ahora
+   └─ 200 entran en send_queue (status='queued', priority=3)
+          ├─ mañana el drenador toma los que quepan
+          └─ y así hasta vaciarla
+```
+
+La campaña queda en `status='running'` mientras gotee, y solo pasa a `completed` cuando su cola se
+vacía. Marcarla `completed` con 200 pendientes le mentiría al operador.
+
+## El drenador
+
+`POST /api/cron/queue-drain` — **lo dispara n8n cada 15 min** (workflow W4,
+`n8n/cron_queue-drain.json`), no Vercel: `vercel.json` tiene `"crons": []` a propósito desde
+2026-07-05 (ver `docs/04-deployment.md` §2).
+
+Orden de trabajo de cada invocación:
+
+1. **Vencer.** `expire_send_queue()` marca `expired` lo que pasó su `expires_at`. Va primero: no
+   tiene sentido gastar cupo en un cumpleaños de ayer.
+2. **Listar tenants** con cola pendiente (`send_queue_pending_tenants()`), ordenados por urgencia:
+   primero la prioridad más alta y, a igualdad, el de cola más corta — así un tenant con 5.000 items
+   no deja sin drenar a los demás.
+3. **Round-robin**: una tanda pequeña de cada tenant por vuelta, hasta agotar el presupuesto de
+   tiempo (~50 s) o la cola.
+4. Por tenant: leer el presupuesto de línea **en cada vuelta** (entre tanda y tanda pueden haber
+   salido bienvenidas que consumieron límite), reclamar `min(disponible, 10)` items, re-evaluar las
+   guardas, enviar, aplicar los efectos posteriores.
+5. **Podar** las tablas de retención.
+
+Devuelve `{ processed, sent, failed, skipped, expired, tenants, has_more, cursor }`.
+
+### El reclamo (claim) — por qué existe
+
+n8n dispara cada 15 min, pero una invocación lenta puede solaparse con la siguiente, y n8n reintenta
+ante un timeout de red. Sin protección, las dos corridas leen los mismos items `queued` y **el
+cliente recibe el mensaje dos veces**.
+
+`claim_send_queue()` lo resuelve con `FOR UPDATE SKIP LOCKED`: la segunda invocación **salta** las
+filas que la primera bloqueó, en vez de esperarlas. Las dos se reparten la cola.
+
+El estado de "reclamado" es un **arriendo** (`claimed_at`), no un estado nuevo en el CHECK de
+`status`. Un arriendo vencido (10 min) se vuelve a tomar solo, así que un drenador que muera a mitad
+no deja items clavados para siempre.
+
+### Encolar NO es un permiso permanente
+
+**Ésta es la regla que gobierna el drenador.** Entre que un cliente entra en la cola y que le toca su
+turno pueden pasar días. Puede haber hecho opt-out, haber recibido otra campaña, o haber llegado a su
+cap mensual. Por eso las guardas se re-evalúan **al enviar**:
+
+| Guarda | Qué pasa si ya no la cumple |
+|---|---|
+| Opt-out (`whatsapp_opt_out_at`) | `cancelled` |
+| El cliente ya no existe | `cancelled` |
+| Frequency cap (recibió otra campaña) | `cancelled` — salvo `birthday` y `reward_reminder`, exentos por diseño |
+| Cap mensual | `cancelled` |
+
+`cancelled` **no es un fallo**: no consume intentos ni vuelve a la cola. Un fallo de envío sí:
+vuelve con backoff (15 min → 1 h → 4 h) y se rinde como `failed` al tercer intento.
+
+> **Limitación honesta:** `sendTemplateMessage()` devuelve `null` para *todos* sus modos de fallo
+> (sin credenciales, opt-out, cupo agotado, rechazo del proveedor). El drenador no puede
+> distinguirlos, así que trata cualquier `null` como reintentable. Es conservador a propósito:
+> reintentar tres veces cuesta milisegundos; cancelar por error pierde el mensaje para siempre.
+
+### Anti-duplicado
+
+El índice de `00037` era `(tenant_id, phone, campaign_id) WHERE status='queued'`. En Postgres **dos
+NULL nunca colisionan** en un índice único, así que los items encolados por un cron (sin
+`campaign_id`) no tenían protección: dos corridas del mismo cron encolaban el mismo teléfono dos
+veces. `00038` lo reemplaza por
+`(tenant_id, phone, COALESCE(campaign_id, centinela), message_type) WHERE status='queued'`.
+
+Se añade `message_type` para no impedir lo legítimo: un cliente sí puede tener a la vez en cola su
+cumpleaños y una campaña manual.
+
+> **Por qué el encolado pasa por una función SQL y no por `.upsert()`:** el `onConflict` de
+> supabase-js solo admite una lista de columnas, así que nunca podría apuntar a un índice **parcial
+> sobre una expresión**. PostgREST caería en la clave primaria y el anti-duplicado no se aplicaría
+> jamás, en silencio. `enqueue_send_queue()` usa `ON CONFLICT DO NOTHING` **sin destino**, que
+> absorbe la violación de cualquier índice único de la tabla.
+
+## Qué encola hoy, y qué no
+
+| Emisor | ¿Encola? | Por qué |
+|---|---|---|
+| Campaña manual | ✅ Sí | Es el escenario del spec §3.4. |
+| `birthday` | ❌ Todavía no | Ver la pregunta abierta al final. |
+| `reactivation` | ❌ Todavía no | Variables volátiles (fecha límite del premio) y un efecto posterior: `grantReward()`. Si el envío se difiere, **¿cuándo se otorga el premio?** No está decidido. |
+| `reward_reminder` | ❌ Todavía no | `days_left` caduca: encolar hoy y enviar en dos días manda un número mentiroso. Y `markReminderSent()` tendría que moverse al drenaje. |
+| `calendar_event` | ❌ Todavía no | La lógica de media provider-aware vive dentro de `executeAutoEvent()`. |
+| Golden Bullet (`import`) | ❌ No | Es el Bloque 5; depende de los Bloques 3 y 4. Además sigue registrando `messageType: 'manual'` en vez de `'import'`. |
+
+**El drenador ya sabe enviar cualquiera de esos tipos** — lo que falta es decidir qué variables se
+congelan y cuáles se recalculan al drenar, y dónde van los efectos posteriores.
+
+## Endpoints
+
+| Método | Ruta | Auth |
+|---|---|---|
+| `POST`/`GET` | `/api/cron/queue-drain` | `CRON_SECRET` |
+| `GET` | `/api/dashboard/send-queue` | Admin del tenant |
+| `DELETE` | `/api/dashboard/send-queue/[id]` | Admin del tenant |
+
+`GET /api/dashboard/line-budget` ahora incluye además `queueDepth`.
+
+El `DELETE` **no borra la fila**: la pasa a `cancelled`. La cola es el registro de qué se decidió
+enviar y qué pasó con cada intento; borrar filas dejaría al operador sin poder explicar por qué una
+campaña envió 180 de 380. Cancelar además libera el hueco del índice único (que solo cubre
+`queued`), así que ese teléfono se puede volver a encolar.
+
+## La billetera y los tenants Zernio — la otra mitad de D-2
+
+`00037` apagó el **cobro** a tenants Zernio (el trigger `debit_wallet_on_message_sent()` los salta),
+pero `canSendBulk()` seguía **bloqueando** sus campañas por saldo insuficiente. Como su saldo se
+queda en 0 para siempre —no entran recargas ni salen débitos—, **toda campaña masiva de todo tenant
+Zernio se habría rechazado con 409 «Saldo insuficiente»**.
+
+`canSendBulk()` ahora exime a los tenants `messaging_provider='zernio'`. Es la otra mitad de la misma
+decisión, no una nueva. No los deja sin freno: el presupuesto de línea lo reemplaza, y frena contra
+el límite real de Meta en vez de contra la plata.
+
+## Blindaje de permisos de 00037 (corregido antes de aplicar)
+
+La versión original de `00037` revocaba `PUBLIC` solo en las dos funciones del AIOS y **se olvidaba
+de las cuatro del núcleo**. Como Postgres concede `EXECUTE` a `PUBLIC` por defecto y las cuatro son
+`SECURITY DEFINER`, quedaban invocables por `anon` —el rol de la `NEXT_PUBLIC_SUPABASE_ANON_KEY`, que
+viaja en el bundle del navegador— vía RPC de PostgREST, ejecutándose con los privilegios del dueño.
+
+Lo grave no era la lectura: **`prune_send_governance()` BORRA `send_reservations`, y borrar reservas
+reinicia la ventana rodante de 24 h.** El freno que toda esta migración construye se podía desactivar
+desde fuera con una clave pública. Se verificó con el harness de pruebas: `SET ROLE anon` la
+ejecutaba y devolvía `{reservations_deleted: 1, snapshots_deleted: 1}`.
+
+Corregido en el bloque 13 de `00037` (la migración **no estaba aplicada** todavía) y fijado con
+`tests/db/permisos.test.ts`.
+
 ## Archivos
 
-- `supabase/migrations/00037_send_governance.sql`
+- `supabase/migrations/00037_send_governance.sql`, `00038_send_queue_drain.sql`
 - `src/constants/messaging.ts`
-- `src/services/line-budget.service.ts`
+- `src/services/line-budget.service.ts`, `src/services/send-queue.service.ts`
 - `src/services/whatsapp.service.ts` (guarda en ambas ramas + release en fallo)
-- `src/app/api/dashboard/line-budget/route.ts`
+- `src/services/campaign.service.ts` (`passesFrequencyCap`, `isInRecoveryZone`)
+- `src/services/wallet.service.ts` (exención Zernio en `canSendBulk`)
+- `src/app/api/cron/queue-drain/route.ts`
+- `src/app/api/dashboard/line-budget/route.ts`, `send-queue/route.ts`, `send-queue/[id]/route.ts`
+- `src/app/api/dashboard/campaigns/manual/route.ts` (split enviar-hoy / encolar)
+- `n8n/cron_queue-drain.json` (W4)
+- `tests/` — ver `docs/features/testing.md`
 
 ## Pendiente (bloques siguientes del spec)
 
-Esta entrega es el **Bloque 1** (presupuesto) más el **Bloque 8** (retiro de billetera Zernio). La
-migración `00037` ya crea las tablas de los bloques siguientes, pero **el código que las usa todavía
-no existe**:
-
-- **Bloque 2 — cola de goteo.** `send_queue` existe; falta `/api/cron/queue-drain`, el workflow W4 de
-  n8n y el encolado desde campañas y crons. **Hoy, una campaña que excede el presupuesto simplemente
-  falla el resto de los envíos en vez de repartirlos en días.**
 - **Bloque 3 — salud y frenos.** `line_health_snapshots` y `tenants.quality_rating` existen y
   `line_budget()` ya respeta `throttled`/`frozen`, pero **nada los escribe todavía**: falta
   `/api/cron/line-health` y el workflow W5.
+
+  > ⚠️ **El estado de las plantillas ya tiene dueño — no lo dupliques.** La v2.13.0 (§12, plantillas)
+  > implementó el detector de aprobación como el webhook `whatsapp.template.status_updated`, y toda la
+  > lógica de promoción vive detrás de **una sola función**:
+  > `applyProviderTemplateStatus()` en `src/services/template.service.ts`.
+  > Cuando `/api/cron/line-health` lea `GET /v1/whatsapp/templates` para llenar `paused_templates`,
+  > debe **llamar a esa función** con cada estado que reciba, no escribir su propia promoción: es el
+  > único código autorizado a mover `admin_settings.*_template_sid`.
+  > `refreshTemplateStatusFromProvider()` ya deja armado ese camino para una plantilla suelta.
+  > Ver `docs/features/whatsapp-templates.md`. **D-4 ya está resuelta:** Zernio expone
+  `quality_rating` y `messaging_limit_tier` por `GET /v1/whatsapp/number-info`, pero **no** emite
+  webhook de calidad — el poll es la única fuente. Ver §10 del spec.
 - **Bloque 4 — consentimiento.** `consent_events` existe; falta escribir en él desde check-in y
   webhooks, y el backfill.
 - **Bloque 5 — régimen de Golden Bullet** (§3.4.1 del spec).
 
-El scheduler de los bloques 2 y 3 son **workflows de n8n**, no crons de Vercel: `vercel.json` tiene
-`"crons": []` a propósito (ver `docs/04-deployment.md` §5).
+### Pregunta abierta que este bloque deja sobre la mesa
+
+**¿Cómo se difieren los mensajes con datos que caducan y con efectos posteriores?** Afecta a
+`reactivation`, `reward_reminder` y `calendar_event`. Concretamente:
+
+1. ¿Qué variables se congelan al encolar y cuáles se recalculan al drenar? (`days_left` y las fechas
+   límite tendrían que recalcularse siempre.)
+2. En la reactivación agresiva, `grantReward()` corre hoy justo después del envío. Si el envío se
+   difiere tres días, **¿el premio se otorga al encolar (y su ventana empieza a correr sin que el
+   cliente lo sepa) o al enviar?**
+3. ¿Un `reward_reminder` que no cabe hoy se encola con `expires_at` = fin de la ventana del premio, o
+   simplemente no se manda?
+
+No se asumió ninguna respuesta (Mandamiento I).

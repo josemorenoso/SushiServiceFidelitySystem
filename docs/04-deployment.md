@@ -506,6 +506,39 @@ Fire-and-forget — si falla, el check-in/delivery NO se rompe (timeout 10s, log
 
 ---
 
+### W4 · queue-drain (activo — v2.13.0)
+
+**Propósito:** drenar la cola de goteo (`send_queue`). Desde el Bloque 2, una campaña que no cabe en
+el presupuesto de línea del día no pierde a los destinatarios sobrantes: los encola, y este workflow
+los va enviando en los días siguientes. Tampoco está en `vercel.json` — una cadencia `*/15` en Vercel
+exigiría plan Pro, y `"crons": []` es la decisión vigente desde 2026-07-05 (ver §2).
+
+**Nodo 1 — Schedule Trigger:**
+- Trigger Interval: `Custom (Cron)` → `*/15 * * * *`
+- A esta cadencia la zona horaria **no importa** (a diferencia de los crons diarios, que llevan la
+  conversión UTC→Colombia dentro de la expresión).
+
+**Nodo 2 — HTTP Request:**
+- Method: `POST`
+- URL: `https://<dominio-del-cliente>/api/cron/queue-drain`
+- Authentication: *Header Auth* → credencial `RestaurantQR CRON_SECRET`
+- Timeout: **70000 ms**. El drenador se auto-limita a ~50 s por invocación (`TIME_BUDGET_MS`) y
+  devuelve `has_more`; el margen extra evita que n8n corte una corrida que sí iba a terminar.
+  **No bajar de 60 s.**
+
+**JSON del workflow para importar:** `n8n/cron_queue-drain.json`.
+
+**Es seguro que se solape.** `claim_send_queue()` usa `FOR UPDATE SKIP LOCKED`, así que dos corridas
+simultáneas se reparten la cola en vez de enviar lo mismo dos veces. Un reintento de n8n tras un
+timeout de red tampoco duplica nada.
+
+**Verificar que funciona:** tras activar, "Execute Workflow". Respuesta esperada:
+`{"ok":true,"processed":N,"sent":N,"failed":0,"skipped":0,"expired":0,"tenants":N,"has_more":false,"cursor":null}`.
+Si llega `{"error":"No autorizado"}` → el `CRON_SECRET` no coincide entre n8n y Vercel.
+
+> **Requiere la migración `00038_send_queue_drain.sql` aplicada.** Sin ella el endpoint responde 500
+> (`claim_send_queue` no existe). Aplicar primero `00037` y luego `00038` en el SQL Editor.
+
 ### Crons de birthday/reactivation vía n8n
 
 > **Mecanismo oficial desde 2026-07-05** (antes corría en paralelo con Vercel nativo,

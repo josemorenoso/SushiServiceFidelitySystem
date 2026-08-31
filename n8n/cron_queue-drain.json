@@ -1,0 +1,64 @@
+{
+  "name": "Cron Queue Drain",
+  "nodes": [
+    {
+      "id": "cron_trigger",
+      "name": "Cada 15 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 300],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/15 * * * *"
+            }
+          ]
+        }
+      },
+      "notes": "Cada 15 min es indiferente a la zona horaria (a diferencia de los crons diarios, que llevan la conversión UTC→Colombia dentro de la expresión). El drenador es idempotente: si una corrida no alcanza a vaciar la cola, la siguiente sigue donde quedó."
+    },
+    {
+      "id": "call_queue_drain",
+      "name": "Ejecutar Cron Queue Drain",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://clubsushiservice.constelarys.com/api/cron/queue-drain",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 70000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": { "name": "RestaurantQR CRON_SECRET" }
+      },
+      "notes": "Timeout 70 s: el drenador se auto-limita a ~50 s por invocación (TIME_BUDGET_MS) y devuelve has_more; el margen extra evita que n8n corte una corrida que sí iba a terminar. NO bajar de 60 s. El endpoint es seguro ante solapamiento: claim_send_queue() usa FOR UPDATE SKIP LOCKED, así que dos corridas simultáneas se reparten la cola en vez de enviar lo mismo dos veces."
+    },
+    {
+      "id": "log_result",
+      "name": "Log Resultado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 300],
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconsole.log(`[Cron QueueDrain] Enviados: ${data.sent || 0}, Fallidos: ${data.failed || 0}, Omitidos: ${data.skipped || 0}, Vencidos: ${data.expired || 0}, Tenants: ${data.tenants || 0}, Quedan: ${data.has_more ? 'SI' : 'no'}`);\nreturn [$input.first()];"
+      }
+    }
+  ],
+  "connections": {
+    "Cada 15 min": {
+      "main": [[{ "node": "Ejecutar Cron Queue Drain", "type": "main", "index": 0 }]]
+    },
+    "Ejecutar Cron Queue Drain": {
+      "main": [[{ "node": "Log Resultado", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

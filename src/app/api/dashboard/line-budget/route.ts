@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getTenantIdFromJwt } from '@/lib/tenant'
 import { getLineBudget } from '@/services/line-budget.service'
+import { getQueueDepth } from '@/services/send-queue.service'
 
 /**
  * GET /api/dashboard/line-budget — cuánto puede emitir HOY la línea del tenant.
@@ -36,8 +37,13 @@ export async function GET() {
   }
 
   try {
-    const budget = await getLineBudget(tenantId)
-    return NextResponse.json({ available: true, ...budget })
+    // `queueDepth` lo pide el spec §5 en este payload. Va aparte de
+    // `line_budget()` a propósito: esa función SQL ya está commiteada y el AIOS
+    // la consume, así que se le añade el dato en la ruta en vez de cambiarle el
+    // contrato. Falla blando — un error contando la cola no debe tumbar la
+    // tarjeta de presupuesto, que es el dato importante.
+    const [budget, depth] = await Promise.all([getLineBudget(tenantId), getQueueDepth(tenantId)])
+    return NextResponse.json({ available: true, ...budget, queueDepth: depth })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.error('[line-budget] No se pudo calcular el presupuesto:', message)

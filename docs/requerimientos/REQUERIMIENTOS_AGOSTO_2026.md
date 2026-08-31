@@ -727,7 +727,7 @@ twilio déjalos así, ni los toques"*. Sushi Service, Don Alirio, Frangal y Demo
 plantillas actuales tal cual. El catálogo estándar aplica a los tenants que se den de alta vía Zernio
 de aquí en adelante.
 
-### ⚠️ Pregunta 1 — sigue abierta (estaba mal formulada)
+### ✅ Pregunta 1 — RESUELTA (2026-08-30)
 
 La pregunta original no se entendió, y con razón: no era sobre tenants viejos vs. nuevos. Es sobre
 **el hueco que abre una edición dentro de un mismo tenant**.
@@ -741,11 +741,26 @@ nueva**, porque Meta no deja editar una plantilla aprobada in-place. Entonces:
 Con "borrar y crear", la vieja ya no existe y la nueva no está aprobada → **ese cliente no recibe
 nada**.
 
-**Propuesta que disuelve el problema (pendiente de confirmación del dueño):** no borrar la vieja hasta
-que la nueva quede aprobada. El sistema apunta a la vieja mientras tanto, y cuando Meta aprueba la
-nueva, cambia el puntero y recién ahí borra la vieja. El dueño nunca ve el hueco — que es exactamente
-lo que pide el punto 4 (*"debe sentirse como una edición simple, nunca como 'estoy creando algo
-nuevo'"*). Requiere que `admin_settings` pueda guardar la plantilla vigente y la pendiente a la vez.
+**DECISIÓN DEL DUEÑO:** *"que se cree primero la nueva y una vez quede aprobada se cambie y
+automáticamente se modifique, pero luego de aprobarla, para nunca arriesgarnos a perder un mensaje"*.
+
+O sea: **la vieja NO se borra hasta que Meta apruebe la nueva.** El flujo real, por debajo:
+
+1. El dueño edita y guarda → se **crea** la plantilla nueva y se somete a Meta. La vieja sigue vigente.
+2. Mientras Meta revisa (24–72h), **todos los envíos siguen usando la vieja**. Cero huecos.
+3. Cuando Meta aprueba → el puntero cambia **automáticamente** a la nueva, y recién ahí se borra la
+   vieja.
+4. Si Meta **rechaza** → la vieja sigue vigente y al dueño se le avisa. El sistema nunca queda sin
+   plantilla utilizable.
+
+**Nunca se pierde un mensaje.** Y el dueño no ve nada de esto — que es lo que pide el punto 4
+(*"debe sentirse como una edición simple, nunca como 'estoy creando algo nuevo'"*).
+
+**Implica en el modelo de datos:** `admin_settings` tiene que poder guardar la plantilla **vigente** y
+la **pendiente** a la vez (hoy solo guarda una: `*_template_sid`), más el estado de la pendiente. Y
+hace falta algo que detecte la aprobación para disparar el cambio de puntero — webhook del proveedor
+si existe, o poll. Es el mismo mecanismo que el Bloque 3 de la gobernanza de envío necesita para leer
+el estado de las plantillas: **conviéne construirlos juntos.**
 
 ### Relación con lo ya documentado
 
@@ -1075,11 +1090,9 @@ priorizar distinto.
    commiteó — ver CHANGELOG v2.8.2/v2.8.3/v2.9.1).
 2. ✅ Acceso a la cuenta Zernio obtenido y las 6 preguntas técnicas de §1 respondidas — ver la
    investigación completa y el código escrito dentro de §1.
-3. **§12 (Plantillas): 5 de las 6 preguntas urgentes YA ESTÁN RESPONDIDAS** (2026-08-30, ver el bloque
-   "RESPUESTAS DEL DUEÑO" dentro de §12). Queda abierta solo la **pregunta 1** — qué se envía durante
-   las 24–72h que Meta tarda en aprobar una plantilla recién editada — con una propuesta de solución
-   ya escrita ahí (no borrar la vieja hasta que la nueva se apruebe). **Confirmar esa única pregunta y
-   §12 queda desbloqueado para codear.**
+3. ✅ **§12 (Plantillas): las 6 preguntas urgentes están RESPONDIDAS** (2026-08-30, ver el bloque
+   "RESPUESTAS DEL DUEÑO" dentro de §12). **§12 está desbloqueado para codear.** Sigue siendo la
+   PRIMERA PRIORIDAD de producto.
 4. **§13 (Campañas) no tiene alcance definido todavía** — preguntarle al dueño antes de investigar o
    codear.
 5. Para cada una de las 7 mejoras §3–§9, las preguntas listadas en su sección son decisiones del

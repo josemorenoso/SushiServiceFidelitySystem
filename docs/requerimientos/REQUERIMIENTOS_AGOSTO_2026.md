@@ -692,6 +692,61 @@ resuelve esto.
    con el catálogo estándar) **o solo a los tenants que se den de alta de aquí en adelante** (vía
    Zernio)?
 
+### ✅ RESPUESTAS DEL DUEÑO (2026-08-30) — 5 de 6 cerradas
+
+Las respuestas de abajo son **decisiones tomadas**. No volver a preguntarlas ni asumir otra cosa.
+
+**2 · Un solo estilo por tenant.** Textual: *"no puedes enviar un mensaje con tono urbano y uno cálido,
+no tiene el más mínimo sentido, aquí tenemos que definir realmente un estilo, no podemos tirarnos una
+cagada total"*. Las 13 plantillas del tenant van **todas** con el mismo estilo. No se mezcla.
+
+**3 · El dueño del restaurante puede editar sus plantillas.** Textual: *"el dueño puede, si se las
+llegan a bloquear va a ser su culpa, ahí se lo especificamos"*. ⇒ Requisito de producto derivado: el
+apartado debe **mostrar esa advertencia de responsabilidad** antes de guardar una edición, y dejar
+constancia de quién editó y cuándo. Sin ese registro, "es su culpa" no se puede sostener después.
+
+**4 · El estilo se guarda como SUGERENCIA, no como candado.** Textual: *"que ese estilo se guarde como
+sugerencia"*. Significa:
+- `admin_settings.template_style` es el **default** con el que nace cada plantilla nueva del catálogo.
+- El dueño puede cambiarlo cuando quiera, y al cambiarlo se le ofrece **re-aplicarlo a todo el
+  catálogo** (respondiendo a su pregunta *"¿qué sucede si el dueño quiere cambiar todo?"*: sí, se puede
+  cambiar todo, pero es una acción explícita, no automática).
+- Re-aplicar un estilo = **13 aprobaciones nuevas de Meta**. La pantalla tiene que decirlo antes de
+  confirmar, no después.
+
+**5 · Banco de textos fijo ahora; LLM después.** Textual: *"banco fijo, llm luego"*. Los textos de
+*elegante* y *urbano* se escriben una vez y quedan fijos. El prompt P4 de
+`PROMPTS_SESIONES_BARATAS.md` queda para una fase posterior.
+> **Alcance del banco:** el estilo **NO varía por `business_type`.** Lo específico del negocio va en
+> variables (`{{1}}` = nombre del local, etc.), no en el texto aprobado. Así el banco es de
+> **13 plantillas × 2 estilos = 26 textos**, no 78 (13 × 2 × 3 tipos de negocio). Cada texto es una
+> aprobación de Meta aparte, así que la diferencia entre 26 y 78 es real en tiempo y en riesgo.
+
+**6 · Solo tenants nuevos. Los 4 de Twilio no se tocan.** Textual: *"los 4 tenants que están con
+twilio déjalos así, ni los toques"*. Sushi Service, Don Alirio, Frangal y Demo conservan sus
+plantillas actuales tal cual. El catálogo estándar aplica a los tenants que se den de alta vía Zernio
+de aquí en adelante.
+
+### ⚠️ Pregunta 1 — sigue abierta (estaba mal formulada)
+
+La pregunta original no se entendió, y con razón: no era sobre tenants viejos vs. nuevos. Es sobre
+**el hueco que abre una edición dentro de un mismo tenant**.
+
+El punto 4 de "Qué se pide" (arriba) dice que **editar = borrar la plantilla anterior y crear una
+nueva**, porque Meta no deja editar una plantilla aprobada in-place. Entonces:
+
+> Don Alirio edita su plantilla de bienvenida el lunes. La nueva entra en revisión de Meta
+> (24–72h). El martes un cliente escanea el QR. **¿Qué se le envía?**
+
+Con "borrar y crear", la vieja ya no existe y la nueva no está aprobada → **ese cliente no recibe
+nada**.
+
+**Propuesta que disuelve el problema (pendiente de confirmación del dueño):** no borrar la vieja hasta
+que la nueva quede aprobada. El sistema apunta a la vieja mientras tanto, y cuando Meta aprueba la
+nueva, cambia el puntero y recién ahí borra la vieja. El dueño nunca ve el hueco — que es exactamente
+lo que pide el punto 4 (*"debe sentirse como una edición simple, nunca como 'estoy creando algo
+nuevo'"*). Requiere que `admin_settings` pueda guardar la plantilla vigente y la pendiente a la vez.
+
 ### Relación con lo ya documentado
 
 Este pedido recorta, con prioridad máxima, lo que ya estaba planteado en **§6** (el wizard de
@@ -1020,8 +1075,11 @@ priorizar distinto.
    commiteó — ver CHANGELOG v2.8.2/v2.8.3/v2.9.1).
 2. ✅ Acceso a la cuenta Zernio obtenido y las 6 preguntas técnicas de §1 respondidas — ver la
    investigación completa y el código escrito dentro de §1.
-3. **§12 (Plantillas) tiene preguntas URGENTES sin responder — no empezar a codear ese frente hasta
-   tener las respuestas del dueño** (ver la lista numerada en §12).
+3. **§12 (Plantillas): 5 de las 6 preguntas urgentes YA ESTÁN RESPONDIDAS** (2026-08-30, ver el bloque
+   "RESPUESTAS DEL DUEÑO" dentro de §12). Queda abierta solo la **pregunta 1** — qué se envía durante
+   las 24–72h que Meta tarda en aprobar una plantilla recién editada — con una propuesta de solución
+   ya escrita ahí (no borrar la vieja hasta que la nueva se apruebe). **Confirmar esa única pregunta y
+   §12 queda desbloqueado para codear.**
 4. **§13 (Campañas) no tiene alcance definido todavía** — preguntarle al dueño antes de investigar o
    codear.
 5. Para cada una de las 7 mejoras §3–§9, las preguntas listadas en su sección son decisiones del

@@ -298,6 +298,16 @@ que causó el rojo se reanuda y termina de hundirlo.
 
 ### 3.6 Gobernanza de frecuencia: rediseño de "normal vs agresiva"
 
+> ⚠️ **SUPERADA (2026-08-30, mismo día).** El dueño pidió después algo más ambicioso que una matriz de
+> cooldown: un **pipeline del recorrido del cliente** que se reinicia con cada visita o pedido, más una
+> regla de fatiga (6 comunicaciones sin volver → fuera de la lista hasta que vuelva a escanear). Ver
+> `docs/requerimientos/REQUERIMIENTOS_AGOSTO_2026.md` §16. La matriz de abajo es un caso particular y
+> más pobre de eso, y **necesita spec propio antes de implementarse**.
+>
+> Esto **no bloquea los Bloques 1–4**: aquellos gobiernan la *oferta* (cuántos mensajes puede emitir la
+> línea) y esto gobierna la *demanda* (a quién y cuándo). Ejes independientes. Lo que cambia es el
+> **Bloque 7**, que pasa de "frecuencia configurable" a "pipeline del recorrido del cliente".
+
 Petición explícita del dueño. Hoy la distancia es una constante global única (`FREQUENCY_CAP_DAYS = 7`)
 que aplica igual a todas las campañas. Se reemplaza por una **matriz de cooldown por clase**, en
 `admin_settings.campaign_cooldown_days` (JSON), con estos defaults — que preservan el comportamiento

@@ -708,9 +708,15 @@ El dueño pidió modificar el apartado de Campañas
 `docs/features/campaigns.md`), en segundo lugar de prioridad: inmediatamente después de §12
 (Plantillas) y antes de §3–§9.
 
-**Sin detalles todavía.** El dueño no especificó qué cambios necesita — queda pendiente que los
-describa antes de que cualquier IA empiece a investigar o codear este frente (Mandamiento I: ante
-duda, preguntar — no asumir alcance).
+> **ACTUALIZACIÓN 2026-08-30 — esta sección ya tiene dirección: ver §15 y §16.** El dueño
+> describió lo que falta: usabilidad ("que entiendan estúpidamente fácil cómo se usa"), eliminar o
+> completar las dos campañas fantasma, mover las burbujas del dashboard aquí, y sobre todo el
+> **pipeline del recorrido del cliente** (§16), que es el cambio de fondo. Las preguntas de abajo
+> quedan parcialmente respondidas; las que siguen abiertas están en §15 y §16.
+
+**Sin detalles todavía** (al 2026-08-29). El dueño no especificó qué cambios necesita — queda pendiente
+que los describa antes de que cualquier IA empiece a investigar o codear este frente (Mandamiento I:
+ante duda, preguntar — no asumir alcance).
 
 **Preguntas:**
 - ¿Qué de la pantalla o el flujo actual de Campañas no funciona o no alcanza?
@@ -721,7 +727,285 @@ duda, preguntar — no asumir alcance).
 
 ---
 
+## 14. Dashboard — limpieza (pedido 2026-08-30)
+
+**Toca la base de envío:** NO. Es UI pura, no retrasa nada.
+
+1. **Eliminar la sección de clientes Black del dashboard principal.** No se borra el componente: se
+   **mueve** al apartado de Clientes (ver §17). Hoy `BlackTierSection` se renderiza en
+   `src/app/(dashboard)/dashboard/page.tsx:77`.
+2. **Reducir el resumen de clientes a 15.** Hoy son 20:
+   `src/services/dashboard.service.ts:270` → `customers.slice(0, 20)`. Cambia a `slice(0, 15)`.
+
+**Sin preguntas abiertas.** Ambos son cambios de una línea.
+
+---
+
+## 15. Campañas — usabilidad y campañas fantasma (pedido 2026-08-30)
+
+**Toca la base de envío:** PARCIALMENTE (el punto 2 define si nacen tipos de mensaje nuevos).
+
+**Textual del dueño:** *"hacer que entiendan estúpidamente fácil cómo se usa"*.
+
+1. **Rediseño de usabilidad del apartado de Campañas.** Este es el §13 que quedó "sin alcance
+   definido" — ahora tiene dirección: la pantalla debe explicarse sola. Sigue **sin detalle
+   suficiente** para codear: falta saber qué específicamente confunde hoy.
+
+2. **Campañas fantasma.** Textual: *"hay campañas como invitar a restaurante los que piden domi o
+   invitar a que pidan domi los que van a restaurante, que no tienen plantillas y no van a poder
+   usarse, son básicamente de mentira"*.
+
+   **Verificado:** existen como presets en `src/components/dashboard/ManualCampaigns.tsx:73` e
+   `:83` — `invite_restaurant` (filtro `source: 'delivery_only'`) e `invite_delivery` (filtro
+   `source: 'qr_only'`). Los **filtros** sí están implementados; lo que falta es la plantilla
+   aprobada de Meta con ese mensaje.
+
+   **Decisión requerida:** ¿se **eliminan** los dos presets, o se **crean las plantillas** que les
+   faltan y se vuelven reales? Si se crean, son 2 plantillas nuevas al catálogo de §12 y 2 entradas
+   nuevas en la tabla de clases/prioridad del spec de gobernanza de envío (§3.3).
+
+3. **Mover las burbujas flotantes al apartado de Campañas.** Textual: *"considerando el día a día del
+   cliente deberíamos eliminar las burbujas flotantes catalogadas por días en el dashboard y meterla
+   en el área de campañas"*. Hoy `AtRiskBubbles` se renderiza en
+   `src/app/(dashboard)/dashboard/page.tsx:85`. Es un movimiento, no un borrado — el componente ya
+   dispara campañas de reactivación desde ahí.
+
+**Preguntas abiertas:**
+- 15.a ¿Qué específicamente no se entiende hoy del apartado de Campañas? ¿Es la pantalla (cómo se ve)
+  o el modelo mental (qué hace cada campaña y cuándo usarla)?
+- 15.b Los dos presets fantasma: ¿eliminar o crearles plantilla?
+
+---
+
+## 16. Fatiga y pipeline del recorrido del cliente (pedido 2026-08-30) — ⚠️ TOCA LA BASE
+
+**Toca la base de envío:** SÍ, de lleno. Reemplaza y amplía la §3.6 del spec
+`docs/superpowers/specs/2026-08-30-gobernanza-de-envio-design.md` (Bloque 7).
+
+**Este es el requerimiento de mayor calado de los nueve.** No es una regla más: es un modelo distinto.
+
+### 16.1 Regla de fatiga
+
+**Textual:** *"si un cliente recibe 6 comunicaciones y no vuelve, se elimina de lista de mensajes
+hasta que vuelve a escanear"*.
+
+Es una regla de **fatiga acumulada sin conversión**, que hoy no existe en ninguna forma. Lo que existe
+(`FREQUENCY_CAP_DAYS = 7`, `MONTHLY_MARKETING_CAP = 3`) limita el *ritmo*, no el *total sin respuesta*.
+Un cliente puede recibir 3 mensajes al mes indefinidamente sin volver jamás.
+
+La regla es además excelente para el quality rating: los clientes que no responden son exactamente los
+que terminan bloqueando o reportando. Apagarlos protege la línea.
+
+### 16.2 El pipeline roto
+
+**Textual:** *"ahorita el pipeline se rompe, un recordatorio de cumple (si aplica) una campaña a los 21
+días y una a los 25, exageradamente cerca, si está de viaje, en trabajo intenso o incluso con una
+diarrea no le da ni tiempo de pensar en ir en 4 días de diferencia... además, el pipeline a la segunda
+que es campaña agresiva se rompe, hasta ahí llega"*.
+
+**Verificado, el dueño tiene razón en los dos puntos:**
+
+- `REACTIVATION_DAYS = 21` y `REACTIVATION_AGGRESSIVE_DAYS = 25` (`src/constants/rewards.ts:4` y `:7`)
+  → 4 días de separación. Son configurables en `admin_settings`, pero el default es ese.
+- Después de la agresiva (día 25) **no hay nada más**. `RECOVERY_ZONE_END_DAYS = 25`. El preset manual
+  `rescue_lost` (26+ días) existe pero es **manual** — nadie lo dispara solo. El recorrido automático
+  termina ahí.
+
+**Lo que se pide:** *"tener como una especie de pipeline del recorrido del cliente que se va reiniciando
+a medida el cliente pida por domi o asista al restaurante"*.
+
+Es una **máquina de estados del ciclo de vida del cliente**, con:
+- etapas ordenadas y separación configurable entre ellas,
+- **reinicio** del recorrido ante una conversión (visita por QR **o** pedido por domicilio),
+- un estado terminal de fatiga (16.1) que saca al cliente de todo envío,
+- reingreso solo por un nuevo escaneo.
+
+### 16.3 Relación con el spec de gobernanza de envío
+
+La §3.6 de ese spec propone una **matriz de cooldown por clase** — que es un caso particular, y más
+pobre, de lo que se pide aquí. **Esa sección queda superada.** El Bloque 7 del plan de implementación
+deja de ser "frecuencia configurable" y pasa a ser **"pipeline del recorrido del cliente"**, con spec
+propio.
+
+**No bloquea los Bloques 1–4** (presupuesto de línea, cola, salud, consentimiento): esos gobiernan la
+*oferta* (cuántos puede emitir la línea) y este gobierna la *demanda* (a quién y cuándo). Son ejes
+independientes. El trabajo de lanzamiento sigue su curso.
+
+**Preguntas abiertas:**
+- 16.a ¿Cuáles son las etapas del recorrido y a cuántos días cada una? El dueño dice que 21 y 25 están
+  muy cerca, pero no dijo cuáles serían los números correctos.
+- 16.b ¿Las 6 comunicaciones de la regla de fatiga cuentan **todas** las clases (incluidos cumpleaños y
+  recordatorio de premio) o solo las de marketing (`MONTHLY_CAP_SOURCES`)?
+- 16.c ¿El contador de 6 se reinicia con la visita, o también con el paso del tiempo (ej. al año)?
+- 16.d ¿"Vuelve a escanear" incluye pedir domicilio, o es literalmente solo el QR? El texto del reinicio
+  dice "pida por domi o asista", pero el del reingreso dice "vuelve a escanear" — hay que unificarlo.
+- 16.e ¿Qué pasa con un cliente ya fatigado hoy? ¿Backfill retroactivo o la regla aplica de aquí en
+  adelante?
+
+---
+
+## 17. Clientes Black / VIP — lógica real y tarjeta distintiva (pedido 2026-08-30)
+
+**Toca la base de envío:** NO directamente. Salvo que el "beneficio permanente" implique mensajes.
+
+**Textual:** *"la pantalla negra de clientes VIP tiene que quedar dentro del apartado de clientes y
+esta lógica tiene que estar bien definida"*.
+
+1. **Mover `BlackTierSection` del dashboard a `dashboard/customers`** (contraparte de §14.1).
+2. **Al entrar a Black, la tarjeta del cliente en su celular cambia a negro y dorado**, con distintivo
+   claro de Black. Toca `src/app/(public)/tarjeta/page.tsx` y el sistema de diseño
+   (`docs/features/design-system.md`, `docs/features/visual-loyalty-fase1-spec.md`).
+3. **Beneficio permanente** al llegar a Black — no un premio de una vez, sino algo que se mantiene.
+   Esto es nuevo: hoy `reward_tiers` otorga premios por umbral, no beneficios permanentes.
+4. **Definir clara y fácilmente las recompensas reales y las visitas/puntos necesarios** para llegar a
+   Black, desde el dashboard.
+
+**Verificado:** hoy "Black" está hardcodeado como *10+ visitas* en el preset `black_exclusive`
+(`ManualCampaigns.tsx:93`, filtro `minVisits: '10'`). No es configurable por tenant.
+
+**Preguntas abiertas:**
+- 17.a ¿Qué es un "beneficio permanente"? ¿Descuento fijo, puntos multiplicados, acceso a premios
+  exclusivos, otra cosa? Define el modelo de datos entero.
+- 17.b ¿El umbral de Black se define por visitas, por puntos, o por cualquiera de los dos?
+- 17.c ¿Se puede caer de Black si el cliente deja de venir, o es permanente de por vida?
+- 17.d ¿Black es el tier máximo o habrá más arriba? (§8 de este documento ya preguntaba qué pasa al
+  superar el tier máximo — está relacionado y sigue sin responder.)
+
+---
+
+## 18. Domicilios bajo coexistencia (pedido 2026-08-30) — ⚠️ TOCA LA BASE
+
+**Toca la base de envío:** SÍ. Cambia por dónde entran los pedidos.
+
+**Textual:** *"ahorita ni yo mismo sé bien cómo explicarle al cliente cómo funciona... de ahora en
+adelante vamos a usar coexistence con los restaurantes, eso quiere decir que su mismo número va a ser
+el que envíe los mensajes, entonces, si tenían que enviar antes el cuadro al número alternativo, ahora
+¿a dónde van a enviar ese cuadro o cómo vamos a hacer?"*
+
+**El problema es real y es consecuencia directa de la decisión de coexistencia.** Hoy el flujo de
+domicilios funciona así (verificado):
+
+- Un mesero//operador autorizado (`authorized_numbers`) le manda el "cuadro" del pedido por WhatsApp
+  al número del sistema.
+- El webhook (`twilio-incoming` o `zernio`) detecta que el remitente está en `authorized_numbers` y
+  reenvía el mensaje a n8n (workflow W1), que lo parsea y crea el pedido.
+- Ver `docs/features/delivery-webhook.md` y `docs/features/delivery-ai-parsing.md`.
+
+Con coexistencia, **el número que recibe es la línea principal del restaurante** — la misma por la que
+hablan con sus clientes. El "cuadro" del pedido caería en la misma bandeja que la conversación con los
+comensales.
+
+**Además:** el webhook de Zernio **ya no puede responder auto-reply de texto libre**
+(`docs/features/zernio-messaging.md`, sección "Pendiente"), así que la confirmación al operador
+tampoco funciona igual que con Twilio.
+
+**Lo que se pide:** *"una parte reservada para domicilios para explicarles cómo funciona y conectar
+algo si hace falta"* — es decir, un apartado propio en el dashboard que documente y configure el flujo.
+
+**Preguntas abiertas (bloqueantes, ninguna asumible):**
+- 18.a ¿El "cuadro" sigue entrando por WhatsApp a la línea principal, o se mueve a otro canal (un
+  formulario web en el dashboard, un número aparte, integración directa con su POS)?
+- 18.b Si sigue por WhatsApp: ¿cómo se distingue el cuadro de un pedido de un mensaje de un cliente
+  real, ahora que llegan al mismo número? Hoy se distingue por `authorized_numbers`, lo cual **sigue
+  funcionando** — hay que confirmar si eso basta.
+- 18.c ¿Qué se le responde al operador cuando el tenant es Zernio y no hay texto libre disponible?
+  ¿Una plantilla de confirmación aprobada?
+- 18.d ¿Qué debe contener exactamente el apartado nuevo de Domicilios: solo explicación, o también
+  configuración (números autorizados, formato del cuadro, pruebas)?
+
+---
+
+## 19. Escáner QR — un dispositivo por local, PIN por mesero, atribución (pedido 2026-08-30)
+
+**Toca la base de envío:** NO. Es un subsistema aparte y grande — merece **spec propio**.
+
+### 19.1 Corrección importante: esto NO se construye desde cero
+
+El dueño planteó esto como si el sistema de meseros no existiera. **Sí existe**, desde la migración
+`00018_staff_qr_scan.sql`:
+
+| Ya existe | Dónde |
+|---|---|
+| `staff_users` (name, `phone` UNIQUE, `pin` **hasheado con bcrypt**, `role`, `is_active`) | `00018:9` |
+| `staff_devices` (`staff_user_id`, `device_fingerprint`, **`device_name`**, `is_trusted`, `expires_at`) | `00018:29` |
+| Login con `phone` + `pin` | `src/app/api/staff/login/route.ts` |
+| Rutas `device`, `login`, `me`, `pending-rewards`, `stats` | `src/app/api/staff/` |
+| **Captura del número de mesa** | `src/app/(public)/mesero/confirm/page.tsx:284` |
+
+**Lo que se pide no es construir: es invertir el modelo.** Hoy el **dispositivo pertenece a un mesero**
+(`staff_devices.staff_user_id`). Lo que se pide es que el **dispositivo pertenezca al restaurante** y
+el mesero se elija **por operación**. `device_name` ya existe y cubre la "nota de quién es el celular".
+
+### 19.2 Lo que se pide
+
+1. **Un solo inicio de sesión por celular**, con usuario y clave **del administrador**. Todos los
+   celulares comparten el mismo acceso. Se elimina el alta de un login por mesero.
+2. **Los meseros se dan de alta solo con un PIN de 4 dígitos** — sin teléfono, sin celular propio.
+   *(Implica que `staff_users.phone`, hoy `NOT NULL UNIQUE`, deja de ser obligatorio.)*
+3. **Nota del dispositivo:** al activar un celular nuevo, el administrador deja anotado de quién es.
+   *(`staff_devices.device_name` ya lo soporta.)*
+4. **Al escanear un cliente:** se pide **mesa** (ya existe) y se **selecciona el mesero** que atiende.
+   Habilita la métrica de cuántos QR escaneó cada mesero, para incentivos.
+5. **Al entregar un premio: dos botones — "Redimir ahora" o "Acumular".** Textual: *"por si se les
+   olvidó escanear al principio y de pronto tienen una bebida, van a preferir redimir en el siguiente
+   premio"*. Se decide con el cliente en la mesa.
+6. **Al redimir: se escoge quién redime y qué mesa, y se exige el PIN de ese mesero.** Razón textual:
+   *"para llevar un registro bien claro de quién fue y que nadie pueda registrar premios a nombre de
+   otros meseros"*.
+7. **El PIN en la redención debe poder activarse y desactivarse** desde el apartado de escaneo, *"por
+   si el dueño no quiere que se tengan que estar acordando de la clave"*.
+
+### 19.3 Observación de diseño del dueño, que vale la pena registrar
+
+Textual: *"sí se podrán registrar QR a nombre de otros meseros pero nadie lo va a hacer porque es una
+estupidez regalar tu premio a otro, así ellos mismos van a cuidar sus claves"*.
+
+Es una decisión deliberada: **la atribución del escaneo NO se protege con PIN, solo la redención.** El
+incentivo económico hace el trabajo del control de acceso en un lado, y el PIN lo hace en el otro.
+Registrado a propósito para que nadie "arregle" después el hueco de atribución creyendo que es un bug.
+
+**Preguntas abiertas:**
+- 19.a ¿El usuario y clave del administrador es el mismo login del dashboard, o uno aparte solo para
+  los celulares?
+- 19.b ¿Qué pasa con los `staff_users` que hoy existen con teléfono y PIN? ¿Migración o alta de cero?
+- 19.c Si el PIN de redención está desactivado, ¿igual se pide **elegir** el mesero (para la
+  atribución) o se salta el paso entero?
+- 19.d "Acumular" — ¿qué significa exactamente en el modelo de datos? ¿El premio queda pendiente y
+  disponible indefinidamente, o mantiene la ventana de vencimiento que hoy tiene
+  (`docs/features/reward-grants.md`)?
+- 19.e ¿Cuántos intentos de PIN fallidos antes de bloquear? Hoy no hay límite documentado.
+
+---
 ## Handoff — cómo continuar sin releer el repo entero
+
+> ### ⚠️ ACTUALIZACIÓN 2026-08-30 — leer esto ANTES del orden de trabajo de abajo
+>
+> **Se decidió coexistencia** (los mensajes salen por la línea principal de WhatsApp de cada
+> restaurante, no por un número aparte). Eso hizo aparecer un frente nuevo que no estaba en este
+> documento y que es **prerrequisito de las 25 altas**:
+>
+> **`docs/superpowers/specs/2026-08-30-gobernanza-de-envio-design.md`** — gobernanza de envío.
+> El repo gobierna la *demanda* (cuántos mensajes recibe una persona: cap de 7 días, cap mensual de 3)
+> pero **no gobierna la oferta** (cuántos puede emitir la línea: Meta limita a N destinatarios únicos
+> por 24h rodantes, y nada en el código lo sabe). Sus Bloques 1–4 bloquean el lanzamiento.
+>
+> **Decisiones ya cerradas ahí** (no volver a abrirlas):
+> - **D-1:** Golden Bullet se permite, bajo régimen especial (§3.4.1 del spec).
+> - **D-2:** se apaga el débito de billetera para tenants Zernio — Meta le factura directo al
+>   restaurante, cobrarle además $100 COP/mensaje sería cobrarle dos veces. El modelo pasa a
+>   suscripción mensual variable. La billetera de los 4 tenants Twilio **no se toca**.
+>
+> **Requerimientos nuevos del 2026-08-30:** §14 a §19 de este documento. De los seis, **§16 (fatiga +
+> pipeline del recorrido del cliente) y §18 (domicilios bajo coexistencia) tocan la base de envío**;
+> §16 además **supera la §3.6 del spec de gobernanza** y necesita spec propio. §19 (escáner QR) es un
+> subsistema aparte, también con spec propio — y **ojo: el sistema de meseros con PIN ya existe**
+> (migración `00018`), lo que se pide es invertir el modelo, no construirlo.
+>
+> **Estado de la infraestructura de pruebas (verificado 2026-08-30):** el proyecto **no tiene ninguna**
+> — no hay vitest/jest, ni un solo archivo de test, y `package.json` solo expone `lint` y `build`.
+> Tampoco hay Supabase CLI (`supabase/config.toml` no existe): las migraciones se aplican **a mano en
+> el SQL Editor**. Cualquier plan que exija TDD tiene que montar esa infraestructura primero.
+
 
 **Orden de trabajo acordado con el dueño (actualizado 2026-08-29, noche):** la migración a Zernio
 (§1, con §2 como contexto obligatorio de arquitectura) ya tiene código implementado y commiteado —

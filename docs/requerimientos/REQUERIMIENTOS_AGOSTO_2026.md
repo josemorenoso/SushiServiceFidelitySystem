@@ -631,6 +631,28 @@ línea de la app (ni del AIOS ni de Zernio) está escrita todavía.**
 
 ## 12. Plantillas de WhatsApp — mismo set para todos + 3 estilos + edición (decidido PRIMERA PRIORIDAD, 2026-08-29 noche)
 
+> ## ✅ IMPLEMENTADO — v2.12.0, 2026-08-30
+>
+> Doc de feature: **`docs/features/whatsapp-templates.md`** · Migración: `00039_template_catalog.sql`
+> (la **00039**, no la 00038: esa la tomó `00038_send_queue_drain.sql`).
+>
+> Las 6 decisiones del dueño están implementadas tal cual. Tres cosas que conviene saber sin releer
+> todo:
+>
+> 1. **El detector de aprobación resultó ser un webhook, no un poll.** El contrato verificado de
+>    Zernio documenta `whatsapp.template.status_updated` con su payload exacto. Hay que **agregar ese
+>    evento** a la config de webhooks del Team en Zernio (`POST /v1/webhooks/settings`).
+> 2. **No se borra la plantilla vieja del proveedor.** El contrato verificado de Zernio no expone un
+>    DELETE de plantillas, y esa doc prohíbe inventar rutas. Se deja de apuntarla y se marca
+>    `retired`, que resuelve el problema real. La plantilla queda huérfana en la WABA, sin costo.
+> 3. **Los textos `calido` conservan el 🍣 de Sushi Service.** La decisión 2 dice "sin cambios en el
+>    default", así que no se tocó — pero en un tenant que no sea de comida japonesa se ve fuera de
+>    lugar. **Es una decisión pendiente del dueño**, no un olvido.
+>
+> Queda sin implementar (fuera de §12): generación con LLM (respuesta 5: "banco fijo, llm luego"),
+> aviso proactivo al dueño cuando Meta rechaza, y qué hacer si Meta **pausa** una plantilla ya vigente
+> (material del Bloque 3 de gobernanza de envío).
+
 **Decisión del dueño, textual:** *"desde el principio me han cargado como un loco"* (las plantillas).
 Se reprioriza por encima de TODO lo demás en esta lista, incluidas las 7 mejoras de §3–§9 y por
 delante de seguir puliendo la migración a Zernio. Antes de tocar cualquier otra cosa de producto, se
@@ -1102,6 +1124,152 @@ priorizar distinto.
 `scripts/alta-frangal.sql`, `Level 2.0/` [irrelevante, ignorar], y los ~10 archivos con diff pendiente)
 seguía así al momento de esta investigación (2026-08-28) — si esta fecha ya pasó, correr `git status`
 antes de asumir que sigue igual.
+
+## 20. Decisiones del dueño — 2026-08-30 (segunda tanda)
+
+> Cuatro decisiones tomadas después de publicado el spec de gobernanza de envío. **Dos de ellas
+> corrigen el spec**, no lo complementan: si el spec y esta sección se contradicen, **manda esta
+> sección**.
+
+---
+
+### D-7 · Golden Bullet: el techo del bloque es el presupuesto de campaña completo
+
+**Textual:** *"en el área de golden bullet debemos de tomar el total de clientes y poder dividirlos en
+bloques de la cantidad que queramos respetando siempre el límite de la cuenta, ejemplo máximo 180 si
+tenemos 250 y si tenemos 500 máximo x número porque hay restaurantes que van a querer cargar hasta
+7000 y a estos no van a poder despertarlos en un solo día"*.
+
+⚠️ **Esto REEMPLAZA la §3.4.1 del spec** (`docs/superpowers/specs/2026-08-30-gobernanza-de-envio-design.md`)
+en dos puntos concretos:
+
+| | Spec §3.4.1 (superado) | Decisión D-7 (vigente) |
+|---|---|---|
+| Sub-cap diario | `15 %` del presupuesto de campaña → ~27/día a escalón 250 | **el presupuesto de campaña completo** → 180 de 250 |
+| Puerta de entrada | exigía `messaging_daily_limit > 250` | **se elimina**: a escalón 250 también se puede |
+| Puerta de calidad | `line_status='active'` y `quality_rating='green'` | **se conserva sin cambios** |
+| Congelamiento al primer amarillo | sí | **se conserva sin cambios** |
+| Frase de confirmación escrita | sí | **se conserva sin cambios** |
+
+`admin_settings.golden_bullet_pct` deja de tener sentido como sub-cap y **no debe implementarse**.
+
+**Lo que SÍ hay que construir — el divisor de bloques.** Es la parte nueva del pedido:
+
+1. El operador ve el **total de contactos** cargados (pueden ser 7.000).
+2. El operador **elige el tamaño del bloque diario**. No lo elige el sistema.
+3. El sistema **acota** esa elección al cupo real: `bloque = LEAST(elegido, presupuesto_campana)`.
+   El tope se recalcula con el límite vigente de la línea — no es la constante 180. A escalón 2.000 el
+   tope es ~1.930; a escalón 250 es 180.
+4. Antes de confirmar, la pantalla muestra **cuántos días va a tardar y en qué fecha termina**.
+   7.000 contactos a 180/día son **39 días**. El dueño tiene que verlo antes de decir que sí, y ventas
+   tiene que saberlo para no prometer resultados el mismo día.
+
+**Consecuencia comercial que hay que decir en voz alta:** Golden Bullet dejó de ser una bala. Es un
+goteo de semanas o meses. Una base de 7.000 en una línea de 250 no se despierta — se despierta en mes
+y medio, y solo si la calidad aguanta verde todo ese tiempo.
+
+**Riesgo que el dueño acepta al elegir esta opción:** con el techo en el presupuesto completo, un
+Golden Bullet a full puede consumir **todo** el cupo de campaña del día y dejar sin mensaje a los
+clientes que SÍ consintieron (cumpleaños, reactivación, recordatorios). La reserva transaccional sigue
+protegida — bienvenidas y check-in nunca se ven afectados. Si esto molesta en producción, la salida es
+que el operador elija un bloque menor, no un cambio de código.
+
+---
+
+### D-8 · Backfill de consentimiento: tres periodos, no uno
+
+**Textual:** *"tenemos la fecha de ingreso al sistema de los clientes no? pon ahí la fecha de ingreso y
+que aprobaron, no es mentira porque todos dieron consentimiento explícito"*.
+
+**Correcto para la mayoría de la base, pero no para toda.** Verificado contra git: el checkbox de
+consentimiento **no fue siempre obligatorio**.
+
+| Periodo | Estado del checkbox | Texto exacto que vio el cliente |
+|---|---|---|
+| Antes de **2026-05-10** | **pre-marcado y opcional** (`useState(true)`, sin `disabled`) | "Acepto ser parte de la familia y recibir regalos, recompensas y comunicaciones por WhatsApp" |
+| **2026-05-10** → **2026-06-03** | desmarcado y obligatorio (commit `c844c28`) | igual que el anterior |
+| Desde **2026-06-03** | desmarcado y obligatorio (commit `203a3d3`) | "Acepto recibir regalos, recompensas y comunicaciones por WhatsApp. He leído y acepto la Política de Privacidad." |
+
+Un checkbox **pre-marcado no es consentimiento explícito** — ni para Meta ni bajo la Ley 1581 de
+habeas data. Los clientes anteriores al 2026-05-10 consintieron por **no desmarcar**, que es opt-out
+por omisión.
+
+**Decisión aplicada:** se hace el backfill como pidió el dueño — un evento `opt_in` por cliente con
+`occurred_at = customers.created_at` — con **dos correcciones sobre lo que decía el spec §3.7**:
+
+1. **`consent_text` NO va en `null`.** Va el texto real del periodo que le corresponde a ese
+   `created_at`, reconstruido de git (tabla de arriba). El spec decía `consent_text=null`; era
+   innecesariamente pesimista.
+2. **`evidence.explicit` distingue los dos regímenes:**
+
+```jsonc
+// created_at >= 2026-05-10
+{ "backfill": true, "explicit": true,  "method": "checkbox_required",   "source": "git:c844c28" }
+// created_at <  2026-05-10
+{ "backfill": true, "explicit": false, "method": "checkbox_prechecked", "source": "git:pre-c844c28" }
+```
+
+`explicit:false` no apaga a nadie ni les corta mensajes hoy. Es la diferencia entre tener y no tener
+una defensa el día que Meta o la SIC pregunte por un número concreto.
+
+**Falta un dato que solo se puede sacar de producción** — cuántos clientes caen en el periodo
+pre-mayo:
+
+```sql
+SELECT t.slug,
+       COUNT(*) FILTER (WHERE c.created_at <  '2026-05-10') AS sin_consentimiento_explicito,
+       COUNT(*) FILTER (WHERE c.created_at >= '2026-05-10') AS con_consentimiento_explicito
+  FROM customers c JOIN tenants t ON t.id = c.tenant_id
+ GROUP BY t.slug ORDER BY 2 DESC;
+```
+
+Si el primer número es marginal, esto es una nota al pie. Si es la mitad de la base, hay que decidir
+aparte qué hacer con ellos — pero eso se decide **con el número a la vista**, no antes.
+
+---
+
+### D-9 · Alta sin checkbox: el mesero cuenta, la importación no
+
+**El agujero:** `src/app/api/check-in/route.ts:366` hace `accepts_marketing: body.accepts_marketing ?? true`.
+El formulario público sí exige el check, pero **cualquier otra vía que omita el campo crea un cliente
+consentido sin habérselo pedido nunca**.
+
+**Decisión:**
+
+| Canal | ¿Cuenta como consentimiento? | `channel` en `consent_events` |
+|---|---|---|
+| Formulario público de check-in | SÍ (ya exige el check) | `checkin_qr` |
+| Alta hecha por el mesero | **SÍ** — hubo contacto presencial, se le puede preguntar | `staff` |
+| Alta manual desde el dashboard | SÍ, con el mismo criterio que el mesero | `manual` |
+| Importación / Golden Bullet | **NO, nunca** | `import` |
+
+El `?? true` **se conserva** para las vías presenciales, pero la ruta de importación debe pasar
+`accepts_marketing: false` de forma explícita y registrar el evento con `channel='import'` y la
+responsabilidad del dueño como evidencia (§2.1 del spec).
+
+---
+
+### D-10 · Regla de las 6 comunicaciones: es una PAUSA, no un opt-out
+
+**Textual (§16.1):** *"si un cliente recibe 6 comunicaciones y no vuelve, se elimina de lista de
+mensajes hasta que vuelve a escanear"*.
+
+**Decisión:** el cliente se **suprime de campañas**, pero su consentimiento **sigue vigente**.
+
+- **NO** se toca `customers.accepts_marketing`.
+- **NO** se escribe nada en `consent_events` — no hubo un cambio de consentimiento, hubo un cambio de
+  comportamiento nuestro.
+- **NO** hace falta ampliar el `CHECK` de `consent_events.channel` con `'system'`.
+- Al volver a escanear, **se reactiva solo**, sin pedirle nada al cliente.
+
+La fatiga vive en su propio contador, separado del consentimiento. Son dos ejes distintos: el
+consentimiento dice *si podemos*, la fatiga dice *si conviene*. Mezclarlos obligaría a re-pedir un
+permiso que el cliente nunca retiró.
+
+**Sigue abierta la 16.d:** ¿"vuelve a escanear" incluye pedir a domicilio, o es literalmente solo el
+QR? Sin eso no se puede codear el reinicio del contador.
+
+---
 
 **Este documento se generó con una auditoría de 10 agentes en paralelo** (Twilio/acoplamiento,
 arquitectura multitenant, calendario, QR, referidos, personalización check-in, branding/plantillas,

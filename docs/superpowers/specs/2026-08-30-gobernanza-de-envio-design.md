@@ -228,7 +228,14 @@ dashboard muestra *"180 de 380 enviados · 200 en cola · termina aprox. el 1 de
 
 **Anti-duplicado:** índice único parcial sobre `(tenant_id, phone, campaign_id) WHERE status='queued'`.
 
-### 3.4.1 Golden Bullet: régimen especial (decisión del dueño, 2026-08-30)
+### 3.4.1 Golden Bullet: régimen especial
+
+> ⚠️ **SUPERADO EN PARTE POR LA DECISIÓN D-7 (2026-08-30, tarde).** El sub-cap del 15 %
+> y la puerta de entrada `messaging_daily_limit > 250` **quedan sin efecto**: el techo del bloque
+> diario pasa a ser el **presupuesto de campaña completo**, y el operador elige el tamaño del
+> bloque. Las puertas de calidad y el congelamiento al primer amarillo se conservan. Ver §20 / D-7
+> de [`REQUERIMIENTOS_AGOSTO_2026.md`](../../../docs/requerimientos/REQUERIMIENTOS_AGOSTO_2026.md).
+ (decisión del dueño, 2026-08-30)
 
 Golden Bullet **se permite**, pero no comparte el régimen de las demás campañas. Es la única clase que
 envía a personas que **no dieron consentimiento** (§2.1), así que corre bajo tres restricciones propias:
@@ -343,6 +350,12 @@ anterior.
 `last_campaign_at` se conserva para el piso global de `min_spacing_hours` y por compatibilidad.
 
 ### 3.7 Registro de consentimiento
+
+> ⚠️ **CORREGIDO POR LA DECISIÓN D-8 (2026-08-30, tarde).** El backfill **no** usa
+> `consent_text=null`: el texto real de cada periodo se reconstruye de git. Y hay **tres**
+> periodos, no uno — antes del 2026-05-10 el checkbox venía **pre-marcado**, que no es
+> consentimiento explícito. Ver §20 / D-8 de [`REQUERIMIENTOS_AGOSTO_2026.md`](../../../docs/requerimientos/REQUERIMIENTOS_AGOSTO_2026.md).
+
 
 Tabla `consent_events`, append-only. Un evento por cada opt-in y cada opt-out, con: fecha, canal
 (`checkin_qr` / `whatsapp_reply` / `import` / `manual` / `staff`), **el texto exacto que vio el
@@ -630,9 +643,50 @@ invariante que ya exige `zernio-messaging.md` §"Invariantes de seguridad" punto
      para el super-admin.
 - **D-3 · Reserva transaccional en el alta.** ¿`reserve_floor = 70` es el default para todos, o el
   equipo de ventas lo ajusta por tamaño de restaurante?
-- **D-4 · Señales de calidad en Zernio.** ¿Zernio expone quality rating y límite de mensajería por API
-  o webhook? **Verificable hoy** con la API key ya disponible, sin gastar dinero. Si no los expone, el
-  Bloque 3 necesita otra fuente (Meta Business Manager manual) y hay que rediseñarlo.
+- ~~**D-4 · Señales de calidad en Zernio.**~~ ✅ **RESUELTA (2026-08-30) — verificada contra la API
+  real, solo lectura, sin comprar ni crear nada.** Respuesta corta: **por API SÍ, por webhook NO.**
+
+  **Lo que sí expone.** `GET /v1/whatsapp/number-info?accountId=<id>` devuelve, en vivo desde Meta:
+
+  | Campo | Valores | Para qué sirve |
+  |---|---|---|
+  | `phone.quality_rating` | `GREEN` · `YELLOW` · `RED` · `UNKNOWN` | Los frenos de §3.5 |
+  | `phone.messaging_limit_tier` | `TIER_250` · `TIER_1K` · `TIER_10K` · `TIER_100K` · `TIER_UNLIMITED` | Sincronizar `tenants.messaging_daily_limit` |
+  | `phone.throughput.level` | `STANDARD` · `HIGH` | — |
+  | `phone.health_status` | objeto `can_send_message` de Meta | Más rico de lo que el spec asumía |
+  | `phone.name_status` | `APPROVED`, `PENDING_REVIEW`, … | — |
+  | `waba.business_verification_status` | `verified`, `not_verified`, … | La puerta de entrada de §3.4.1 |
+
+  Los mismos `qualityRating` y `messagingLimitTier` vienen además en el `metadata` de
+  `GET /v1/accounts`, así que una sola llamada cubre a todos los tenants de una cuenta.
+
+  **Verificación hecha:** el spec OpenAPI público (`docs.zernio.com/api/openapi`, 2,4 MB, versión
+  1.0.4) documenta el endpoint; con la `ZERNIO_API_KEY` de `.env.local` se comprobó que la ruta
+  existe y autoriza (`GET /v1/accounts` → 200; `/v1/whatsapp/number-info` con un accountId que no es
+  de WhatsApp → 404 «WhatsApp account not found», no 401). **No se pudo ver una respuesta real de
+  WhatsApp porque la cuenta Zernio todavía no tiene ningún número conectado** — el único conectado es
+  una cuenta de Instagram. Queda por confirmar contra el primer número real.
+
+  **Lo que NO expone: no hay evento de webhook para el quality rating ni para el escalón.** El
+  catálogo completo de eventos (50, listados en el `enum` del spec OpenAPI) incluye
+  `whatsapp.template.status_updated`, `whatsapp.account.name_status_updated`,
+  `whatsapp.number.suspended`, `whatsapp.number.reactivated`, `whatsapp.number.action_required`…
+  pero **ninguno para verde→amarillo→rojo ni para cambio de tier**.
+
+  **Tres consecuencias para el Bloque 3, que el spec debe asumir:**
+
+  1. **El poll W5 no es opcional, es la única fuente del quality rating.** La frase de §3.5 «Eventos
+     del webhook de Zernio, si el proveedor los emite» se resuelve así: sirve para **plantillas
+     pausadas** (`whatsapp.template.status_updated` con `status: PAUSED`) y para **suspensión del
+     número**, que sí llegan por push. La calidad, no.
+  2. **El congelamiento de Golden Bullet «al primer amarillo» (§3.4.1) tiene la latencia del poll.**
+     Con W5 cada 60 min, puede seguir enviando hasta una hora después de que la línea se ponga
+     amarilla. O se acepta y se documenta, o W5 sube de cadencia mientras haya Golden Bullet activo.
+  3. **`messaging_limit_tier` es un ESCALÓN, no un entero**, y `tenants.messaging_daily_limit` es
+     `integer`. Hace falta un mapa `TIER_250 → 250`, `TIER_1K → 1000`, … y decidir qué guardar para
+     `TIER_UNLIMITED` (candidato: `NULL`, que en la 00037 ya significa «sin tope aplicado»).
+     Ojo también con la caja: Meta devuelve `GREEN`/`YELLOW`/`RED` en mayúsculas y el CHECK de
+     `tenants.quality_rating` exige minúsculas.
 - **D-5 · Cooldown agresivo.** ¿3 días es correcto para `reactivation_aggressive`, o el dueño quiere
   otro número? El default propuesto es una sugerencia, no una decisión tomada.
 - **D-6 · Qué hacer cuando una campaña se cancela a medias.** Si el dueño cancela una campaña con 200

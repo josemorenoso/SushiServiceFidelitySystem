@@ -146,6 +146,8 @@ Admin login (Supabase Auth) → /dashboard → Métricas, Clientes, Recompensas,
 | `STAFF_QR_JWT_SECRET` | Secret para firmar tokens efímeros del QR dinámico del cliente | privada | SI (si usa staff scan) |
 | `NEXT_PUBLIC_STAFF_ROLE_LABEL` | Etiqueta del rol del staff. `Mesero` (restaurante), `Barbero` (barbería), etc. Default: `Mesero` | pública | NO |
 | `N8N_BASE_URL` | URL base de n8n | privada | NO |
+| `ZERNIO_TEMPLATE_SAMPLE_IMAGE_URL` | URL pública de la imagen de muestra que Meta revisa al aprobar la plantilla `evento_imagen`. Meta **descarga** el archivo: no se puede inventar. Sin ella, las 11 plantillas de texto funcionan igual y solo falla la de evento con imagen. Ver `docs/features/whatsapp-templates.md` | privada | NO (sí para eventos con imagen en tenants Zernio) |
+| `ZERNIO_TEMPLATE_SAMPLE_VIDEO_URL` | Ídem, para la plantilla `evento_video` | privada | NO (sí para eventos con video en tenants Zernio) |
 
 ## Convenciones del Proyecto
 | Tipo | Convención | Ejemplo |

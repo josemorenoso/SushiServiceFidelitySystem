@@ -26,9 +26,12 @@ import type {
   ZernioWebhookPayload,
   ZernioWebhookPayloadMessage,
   ZernioWebhookPayloadDeliveryStatus,
+  ZernioWebhookPayloadTemplateStatus,
 } from '@/lib/zernio/webhooks'
+import type { ZernioTemplateStatus } from '@/lib/zernio/templates'
 import { getTenantByZernioAccountId } from '@/lib/tenant'
 import { setWhatsappOptOut, clearWhatsappOptOut } from '@/services/customer.service'
+import { applyProviderTemplateStatus } from '@/services/template.service'
 
 // Mismos keywords que twilio-incoming/route.ts (duplicados a propósito: son
 // ~2 líneas estables y extraerlos a un módulo compartido es más cambio del
@@ -255,6 +258,66 @@ async function handleDeliveryStatus(payload: ZernioWebhookPayloadDeliveryStatus)
   return new NextResponse(null, { status: 200 })
 }
 
+/**
+ * `whatsapp.template.status_updated` — el veredicto de Meta sobre una plantilla.
+ *
+ * ES EL DISPARADOR DEL CAMBIO DE PUNTERO del §12: mientras Meta revisaba, los
+ * envíos seguían saliendo con la plantilla vieja; cuando llega este evento con
+ * `status: APPROVED`, el puntero pasa a la nueva y la vieja se marca retirada.
+ * Si llega `REJECTED`, la vieja se queda como está y el rechazo queda visible en
+ * la pantalla de Plantillas.
+ *
+ * Toda la decisión vive en `applyProviderTemplateStatus()` — aquí no se escribe
+ * ni una fila. Ese servicio es la puerta única para que el Bloque 3 de la
+ * gobernanza de envío pueda reusarlo sin duplicar la lógica de promoción.
+ *
+ * Siempre 200: un 4xx/5xx acumulado hace que Zernio desactive el webhook entero
+ * tras 10 fallos consecutivos, y perder los eventos de mensajes por un problema
+ * con una plantilla sería mucho peor que perder este evento.
+ */
+async function handleTemplateStatusUpdated(
+  payload: ZernioWebhookPayloadTemplateStatus
+): Promise<NextResponse> {
+  if (await isDuplicateZernioEvent(payload.id)) {
+    return new NextResponse(null, { status: 200 })
+  }
+
+  const accountId = extractAccountId(payload.account)
+  if (!accountId) {
+    console.warn('[webhook/zernio] template.status_updated sin accountId')
+    return new NextResponse(null, { status: 200 })
+  }
+
+  const tenant = await getTenantByZernioAccountId(accountId)
+  if (!tenant) {
+    console.warn(`[webhook/zernio] template.status_updated de un account desconocido: ${accountId}`)
+    return new NextResponse(null, { status: 200 })
+  }
+
+  try {
+    const outcome = await applyProviderTemplateStatus({
+      provider: 'zernio',
+      tenantId: tenant.id,
+      providerRef: payload.template.name,
+      language: payload.template.language,
+      status: payload.template.status as ZernioTemplateStatus,
+      // El contrato manda 'NONE' cuando no hay motivo, no null.
+      reason:
+        payload.template.reason && payload.template.reason !== 'NONE'
+          ? payload.template.reason
+          : null,
+    })
+    console.log(
+      `[webhook/zernio] template ${payload.template.name} → ${payload.template.status} (${tenant.slug}):`,
+      outcome.handled ? outcome.action : outcome.reason
+    )
+  } catch (err) {
+    console.error('[webhook/zernio] Error procesando template.status_updated:', err)
+  }
+
+  return new NextResponse(null, { status: 200 })
+}
+
 export async function POST(req: NextRequest): Promise<NextResponse> {
   // F7 (post-review): los payloads documentados de Zernio son de pocos KB — se
   // corta ANTES de leer el body si el header dice que excede el límite, para no
@@ -290,6 +353,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   if (payload.event === 'message.delivered' || payload.event === 'message.read' || payload.event === 'message.failed') {
     return handleDeliveryStatus(payload)
+  }
+
+  if (payload.event === 'whatsapp.template.status_updated') {
+    return handleTemplateStatusUpdated(payload)
   }
 
   // Zernio puede agregar eventos nuevos sin avisar (16 plataformas, no solo

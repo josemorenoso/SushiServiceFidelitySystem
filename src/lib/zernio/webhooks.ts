@@ -119,7 +119,33 @@ export interface ZernioWebhookPayloadTest {
   timestamp: string
 }
 
+/**
+ * Evento `whatsapp.template.status_updated` / `whatsapp.template.category_updated`.
+ *
+ * ES EL DETECTOR DE APROBACIÓN de plantillas: sin él habría que hacer poll cada
+ * pocas horas contra `GET /v1/whatsapp/templates` para enterarse de que Meta ya
+ * revisó una edición. Forma tomada literal del contrato verificado
+ * (`Level 2.0/aios-constelarys/docs/zernio-api-contract.md` §5) — el `account`
+ * trae `accountId`, que es como se resuelve el tenant.
+ *
+ * `reason` llega como `"NONE"` cuando no hay motivo, no como null.
+ */
+export interface ZernioWebhookPayloadTemplateStatus {
+  id: string
+  event: 'whatsapp.template.status_updated' | 'whatsapp.template.category_updated'
+  account: Record<string, unknown>
+  template: {
+    templateId: string
+    name: string
+    language: string
+    status: string
+    reason?: string | null
+  }
+  timestamp: string
+}
+
 export type ZernioWebhookPayload =
   | ZernioWebhookPayloadMessage
   | ZernioWebhookPayloadDeliveryStatus
   | ZernioWebhookPayloadTest
+  | ZernioWebhookPayloadTemplateStatus

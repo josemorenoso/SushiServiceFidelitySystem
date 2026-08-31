@@ -6,6 +6,15 @@
 > **Versión:** v1.0.2 — Sistema de Puntos + Mystery Box
 > **Última actualización:** 2026-05-25 — Variables corregidas, opt-out agregado, reactivación agresiva con {{4}}
 
+> **📌 Desde v2.12.0 (2026-08-30) este documento describe el estilo `calido`, que es uno de tres.**
+> El catálogo estándar de 13 plantillas × 3 estilos (`calido`, `elegante`, `urbano`), la edición desde
+> el dashboard y el flujo "crear → esperar aprobación → cambiar puntero" viven en
+> **`docs/features/whatsapp-templates.md`**. Los textos ya no se copian a mano: están tipados en
+> `src/constants/template-texts.ts`, y la tabla de variables de abajo es la versión en prosa del
+> contrato que ahora vive en `src/constants/template-catalog.ts`.
+> Este documento sigue siendo la referencia del **tono cálido** y de **qué manda el backend en cada
+> `{{n}}`** — eso no cambió. Lo de aquí aplica tal cual a los 4 tenants Twilio.
+
 ---
 
 ## Tipos de plantilla en este sistema

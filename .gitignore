@@ -56,3 +56,6 @@ Notion.md
 # AIOS Constelarys — proyecto SEPARADO (repo/Supabase propios); vive aquí solo
 # como carpeta de trabajo. Nunca se commitea al repo del producto.
 Level 2.0/
+
+# Postgres efímero de las pruebas (tests/setup/global-postgres.ts)
+.pgdata-test/

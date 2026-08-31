@@ -594,8 +594,8 @@ BEGIN
 END;
 $fn$;
 
-REVOKE ALL ON FUNCTION aios_line_health(text)                 FROM PUBLIC;
-REVOKE ALL ON FUNCTION aios_set_line_status(text, text, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION aios_line_health(text)                 FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION aios_set_line_status(text, text, text) FROM PUBLIC, anon, authenticated;
 
 DO $$
 BEGIN
@@ -626,3 +626,50 @@ BEGIN
   RETURN jsonb_build_object('reservations_deleted', v_res, 'snapshots_deleted', v_snap);
 END;
 $fn$;
+
+-- ─────────────────────────────────────────────────────────────
+-- 13. Blindaje de permisos de las funciones del núcleo
+-- ─────────────────────────────────────────────────────────────
+-- Postgres concede EXECUTE a PUBLIC por defecto en toda función nueva. Como
+-- estas cinco son SECURITY DEFINER, corren con los privilegios del dueño y por
+-- tanto ESCRIBEN aunque quien las llame no tenga permiso sobre las tablas.
+--
+-- Sin este bloque, cualquiera con la NEXT_PUBLIC_SUPABASE_ANON_KEY —que viaja
+-- en el bundle del navegador— puede llamarlas por RPC de PostgREST:
+--
+--   · prune_send_governance()  BORRA send_reservations. Y borrar reservas
+--     REINICIA el contador de la ventana de 24h, que es exactamente el freno
+--     que esta migración existe para construir. Verificado: `SET ROLE anon` la
+--     ejecuta y devuelve {reservations_deleted: 1, snapshots_deleted: 1}.
+--   · reserve_send_slot()      consume cupo del día de un tenant a voluntad.
+--   · release_send_slot()      libera reservas ajenas.
+--   · line_budget()            filtra el consumo y los límites de cualquier tenant.
+--
+-- Ninguna de las cuatro se llama nunca desde el navegador: el único consumidor
+-- es el service role (src/services/line-budget.service.ts), que salta estos
+-- permisos por definición. Revocarlas a PUBLIC no rompe nada.
+--
+-- Mismo criterio que ya aplican 00036:219,255,319 y las dos funciones del AIOS
+-- doce líneas más arriba.
+-- OJO: `FROM PUBLIC` SOLO NO BASTA EN SUPABASE.
+-- Todo proyecto Supabase trae `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT
+-- ALL ON FUNCTIONS TO postgres, anon, authenticated, service_role`, así que
+-- cada función creada aquí nace ADEMÁS con un GRANT EXECUTE *nominal* a anon y
+-- authenticated. Revocar PUBLIC borra un ACE y deja los otros dos intactos.
+-- Hay que nombrarlos. (La misma lógica por la que 00037 más arriba escribe
+-- `REVOKE UPDATE, DELETE ON consent_events FROM authenticated, anon`.)
+REVOKE ALL ON FUNCTION line_budget(uuid)                      FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION reserve_send_slot(uuid, text, text)    FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION release_send_slot(uuid, uuid)          FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION prune_send_governance()                FROM PUBLIC, anon, authenticated;
+
+-- El AIOS lee el tablero de emergencia con aios_line_health(), que internamente
+-- llama line_budget(). Al ser SECURITY DEFINER, la llamada anidada corre con
+-- los privilegios del dueño y NO necesita este grant — pero dejarlo explícito
+-- evita que un cambio futuro de aios_line_health a INVOKER lo rompa en silencio.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'aios_constelarys') THEN
+    GRANT EXECUTE ON FUNCTION line_budget(uuid) TO aios_constelarys;
+  END IF;
+END $$;

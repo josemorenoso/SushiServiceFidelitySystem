@@ -30,6 +30,8 @@ import { formatPhoneForWhatsApp, validatePhone } from '@/lib/validators/phone'
 import { recordMessageLog } from '@/services/message-log.service'
 import { isPhoneOptedOut } from '@/services/customer.service'
 import { sendZernioTemplateMessage } from '@/lib/zernio/messaging'
+import { classifyMessageType } from '@/constants/messaging'
+import { reserveSendSlot, releaseSendSlot, describeDenial } from '@/services/line-budget.service'
 import { ZernioApiError } from '@/lib/zernio/client'
 
 export interface TwilioMessageResponse {
@@ -173,6 +175,46 @@ function toZernioTemplateParams(variables: Record<string, string>): string[] {
  * Twilio master — eso enviaría el mensaje desde el número de OTRO cliente y se
  * lo cobraría a él (la trampa documentada en scripts/seed-new-tenant.sql).
  */
+/**
+ * Guarda de presupuesto de línea (migración 00037, spec §3.2).
+ *
+ * Va DESPUÉS del opt-out en ambas ramas: un cliente que pidió SALIR no debe
+ * consumir uno de los cupos diarios de la línea.
+ *
+ * Falla CERRADO. Si no se puede confirmar que hay cupo, no se envía — perder un
+ * mensaje es mucho más barato que pasarse del límite de Meta y que le
+ * restrinjan al restaurante su línea principal de atención.
+ */
+async function reserveLineSlot(
+  phone: string,
+  contentSid: string,
+  variables: Record<string, string>,
+  tenant: TenantMessagingContext,
+  logContext?: MessageLogContext
+): Promise<{ ok: true; reservationId: string | null } | { ok: false }> {
+  const { messageClass } = classifyMessageType(logContext?.messageType ?? 'manual')
+  const result = await reserveSendSlot(tenant.id, phone, messageClass)
+
+  if (result.granted) return { ok: true, reservationId: result.reservationId }
+
+  const reason = result.reason ?? 'budget_check_failed'
+  console.warn(`[WhatsApp] Envío denegado por presupuesto de línea: ${reason} (template=${contentSid})`)
+  if (logContext) {
+    await recordMessageLog({
+      ...logContext,
+      tenantId: tenant.id,
+      phone,
+      templateSid: contentSid,
+      variables,
+      status: 'failed',
+      errorCode: reason,
+      errorMessage: describeDenial(reason),
+      // Sin twilioSid: el trigger de billetera (00033) no cobra un envío que no salió.
+    })
+  }
+  return { ok: false }
+}
+
 async function sendViaZernio(
   phone: string,
   contentSid: string,
@@ -218,6 +260,10 @@ async function sendViaZernio(
     return null
   }
 
+  // Presupuesto de línea (00037) — después del opt-out, antes de gastar el cupo.
+  const zernioSlot = await reserveLineSlot(phone, contentSid, variables, tenant, logContext)
+  if (!zernioSlot.ok) return null
+
   const templateLanguage = options?.templateLanguage ?? process.env.ZERNIO_TEMPLATE_LANGUAGE ?? 'es'
   const templateParams = toZernioTemplateParams(variables)
   const toPhone = normalizePhoneForZernio(phone)
@@ -257,6 +303,8 @@ async function sendViaZernio(
     const zernioErr = error instanceof ZernioApiError ? error : null
     const errMsg = error instanceof Error ? error.message : String(error)
     console.error(`[WhatsApp] FALLO envío Zernio template=${contentSid} status=${zernioErr?.status ?? 'n/a'} msg="${errMsg}"`)
+    // El envío no salió: se devuelve el cupo a la ventana de 24h.
+    await releaseSendSlot(zernioSlot.reservationId)
     if (logContext) {
       await recordMessageLog({
         ...logContext,
@@ -354,6 +402,10 @@ export async function sendTemplateMessage(
     return null
   }
 
+  // Presupuesto de línea (00037) — después del opt-out, antes de gastar el cupo.
+  const twilioSlot = await reserveLineSlot(phone, contentSid, variables, tenant, logContext)
+  if (!twilioSlot.ok) return null
+
   const twilio = (await import('twilio')).default
   const client = twilio(config.accountSid, config.authToken)
 
@@ -423,8 +475,12 @@ export async function sendTemplateMessage(
           errorMessage: errMsg,
         })
       }
+      // El envío no salió: se devuelve el cupo a la ventana de 24h.
+      await releaseSendSlot(twilioSlot.reservationId)
       return null
     }
   }
+  // Se agotaron los reintentos de 21665 sin enviar: el cupo también se devuelve.
+  await releaseSendSlot(twilioSlot.reservationId)
   return null
 }

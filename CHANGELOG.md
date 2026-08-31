@@ -5,6 +5,80 @@
 
 ---
 
+## [v2.11.0] — 2026-08-30 — feat: gobernanza de envío — presupuesto de línea + retiro de billetera Zernio
+
+> Request original: *"hay que traer de alguna forma el límite del número para mensajes diarios y tener
+> un cap seguro para mensajes del sistema... el cap de 250 que es el de Meta, lo dejamos siempre en 180
+> mensajes disponibles para campaña libre"*.
+
+### Contexto
+
+Tras decidir **coexistencia** (los mensajes salen por la línea principal de WhatsApp del restaurante,
+no por un número aparte), el riesgo cambió de lugar: una campaña que se pasa del límite de Meta ya no
+degrada un número de marketing, degrada la línea de atención al cliente del negocio.
+
+**El encuadre:** el repo ya gobernaba la DEMANDA (`FREQUENCY_CAP_DAYS = 7`, `MONTHLY_MARKETING_CAP = 3`,
+blackout pre-evento, opt-out) pero **no gobernaba la OFERTA** — nada sabía que Meta limita cada línea a
+N destinatarios **únicos** por 24h **rodantes**, ni que ese límite lo consumen por igual las plantillas
+de marketing y las de utility. `BATCH_SIZE = 10` en las campañas era concurrencia, no un tope.
+
+Spec: `docs/superpowers/specs/2026-08-30-gobernanza-de-envio-design.md`.
+Esta entrega cubre el **Bloque 1** (presupuesto) y el **Bloque 8** (billetera).
+
+### Agregado
+
+- **`supabase/migrations/00037_send_governance.sql`** — 5 tablas nuevas (`message_class_map`,
+  `send_reservations`, `send_queue`, `line_health_snapshots`, `consent_events`), 6 columnas nuevas en
+  `tenants`, y 6 funciones. Ver `docs/DB_SCHEMA.md`.
+- **`src/services/line-budget.service.ts`** — reserva, liberación y lectura del presupuesto.
+- **`src/constants/messaging.ts`** — espejo en TS de `message_class_map`.
+- **`src/app/api/dashboard/line-budget/route.ts`** — cuánto puede emitir hoy la línea del tenant.
+- **`docs/features/send-governance.md`** — doc de la feature.
+
+### Modificado
+
+- **`src/services/whatsapp.service.ts`** — guarda de presupuesto en el choke-point único, **después
+  del opt-out** en ambas ramas (un cliente que pidió SALIR no debe consumir cupo), y liberación del
+  cupo cuando el proveedor rechaza. `is_demo` sigue saliendo antes: un tenant demo no consume cupo.
+- **`debit_wallet_on_message_sent()`** (dentro de 00037) — copia fiel de la 00033, **incluido su
+  `EXCEPTION WHEN OTHERS`**, con una sola guarda añadida: los tenants Zernio ya no se cobran.
+
+### Decisiones
+
+- **D-1 — Golden Bullet se permite** bajo régimen especial (spec §3.4.1). Sigue apagado por su feature
+  flag hasta que exista el Bloque 5.
+- **D-2 — se apaga el débito de billetera para tenants Zernio.** Meta le factura los mensajes directo
+  al restaurante; cobrarle además $100 COP/mensaje sería cobrarle dos veces. El modelo pasa a
+  suscripción mensual variable. **La billetera de los 4 tenants Twilio no se toca.** Lo que lo hace
+  posible: la billetera también era el freno de gasto, y el presupuesto de línea la reemplaza en esa
+  función — frenando contra el límite real de Meta en vez de contra el saldo.
+
+### Notas de diseño
+
+- **La reserva es atómica en Postgres, no en TypeScript.** Las campañas envían en paralelo; un patrón
+  leer-contar-insertar tiene una carrera que permite pasarse del límite. `reserve_send_slot()` toma un
+  `pg_advisory_xact_lock` por tenant. **No quitar ese lock.**
+- **La guarda falla CERRADO.** Si no se puede confirmar el cupo, no se envía
+  (`error_code = 'budget_check_failed'`). Perder una bienvenida es barato; que Meta le restrinja al
+  restaurante su línea principal, no. El `release`, en cambio, es best-effort: desperdiciar un cupo no
+  le restringe el número a nadie.
+- **Se cuenta `COUNT(DISTINCT phone)` sobre ventana rodante**, no mensajes por día calendario — es como
+  Meta cuenta de verdad.
+
+### Verificado
+
+- `npx tsc --noEmit`: **0 errores** en los archivos tocados. Los 43 errores restantes de `src/` son
+  `TS1149` (colisión de mayúsculas `Card.tsx`/`card.tsx`), preexistentes y provocados por que
+  `Level 2.0/aios-constelarys` importa `@/components/ui/Badge` con mayúscula.
+- `npx eslint` sobre los 4 archivos: limpio.
+- **NO verificado en base de datos real:** la migración no se ha aplicado (este proyecto no usa
+  Supabase CLI — se aplica a mano en el SQL Editor) y el proyecto **no tiene infraestructura de
+  pruebas** (sin vitest/jest, sin un solo archivo de test). La prueba de concurrencia de
+  `reserve_send_slot()` — 20 llamadas en paralelo con límite 10 deben conceder exactamente 10 — es la
+  más importante del spec y **sigue pendiente**.
+
+---
+
 ## [v2.10.0] — 2026-08-29 — feat: swap real Twilio → Zernio + funciones de alta del AIOS
 
 > Request original: *"...necesito dar de alta a 25 clientes nuevos... [integración Zernio completa:

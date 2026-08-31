@@ -67,6 +67,11 @@
 | `src/app/api/webhook/zernio/*` | `docs/features/zernio-messaging.md` + `docs/03-security.md` |
 | `src/services/*` | `docs/features/[feature].md` correspondiente |
 | `src/services/whatsapp.service.ts` | `docs/features/zernio-messaging.md` (ruteo por proveedor) + `docs/features/campaigns.md` |
+| `src/services/line-budget.service.ts` | `docs/features/send-governance.md` + `docs/DB_SCHEMA.md` |
+| `src/constants/messaging.ts` | `docs/features/send-governance.md` (espejo de `message_class_map` — cambiar SIEMPRE los dos lados) |
+| `src/app/api/dashboard/line-budget/*` | `docs/features/send-governance.md` + `docs/API_DOCS.md` |
+| `src/app/api/cron/queue-drain/*` | `docs/features/send-governance.md` + `docs/04-deployment.md` (lo dispara n8n, NO Vercel) |
+| `src/app/api/cron/line-health/*` | `docs/features/send-governance.md` + `docs/04-deployment.md` |
 | `src/constants/rewards.ts` | `docs/features/campaigns.md` + `docs/features/calendar.md` + `docs/features/points-mystery-box.md` |
 | `src/lib/points-engine.ts` | `docs/features/points-mystery-box.md` |
 | `src/services/points.service.ts` | `docs/features/points-mystery-box.md` |

@@ -62,6 +62,7 @@ Webhooks validan origen por número autorizado o `x-webhook-secret`. Cron jobs v
 | POST | /api/dashboard/campaigns/run-auto | Ejecutar cron birthday/reactivation del tenant actual (puente con CRON_SECRET) | Admin Cookie |
 | GET | /api/dashboard/twilio-balance | Saldo Twilio matriz + costo/msg (**saldo solo super-admin**; tenants → `restricted`) | Admin Cookie |
 | GET | /api/dashboard/wallet | Saldo COP del tenant actual: balance, mensajes disponibles, consumo del mes, últimos movimientos | Admin Cookie |
+| GET | /api/dashboard/line-budget | Cupo de envío de la línea hoy: límite de Meta, consumo de las últimas 24h, reserva transaccional, cupo de campaña disponible, calidad y estado de la línea | Admin Cookie |
 | POST | /api/admin/wallet/topup | Registrar recarga manual de un tenant (asignar saldo) | **Super-admin** |
 | GET | /api/admin/wallets | Estado de la billetera de todos los tenants (saldo, consumo, última recarga) | **Super-admin** |
 | GET | /api/dashboard/redemptions | Listar redenciones con filtros | Admin Cookie |
@@ -1407,6 +1408,45 @@ X-Device-Token: {device_fingerprint}
 **`DELETE /api/dashboard/staff?id=uuid`** — Admin JWT
 
 **Response 200:** `{ "success": true }`
+
+---
+
+### GET /api/dashboard/line-budget
+
+Cuántos mensajes puede emitir **hoy** la línea del tenant. Para tenants Zernio esta tarjeta reemplaza a
+la de billetera: desde la migración `00037` (decisión D-2) esos tenants ya no se cobran por mensaje
+— Meta les factura directo — así que el freno dejó de ser el saldo y pasó a ser el cupo.
+
+**Auth:** cookie de admin. Un super-admin sin `tenant_id` en el JWT recibe `{ "available": false }`
+(degrada limpio, igual que `/api/dashboard/wallet`).
+
+**Respuesta 200:**
+
+```json
+{
+  "available": true,
+  "limit": 250,
+  "used24h": 42,
+  "reserve": 70,
+  "campaignBudget": 180,
+  "campaignAvailable": 138,
+  "transactionalAvailable": 208,
+  "qualityRating": "green",
+  "lineStatus": "active"
+}
+```
+
+| Campo | Significado |
+|---|---|
+| `limit` | Destinatarios **únicos** que Meta permite en 24h **rodantes**. No es un contador por día calendario. |
+| `used24h` | `COUNT(DISTINCT phone)` en la ventana. Tres mensajes al mismo teléfono cuentan **uno**. |
+| `reserve` | Cupos apartados para lo transaccional. Existe porque en Meta una bienvenida pesa igual que una promo. |
+| `campaignBudget` | Techo total que las campañas pueden alcanzar (`limit - reserve`, x0.5 si `throttled`, 0 si `frozen`). |
+| `lineStatus` | `active` \| `throttled` \| `frozen`. Volver a `active` es **siempre** manual. |
+
+**Errores:** `401` sin sesión · `500` si no se pudo calcular el presupuesto.
+
+Ver `docs/features/send-governance.md`.
 
 ---
 

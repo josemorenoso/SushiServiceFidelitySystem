@@ -128,10 +128,45 @@ un `{{n}}`. Cambiar la aridad en `TEMPLATE_CATALOG` rompe el envío de los 3 est
 variables. Cada texto es una aprobación de Meta aparte, así que la diferencia entre 39 y 117 es real
 en tiempo y en riesgo.
 
-> ⚠️ **Observación para el dueño (no resuelta a propósito):** los textos `calido` traen 🍣 horneado —
-> nacieron para Sushi Service. En un tenant que no sea de comida japonesa, ese emoji se ve fuera de
-> lugar. No se tocó porque la decisión 2 dice explícitamente "sin cambios en el default"; cambiarlo es
-> una decisión del dueño, no nuestra. `elegante` y `urbano` sí nacen neutrales al tipo de negocio.
+### El emoji de marca (v2.15.0)
+
+Los textos `calido` nacieron para Sushi Service y traían **🍣 horneado dentro del texto**. Como Meta
+aprueba el cuerpo LITERAL, ese sushi le llegaba igual a una barbería. El dueño lo señaló y autorizó
+el cambio: *"hay que tener cuidado con que contenga stickers de sushi o algo porque se hardcodean
+para todos"*.
+
+Hoy ese lugar lo ocupa `${emoji}`, que resuelve `resolveTemplateEmoji(business_type, override)` en el
+momento de **construir** el cuerpo — antes de someterlo a Meta, exactamente igual que el nombre del
+negocio:
+
+| `business_type` | Emoji |
+|---|---|
+| `restaurant` | 🍽️ |
+| `barbershop` | 💈 |
+| `beauty_salon` | 💅 |
+| cualquier otro | ✨ |
+
+Override por tenant: `tenants.config.template_emoji`.
+
+**No es una variable `{{n}}`.** El contrato de variables no cambió: el emisor manda los mismos
+valores en el mismo orden y no sabe nada del emoji. Era el requisito explícito del dueño al autorizar
+el cambio (*"asegúrate que sigamos usando toda nuestra lógica de plantillas y variables"*).
+
+Tres reglas que hay que preservar:
+
+1. **`resolveTemplateEmoji()` nunca devuelve vacío.** Los textos lo pegan junto a otro emoji
+   (`🎉${emoji}`) o después de una palabra; una cadena vacía dejaría un espacio suelto dentro de un
+   texto **ya aprobado**, imposible de arreglar sin re-someterlo. Un tenant que no quiera emoji edita
+   sus textos, que es justo lo que la pantalla permite.
+2. **`buildTemplateBody()` y `detectTemplateStyle()` reciben el MISMO emoji.** Si difirieran, un
+   texto sin editar se detectaría como `personalizado` y la pantalla le diría al dueño que dejó de
+   usar el estilo que sí está usando. `emojiOf(tenant)` en `template.service.ts` es la única fuente.
+3. **Nada de emojis de un rubro concreto en `template-texts.ts`.**
+   `tests/unit/template-catalog.test.ts` recorre las 39 combinaciones y falla si aparece
+   🍣 🍕 🍔 🌮 ☕ 🍜 🥢 💈 💅 o 🍽️ horneado.
+
+Cambiar el emoji **no cambia las plantillas ya aprobadas**: el texto que Meta aprobó es literal. Solo
+afecta a las que se creen o se re-sometan después.
 
 ## Modelo de datos
 
@@ -206,6 +241,37 @@ negocio no es Zernio, y `page.tsx` cae al `TwilioTemplateManager` — la pantall
 componente **sin un solo cambio de comportamiento**. El guardarraíl de verdad no está en la UI sino en
 `assertZernioTenant()`, dentro del servicio, para que ninguna ruta pueda saltárselo.
 
+#### Completar huecos del set estándar (v2.15.0)
+
+Encima de esa pantalla se dibuja **«Del set estándar te faltan N»**
+(`StandardCatalogGaps.tsx` → `twilio-catalog.service.ts` → `/api/dashboard/templates/standard`).
+
+Existe por un reporte concreto del dueño: *"al apartado le faltan las plantillas de invitar a
+restaurante los que piden por domicilio e invitar a domicilio los que piden por restaurante"*. Las
+dos **sí están** en el catálogo y en el script de alta de Twilio, pero ese script solo corrió
+completo en algunas altas —el problema original de §12— y sus presets en `ManualCampaigns.tsx` se
+ocultan solos mientras su `admin_settings.*_template_sid` no apunte a una plantilla aprobada
+(§15.2). Resultado: una campaña que no se podía lanzar y ninguna pista de por qué.
+
+**Es estrictamente aditivo y no contradice la decisión 6** (*"los 4 tenants Twilio déjalos así, ni
+los toques"*): crea las que faltan y jamás reemplaza, reescribe ni re-somete una existente.
+
+| Estado | Qué significa | Qué se puede hacer |
+|---|---|---|
+| `missing` | No hay puntero en `admin_settings` | Crear con un click |
+| `orphan` | Hay puntero, pero Twilio no conoce ese ContentSid | Nada automático: repuntar una plantilla viva es una decisión |
+| `pending` | Creada, esperando a Meta | Esperar |
+| `approved` | Funcionando | Nada |
+
+**El invariante del puntero se mantiene y se afina.** `promoteVersion()` sigue siendo el único que
+**cambia** un `admin_settings.*_template_sid` que ya tiene valor, y solo tras la aprobación de Meta —
+así ningún negocio se queda 24-72 h sin ese mensaje. `fillEmptyPointer()` solo **rellena una clave
+vacía** y se niega en redondo si encuentra un valor: rellenar un hueco no puede abrir uno.
+
+Escribir el puntero antes de la aprobación es seguro y deliberado: `isPresetSendable()` exige además
+que el SID esté en la lista de aprobadas de Twilio, así que el preset sigue oculto hasta que Meta
+responda — y cuando responda, aparece solo, sin que nadie tenga que volver a entrar.
+
 ## Configuración
 
 | Variable de entorno | Requerida | Para qué |
@@ -232,8 +298,18 @@ claro al intentar crearlas. Meta **descarga** el archivo de muestra: no se puede
   un correo o un WhatsApp no está en §12.
 - **Generación de textos con LLM** — §12 respuesta 5: *"banco fijo, llm luego"*. El prompt P4 de
   `PROMPTS_SESIONES_BARATAS.md` queda para una fase posterior.
-- **Los 4 tenants Twilio** no reciben el catálogo estándar. Decisión 6, textual: "déjalos así, ni los
-  toques".
+- **Los 4 tenants Twilio** no reciben el catálogo estándar *completo*: sus plantillas existentes no
+  se tocan (decisión 6, textual: "déjalos así, ni los toques"). Desde v2.15.0 sí pueden **rellenar
+  los huecos** —crear las que nunca se les crearon— desde su propia pantalla. Lo que sigue sin
+  existir para ellos es el editor tipo documento y el cambio de estilo.
+- **Las 2 plantillas de evento (media) no se pueden crear desde la pantalla de Twilio.** Llevan
+  header de imagen/video y siguen dependiendo de `scripts/twilio-create-media-templates.mjs`. La
+  tarjeta las muestra como informativas, sin botón.
+- **No se agregó botón de opt-out a las plantillas MARKETING.** Meta lo pide para marketing desde
+  2024, pero las 11 que hay ya están **aprobadas con la línea de texto** *"Responde SALIR…"*, y
+  cambiar el componente obligaría a re-someter las 11 (24-72 h cada una) sin evidencia de que haga
+  falta. Si Meta empieza a rechazar plantillas nuevas por esto, el cambio es en
+  `src/lib/zernio/templates.ts` (hoy declara "sin footer y sin botones").
 
 ## Relación con otros docs
 

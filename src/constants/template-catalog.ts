@@ -29,6 +29,7 @@
  */
 
 import { TEMPLATE_TEXTS } from './template-texts'
+import type { BusinessType } from '@/types/tenant.types'
 import {
   TEMPLATE_STYLES,
   type CatalogTemplate,
@@ -80,6 +81,50 @@ export const TEMPLATE_STYLE_INFO: Record<
  * `{{2}}` en vez de ir horneada en el texto.
  */
 const BRAND_TOKEN = '{negocio}'
+
+/**
+ * EL EMOJI DE MARCA — el que va horneado en el texto que Meta aprueba.
+ *
+ * Los textos `calido` nacieron para Sushi Service y traían 🍣 escrito a mano.
+ * Como Meta aprueba el texto LITERAL, ese sushi le llegaba igual a una
+ * barbería. Ahora ese lugar lo ocupa un emoji resuelto por tipo de negocio en
+ * el momento de construir el cuerpo — antes de someterlo a Meta, exactamente
+ * igual que el nombre del negocio.
+ *
+ * ⚠️ NO es una variable `{{n}}`: el contrato de variables no cambia, y el
+ * emisor (check-in, crons, campañas, calendario) sigue mandando exactamente los
+ * mismos valores en el mismo orden.
+ */
+export const TEMPLATE_EMOJI_BY_BUSINESS_TYPE: Record<BusinessType, string> = {
+  restaurant: '🍽️',
+  barbershop: '💈',
+  beauty_salon: '💅',
+}
+
+/** Cuando el tipo de negocio no está en el mapa. Neutro a propósito. */
+export const FALLBACK_TEMPLATE_EMOJI = '✨'
+
+/**
+ * El emoji de un tenant: su override explícito si lo tiene, si no el de su
+ * tipo de negocio.
+ *
+ * Nunca devuelve vacío: los textos lo pegan junto a otro emoji (`🎉${emoji}`) o
+ * después de una palabra, así que una cadena vacía dejaría un espacio suelto
+ * dentro de un texto ya aprobado por Meta — imposible de arreglar sin volver a
+ * someterlo. Un tenant que no quiera emoji tiene que editar sus textos, que es
+ * justo lo que la pantalla de Plantillas ya permite.
+ */
+export function resolveTemplateEmoji(
+  businessType: string | null | undefined,
+  override?: string | null
+): string {
+  const trimmed = (override ?? '').trim()
+  if (trimmed) return trimmed
+  if (businessType && businessType in TEMPLATE_EMOJI_BY_BUSINESS_TYPE) {
+    return TEMPLATE_EMOJI_BY_BUSINESS_TYPE[businessType as BusinessType]
+  }
+  return FALLBACK_TEMPLATE_EMOJI
+}
 
 const ROADMAP_SAMPLE =
   '🥉 Bronce (150 pts) → Bebida gratis — te faltan 23 pts 🔥 · 🥈 Plata (350 pts) → Postre gratis · 🥇 Oro (600 pts) → Plato fuerte · 🖤 BLACK (1000 pts) → Experiencia Chef'
@@ -294,9 +339,17 @@ export function isTemplateStyle(value: string): value is TemplateStyle {
   return (TEMPLATE_STYLES as readonly string[]).includes(value)
 }
 
-/** Texto del banco para una plantilla + estilo, con el nombre del negocio ya puesto. */
-export function buildTemplateBody(key: TemplateKey, style: TemplateStyle, brandName: string): string {
-  return TEMPLATE_TEXTS[key][style](brandName)
+/**
+ * Texto del banco para una plantilla + estilo, con el nombre del negocio y su
+ * emoji ya puestos. Es el ÚNICO lugar que convierte el banco en un cuerpo real.
+ */
+export function buildTemplateBody(
+  key: TemplateKey,
+  style: TemplateStyle,
+  brandName: string,
+  emoji: string = FALLBACK_TEMPLATE_EMOJI
+): string {
+  return TEMPLATE_TEXTS[key][style](brandName, emoji)
 }
 
 /**
@@ -329,11 +382,12 @@ export function renderTemplatePreview(key: TemplateKey, body: string, brandName:
 export function detectTemplateStyle(
   key: TemplateKey,
   body: string,
-  brandName: string
+  brandName: string,
+  emoji: string = FALLBACK_TEMPLATE_EMOJI
 ): TemplateVersionStyle {
   const normalized = body.trim()
   for (const style of TEMPLATE_STYLES) {
-    if (buildTemplateBody(key, style, brandName).trim() === normalized) return style
+    if (buildTemplateBody(key, style, brandName, emoji).trim() === normalized) return style
   }
   return 'personalizado'
 }
@@ -412,11 +466,14 @@ export function validateTemplateBody(
  * mal escrito falle en un test (tests/template-catalog.test.ts) y no en una
  * respuesta de Meta 48 horas después.
  */
-export function assertCatalogTextsAreValid(brandName = 'Mi Negocio'): string[] {
+export function assertCatalogTextsAreValid(
+  brandName = 'Mi Negocio',
+  emoji = FALLBACK_TEMPLATE_EMOJI
+): string[] {
   const problems: string[] = []
   for (const definition of TEMPLATE_CATALOG) {
     for (const style of TEMPLATE_STYLES) {
-      const body = buildTemplateBody(definition.key, style, brandName)
+      const body = buildTemplateBody(definition.key, style, brandName, emoji)
       const issues = validateTemplateBody(body, {
         category: definition.category,
         expectedVariables: definition.variables.length,

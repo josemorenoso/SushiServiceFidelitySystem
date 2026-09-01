@@ -14,6 +14,7 @@ import { VisitHeatmap } from '@/components/dashboard/VisitHeatmap'
 import { AcquisitionChannelChart } from '@/components/dashboard/AcquisitionChannelChart'
 import { ReactivationRateChart } from '@/components/dashboard/ReactivationRateChart'
 import { CampaignEfficiencyChart } from '@/components/dashboard/CampaignEfficiencyChart'
+import { OptOutPanel } from '@/components/dashboard/OptOutPanel'
 import { TwilioMessagesPanel } from '@/components/dashboard/TwilioMessagesPanel'
 import { CustomerDetailDialog } from '@/components/dashboard/CustomerDetailDialog'
 import type { Customer } from '@/types/database.types'
@@ -84,6 +85,11 @@ export default function DashboardPage() {
       <ReactivationRateChart data={data?.reactivationRate ?? []} loading={loading} />
 
       <CampaignEfficiencyChart />
+
+      {/* Va ANTES del panel de Twilio: este cuenta los opt-outs de verdad (la
+          columna que el envío consulta), sirva el negocio por Twilio o por
+          Zernio. El de abajo los deduce de la API de Twilio y solo aplica ahí. */}
+      <OptOutPanel />
 
       <TwilioMessagesPanel />
 

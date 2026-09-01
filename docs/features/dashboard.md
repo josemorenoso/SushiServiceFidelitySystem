@@ -93,8 +93,18 @@ restaurante los que piden domi o invitar a que pidan domi los que van a restaura
 plantillas y no van a poder usarse, son básicamente de mentira"*. Los **filtros** de esos presets sí
 estaban implementados; lo que faltaba era la plantilla aprobada por Meta con ese mensaje.
 
-La regla implementada es genérica a propósito, porque la decisión de fondo (**15.b: ¿se eliminan los
-dos presets o se les crea plantilla?**) sigue abierta y esta regla sirve para las dos salidas:
+**15.b RESUELTA (2026-08-31): se les crea la plantilla.** El dueño lo pidió textualmente —*"a ese
+apartado le faltan las plantillas de invitar a restaurante los que piden por domicilio · invitar a
+domicilio los que piden por restaurante"*. No se elimina ningún preset.
+
+La regla de abajo **no cambia** y sigue siendo la que decide qué se dibuja; lo que cambia es que
+ahora hay un camino en la interfaz para cumplirla sin SQL ni scripts: la tarjeta «Del set estándar te
+faltan N» en `/dashboard/templates` (negocios Twilio) crea la plantilla y deja el puntero listo. En
+cuanto Meta aprueba, **el preset reaparece solo, sin tocar código** — que es exactamente lo que esta
+regla estaba diseñada para permitir. Ver `docs/features/whatsapp-templates.md` § "Completar huecos
+del set estándar".
+
+La regla es genérica a propósito y sirve igual para las dos salidas:
 
 - Un preset que declara `templateSettingKey` se muestra **solo** si esa clave de `admin_settings`
   apunta a un SID que existe y está **aprobado** (y no es de media — el camino de campañas no puede
@@ -105,16 +115,21 @@ dos presets o se les crea plantilla?**) sigue abierta y esta regla sirve para la
 
 | Preset | `templateSettingKey` | Estado hoy |
 |--------|----------------------|------------|
-| `invite_restaurant` (filtro `source: 'delivery_only'`) | `campaign_domicilio_to_presencial_template_sid` | Oculto hasta que exista y se apruebe la plantilla |
-| `invite_delivery` (filtro `source: 'qr_only'`) | `campaign_presencial_to_domicilio_template_sid` | Oculto hasta que exista y se apruebe la plantilla |
+| `invite_restaurant` (filtro `source: 'delivery_only'`) | `campaign_domicilio_to_presencial_template_sid` | Oculto hasta que la plantilla esté aprobada. Se crea desde `/dashboard/templates` |
+| `invite_delivery` (filtro `source: 'qr_only'`) | `campaign_presencial_to_domicilio_template_sid` | Ídem |
 | `black_exclusive` | — | Visible |
 | `near_reward` | — | Visible |
 | `rescue_lost` | — | Visible |
 
 Los dos SIDs son los del catálogo estándar de §12 (`campaign_domicilio_to_presencial` y
-`campaign_presencial_to_domicilio`). Efecto: hoy los dos presets fantasma desaparecen solos y el día
-que se les cree y apruebe la plantilla **reaparecen sin tocar código**. Si al final se decide
-eliminarlos, se borran las dos entradas de `PRESETS` y la regla sigue sirviendo para el resto.
+`campaign_presencial_to_domicilio`). Efecto: mientras no exista la plantilla, el preset no se dibuja;
+en cuanto Meta la aprueba **reaparece sin tocar código**.
+
+⚠️ **El efecto secundario que costó el diagnóstico:** un preset oculto se ve igual que un preset que
+nunca existió. El dueño reportó que "faltaban las plantillas" precisamente porque la campaña había
+desaparecido de la pantalla sin decir por qué. Por eso la tarjeta de huecos vive en la pantalla de
+Plantillas y nombra la consecuencia: *"mientras falte una, la campaña que la usa no aparece en el
+apartado de Campañas"*.
 
 La predicción vive en `isPresetSendable()` (`src/components/dashboard/ManualCampaigns.tsx`), función
 pura y fuera del JSX. Si ningún preset es enviable, la pantalla lo dice y deja los filtros manuales

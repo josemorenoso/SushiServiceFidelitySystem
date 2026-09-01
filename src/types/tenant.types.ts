@@ -20,6 +20,14 @@ export interface TenantConfig {
   instagram_url?: string // perfil de Instagram — contacto alterno si el negocio no da WhatsApp
   google_maps_url?: string // URL de reseña en Google Maps
   delivery_phone?: string // teléfono de domicilios (fallback del link de WhatsApp)
+  /**
+   * Emoji de marca que se hornea en las plantillas de WhatsApp del estilo
+   * `calido`. Opcional: sin él se usa el de `business_type`
+   * (`resolveTemplateEmoji()` en src/constants/template-catalog.ts).
+   * ⚠️ Cambiarlo NO cambia las plantillas ya aprobadas: el texto que Meta
+   * aprobó es literal. Solo afecta a las que se creen o se re-sometan después.
+   */
+  template_emoji?: string
   card_bg?: string // gradiente CSS de la tarjeta digital
   page_bg?: string // gradiente CSS de fondo de la tarjeta/wallet
 }

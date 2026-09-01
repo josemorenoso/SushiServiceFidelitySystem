@@ -37,6 +37,7 @@ import {
   buildTemplateBody,
   buildTemplateExample,
   detectTemplateStyle,
+  resolveTemplateEmoji,
   isTemplateStyle,
   validateTemplateBody,
 } from '@/constants/template-catalog'
@@ -180,6 +181,18 @@ function brandNameOf(tenant: Tenant): string {
 }
 
 /**
+ * El emoji que se hornea en los textos `calido`.
+ *
+ * Va junto al nombre del negocio en todo lugar que construya o compare un
+ * cuerpo: si `detectTemplateStyle()` usara otro emoji que `buildTemplateBody()`,
+ * un texto sin editar se detectaría como «personalizado» y la pantalla le diría
+ * al dueño que dejó de usar el estilo que sí está usando.
+ */
+function emojiOf(tenant: Tenant): string {
+  return resolveTemplateEmoji(tenant.business_type, tenant.config?.template_emoji)
+}
+
+/**
  * Todo lo que la pantalla de Plantillas necesita: la definición de las 13, qué
  * se está enviando hoy, qué hay en revisión y qué texto propone el estilo actual.
  */
@@ -191,6 +204,7 @@ export async function getTemplateCatalogState(tenant: Tenant): Promise<TemplateC
   ])
 
   const brandName = brandNameOf(tenant)
+  const emoji = emojiOf(tenant)
 
   const entries: TemplateCatalogEntry[] = TEMPLATE_CATALOG.map((definition) => {
     const mine = versions.filter((v) => v.template_key === definition.key)
@@ -212,7 +226,7 @@ export async function getTemplateCatalogState(tenant: Tenant): Promise<TemplateC
       current,
       pending,
       lastRejected,
-      suggestedBody: buildTemplateBody(definition.key, style, brandName),
+      suggestedBody: buildTemplateBody(definition.key, style, brandName, emoji),
       // Puntero cargado fuera del panel (alta por el AIOS o SQL directo): la
       // plantilla está activa pero no tenemos su texto. La UI lo dice tal cual
       // en vez de inventarse un cuerpo que quizá no es el que se está enviando.
@@ -345,7 +359,7 @@ export async function saveTemplateEdit(input: SaveTemplateInput): Promise<SaveTe
     definition,
     body,
     brandName,
-    style: detectTemplateStyle(key, body, brandName),
+    style: detectTemplateStyle(key, body, brandName, emojiOf(tenant)),
     editor,
     existing: mine,
     pointer: pointers[definition.settingsKey] ?? null,
@@ -531,6 +545,7 @@ export async function applyStyleToCatalog(args: {
   }
 
   const brandName = brandNameOf(tenant)
+  const emoji = emojiOf(tenant)
   const versions = await fetchVersions(tenant.id)
   const pointers = await fetchPointers(tenant.id)
 
@@ -538,7 +553,7 @@ export async function applyStyleToCatalog(args: {
 
   for (const definition of TEMPLATE_CATALOG) {
     const mine = versions.filter((v) => v.template_key === definition.key)
-    const body = buildTemplateBody(definition.key, style, brandName)
+    const body = buildTemplateBody(definition.key, style, brandName, emoji)
 
     if (mine.some((v) => v.status === 'pending')) {
       result.skipped.push({ key: definition.key, reason: 'ya tenía un cambio en revisión' })

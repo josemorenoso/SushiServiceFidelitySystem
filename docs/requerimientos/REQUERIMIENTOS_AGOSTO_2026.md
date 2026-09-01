@@ -1271,6 +1271,87 @@ QR? Sin eso no se puede codear el reinicio del contador.
 
 ---
 
+## 21. Panel del AIOS — dónde y en qué condición está cada negocio (pedido 2026-08-31)
+
+**Textual:** *"tengo que poder seleccionar los que usen twilio o estén en otro supabase, para saber
+en qué lugar y condición están · los créditos disponibles para mensaje están escondidos, necesito que
+esté visible a primera vista, es lo que tengo que estar más pendiente · los cobros, por propietario,
+tengo que poder definirlo ahí mismo; si hay varias sedes y el pago es a propietario él tiene que ser
+capaz de ver igualmente cuál consumió qué"*.
+
+**Estado: RESUELTO — AIOS v1.3.0 (migraciones 00005 y 00006 del AIOS).**
+
+Contexto que lo disparó: Sushi Service y Don Alirio llevan meses mandando WhatsApp por **Twilio**, y
+Sushi Fun vive en **su propio Supabase/Vercel**, nunca entró al multitenant (§2). El panel solo sabía
+representar una forma de existir —sede con tenant compartido esperando el alta de Zernio— así que a
+los tres les mostraba eternamente "falta el último paso de instalar WhatsApp".
+
+Lo implementado, en `Level 2.0/aios-constelarys/`:
+
+1. **Condición por sede** (`client_locations.platform` + `.messaging`). Dónde vive (`shared` /
+   `external`) y con qué manda (`pending` / `none` / `twilio` / `zernio`). Un CHECK impide que una
+   sede `external` tenga `tenant_slug`: buscarlo en la base compartida devolvería "no existe" para
+   siempre. El wizard de Zernio solo se despliega si alguna sede lo espera; los pasos que no aplican
+   salen **«No aplica»**, no «Pendiente».
+2. **Créditos a primera vista.** Tarjeta primera en `/clientes`, columna en la lista, línea por sede.
+   Con una corrección de fondo: el crédito **no sale del mismo lado según el proveedor**. Twilio gasta
+   billetera (`saldo / precio_por_mensaje`); Zernio gasta cupo de línea de Meta, porque la migración
+   00037 del producto (decisión D-2) apagó su billetera y su saldo es 0 por diseño. Se lee de
+   `aios_line_health()`.
+3. **`clients.billing_mode`**: `per_site` o `consolidated` (UN cobro por el grupo). Cambiar de modo no
+   cobra dos veces —cada rama del motor se salta los períodos que la otra ya cubrió— y la sección
+   "Cobro y consumo por sede" muestra el desglose aunque el cobro sea uno solo.
+
+**Pendiente del dueño:** revisar la condición de las sedes importadas. El backfill marca `twilio` a
+todo tenant preexistente (es correcto: `messaging_provider` tiene DEFAULT `'twilio'`), pero los de
+cortesía sin WhatsApp —Frangal— hay que pasarlos a **«Sin WhatsApp»** a mano. Ese dato es comercial y
+no está en ninguna columna que se pueda leer.
+
+---
+
+## 22. Franquicias — varios propietarios sobre la misma marca (anticipado 2026-08-31, NO es v1)
+
+**Textual:** *"a futuro es posible que entremos en tema de franquicia, en esta parte vamos a tener un
+proyecto para el mismo restaurante con varios propietarios cada uno encargado de su fase"*.
+
+**No se construyó nada.** Se anota acá para que las decisiones de hoy no cierren la puerta, que es lo
+único que el dueño pidió al mencionarlo.
+
+**Qué encaja ya:** el modelo propietario → sedes del AIOS soporta que cada franquiciado sea un
+`clients` propio con sus sedes, su día de corte y su modo de cobro. Del lado del producto, cada sede
+ya es un tenant con su marca, su billetera y su número. Un franquiciado nuevo es un alta más.
+
+**Qué falta y por qué no es trivial:**
+
+1. **No existe el nivel "marca".** `clients` es el propietario; no hay una entidad por encima que
+   agrupe a los franquiciados de un mismo restaurante. Sin ella no se puede responder "cuánto vende
+   la marca completa" ni compartir catálogo de plantillas entre franquiciados.
+2. **Las plantillas hornean el nombre del negocio.** Los 11 textos interpolan `brandName` dentro del
+   cuerpo que Meta aprueba, así que dos franquiciados de la misma marca con nombres distintos
+   necesitan **plantillas distintas aprobadas por separado** — no se comparten. Si la marca es la
+   misma cadena exacta, sí se podrían compartir, pero cada uno tiene su propia WABA.
+3. **Un número por propietario, no por marca.** El wizard de Zernio crea profile + número a nivel de
+   `clients`. Cuatro franquiciados = cuatro números y cuatro facturas de Meta. Es probablemente lo
+   correcto (cada uno responde por su línea), pero es una decisión, no un accidente.
+4. **`idx_tenants_zernio_account_id`** ya bloquea que dos tenants compartan cuenta Zernio — el mismo
+   índice que hoy impide activar la segunda sede de un propietario (§7.3 del spec del AIOS). Con
+   franquicias el problema se multiplica.
+5. **Los puntos del cliente son por tenant.** Un comensal que visita dos sedes de la misma marca
+   acumula dos saldos separados. Para una franquicia eso puede ser exactamente lo que se quiere (cada
+   franquiciado paga sus propios premios) o exactamente lo que no. **Es la pregunta más cara de las
+   cinco** y hay que responderla antes de escribir código.
+
+**Preguntas para el dueño, cuando toque:**
+
+- ¿Los puntos son de la marca o de la sede? Determina si hace falta un identificador de cliente
+  compartido entre tenants — el cambio de schema más grande de toda esta lista.
+- ¿Quién paga a Cada1: cada franquiciado por su lado, o el franquiciante por todos? Si es lo segundo,
+  `billing_mode = 'consolidated'` ya lo cubre; si es lo primero, ya funciona hoy.
+- ¿Un franquiciado puede editar sus propias plantillas, o el franquiciante fija el mensaje de la
+  marca? Hoy el permiso es por tenant, así que por defecto cada uno edita las suyas.
+
+---
+
 **Este documento se generó con una auditoría de 10 agentes en paralelo** (Twilio/acoplamiento,
 arquitectura multitenant, calendario, QR, referidos, personalización check-in, branding/plantillas,
 puntos/niveles, push/FCM, y visión general del proyecto) — ninguno tuvo acceso a Supabase en vivo (el

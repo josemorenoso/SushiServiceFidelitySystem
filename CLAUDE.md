@@ -78,7 +78,12 @@
 | `src/services/line-budget.service.ts` | `docs/features/send-governance.md` + `docs/DB_SCHEMA.md` |
 | `src/services/template.service.ts` | `docs/features/whatsapp-templates.md` + `docs/DB_SCHEMA.md` (⚠️ `promoteVersion()` es el ÚNICO escritor de `admin_settings.*_template_sid`) |
 | `src/constants/template-catalog.ts` | `docs/features/whatsapp-templates.md` + `docs/PLANTILLAS.md` (⚠️ el contrato de variables `{{n}}` es fijo — cambiarlo rompe el envío de los 3 estilos) |
-| `src/constants/template-texts.ts` | `docs/features/whatsapp-templates.md` (banco de 39 textos; `calido` NO se toca sin decisión del dueño) |
+| `src/constants/template-texts.ts` | `docs/features/whatsapp-templates.md` (banco de 39 textos; `calido` NO se toca sin decisión del dueño · ⚠️ PROHIBIDO hornear emojis de un rubro — usa `${emoji}`, hay un test que lo vigila) |
+| `src/services/twilio-catalog.service.ts` | `docs/features/whatsapp-templates.md` § "Completar huecos" (⚠️ ADITIVO: `fillEmptyPointer()` solo rellena claves vacías; `promoteVersion()` sigue siendo el único que CAMBIA un puntero vivo) |
+| `src/app/api/dashboard/templates/standard/*` | `docs/features/whatsapp-templates.md` + `docs/API_DOCS.md` (espejo Twilio de `/catalog`) |
+| `src/components/dashboard/templates/StandardCatalogGaps.tsx` | `docs/features/whatsapp-templates.md` + `docs/features/dashboard.md` §15.2 (un preset oculto se ve igual que uno inexistente) |
+| `src/components/dashboard/OptOutPanel.tsx` | `docs/features/campaigns.md` (lee `customers.whatsapp_opt_out_at`, NO Twilio — funciona con los dos proveedores) |
+| `src/app/api/dashboard/opt-outs/*` | `docs/API_DOCS.md` + `docs/features/campaigns.md` |
 | `src/lib/zernio/templates.ts` | `docs/features/whatsapp-templates.md` + `Level 2.0/aios-constelarys/docs/zernio-api-contract.md` §4 (NO inventar rutas) |
 | `src/app/api/dashboard/templates/catalog/*` | `docs/features/whatsapp-templates.md` + `docs/API_DOCS.md` |
 | `src/app/api/dashboard/templates/style/*` | `docs/features/whatsapp-templates.md` + `docs/API_DOCS.md` |

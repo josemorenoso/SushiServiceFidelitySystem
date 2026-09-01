@@ -89,6 +89,9 @@ Webhooks validan origen por número autorizado o `x-webhook-secret`. Cron jobs v
 | GET | /api/dashboard/templates/catalog | Estado del catálogo estándar (13 plantillas) — **solo Zernio** | Admin Cookie |
 | PUT | /api/dashboard/templates/catalog/:key | Editar una plantilla del catálogo | Admin Cookie |
 | PUT | /api/dashboard/templates/style | Cambiar estilo (± re-aplicar a las 13) | Admin Cookie |
+| GET | /api/dashboard/templates/standard | Qué le falta del set estándar — **solo Twilio** | Admin Cookie |
+| POST | /api/dashboard/templates/standard | Crear UNA plantilla estándar que falte (aditivo) | Admin Cookie |
+| GET | /api/dashboard/opt-outs | Clientes que pidieron salir — agnóstico de proveedor | Admin Cookie |
 | POST | /api/dashboard/check-in-override | Registrar visita extra (admin override) | Admin Cookie |
 | GET | /api/dashboard/settings | Obtener configuración del admin | Admin Cookie |
 | PUT | /api/dashboard/settings | Actualizar configuración | Admin Cookie |
@@ -1107,6 +1110,104 @@ bloquear va a ser su culpa") no se sostiene sin ese registro.
 | 404 | `:key` no existe en el catálogo |
 | 409 | Ya hay una edición de esa plantilla en revisión, el negocio no es Zernio, o no tiene WhatsApp conectado |
 | 502 | Zernio rechazó la creación. **La plantilla actual sigue funcionando**; el intento queda registrado con `status='failed'` |
+
+#### `GET /api/dashboard/templates/standard` — Admin JWT
+
+Espejo Twilio de `/catalog`: aquel devuelve 409 a un tenant Twilio, este devuelve **409** a uno
+Zernio. Dice en qué punto está cada una de las 13 plantillas del catálogo estándar para este negocio.
+
+```json
+{
+  "provider": "twilio",
+  "brandName": "Don Alirio",
+  "emoji": "🍽️",
+  "style": "calido",
+  "missingCount": 2,
+  "warning": null,
+  "templates": [
+    {
+      "key": "campaign_presencial_to_domicilio",
+      "label": "Campaña — invitar a pedir a domicilio",
+      "description": "…",
+      "whenSent": "Solo cuando lanzas esta campaña manual desde el dashboard.",
+      "settingsKey": "campaign_presencial_to_domicilio_template_sid",
+      "category": "MARKETING",
+      "state": "missing",
+      "pointer": null,
+      "approvalStatus": null,
+      "body": "¡Hola {{1}}! 🛵🍽️
+
+…",
+      "needsMedia": false
+    }
+  ]
+}
+```
+
+`state`: `missing` (no hay puntero) · `orphan` (hay puntero pero Twilio no conoce ese ContentSid) ·
+`pending` (esperando a Meta) · `approved`. `warning` se llena si no se pudo leer la lista de Twilio;
+en ese caso los punteros existentes se reportan como `approved` y el aviso lo explica.
+
+#### `POST /api/dashboard/templates/standard` — Admin JWT
+
+```json
+{ "key": "campaign_presencial_to_domicilio" }
+```
+
+Crea esa plantilla en la cuenta Twilio del tenant con el texto del catálogo (estilo + marca + emoji
+del negocio), la somete a Meta y **rellena el puntero solo si estaba vacío**.
+
+```json
+{
+  "success": true,
+  "key": "campaign_presencial_to_domicilio",
+  "contentSid": "HX…",
+  "approvalSubmitted": true,
+  "approvalError": null,
+  "pointerWritten": true
+}
+```
+
+| Código | Cuándo |
+|---|---|
+| 400 | `key` no es del catálogo, o lleva media (las 2 de evento no se crean desde acá) |
+| 409 | El tenant es Zernio, **o** esa plantilla ya tiene puntero (esto solo llena huecos) |
+| 502 | Twilio rechazó la creación |
+
+Si la creación sale bien pero el envío a Meta falla, **no se aborta**: la plantilla ya existe en
+Twilio, así que se informa (`approvalSubmitted: false` + `approvalError`) y el dueño la reenvía con
+el botón «Enviar a Meta» que ya tiene la lista.
+
+> Doc de feature: `docs/features/whatsapp-templates.md` § "Completar huecos del set estándar".
+
+#### `GET /api/dashboard/opt-outs` — Admin JWT
+
+Query: `days` (default 90, máx 365) — la ventana de la lista de recientes, **no** del total.
+
+```json
+{
+  "total": 14,
+  "base": 620,
+  "rate": 2.3,
+  "days": 90,
+  "recentCount": 3,
+  "recent": [
+    {
+      "id": "uuid",
+      "name": "María",
+      "phone": "300···4567",
+      "optedOutAt": "2026-08-28T14:02:11.000Z",
+      "totalVisits": 7,
+      "totalPoints": 320
+    }
+  ]
+}
+```
+
+Lee `customers.whatsapp_opt_out_at`, que es **la misma columna que consulta `isPhoneOptedOut()` antes
+de cada envío** en las dos ramas de proveedor. Por eso cuenta igual con Twilio y con Zernio, a
+diferencia de `/api/dashboard/twilio-metrics`, que deduce los opt-outs paginando la API de Mensajes
+de Twilio y devuelve vacío para un tenant Zernio. El teléfono va enmascarado.
 
 #### `PUT /api/dashboard/templates/style` — Admin JWT
 

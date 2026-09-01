@@ -5,6 +5,100 @@
 
 ---
 
+## [v2.15.0] — 2026-08-31 — fix: el 🍣 horneado, las campañas de cross-sell que no aparecían, y el opt-out visible
+
+> Request original: *"hay que tener cuidado con que contenga stickers de sushi o algo porque se
+> hardcodean para todos · a ese apartado le faltan las plantillas de invitar a restaurante los que
+> piden por domicilio e invitar a domicilio los que piden por restaurante · el OPT OUT no hablamos
+> de eso pero es extremadamente importante, que el cliente pueda decir Salir y se salga"*.
+> Requerimientos: `docs/requerimientos/REQUERIMIENTOS_AGOSTO_2026.md` §12, §13.
+> **Sin migración.** El único cambio de schema es una clave opcional en `tenants.config` (jsonb).
+
+### El emoji de sushi dejó de ir horneado en las plantillas de todos
+
+Los 11 textos del estilo `calido` nacieron para Sushi Service y traían 🍣 **escrito dentro del
+texto**. Como Meta aprueba el cuerpo LITERAL, ese sushi le llegaba igual a una barbería o a un salón
+de belleza — y no había forma de quitarlo sin volver a someter la plantilla.
+
+Ahora ese lugar lo ocupa un emoji que se resuelve **al construir el cuerpo**, antes de mandarlo a
+Meta, exactamente igual que el nombre del negocio:
+
+| Tipo de negocio | Emoji |
+|---|---|
+| `restaurant` | 🍽️ |
+| `barbershop` | 💈 |
+| `beauty_salon` | 💅 |
+| cualquier otro | ✨ |
+
+Con override por tenant en `tenants.config.template_emoji` para el negocio que quiera el suyo.
+
+**No es una variable `{{n}}` y el contrato de variables no cambió.** El emisor (check-in, crons,
+campañas, calendario) sigue mandando exactamente los mismos valores en el mismo orden — era el
+requisito explícito del dueño: *"asegúrate que sigamos usando toda nuestra lógica de plantillas y
+variables"*. `resolveTemplateEmoji()` nunca devuelve vacío: una cadena vacía dejaría un espacio
+suelto dentro de un texto ya aprobado, imposible de arreglar sin re-someterlo.
+
+De paso, `campaign_domicilio_to_presencial` decía "llevarte **la comida** a casa" → "el pedido".
+
+Un test nuevo (`tests/unit/template-catalog.test.ts`) recorre las 39 combinaciones y **falla si
+alguien vuelve a hornear un emoji de rubro** (🍣 🍕 🍔 🌮 ☕ 🍜 🥢 💈 💅 🍽️). 33 pruebas en verde.
+
+### Las dos campañas de cross-sell sí existían — pero no en la cuenta de Twilio del negocio
+
+Diagnóstico del reporte *"al apartado le faltan las plantillas de invitar a restaurante…"*:
+
+1. Las dos **están** en el catálogo estándar (`campaign_presencial_to_domicilio` y
+   `campaign_domicilio_to_presencial`) y en el script de alta de Twilio.
+2. Pero ese script solo corrió completo en algunas altas — que es exactamente el problema que §12
+   describe: *"cada alta terminaba con un set de plantillas distinto"*.
+3. Y sus presets en `ManualCampaigns.tsx` **se ocultan solos** mientras su
+   `admin_settings.*_template_sid` no apunte a una plantilla aprobada (regla §15.2). Sin plantilla,
+   la campaña no se dibuja y no había forma de saber por qué.
+
+Se agrega, **solo para negocios en Twilio**, una tarjeta «Del set estándar te faltan N» encima de la
+lista de plantillas: dice cuáles faltan, muestra el texto exacto que se crearía y la crea con un
+click (creación + envío a Meta + puntero listo).
+
+**Estrictamente aditivo.** Respeta la decisión 6 del dueño (*"los 4 tenants Twilio déjalos así, ni
+los toques"*): nunca reemplaza, reescribe ni re-somete una plantilla existente.
+`fillEmptyPointer()` se niega a escribir si la clave ya tiene valor —`promoteVersion()` sigue siendo
+el único que **cambia** un puntero vivo, y solo tras la aprobación de Meta— así que rellenar un hueco
+no puede abrir uno.
+
+### El opt-out ya funcionaba; lo que faltaba era poder verlo
+
+Verificado punta a punta antes de tocar nada, y **estaba completo**: el webhook de Twilio y el de
+Zernio persisten `customers.whatsapp_opt_out_at` ante SALIR/STOP/BAJA/CANCELAR,
+`sendTemplateMessage()` lo consulta en **las dos ramas de proveedor**, la cola de goteo lo revisa al
+encolar y otra vez al drenar (entre las dos cosas pueden pasar días), y las campañas lo filtran. Las
+11 plantillas de marketing ya cierran con *"Responde SALIR para no recibir más mensajes."*
+
+Lo que **no** existía era verlo sin depender de Twilio: `/api/dashboard/twilio-metrics` deduce los
+opt-outs paginando la API de Mensajes de Twilio, así que a un negocio en Zernio le mostraba **cero**
+aunque sus clientes sí hubieran respondido SALIR y el sistema los estuviera respetando.
+
+Panel nuevo **«Clientes que pidieron salir»** en el dashboard, encima del de Twilio: lee la columna
+que el envío consulta de verdad, así que cuenta igual con los dos proveedores. Total, % de la base y
+los recientes, con aviso cuando pasa del 5% — que es cuando Meta empieza a bajar la calidad del
+número y con ella el límite diario.
+
+### Archivos
+
+- `src/constants/template-texts.ts` — 13 usos de `${emoji}`, cero emojis de rubro horneados
+- `src/constants/template-catalog.ts` — `resolveTemplateEmoji()`, `TEMPLATE_EMOJI_BY_BUSINESS_TYPE`
+- `src/types/tenant.types.ts` — `TenantConfig.template_emoji`
+- `src/services/template.service.ts` — `emojiOf(tenant)` en los 3 puntos que construyen o comparan un cuerpo
+- `src/services/twilio-catalog.service.ts` **(nuevo)**
+- `src/app/api/dashboard/templates/standard/route.ts` **(nuevo)**
+- `src/components/dashboard/templates/StandardCatalogGaps.tsx` **(nuevo)**
+- `src/components/dashboard/templates/TwilioTemplateManager.tsx` — monta la tarjeta
+- `src/app/api/dashboard/opt-outs/route.ts` **(nuevo)**
+- `src/components/dashboard/OptOutPanel.tsx` **(nuevo)**
+- `src/app/(dashboard)/dashboard/page.tsx` — monta el panel
+- `tests/unit/template-catalog.test.ts` — 6 pruebas nuevas del emoji de marca
+
+---
+
 ## [v2.14.0] — 2026-08-30 — feat(UI): limpieza del panel, campañas fantasma y tarjeta Black
 
 > Request original: *"§14.1 + §17.1 mover la sección de clientes Black · §14.2 el resumen baja de 20

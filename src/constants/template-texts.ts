@@ -37,7 +37,7 @@
  * portado a Zernio en `Level 2.0/aios-constelarys/src/lib/zernio/templates-catalog.ts`).
  * §12 respuesta 2: "Tono por defecto: cálido — el actual. Sin cambios en el
  * default". No tocar estos textos sin una decisión explícita del dueño.
- * Nota para el dueño: los textos `calido` traen 🍣 horneado (nacieron para
+ * Nota para el dueño: los textos `calido` traen ${emoji} horneado (nacieron para
  * Sushi Service). En un tenant que no sea de comida japonesa ese emoji se ve
  * fuera de lugar. `elegante` y `urbano` nacen neutrales al tipo de negocio.
  */
@@ -47,8 +47,22 @@ import type { TemplateKey, TemplateStyle } from '@/types/template.types'
 /** Cierre de opt-out obligatorio en toda plantilla MARKETING. */
 export const OPT_OUT_LINE = '_Responde SALIR para no recibir más mensajes._'
 
-/** Construye el cuerpo de una plantilla interpolando el nombre del negocio. */
-export type TemplateBodyBuilder = (brandName: string) => string
+/**
+ * Construye el cuerpo de una plantilla interpolando el nombre del negocio y su
+ * emoji de marca.
+ *
+ * `emoji` existe porque los textos `calido` nacieron para Sushi Service y
+ * traían 🍣 HORNEADO: un texto aprobado por Meta es literal, así que ese sushi
+ * se le enviaba igual a una barbería. Ahora el emoji lo pone
+ * `defaultTemplateEmoji(business_type)` (o el override del tenant) en el
+ * momento de construir el cuerpo — antes de someterlo a Meta, exactamente
+ * igual que el nombre del negocio. **No es una variable `{{n}}`**: el contrato
+ * de variables no cambia y el emisor sigue mandando los mismos valores.
+ *
+ * Los builders que no lo usan pueden declarar solo `brandName`: en TypeScript
+ * una función de menos parámetros sigue siendo asignable.
+ */
+export type TemplateBodyBuilder = (brandName: string, emoji: string) => string
 
 /**
  * El banco. El tipo `Record<TemplateKey, Record<TemplateStyle, ...>>` obliga a
@@ -61,8 +75,8 @@ export const TEMPLATE_TEXTS: Record<TemplateKey, Record<TemplateStyle, TemplateB
   //     {{1}} nombre · {{2}} puntos iniciales · {{3}} roadmap de tiers
   // ─────────────────────────────────────────────────────────────
   welcome: {
-    calido: (brand) =>
-      `¡Hola {{1}}! 🎉🍣\n\nBienvenid@ a *${brand}*, nos alegra que seas parte de nuestro club\n\nEn cada visita sumas puntos y recibes premios reales — Hoy recibiste *{{2}} puntos* 🎉\n\nAsí funciona tu camino de recompensas 👇\n\n{{3}}\n\n¡Te esperamos pronto!\n\n_— ${brand}_`,
+    calido: (brand, emoji) =>
+      `¡Hola {{1}}! 🎉${emoji}\n\nBienvenid@ a *${brand}*, nos alegra que seas parte de nuestro club\n\nEn cada visita sumas puntos y recibes premios reales — Hoy recibiste *{{2}} puntos* 🎉\n\nAsí funciona tu camino de recompensas 👇\n\n{{3}}\n\n¡Te esperamos pronto!\n\n_— ${brand}_`,
     elegante: (brand) =>
       `Hola {{1}}, es un gusto recibirte.\n\nTe damos la bienvenida a *${brand}*. Desde hoy formas parte de nuestro club de clientes.\n\nCada visita suma puntos, y cada punto se convierte en un beneficio real. Comienzas con *{{2}} puntos*.\n\nEste es el camino que te espera:\n\n{{3}}\n\nSerá un placer atenderte de nuevo.\n\n_— ${brand}_`,
     urbano: (brand) =>
@@ -74,8 +88,8 @@ export const TEMPLATE_TEXTS: Record<TemplateKey, Record<TemplateStyle, TemplateB
   //     {{1}} nombre · {{2}} pts ganados · {{3}} saldo · {{4}} roadmap
   // ─────────────────────────────────────────────────────────────
   points_earned_far: {
-    calido: (brand) =>
-      `¡{{1}}, gracias por tu visita! Esperamos que hayas disfrutado tu experiencia 🍣\n\nSumaste *+{{2}} puntos* hoy 🔥\n\nTu saldo: *{{3}} puntos*\n\nSigue visitándonos y descubre lo que te espera 👇\n\n{{4}}\n\nCuando llegues a tu próximo nivel podrás elegir entre tu *premio seguro* o la *Mystery Box* 🎲\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
+    calido: (brand, emoji) =>
+      `¡{{1}}, gracias por tu visita! Esperamos que hayas disfrutado tu experiencia ${emoji}\n\nSumaste *+{{2}} puntos* hoy 🔥\n\nTu saldo: *{{3}} puntos*\n\nSigue visitándonos y descubre lo que te espera 👇\n\n{{4}}\n\nCuando llegues a tu próximo nivel podrás elegir entre tu *premio seguro* o la *Mystery Box* 🎲\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
     elegante: (brand) =>
       `Gracias por acompañarnos hoy, {{1}}.\n\nSumaste *{{2}} puntos* en esta visita.\n\nTu saldo actual es de *{{3}} puntos*.\n\nAsí avanza tu recorrido:\n\n{{4}}\n\nAl alcanzar el siguiente nivel podrás elegir entre tu premio asegurado o la Mystery Box.\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
     urbano: (brand) =>
@@ -87,8 +101,8 @@ export const TEMPLATE_TEXTS: Record<TemplateKey, Record<TemplateStyle, TemplateB
   //     {{1}} nombre · {{2}} pts ganados · {{3}} saldo · {{4}} premio próximo
   // ─────────────────────────────────────────────────────────────
   points_earned_near: {
-    calido: (brand) =>
-      `¡{{1}}, gracias por tu visita! Esperamos que hayas disfrutado tu experiencia 🍣\n\n¡Casi lo lograste! Sumaste *+{{2}} puntos* 🔥\n\nTu saldo: *{{3}} puntos*\n\nLa próxima visita reclama tu *{{4}}* o si quieres probar suerte, selecciona la *Mystery Box* con premios todavía mejores 🎲\n\n¡Vuelve pronto que ya casi es tuyo!\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
+    calido: (brand, emoji) =>
+      `¡{{1}}, gracias por tu visita! Esperamos que hayas disfrutado tu experiencia ${emoji}\n\n¡Casi lo lograste! Sumaste *+{{2}} puntos* 🔥\n\nTu saldo: *{{3}} puntos*\n\nLa próxima visita reclama tu *{{4}}* o si quieres probar suerte, selecciona la *Mystery Box* con premios todavía mejores 🎲\n\n¡Vuelve pronto que ya casi es tuyo!\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
     elegante: (brand) =>
       `Gracias por tu visita, {{1}}.\n\nSumaste *{{2}} puntos* y estás muy cerca de tu próximo nivel.\n\nTu saldo actual es de *{{3}} puntos*.\n\nEn tu siguiente visita podrás reclamar *{{4}}*, o cambiarlo por la Mystery Box si prefieres la sorpresa.\n\nTe esperamos pronto.\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
     urbano: (brand) =>
@@ -100,8 +114,8 @@ export const TEMPLATE_TEXTS: Record<TemplateKey, Record<TemplateStyle, TemplateB
   //     {{1}} nombre · {{2}} tier · {{3}} premio · {{4}} roadmap
   // ─────────────────────────────────────────────────────────────
   reward_safe: {
-    calido: (brand) =>
-      `¡{{1}}, gracias por volver! Alcanzaste el nivel *{{2}}* 🏆🍣\n\nElegiste ir a la segura y te ganaste: *{{3}}*\n\nMuestra *este mensaje* al mesero para reclamar tu premio 🎁\n\n{{4}}\n\nSigue sumando puntos para tu próximo nivel.\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
+    calido: (brand, emoji) =>
+      `¡{{1}}, gracias por volver! Alcanzaste el nivel *{{2}}* 🏆${emoji}\n\nElegiste ir a la segura y te ganaste: *{{3}}*\n\nMuestra *este mensaje* al mesero para reclamar tu premio 🎁\n\n{{4}}\n\nSigue sumando puntos para tu próximo nivel.\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
     elegante: (brand) =>
       `Enhorabuena, {{1}}: alcanzaste el nivel *{{2}}*.\n\nElegiste tu premio asegurado: *{{3}}*.\n\nPresenta este mensaje a nuestro equipo para reclamarlo.\n\n{{4}}\n\nGracias por tu preferencia.\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
     urbano: (brand) =>
@@ -113,8 +127,8 @@ export const TEMPLATE_TEXTS: Record<TemplateKey, Record<TemplateStyle, TemplateB
   //     {{1}} nombre · {{2}} tier · {{3}} premio · {{4}} roadmap
   // ─────────────────────────────────────────────────────────────
   mystery_box_result: {
-    calido: (brand) =>
-      `¡{{1}}, gracias por volver! Abriste la *Mystery Box* de *{{2}}* 🎲🍣\n\nTu premio: *{{3}}*\n\nMuestra *este mensaje* al mesero para reclamar tu premio 🎁\n\n{{4}}\n\n¡Sigue sumando puntos, cada visita te acerca a una nueva recompensa!\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
+    calido: (brand, emoji) =>
+      `¡{{1}}, gracias por volver! Abriste la *Mystery Box* de *{{2}}* 🎲${emoji}\n\nTu premio: *{{3}}*\n\nMuestra *este mensaje* al mesero para reclamar tu premio 🎁\n\n{{4}}\n\n¡Sigue sumando puntos, cada visita te acerca a una nueva recompensa!\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
     elegante: (brand) =>
       `Hola {{1}}, abriste la Mystery Box de tu nivel *{{2}}*.\n\nTu premio: *{{3}}*.\n\nPresenta este mensaje a nuestro equipo para reclamarlo.\n\n{{4}}\n\nCada visita te acerca a la siguiente recompensa.\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
     urbano: (brand) =>
@@ -126,8 +140,8 @@ export const TEMPLATE_TEXTS: Record<TemplateKey, Record<TemplateStyle, TemplateB
   //     {{1}} nombre · {{2}} premio · {{3}} roadmap
   // ─────────────────────────────────────────────────────────────
   golden_box_result: {
-    calido: (brand) =>
-      `¡{{1}}, gracias por volver! Esperamos hayas disfrutado tu experiencia 🍣\n\nHoy tenías la *Golden Box* activada ✨🎲\n\nTu premio: *{{2}}*\n\nMuestra *este mensaje* al mesero para reclamar tu premio 🎁\n\n{{3}}\n\nLa suerte está de tu lado, sigue sumando puntos y desbloquea nuevas recompensas 🍀\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
+    calido: (brand, emoji) =>
+      `¡{{1}}, gracias por volver! Esperamos hayas disfrutado tu experiencia ${emoji}\n\nHoy tenías la *Golden Box* activada ✨🎲\n\nTu premio: *{{2}}*\n\nMuestra *este mensaje* al mesero para reclamar tu premio 🎁\n\n{{3}}\n\nLa suerte está de tu lado, sigue sumando puntos y desbloquea nuevas recompensas 🍀\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
     elegante: (brand) =>
       `Hoy tenías la Golden Box activa, {{1}}.\n\nTu premio: *{{2}}*.\n\nPresenta este mensaje a nuestro equipo para reclamarlo.\n\n{{3}}\n\nGracias por seguir con nosotros.\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
     urbano: (brand) =>
@@ -152,8 +166,8 @@ export const TEMPLATE_TEXTS: Record<TemplateKey, Record<TemplateStyle, TemplateB
   //     {{1}} nombre · {{2}} puntos · {{3}} premio próximo
   // ─────────────────────────────────────────────────────────────
   reactivation_no_reward: {
-    calido: (brand) =>
-      `¡{{1}}, te extrañamos! Hace rato que no te vemos 👋🍣\n\nTienes *{{2}} puntos* acumulados y estás camino a desbloquear *{{3}}* 🔥\n\nCada visita te acerca más — vuelve y alcanza más rápido ese premio especial 💪\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
+    calido: (brand, emoji) =>
+      `¡{{1}}, te extrañamos! Hace rato que no te vemos 👋${emoji}\n\nTienes *{{2}} puntos* acumulados y estás camino a desbloquear *{{3}}* 🔥\n\nCada visita te acerca más — vuelve y alcanza más rápido ese premio especial 💪\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
     elegante: (brand) =>
       `Hace un tiempo que no te vemos, {{1}}.\n\nTus *{{2}} puntos* siguen esperándote, y estás en camino a *{{3}}*.\n\nCuando quieras retomarlo, aquí estaremos.\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
     urbano: (brand) =>
@@ -165,8 +179,8 @@ export const TEMPLATE_TEXTS: Record<TemplateKey, Record<TemplateStyle, TemplateB
   //     {{1}} nombre · {{2}} puntos · {{3}} premio próximo
   // ─────────────────────────────────────────────────────────────
   reactivation_aggressive: {
-    calido: (brand) =>
-      `Hola *{{1}}* 👀🍣\n\nTus *{{2}} puntos* llevan tiempo sin moverse\n\nEstás cerca de ganarte *{{3}}* — sería una lástima dejarlo ahí\n\nVuelve esta semana y sigue sumando, nosotros mantenemos tu progreso 💪\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
+    calido: (brand, emoji) =>
+      `Hola *{{1}}* 👀${emoji}\n\nTus *{{2}} puntos* llevan tiempo sin moverse\n\nEstás cerca de ganarte *{{3}}* — sería una lástima dejarlo ahí\n\nVuelve esta semana y sigue sumando, nosotros mantenemos tu progreso 💪\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
     elegante: (brand) =>
       `Tu progreso sigue intacto, {{1}}.\n\nAcumulaste *{{2}} puntos* y te falta poco para *{{3}}*.\n\nConservamos tu avance para cuando decidas volver. Una visita esta semana te acerca al objetivo.\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
     urbano: (brand) =>
@@ -178,8 +192,8 @@ export const TEMPLATE_TEXTS: Record<TemplateKey, Record<TemplateStyle, TemplateB
   //      {{1}} nombre · {{2}} puntos · {{3}} premio próximo
   // ─────────────────────────────────────────────────────────────
   campaign_presencial_to_domicilio: {
-    calido: (brand) =>
-      `¡Hola {{1}}! 🛵🍣\n\n¿Sabías que también llevamos *${brand}* hasta tu puerta?\n\nPide tus favoritos sin salir de casa y los domicilios *también suman puntos* 🔥\n\nTienes *{{2}} puntos* y vas camino a *{{3}}*\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
+    calido: (brand, emoji) =>
+      `¡Hola {{1}}! 🛵${emoji}\n\n¿Sabías que también llevamos *${brand}* hasta tu puerta?\n\nPide tus favoritos sin salir de casa y los domicilios *también suman puntos* 🔥\n\nTienes *{{2}} puntos* y vas camino a *{{3}}*\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
     elegante: (brand) =>
       `Hola {{1}}, también llevamos *${brand}* hasta tu casa.\n\nNuestro servicio a domicilio suma los mismos puntos que una visita presencial.\n\nTienes *{{2}} puntos* y avanzas hacia *{{3}}*.\n\nCuando quieras, estamos a un mensaje de distancia.\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
     urbano: (brand) =>
@@ -191,8 +205,8 @@ export const TEMPLATE_TEXTS: Record<TemplateKey, Record<TemplateStyle, TemplateB
   //      {{1}} nombre · {{2}} puntos · {{3}} premio próximo
   // ─────────────────────────────────────────────────────────────
   campaign_domicilio_to_presencial: {
-    calido: (brand) =>
-      `¡{{1}}, la experiencia en *${brand}* es otro nivel! ♥️🍣\n\nNos encanta llevarte la comida a casa, pero en el restaurante es una experiencia completamente diferente ✨\n\nTienes *{{2}} puntos* — ven, suma puntos y desbloquea *{{3}}* 🔥\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
+    calido: (brand, emoji) =>
+      `¡{{1}}, la experiencia en *${brand}* es otro nivel! ♥️${emoji}\n\nNos encanta llevarte el pedido a casa, pero en el restaurante es una experiencia completamente diferente ✨\n\nTienes *{{2}} puntos* — ven, suma puntos y desbloquea *{{3}}* 🔥\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
     elegante: (brand) =>
       `Nos encanta llevarte lo mejor a casa, {{1}}.\n\nAun así, vivir *${brand}* en el lugar es una experiencia distinta: el ambiente, el detalle y la atención de nuestro equipo.\n\nTienes *{{2}} puntos* y avanzas hacia *{{3}}*.\n\nTe esperamos cuando quieras acompañarnos.\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
     urbano: (brand) =>
@@ -206,8 +220,8 @@ export const TEMPLATE_TEXTS: Record<TemplateKey, Record<TemplateStyle, TemplateB
   //      el script de media original y en calendar.service.ts.
   // ─────────────────────────────────────────────────────────────
   event_image: {
-    calido: () =>
-      `¡Hola {{1}}! 🎉\n\n*{{2}}* tiene el placer de invitarte a vivir una noche especial:\n*{{3}}* 🍽️\n\n📅 {{4}}\n\n{{5}}\n\n¡Te esperamos con tu familia!\n\n${OPT_OUT_LINE}`,
+    calido: (_brand, emoji) =>
+      `¡Hola {{1}}! 🎉\n\n*{{2}}* tiene el placer de invitarte a vivir una noche especial:\n*{{3}}* ${emoji}\n\n📅 {{4}}\n\n{{5}}\n\n¡Te esperamos con tu familia!\n\n${OPT_OUT_LINE}`,
     elegante: () =>
       `Hola {{1}},\n\n*{{2}}* tiene el gusto de invitarte a una ocasión especial:\n*{{3}}*\n\nFecha: {{4}}\n\n{{5}}\n\nSerá un placer contar con tu presencia.\n\n${OPT_OUT_LINE}`,
     urbano: () =>
@@ -222,8 +236,8 @@ export const TEMPLATE_TEXTS: Record<TemplateKey, Record<TemplateStyle, TemplateB
   //      `event.media_type`.
   // ─────────────────────────────────────────────────────────────
   event_video: {
-    calido: () =>
-      `¡Hola {{1}}! 🎉\n\n*{{2}}* tiene el placer de invitarte a vivir una noche especial:\n*{{3}}* 🍽️\n\n📅 {{4}}\n\n{{5}}\n\n¡Te esperamos con tu familia!\n\n${OPT_OUT_LINE}`,
+    calido: (_brand, emoji) =>
+      `¡Hola {{1}}! 🎉\n\n*{{2}}* tiene el placer de invitarte a vivir una noche especial:\n*{{3}}* ${emoji}\n\n📅 {{4}}\n\n{{5}}\n\n¡Te esperamos con tu familia!\n\n${OPT_OUT_LINE}`,
     elegante: () =>
       `Hola {{1}},\n\n*{{2}}* tiene el gusto de invitarte a una ocasión especial:\n*{{3}}*\n\nFecha: {{4}}\n\n{{5}}\n\nSerá un placer contar con tu presencia.\n\n${OPT_OUT_LINE}`,
     urbano: () =>

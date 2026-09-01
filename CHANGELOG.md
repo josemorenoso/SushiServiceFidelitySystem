@@ -5,6 +5,84 @@
 
 ---
 
+## [v2.15.1] — 2026-09-01 — fix(db): el `ALTER` que solo vivía aplicado a mano
+
+> Request original: *"`ALTER FUNCTION is_super_admin() SECURITY DEFINER` se aplicó A MANO a la
+> base del producto y no vive en ninguna migración. Si esa base se reconstruye, el AIOS falla
+> con 42501 y nadie va a saber por qué. Conviértelo en migración versionada."*
+> **Migración nueva: `00040_is_super_admin_security_definer.sql`.** Para la base de producción
+> es un **no-op** — el ALTER ya estaba aplicado ahí, verificado el 2026-09-01.
+
+### El fallo que evitaba, y por qué era invisible
+
+`is_super_admin()` (migración 00024) llama a `auth.jwt()`. El rol `aios_constelarys`
+(migración 00035 v2) **no tiene USAGE sobre el schema `auth`** — a propósito: es un rol de
+solo lectura para un sistema que corre en otra infraestructura. Comprobado contra la base:
+
+```
+SELECT has_schema_privilege('aios_constelarys','auth','USAGE');  -- false
+SELECT auth.jwt();                                               -- 42501
+SELECT current_tenant_id();                                      -- 42501
+SELECT is_super_admin();                                         -- false  ← solo porque ya es DEFINER
+```
+
+Ese rol tampoco es dueño de `tenants` ni tiene BYPASSRLS (`rolsuper=false`,
+`rolbypassrls=false`, sin membresías), así que sus `SELECT` **sí** evalúan las policies. Y
+sobre `tenants` conviven dos permisivas, que Postgres combina con OR:
+
+| policy | `USING` | de dónde sale |
+|---|---|---|
+| `aios_constelarys_select_tenants` | `true` | 00035 v2 |
+| `super_admin_all_tenants` | `is_super_admin()` | 00024 |
+
+**Que la primera sea `true` no salva a la segunda.** Postgres no garantiza cortocircuitar el
+OR: al evaluar `is_super_admin()` en el contexto del rol que llama, `auth.jwt()` revienta y se
+cae el `SELECT` entero — aunque la otra policy lo habría permitido. El panel del AIOS se queda
+sin poder leer un solo tenant, con un `permission denied for schema auth` que no apunta a
+ninguna línea de código del AIOS ni del producto.
+
+Reconstruir la base desde `supabase/migrations/` reproducía exactamente eso, porque el arreglo
+no estaba en ningún archivo.
+
+### Por qué `SECURITY DEFINER` acá no es un agujero
+
+`auth.jwt()` lee `current_setting('request.jwt.claims', true)`: un ajuste de **sesión**, no un
+permiso del rol. Correr como `postgres` devuelve **los mismos claims del que llama**, así que
+la función sigue respondiendo por el JWT del usuario y no por el del dueño. Lo único que cambia
+es que deja de necesitar permiso sobre el schema para leer un valor que ya era suyo. Es el
+patrón estándar de Supabase para helpers de RLS.
+
+`search_path` va fijo en `pg_catalog, public` — el mismo valor que ya tenía producción. Es
+obligatorio: sin él, quien pueda crear objetos cuela un `jwt()` propio en un schema anterior
+del path y secuestra la función.
+
+**La migración no otorga ni revoca nada.** El `EXECUTE` a PUBLIC tiene que seguir: las policies
+de `tenants`, `tenant_wallet_transactions`, `reward_grants`, `review_events`, `send_queue` y
+compañía llaman a esta función como `anon` y `authenticated`. Un REVOKE dejaría sin leer a la
+app entera. `CREATE OR REPLACE` conserva dueño y GRANTs, y el cuerpo es idéntico al de la
+00024.
+
+### Deuda que esta entrega NO cierra, a propósito
+
+`current_tenant_id()` tiene **exactamente el mismo defecto** y se deja intacta. Hoy no rompe
+nada porque las dos únicas tablas que el AIOS lee tienen policies que solo llaman a
+`is_super_admin()`. Pero el patrón dominante del resto del esquema es
+`USING (tenant_id = current_tenant_id() OR is_super_admin())`: el día que alguien le agregue a
+una de esas tablas una policy `aios_constelarys_select_*` para que el panel la lea, la lectura
+muere con el mismo 42501 silencioso.
+
+Cambiarla altera cómo se evalúa el RLS de **cada** tabla multitenant del producto. Eso es una
+decisión del dueño con su propia verificación, no un efecto colateral de versionar un ALTER que
+ya estaba aplicado (Mandamiento I). Queda anotada en la migración y en `docs/03-security.md`.
+
+### Archivos
+
+- `supabase/migrations/00040_is_super_admin_security_definer.sql` — nueva, idempotente, con bloque de verificación
+- `docs/DB_SCHEMA.md` — fila 40 en la tabla de migraciones
+- `docs/03-security.md` — sección nueva «Helpers de RLS y el rol del AIOS Constelarys», con las 3 reglas al tocar esto y la deuda abierta
+
+---
+
 ## [v2.15.0] — 2026-08-31 — fix: el 🍣 horneado, las campañas de cross-sell que no aparecían, y el opt-out visible
 
 > Request original: *"hay que tener cuidado con que contenga stickers de sushi o algo porque se

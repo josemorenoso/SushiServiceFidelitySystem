@@ -1350,6 +1350,109 @@ ya es un tenant con su marca, su billetera y su número. Un franquiciado nuevo e
 - ¿Un franquiciado puede editar sus propias plantillas, o el franquiciante fija el mensaje de la
   marca? Hoy el permiso es por tenant, así que por defecto cada uno edita las suyas.
 
+## 23. Un cliente, varias sedes — mismo recorrido, datos separados (pedido 2026-09-01) — ⚠️ TOCA LA BASE
+
+> Pedido textual del dueño: *"cómo hacemos cuando es más de una sede para que
+> independientemente de si comparten número o es separado, los clientes tengan el mismo
+> recorrido en las dos sedes, pero separemos al mismo tiempo los datos para cada dashboard.
+> Osea si voy a la sede Envigado y acumulo 70 puntos no voy a ir a la de Laureles a empezar
+> de 0. El punto es tener un seguimiento porque es mi recompensa por asistir a cualquiera de
+> las sedes."*
+
+**Esto responde la pregunta abierta de §22**: los puntos son **de la marca**, no de la sede.
+Y §22 ya advertía que esa respuesta implica *"el cambio de schema más grande de toda esta
+lista"*.
+
+### Los dos hechos que definen el problema (verificados contra la base, 2026-09-01)
+
+**1. La identidad del cliente es POR TENANT.**
+
+```sql
+ALTER TABLE customers ADD CONSTRAINT customers_phone_tenant_key UNIQUE (phone, tenant_id);
+```
+
+(migración `00028`). El mismo celular en dos tenants son **dos filas distintas** de
+`customers`, cada una con sus `total_visits`, y `point_transactions.customer_id` cuelga de
+esa fila. Como el AIOS modela hoy **1 sede = 1 tenant**, la segunda sede arranca en cero. Es
+exactamente el síntoma que reporta el dueño, y no es un bug: es el modelo actual funcionando
+como se diseñó.
+
+**2. Ningún evento sabe en qué sede ocurrió.**
+
+`restaurant_locations` existe desde la `00014` y tiene `tenant_id`, `lat`, `lon`,
+`radius_meters` — pero **`visits` NO tiene `location_id`**. Tampoco `point_transactions`,
+`reward_grants`, `reward_redemptions` ni `review_events`. La tabla se usa solo en
+`/api/dashboard/location`, y la comprobación de geocerca de `src/app/api/check-in/route.ts`
+está **comentada** (≈líneas 226-237).
+
+**La consecuencia incómoda: hoy NINGUNO de los dos modelos sirve.**
+
+| | ¿Puntos compartidos? | ¿Dashboard por sede? |
+|---|---|---|
+| 1 sede = 1 tenant (modelo actual del AIOS) | ❌ arranca de 0 | ✅ natural |
+| 1 marca = 1 tenant, sedes en `restaurant_locations` | ✅ natural | ❌ **imposible: los eventos no guardan la sede** |
+
+Cualquier solución tiene que tocar la base. No hay atajo de configuración.
+
+### Las dos arquitecturas posibles
+
+**Opción A — 1 marca = 1 tenant · sede = `restaurant_locations`** *(recomendada)*
+
+Los puntos se comparten solos, porque es la misma fila de `customers`. Lo que hay que
+construir es la **separación**, no la unión:
+
+1. `location_id uuid NULL REFERENCES restaurant_locations(id)` en `visits`,
+   `point_transactions`, `reward_grants`, `reward_redemptions`, `review_events`. NULL =
+   histórico anterior a esto, o sede desconocida.
+2. El check-in tiene que **saber en qué sede está**. Hoy el tenant se resuelve por *host*
+   (`getTenantByDomain`), así que un tenant = un subdominio = un QR. Con varias sedes hace
+   falta que el QR distinga la sede — un parámetro en la URL, un QR por sede, o revivir la
+   geocerca que está comentada. **Decisión de producto, no técnica.**
+3. Filtro por sede en el dashboard, con "todas las sedes" como default.
+4. **Mensajería:** hoy vive en `tenants` (`messaging_provider`, `zernio_account_id` — con
+   índice ÚNICO —, subcuenta Twilio). Con un tenant por marca, las sedes comparten número
+   por construcción. Para soportar *"número separado por sede"* la config de mensajería
+   tiene que poder bajar al nivel de sede. Esto engancha con §14.1 y §14.2 del spec de alta
+   (`docs/superpowers/specs/2026-08-30-alta-negocios-design.md`), que ya listaban como
+   pendientes justo eso: quitar el único de `idx_tenants_zernio_account_id` y desambiguar a
+   qué sede pertenece un mensaje entrante.
+5. **El AIOS cambia de modelo:** `client_locations.tenant_slug` deja de ser 1:1. Varias
+   sedes del mismo propietario apuntarían al MISMO tenant, y cada una a su
+   `restaurant_locations`. `provisionTenant()` crea el tenant en la primera sede y solo
+   agrega una `location` en las siguientes.
+
+**Opción B — mantener 1 sede = 1 tenant y compartir el cliente entre tenants**
+
+Exige una entidad "marca/grupo" por encima de `tenants` y una identidad de cliente
+compartida entre ellos. Rompe el aislamiento por RLS que monta la `00026` (que es la
+garantía de que un negocio no ve los datos de otro), la unicidad `(phone, tenant_id)`, y
+todo servicio que asume que un cliente pertenece a un tenant. **Más riesgo, más superficie,
+y a cambio solo evita el punto 5 de la Opción A.** No se recomienda.
+
+### Preguntas para el dueño — hay que responderlas ANTES de escribir código
+
+1. **Un premio ganado en Envigado, ¿se puede redimir en Laureles?** Si los puntos son de la
+   marca, lo natural es que sí — pero el costo lo asume una sede concreta y eso hay que
+   poder verlo en su dashboard.
+2. **¿Cómo sabe el sistema en qué sede está el cliente?** QR distinto por sede, parámetro en
+   la URL, o geocerca (hoy comentada). Determina el punto 2 de la Opción A.
+3. **¿Un login por sede, o un login con selector de sede?** Hoy el JWT lleva `tenant_id`; si
+   el tenant pasa a ser la marca, el permiso "solo mi sede" no existe todavía.
+4. **¿La billetera y el cupo de línea son de la marca o de la sede?** Comercialmente ya está
+   medio resuelto: `clients.billing_mode` del AIOS distingue `per_site` de `consolidated`.
+5. **¿Hay ya algún negocio con más de una sede, o esto llega con los 25?** Cambia si esto es
+   una migración de datos existentes o solo un modelo para altas nuevas.
+
+### Qué NO hacer
+
+- **No** empezar por el schema. La pregunta 2 (cómo se identifica la sede en el check-in)
+  decide si `location_id` se puede llenar de verdad; sin esa respuesta, la columna nace
+  vacía y el dashboard por sede sigue sin poder existir.
+- **No** tocar los 4 tenants Twilio (Sushi Service, Don Alirio, Frangal, Demo) al migrar.
+  Los cuatro son de una sola sede, así que la Opción A les aplica sin cambios: su tenant
+  pasa a ser "la marca" y su sede actual es su única `restaurant_locations`.
+
+
 ---
 
 **Este documento se generó con una auditoría de 10 agentes en paralelo** (Twilio/acoplamiento,

@@ -5,6 +5,41 @@
 
 ---
 
+## [docs] — 2026-09-01 — §23: un cliente, varias sedes (mismo recorrido, datos separados)
+
+> Request original: *"cómo hacemos cuando es más de una sede para que independientemente de si
+> comparten número o es separado, los clientes tengan el mismo recorrido en las dos sedes, pero
+> separemos al mismo tiempo los datos para cada dashboard… si voy a la sede Envigado y acumulo 70
+> puntos no voy a ir a la de Laureles a empezar de 0"*.
+> **Sin código.** Requerimiento nuevo en `docs/requerimientos/REQUERIMIENTOS_AGOSTO_2026.md` §23.
+
+Esto **responde la pregunta abierta de §22** (*"¿los puntos son de la marca o de la sede?"*): son de
+la marca. §22 ya advertía que esa respuesta implica el cambio de schema más grande de la lista.
+
+Dos hechos verificados contra la base el 2026-09-01, que son los que definen el problema:
+
+1. **La identidad del cliente es por tenant** — `customers_phone_tenant_key UNIQUE (phone, tenant_id)`
+   (migración 00028). Como el AIOS modela 1 sede = 1 tenant, la segunda sede arranca en cero. No es
+   un bug: es el modelo actual funcionando como se diseñó.
+2. **Ningún evento sabe en qué sede ocurrió** — `visits` tiene `tenant_id` pero **no** `location_id`,
+   y tampoco lo tienen `point_transactions`, `reward_grants`, `reward_redemptions` ni `review_events`.
+   `restaurant_locations` (00014) existe pero solo la consume `/api/dashboard/location`; la geocerca
+   del check-in está **comentada** (`src/app/api/check-in/route.ts` ≈226-237).
+
+De ahí la conclusión incómoda: **hoy ninguno de los dos modelos sirve**. Con 1 sede = 1 tenant los
+puntos no se comparten; con 1 marca = 1 tenant el dashboard por sede es imposible, porque los eventos
+no guardan la sede. Cualquier solución toca la base — no hay atajo de configuración.
+
+§23 deja las dos arquitecturas con sus consecuencias (recomendada: 1 marca = 1 tenant, sede =
+`restaurant_locations`), las 5 preguntas que el dueño tiene que responder antes de escribir código, y
+el enganche con §14.1/§14.2 del spec de alta, que ya listaban como pendiente quitar el único de
+`idx_tenants_zernio_account_id` y desambiguar a qué sede pertenece un mensaje entrante.
+
+Nada se implementó: Mandamiento I — la pregunta 2 (cómo sabe el check-in en qué sede está) decide si
+`location_id` se puede llenar de verdad, y sin esa respuesta la columna nacería vacía.
+
+---
+
 ## [v2.15.1] — 2026-09-01 — fix(db): el `ALTER` que solo vivía aplicado a mano
 
 > Request original: *"`ALTER FUNCTION is_super_admin() SECURITY DEFINER` se aplicó A MANO a la

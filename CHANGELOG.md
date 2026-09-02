@@ -5,6 +5,40 @@
 
 ---
 
+## [2026-09-02 01:05] - §23.bis: el multi-sede verificado contra la base real, la cuarta vía y 8 preguntas nuevas
+
+### Tipo de cambio
+- **ADDED**: §23.bis en requerimientos — el diagnóstico del §23 comprobado contra la base de producción, una cuarta forma de identificar la sede que no estaba listada, 8 preguntas al dueño que faltaban y 5 riesgos que nadie había puesto sobre la mesa.
+- **DOCS**: documento de decisiones para el dueño, en lenguaje de negocio, publicado como artifact.
+
+### Archivos afectados
+- `docs/requerimientos/REQUERIMIENTOS_AGOSTO_2026.md` - §23.bis nueva (150 líneas), insertada dentro del §23 y antes del §24. El §23 original **no se tocó**.
+
+### Descripción detallada
+
+**Sin código.** Es el paso previo obligatorio del §23, que cierra con *"No empezar por el schema"*.
+
+**Por qué existe.** El §23 se escribió con una auditoría de 10 agentes **sin acceso a Supabase** (el MCP pedía OAuth). Esta ampliación sale de tres sondas de **solo lectura** contra la base de producción con `AIOS_PRODUCT_DB_URL`, del Supabase del AIOS con sesión real, y de un mapeo de 17 agentes sobre 8 dimensiones del producto con verificación adversarial de cada hallazgo.
+
+**Lo que la base confirmó, y lo que agrandó.** `customers_phone_tenant_key UNIQUE (phone, tenant_id)` existe tal cual. `aios_set_domain()` no existe. La 00040 está aplicada (`is_super_admin()` es SECURITY DEFINER; `current_tenant_id()` **no**). Y el hecho 2 del §23 resultó **más grande de lo que decía**: no son 5 tablas sin `location_id` — no hay **ni una** columna `location*`/`sede*`/`branch*`/`store*` en todo el schema `public`.
+
+**Tres datos nuevos que cambian el costo del cambio.** (1) **No existe ninguna vista SQL en `public`**: todo el cálculo de métricas vive en TypeScript, así que un filtro por sede no obliga a reescribir vistas — abarata la Opción A. (2) **32 policies de RLS, 27 con `current_tenant_id()`**, pero el aislamiento real no lo da el RLS sino **144 `.eq('tenant_id', …)` en 48 archivos**, porque la app corre casi todo con `service_role`. (3) El rol `aios_constelarys` **no tiene ni un privilegio de tabla**: solo `SELECT` por columna sobre 13 columnas de `tenants` y 5 de `tenant_wallet_transactions`, más `EXECUTE` sobre las 5 funciones `aios_*`. Para que el AIOS agregue una sede a un tenant existente hace falta una **función SECURITY DEFINER nueva**, nunca un GRANT.
+
+**Pregunta 5 del §23: respondida con datos.** No hay hoy ningún negocio con más de una sede — 3 propietarios en el AIOS con una sede cada uno, cero `tenant_slug` repetidos, y `restaurant_locations` con ~1 fila en total en el producto. **No es una migración de datos, es un modelo para altas nuevas.**
+
+**La cuarta vía.** El §23 listaba tres formas de identificar la sede (QR por sede, parámetro en la URL, geocerca) y las tres comparten un defecto que el mapeo destapó: **quien escribe la fila de `visits` no es el celular del cliente, es el del mesero** (`check-in/route.ts:529-537` rechaza `action:'checkin'` salvo `source==='staff_scan'`). Cualquier señal puesta del lado del cliente llega al `lookup` pero no al momento en que se escribe el evento. La cuarta vía —`staff_devices.location_id`— toca el punto exacto de escritura con una señal autenticada que el cliente no puede falsificar, y §19.2 ya pedía ese mismo cambio por otro motivo.
+
+**Los riesgos que faltaban.** La Opción A es **de una sola vía** (no hay función de merge ni de split en las 40 migraciones). Los reportes de plata **van a mentir en vez de fallar** si se agrega `location_id` solo a las 5 tablas y se dejan `total_visits` y `avg_ticket` como están. El **cron de reactivación se apaga solo** para la segunda sede, en silencio. Y el libro de `consent_events` es append-only: fusionar reescribe de facto a nombre de quién se otorgó cada consentimiento.
+
+**Qué NO se hizo, a propósito.** Ni schema, ni spec, ni código. El §23 lo dice y sigue vigente: sin saber quién va a llenar `location_id`, la columna nace vacía y se paga el cambio entero para quedarse con la mitad del pedido.
+
+### Pendiente
+- Las 13 preguntas al dueño (5 del §23 + 8 nuevas) esperan respuesta. La que bloquea a las otras doce es **cómo sabe el sistema en qué sede está el cliente**.
+- Queda una consulta sin poder correr: si ya hay teléfonos repetidos entre tenants. Necesita el `SUPABASE_SERVICE_ROLE_KEY` del producto — el rol del AIOS no puede leer `customers` (42501).
+
+---
+
+
 ## [2026-09-02 00:15] - §25: plan de migración n8n → Vercel + corrección del límite de crons
 
 ### Tipo de cambio

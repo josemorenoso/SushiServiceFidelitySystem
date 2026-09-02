@@ -1453,6 +1453,156 @@ y a cambio solo evita el punto 5 de la Opción A.** No se recomienda.
   pasa a ser "la marca" y su sede actual es su única `restaurant_locations`.
 
 
+### 23.bis — Verificado contra la base REAL (2026-09-02) y las 8 preguntas que faltaban
+
+> El §23 se escribió con una auditoría de 10 agentes **sin acceso a Supabase**. Esta ampliación
+> sale de tres sondas de **solo lectura** contra la base de producción (`AIOS_PRODUCT_DB_URL`,
+> rol `aios_constelarys`) y del Supabase del AIOS con sesión real, más un mapeo de 17 agentes
+> sobre 8 dimensiones del producto. Corrige y agranda el diagnóstico; no lo reemplaza.
+>
+> **Documento de decisiones para el dueño** (lenguaje de negocio, sin tecnicismos):
+> <https://claude.ai/code/artifact/1fc931a7-2845-46e5-b974-60e33048d6b0>
+
+#### Lo que la base confirma, y lo que agranda
+
+| Afirmación del §23 | Veredicto contra la base |
+|---|---|
+| `customers_phone_tenant_key UNIQUE (phone, tenant_id)` | **Confirmado** — existe tal cual. |
+| A las 5 tablas de eventos les falta `location_id` | **Confirmado y AGRANDADO**: no hay **ni una** columna `location*`/`sede*`/`branch*`/`store*` en **todo el schema `public`**. No son 5 tablas: es la base entera. |
+| `restaurant_locations` existe | **Confirmado** — con `lat`, `lon`, `radius_meters`, `is_active`, `tenant_id`. |
+| `aios_set_domain()` no existe | **Confirmado** — solo hay 5 funciones `aios_*`, todas SECURITY DEFINER. |
+| La 00040 está aplicada | **Confirmado** — `is_super_admin()` es SECURITY DEFINER; `current_tenant_id()` **no** lo es (de ahí el 42501 del rol del AIOS). |
+
+Datos nuevos que **cambian el tamaño del trabajo**:
+
+- **27 tablas tienen FK a `tenants`. Cero a `restaurant_locations`.** Esa es la superficie real
+  del modelo actual.
+- **No existe NINGUNA vista SQL en `public`.** Todo el cálculo de métricas se hace en TypeScript
+  (`dashboard.service.ts`). Un filtro por sede **no obliga a reescribir vistas** — abarata mucho
+  la Opción A frente a lo que se temía.
+- **32 policies de RLS: 27 invocan `current_tenant_id()` y 29 `is_super_admin()`.** Si el permiso
+  "solo mi sede" se mete en RLS son 27 policies; si se resuelve en la capa de consulta, son 0.
+  Eso convierte la pregunta 3 en una decisión de costo, no de gusto.
+- **El aislamiento real NO lo da el RLS.** La app corre casi todo con `service_role` (55 archivos);
+  lo que separa negocios son **144 `.eq('tenant_id', …)` repartidos en 48 archivos**. Cualquier
+  filtro por sede hereda ese patrón — y su modo de fallo: el que se olvide filtra de más, sin error.
+- **Volumen del histórico** (estimación del planificador, no un `COUNT`): `visits` ~1581,
+  `customers` ~1176, `point_transactions` ~991, `review_events` ~685, `reward_grants` ~221,
+  `reward_redemptions` ~1. El backfill de `location_id` es trivial.
+- **El rol `aios_constelarys` no tiene NI UN privilegio a nivel de tabla.** Solo `SELECT` a nivel de
+  **columna** sobre 13 columnas de `tenants` y 5 de `tenant_wallet_transactions`, más `EXECUTE`
+  sobre las 5 funciones `aios_*`. Consecuencia directa para el punto 5 de la Opción A: para que el
+  AIOS agregue una sede a un tenant existente hace falta una **función SECURITY DEFINER nueva**
+  (tipo `aios_add_location(slug, location jsonb) RETURNS uuid`, más una de lectura). No hay camino
+  de INSERT directo, y ampliar GRANTs es justo lo que cerró la 00035 v2.
+
+#### Pregunta 5 — RESPONDIDA con datos
+
+**No hay hoy ningún negocio con más de una sede.** En el AIOS: 3 propietarios (Sushi Service,
+Don Alirio, Frangal), **una sede cada uno**, cero `tenant_slug` repetidos, los tres en
+`billing_mode = 'per_site'`. En el producto: `restaurant_locations` tiene **~1 fila en total**
+entre los 4 tenants.
+
+→ **Esto NO es una migración de datos. Es un modelo para las altas nuevas** — el escenario barato.
+Con una condición de calendario que vale plata: si uno de los negocios que entra tiene dos sedes y
+se da de alta **antes** de resolver esto, se convierte en el caso caro (dos tenants que después hay
+que fundir a mano, chocando con `customers_phone_tenant_key`).
+
+#### La CUARTA vía para identificar la sede (el §23 solo listaba tres)
+
+El §23 planteó QR por sede / parámetro en la URL / geocerca. Las tres comparten un defecto que el
+mapeo destapó: **quien escribe la fila de `visits` no es el celular del cliente, es el del mesero.**
+`check-in/route.ts:529-537` rechaza `action:'checkin'` salvo `source==='staff_scan'`, y el POST sale
+de `mesero/confirm/page.tsx:154-164`, cuyo body **no lleva ni el host ni la URL del cliente**. Por eso
+cualquier señal puesta del lado del cliente llega al `lookup` pero **no** al momento en que se escribe
+el evento. Y la geocerca comentada (`route.ts:209-244`) mide el GPS del **cliente**: aun reviviéndola
+mide a la persona equivocada, además de que su query no filtra `tenant_id` y usa `.single()`, así que
+con dos sedes revienta.
+
+**Cuarta vía: la sede la porta el dispositivo del mesero** (`staff_devices.location_id`).
+
+- Toca el punto exacto de escritura, con una señal **autenticada que el cliente no puede falsificar**.
+- `staff_devices` ya existe por tenant, ya lo activa el supervisor con su PIN, y su token ya viaja en
+  cada request que crea una visita (`mesero/confirm/page.tsx:138-144`).
+- Cuesta: una columna, un paso más en `/api/staff/device/register`, y sumarla a los dos SELECT que el
+  check-in ya hace (`route.ts:556-588`).
+- **§19.2 ya pedía invertir el modelo a "el dispositivo pertenece al restaurante"** — es el mismo
+  trabajo, no uno extra.
+- Hueco: el registro de un cliente **nuevo** en modo `auto` no pasa por auth de mesero
+  (`route.ts:325-403`). Se tapa combinándola con `?sede=`. **Las vías no son excluyentes.**
+
+**Ninguna de las cuatro cubre los domicilios**, que entran por n8n sin nadie parado en un local.
+
+#### Las 8 preguntas que el §23 no hizo
+
+1. **¿Las sedes son del mismo dueño y la misma razón social, o puede haber franquiciado/socio por
+   sede? ¿Y si mañana una se separa?** — Es LA pregunta. El §22 ya había decidido lo contrario para
+   franquicias ("cada franquiciado es un tenant propio"). Si la 2ª sede es franquicia, la Opción A le
+   entrega a uno la base de clientes, el saldo, el número y el libro de consentimiento del otro.
+2. **¿Cada sede tiene su ficha de Google, su teléfono de domicilios y su Instagram?** — Los cuatro son
+   UN campo en `tenants.config`. Con un tenant por marca, todas las reseñas caen en la misma ficha, y
+   `customers.google_review_clicked_at` (una fila por cliente) hace que quien reseñó Envigado nunca
+   vea el pop-up de Laureles.
+3. **¿Los domicilios salen de cocina central o cada sede despacha su zona?** — El webhook ya recibe
+   `direccion` y `ciudad`. Si cada sede despacha su zona, la sede es derivable; si hay cocina central,
+   `location_id` debe ser un valor fijo y explícito, no NULL.
+4. **¿El menú y los precios son iguales?** — `avg_ticket` es una sola clave de `admin_settings` y
+   alimenta 3 reportes de plata (`roiEstimate`, eficiencia de campañas, ROI del Golden Bullet).
+5. **¿Un evento del calendario es de una sede o de la marca?** — `restaurant_events` no tiene sede y
+   `findCustomersForEvent()` arma la audiencia con `.eq('tenant_id')`. El filtro `city` **no sirve de
+   proxy**: es la ciudad del CLIENTE.
+6. **¿Un mesero puede trabajar en las dos sedes?** — Si rotan, la cuarta vía deja de ser confiable y
+   el backfill retroactivo vía `visits.registered_by_staff_id` deja de ser válido.
+7. **¿Las dos sedes ofrecen los mismos premios y umbrales?** — `reward_tiers` tiene único
+   `(point_threshold, tenant_id) WHERE is_active`: con un tenant por marca, premios distintos por
+   sede son **inexpresables**, no incómodos.
+8. **¿La 2ª sede abre con el mismo QR, o se imprime material nuevo?** — La 00029 eligió el dominio
+   justamente para "preservar los QR impresos". Reimprimir es plata y logística.
+
+#### Riesgos que nadie había puesto sobre la mesa
+
+- **La Opción A es de una sola vía.** No existe ninguna función de merge ni de split en las 40
+  migraciones. Fundir es un INSERT; separar es una migración con reglas de negocio inventadas al
+  vuelo (¿de quién son los puntos, el saldo, los opt-outs?).
+- **Los reportes de plata van a MENTIR, no a fallar.** Si se agrega `location_id` solo a las 5 tablas
+  del §23 y se dejan `customers.total_visits`, `last_visit_at` y `avg_ticket` como están, varias
+  pantallas mezclan numerador de sede con denominador de marca. No lanzan excepción, no rompen nada,
+  no hay un solo test que lo cubra.
+- **El cron de reactivación se apaga solo para la segunda sede.** `cron/reactivation/route.ts:158-161`
+  parte la audiencia por `customers.last_visit_at`, que pasa a ser de la marca: un cliente fiel a
+  Envigado **nunca** entra en el rescate de Laureles. No es un número mal mostrado, es una campaña que
+  deja de enviarse en silencio. Igual `cron/birthday`.
+- **Habeas data.** La política pública declara a `brand_name` responsable del tratamiento, y
+  `consent_events` es append-only por diseño. La Opción A reescribe de facto a nombre de quién se
+  otorgó cada consentimiento histórico, y no se puede corregir sin destruir su valor probatorio.
+- **Sin red.** `tests/` tiene 6 archivos y **ninguno toca** `customers`, `visits`, puntos, check-in,
+  redención ni dashboard. Además `tests/setup/bootstrap.sql:8` declara derivarse de "los 37 archivos
+  de supabase/migrations" y hoy hay 40: el harness ya arrastra 3 migraciones de deriva.
+
+#### Zonas acopladas que el §23 no inventarió
+
+`restaurant_events` + `calendar.service.ts:262-287` (audiencia de marca) · `imported-contacts.service.ts:456-482`
+(el ROI del Golden Bullet usa `customers.total_visits`, que pasa a ser de la marca) ·
+`tenants.config` → `whatsapp_link` y `delivery_phone` (`branding.ts:75-88`, el auto-reply de WhatsApp
+le da al comensal de Laureles el teléfono de Envigado) · `docs/features/referral-program.md:86-128`
+(el plan aprobado de referidos no tiene ni `tenant_id`: si se construye después, nace roto) ·
+`scripts/twilio-setup.mjs` (un número, un cliente).
+
+**Verificado en negativo, para poder tacharla:** no hay notificaciones push ni PWA — cero resultados
+de `web-push`/`firebase`/`onesignal`/`serviceWorker`/`manifest` en `src/` y `package.json`. Todo el
+contacto con el cliente pasa por WhatsApp.
+
+#### Lo único que sigue sin poder comprobarse
+
+`SELECT phone, count(DISTINCT tenant_id) FROM customers GROUP BY phone HAVING count(*)>1` — o sea, si
+hoy ya hay teléfonos repetidos entre tenants. El rol del AIOS no puede leer `customers` (42501: las
+policies llaman a `current_tenant_id()`, que no es SECURITY DEFINER) y el `.env.local` del producto no
+tiene `SUPABASE_SERVICE_ROLE_KEY`. **Hace falta el service role del producto para cerrarlo.** No es
+bloqueante: con 0 negocios multi-sede, el caso solo importaría si un mismo cliente frecuenta dos
+negocios distintos, que es otro escenario.
+
+
+
 ## 24. n8n visible y domicilios auditables (pedido 2026-09-01) — el fallo silencioso
 
 > Pedido textual del dueño: *"en AIOS tengo que ser capaz de ver que el N8N esté funcionando, y

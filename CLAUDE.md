@@ -105,6 +105,8 @@
 | `supabase/migrations/*.sql` | `docs/DB_SCHEMA.md` |
 | `src/app/api/**` | `docs/API_DOCS.md` + `docs/features/[feature].md` |
 | `scripts/twilio-setup.mjs` | `docs/04-deployment.md` |
+| `vercel.json` | `docs/04-deployment.md` + §25 de `docs/requerimientos/REQUERIMIENTOS_AGOSTO_2026.md` (⚠️ un cron aquí y su Schedule Trigger en n8n activo a la vez = doble disparo) |
+| `n8n/*.json` | `docs/04-deployment.md` §5 + §25 (migración a Vercel en curso — no editar un workflow sin mirar si ya se movió) |
 | `src/app/(dashboard)/dashboard/calendar/*` | `docs/features/calendar.md` |
 | `src/components/dashboard/Calendar/*` | `docs/features/calendar.md` |
 | `src/app/api/dashboard/calendar/*` | `docs/features/calendar.md` + `docs/API_DOCS.md` |

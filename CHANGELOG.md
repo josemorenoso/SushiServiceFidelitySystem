@@ -5,6 +5,46 @@
 
 ---
 
+## [2026-09-02 00:15] - §25: plan de migración n8n → Vercel + corrección del límite de crons
+
+### Tipo de cambio
+- **ADDED**: §25 en requerimientos — plan de migración por fases de los 7 workflows de n8n a Vercel Cron/Functions.
+- **CHANGED**: `docs/04-deployment.md` — corregido un límite de plataforma que el documento afirmaba y que ya no existe.
+- **SECURITY**: registrado que el plan Hobby de Vercel **prohíbe el uso comercial**, y este producto se cobra a los restaurantes.
+
+### Archivos afectados
+- `docs/requerimientos/REQUERIMIENTOS_AGOSTO_2026.md` - §25 nueva: motivo, inventario de los 7 workflows, 3 fases, la trampa de zona horaria, el riesgo de doble disparo y 4 preguntas abiertas.
+- `docs/04-deployment.md` - bloque de corrección fechado tras el deploy manual; fila del plan actualizada; marcadas como obsoletas las dos afirmaciones sobre "el 3er cron".
+- `CLAUDE.md` - filas nuevas en la tabla de lookup para `vercel.json` y `n8n/*`.
+
+### Descripción detallada
+
+**Sin código.** Es documentación previa a la migración, para que se ejecute con los datos verificados y no con los que el repo daba por buenos.
+
+**Lo que estaba mal.** `docs/04-deployment.md` afirmaba que Hobby *"soporta 2 crons diarios"* y que un tercer cron exigiría Pro. Ese fue el motivo registrado para mover los crons a n8n en julio de 2026. Verificado contra la documentación oficial el 2026-09-02: Vercel permite **100 crons por proyecto en todos los planes** — hay changelog propio (*"Cron jobs now support 100 per project on every plan"*). Lo único que Hobby limita es la **frecuencia**: 1 vez al día, con ±59 min de precisión. Pro permite 1 vez por minuto.
+
+**El motivo real de migrar no son los crons.** `vercel.com/docs/limits/fair-use-guidelines` dice textualmente: *"Hobby teams are restricted to non-commercial personal use only. All commercial usage of the platform requires either a Pro or Enterprise plan"*, y define uso comercial incluyendo *"receiving payment to create, update, or host the site"*. El producto se cobra a los restaurantes, así que hoy está en infracción y Vercel pausa cuentas por esto. Con 25 clientes por delante, una pausa los tumbaría a todos a la vez, incluido el AIOS, que vive en el mismo equipo.
+
+**Alcance de Pro, verificado:** se cobra por **equipo**, no por proyecto — US$20/mes cubren los ~20 proyectos de `josemorenosos-projects`, con 1 seat, US$20 de crédito de uso, 1 TB de transferencia y 10M de edge requests.
+
+**Los 5 crons no necesitan una línea de código.** Verificado: los 5 endpoints existen en `src/app/api/cron/`, los 5 exportan `GET` (el método que invoca Vercel), y `validateCronSecret()` ya espera `Authorization: Bearer $CRON_SECRET`, que es exactamente el header que Vercel Cron envía solo. `CRON_SECRET` ya está en las variables del proyecto. La Fase 1 es editar `vercel.json` — hoy literalmente `{"crons": []}` — y apagar los triggers de n8n en el mismo movimiento.
+
+**Las dos trampas que §25 deja marcadas:**
+
+1. **Zona horaria.** Los workflows de n8n corren en hora de Bogotá; Vercel Cron interpreta las expresiones en UTC (Colombia es UTC-5). Copiar las cadencias tal cual puede mandar los cumpleaños de madrugada. Hay que revisar workflow por workflow qué zona tiene configurada antes de convertir.
+2. **Doble disparo.** Ya ocurrió: `birthday` y `reactivation` se dispararon desde Vercel y desde n8n a la vez. El cliente final nunca recibió mensajes repetidos porque `hasRecentCampaignMessage()` los des-duplicaba, pero el trabajo se hacía dos veces y quedaba un riesgo de carrera. Esa red cubre las campañas, no necesariamente la cola de goteo ni el calendario, que llegaron después.
+
+**Fases:** (1) los 5 crons, solo configuración; (2) domicilios, que exige mover el parseo con OpenAI al producto — no hay cliente de OpenAI en el repo todavía; (3) Google Contacts, la más cara (OAuth2 propio contra la People API) y la única opcional, porque `syncGoogleContact()` ya es fire-and-forget.
+
+Ninguna de las 4 preguntas abiertas se asumió (Mandamiento I). La que bloquea la Fase 2 es cuál de `domicilios_whatsapp_v3.json` / `v4.json` es el vigente.
+
+### Request original
+> "Vamos a migrar todo el sistema de N8N hacia Vercel, voy a ir comprando la suscripción pero tu tienes que documentar todo, dame el promt para hacerlo en otra sesión"
+>
+> Y antes: "Todo eso no podemos moverlo y que funcione dentro de vercel????" · "Voy a comprar la PRO puedo usar varios crons para varios proyectos diferentes??? revisa alcance real, prefiero pagar vercel que n8n"
+
+---
+
 ## [docs] — 2026-09-01 — §23: un cliente, varias sedes (mismo recorrido, datos separados)
 
 > Request original: *"cómo hacemos cuando es más de una sede para que independientemente de si

@@ -1533,6 +1533,153 @@ Vale más una señal tosca y visible que una métrica fina que nadie mira. **La 
 que permite confirmar que volvió a funcionar. Si hay que priorizar, la alarma va primero.
 
 
+## 25. Migración n8n → Vercel (decidido 2026-09-02) — el VPS deja de ser un punto único de fallo
+
+> Request original del dueño: *"Vamos a migrar todo el sistema de N8N hacia Vercel, voy a ir
+> comprando la suscripción pero tú tienes que documentar todo"*. Motivación textual previa:
+> *"prefiero pagar Vercel que n8n"*.
+
+### 25.1 Por qué — y el motivo real no son los crons
+
+Hay dos razones, y la segunda pesa más que la primera:
+
+1. **n8n es un punto único de fallo sin alarma** (§24). Si el VPS `n8n.almojabananet.me` se
+   cae, se detienen cumpleaños, reactivación, recordatorios de premio, calendario y la cola de
+   goteo — y nadie se entera. El de cumpleaños es irrecuperable: el cumpleaños ya pasó.
+
+2. **El plan Hobby de Vercel PROHÍBE el uso comercial.** Textual de
+   `vercel.com/docs/limits/fair-use-guidelines` (consultado 2026-09-02):
+
+   > *"**Hobby teams** are restricted to non-commercial personal use only. All commercial usage
+   > of the platform requires either a Pro or Enterprise plan."*
+
+   Define uso comercial incluyendo explícitamente *"receiving payment to create, update, or
+   host the site"*. El producto se cobra a los restaurantes, así que hoy está en infracción.
+   Vercel pausa cuentas por esto. Con 25 clientes, una pausa los tumba a todos a la vez —
+   incluido el AIOS, que vive en el mismo equipo.
+
+   **Este es el argumento decisivo, por encima de los crons.**
+
+### 25.2 Corrección: `docs/04-deployment.md` estaba desactualizado
+
+Ese doc decía que Hobby soporta *"2 crons diarios"* y que un tercero exigiría Pro. **Ya no es
+cierto** — hay changelog propio de Vercel (*"Cron jobs now support 100 per project on every
+plan"*). Números vigentes al 2026-09-02:
+
+| | Crons por proyecto | Intervalo mínimo | Precisión |
+|---|---|---|---|
+| Hobby | 100 | 1 vez al día | ±59 min |
+| **Pro** | **100** | **1 vez por minuto** | al minuto |
+
+Lo único que Hobby limita hoy es la **frecuencia**, no la cantidad. Y **Pro se cobra por
+EQUIPO**, no por proyecto: US$20/mes de platform fee (1 seat que despliega + US$20 de crédito
+de uso + 1 TB de transferencia + 10M edge requests) cubre los ~20 proyectos del equipo
+`josemorenosos-projects`, incluidos el producto y el AIOS.
+
+Coste marginal de los crons: los dos de `*/15` suman ~5.760 invocaciones/mes, a US$0,60 por
+millón. Es ruido frente al crédito incluido.
+
+### 25.3 Inventario: qué hay que mover y cuánto cuesta cada cosa
+
+| Workflow n8n | Qué es | Endpoint destino | Trabajo |
+|---|---|---|---|
+| `cron_birthday` (`0 13 * * *`) | cron | `/api/cron/birthday` | **cero código** |
+| `cron_reactivation` (`0 15 * * *`) | cron | `/api/cron/reactivation` | **cero código** |
+| `cron_reward-reminder` (`0 16 * * *`) | cron | `/api/cron/reward-reminder` | **cero código** |
+| `cron_calendar-dispatch` (`*/15`) | cron | `/api/cron/calendar-dispatch` | **cero código** · exige Pro |
+| `cron_queue-drain` (`*/15`) | cron | `/api/cron/queue-drain` | **cero código** · exige Pro |
+| `domicilios_whatsapp_v4` | webhook + IA | hoy reenvía a n8n | **código real** |
+| `google_contacts_sync` | webhook + Google API | hoy reenvía a n8n | **lo más difícil** |
+
+**Los 5 crons no necesitan una línea de código nueva.** Verificado el 2026-09-02:
+
+- Los 5 endpoints ya existen en `src/app/api/cron/` y los 5 exportan `GET`, que es el método
+  que invoca Vercel Cron.
+- `validateCronSecret()` (`src/lib/validators/cron.ts`) espera
+  `Authorization: Bearer $CRON_SECRET` — **exactamente** el header que Vercel Cron envía solo.
+  Es el contrato documentado de Vercel, así que no hay que tocar la autenticación; sí hay que
+  no romperla.
+- `CRON_SECRET` ya está en las variables del proyecto.
+- Los crons aceptan `?tenant=` opcional y sin él procesan todos los tenants activos, así que
+  basta **una entrada por endpoint**, no una por cliente.
+
+O sea, la Fase 1 es editar `vercel.json` (hoy literalmente `{"crons": []}`) y apagar n8n.
+
+### 25.4 Fases
+
+**Fase 1 — los 5 crons.** Solo configuración. Requiere Pro por los dos de `*/15`; los otros
+tres cabrían incluso en Hobby.
+
+    {
+      "crons": [
+        { "path": "/api/cron/birthday",          "schedule": "0 13 * * *" },
+        { "path": "/api/cron/reactivation",      "schedule": "0 15 * * *" },
+        { "path": "/api/cron/reward-reminder",   "schedule": "0 16 * * *" },
+        { "path": "/api/cron/calendar-dispatch", "schedule": "*/15 * * * *" },
+        { "path": "/api/cron/queue-drain",       "schedule": "*/15 * * * *" }
+      ]
+    }
+
+> ⚠️ **OJO CON LA ZONA HORARIA — es el error más fácil de toda la migración.**
+> Las cadencias de arriba son las que tiene n8n, y sus workflows corren en hora de **Bogotá**.
+> Vercel Cron interpreta las expresiones en **UTC**, y Colombia es UTC-5. Copiar
+> `0 13 * * *` tal cual haría que los cumpleaños salieran a las **8am UTC = 3am en Colombia**.
+> Hay que sumar 5 horas: 8am Bogotá → `0 13 * * *` en UTC ya es correcto SI el trigger de n8n
+> estaba en UTC, y `0 18 * * *` si estaba en hora local. **Verificar workflow por workflow en
+> n8n cuál es su zona configurada antes de convertir** — `docs/04-deployment.md` §5 ya avisa
+> de esta trampa. Las de `*/15` no se ven afectadas.
+
+**Fase 2 — domicilios.** Hoy `twilio-incoming` (`route.ts:130`) y `zernio` (`route.ts:171`)
+reenvían a `N8N_DOMICILIOS_WEBHOOK_URL`. n8n extrae remitente y texto, llama a OpenAI
+(`gpt-4o-mini`), parsea el JSON y hace `POST /api/webhook/delivery` — endpoint que **ya existe
+y ya crea el cliente, la visita y los puntos**. Migrar = mover esos pasos al producto y llamar
+al servicio directamente en vez de dar la vuelta por HTTP.
+
+No hay cliente de OpenAI en el repo (verificado: cero referencias). El prompt de extracción
+está en `docs/features/delivery-ai-parsing.md`.
+
+**Fase 3 — Google Contacts.** La más difícil y la única realmente opcional. Son 8 nodos que
+hablan con la Google People API (buscar, crear, comparar, actualizar) con la credencial OAuth
+guardada en n8n. Llevarlo a Vercel exige implementar OAuth2 con refresh token propio.
+`syncGoogleContact()` ya es fire-and-forget y hace no-op si falta
+`N8N_GOOGLE_CONTACTS_WEBHOOK_URL`, así que **se puede dejar en n8n o apagar sin romper nada**.
+No bloquea las fases 1 y 2.
+
+### 25.5 El riesgo que ya se materializó una vez
+
+**No pueden correr los dos a la vez.** `docs/04-deployment.md` registra que `birthday` y
+`reactivation` se disparaban desde Vercel *y* desde n8n al mismo tiempo. **El cliente final
+nunca recibió mensajes repetidos** —`hasRecentCampaignMessage()` los des-duplicaba— pero el
+trabajo se hacía dos veces y quedaba un riesgo de carrera si los dos disparos coincidían al
+segundo. Por eso `"crons": []` es la decisión vigente desde 2026-07-05.
+
+Que exista esa red de seguridad **no autoriza a saltarse la regla**: la des-duplicación cubre
+las campañas, no necesariamente la cola de goteo ni el calendario, que llegaron después.
+
+Regla de la migración: **por cada entrada que se agrega a `vercel.json`, se desactiva su
+Schedule Trigger en n8n en el mismo movimiento**, no después. Y se comprueba en la UI de n8n
+que quedó inactivo — no se asume.
+
+### 25.6 Qué se gana en observabilidad (parte de §24 sale gratis)
+
+Vercel registra cada ejecución de cron con su resultado, y `vercel crons ls` los lista. Eso
+responde *"¿está vivo?"* sin construir nada — la mitad de lo que pide §24. **La otra mitad
+sigue haciendo falta**: la alarma de silencio de domicilios, porque un cron vivo que procesa
+cero pedidos se ve igual que uno vivo con pedidos.
+
+### 25.7 Preguntas abiertas
+
+1. **¿Se migra Google Contacts o se apaga?** Si nadie usa esos contactos, apagarlo ahorra la
+   parte más cara de la migración.
+2. **¿`v3` o `v4` es el workflow de domicilios vigente?** Ya anotado en §24; sigue sin
+   respuesta y ahora bloquea la Fase 2.
+3. **¿Se apaga el VPS de n8n al terminar, o se deja como respaldo?** Si se deja, hay que
+   garantizar que sus triggers quedan inactivos.
+4. **¿La cadencia `*/15` de la cola de goteo y el calendario sigue siendo la correcta?** Pro
+   permite hasta cada minuto; la migración es buen momento para revisarla, pero cambiarla es
+   decisión del dueño, no efecto colateral.
+
+
 ---
 
 **Este documento se generó con una auditoría de 10 agentes en paralelo** (Twilio/acoplamiento,

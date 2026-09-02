@@ -102,13 +102,33 @@
 |------|-----------|
 | Framework | Next.js 16.2 (App Router) — TypeScript, TailwindCSS v4, shadcn/ui |
 | Deploy | Vercel — auto-deploy desde GitHub `main` |
-| Plan | Hobby (gratis) — soporta 2 crons diarios + funciones serverless |
+| Plan | Hobby (gratis) — **en migración a Pro, ver §25 de requerimientos** |
 
 ```bash
 # Deploy manual (requiere Vercel CLI)
 npm i -g vercel
 vercel deploy --prod
 ```
+
+> ⚠️ **CORRECCIÓN 2026-09-02 — este documento afirmaba un límite que ya no existe.**
+>
+> Decía que Hobby *"soporta 2 crons diarios"* y que un tercer cron exigiría plan Pro. Ese fue
+> el motivo por el que los crons se movieron a n8n en julio. **Ya no es cierto:** Vercel
+> permite **100 crons por proyecto en todos los planes** (changelog *"Cron jobs now support
+> 100 per project on every plan"*). Lo único que Hobby limita es la **frecuencia**:
+>
+> | | Crons por proyecto | Intervalo mínimo | Precisión |
+> |---|---|---|---|
+> | Hobby | 100 | 1 vez al día | ±59 min |
+> | Pro | 100 | 1 vez por minuto | al minuto |
+>
+> Además, **Hobby prohíbe el uso comercial** — `vercel.com/docs/limits/fair-use-guidelines`:
+> *"Hobby teams are restricted to non-commercial personal use only"* — y este producto se
+> cobra a los restaurantes. Por eso el 2026-09-02 se decidió migrar todo n8n → Vercel y
+> pasar a Pro.
+>
+> **Plan completo, fases y trampas: §25 de `docs/requerimientos/REQUERIMIENTOS_AGOSTO_2026.md`.**
+> Mientras esa migración no esté hecha, lo que sigue en §5 describe el estado VIGENTE (n8n).
 
 O desde Vercel Dashboard: Import Git Repository → Framework: Next.js → configurar env vars → Deploy.
 
@@ -156,7 +176,7 @@ fila en `tenants` (ver §6) con:
 > nunca recibió mensajes repetidos, pero se gastaba el trabajo dos veces y existía un
 > riesgo de carrera si ambos disparos coincidían al segundo. Se decidió dejar **solo
 > n8n** como disparador único — ver [§5](#crons-de-birthdayreactivacion-via-n8n).
-> `calendar-dispatch` tampoco está aquí — lo dispara n8n (ver [§5 W2](#w2--calendar-dispatch)). Agregar un 3er cron con cadencia `*/15` exigiría plan Vercel Pro.
+> `calendar-dispatch` tampoco está aquí — lo dispara n8n (ver [§5 W2](#w2--calendar-dispatch)). Agregar un 3er cron con cadencia `*/15` exigiría plan Vercel Pro. ⚠️ **Obsoleto — ver la corrección del 2026-09-02 más arriba: el límite es la frecuencia, no la cantidad.**
 
 ---
 
@@ -409,7 +429,7 @@ curl -X POST https://n8n.almojabananet.me/webhook-test/[path-del-webhook] \
 ### W2 · calendar-dispatch (activo — v2.1.0)
 
 **Propósito:** Disparar el auto-envío de eventos del calendario cada 15 minutos.
-No está en `vercel.json` porque `*/15` + ser el 3er cron requeriría plan Vercel Pro.
+No está en `vercel.json` porque `*/15` requiere plan Vercel Pro. (Lo del "3er cron" quedó obsoleto — ver corrección del 2026-09-02.)
 
 **Nodo 1 — Schedule Trigger:**
 - Trigger Interval: `Minutes` → cada `15`

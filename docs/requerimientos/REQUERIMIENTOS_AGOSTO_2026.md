@@ -1453,6 +1453,86 @@ y a cambio solo evita el punto 5 de la Opción A.** No se recomienda.
   pasa a ser "la marca" y su sede actual es su única `restaurant_locations`.
 
 
+## 24. n8n visible y domicilios auditables (pedido 2026-09-01) — el fallo silencioso
+
+> Pedido textual del dueño: *"en AIOS tengo que ser capaz de ver que el N8N esté funcionando, y
+> para cada dashboard en el área de domicilio tenemos que ver qué clientes se han cargado,
+> porque ahorita hay algo muy cierto: si usamos el flujo y no se carga nadie, se da cuenta. Y
+> tenemos que ver cómo vamos a seguir usando ese flujo para todos los demás restaurantes."*
+
+El dueño está describiendo un **fallo silencioso**, y tiene razón: hoy no existe ninguna señal.
+Si n8n se cae, nadie se entera hasta que un cliente reclama.
+
+### 24.1 Cuánto depende de n8n (verificado)
+
+n8n no mueve solo los domicilios. En `n8n/` viven **9 workflows**, y cinco de ellos son los
+crons del producto — Vercel Hobby no los corre:
+
+| Workflow | Qué pasa si n8n está caído |
+|---|---|
+| `cron_queue-drain.json` (W4) | La cola de goteo deja de drenar: las campañas que exceden el cupo se quedan encoladas |
+| `cron_birthday.json` | Nadie recibe su mensaje de cumpleaños. **Irrecuperable**: el cumpleaños ya pasó |
+| `cron_reactivation.json` | Se detiene la reactivación de clientes en riesgo |
+| `cron_reward-reminder.json` | Los premios vencen sin avisar al cliente |
+| `cron_calendar-dispatch.json` | Los eventos programados no salen |
+| `domicilios_whatsapp_v3/v4.json` | No entra ningún pedido de domicilio |
+| `google_contacts_sync.json` | Los contactos dejan de sincronizarse |
+
+**Ninguno avisa cuando falla.** El de cumpleaños es el peor: no hay reintento posible.
+
+### 24.2 El flujo de domicilios, tal como es hoy
+
+1. El operador manda el "cuadro" del pedido por WhatsApp al número del sistema.
+2. `twilio-incoming` o `zernio` ve que el remitente está en `authorized_numbers` y reenvía a n8n.
+3. n8n parsea con IA y hace `POST /api/webhook/delivery`.
+4. Ese endpoint crea o encuentra el cliente, registra `visits.source = 'delivery'`, otorga
+   puntos y manda el mensaje.
+
+**Lo que ya existe** (no hay que construirlo): `visits.source = 'delivery'`,
+`customers.source_channels` (`qr` / `delivery` / `both`), y dos gráficas que ya desglosan por
+canal — `AcquisitionChannelChart.tsx` y `VisitsChart.tsx`.
+
+**Lo que falta** es justo lo que el dueño pide: la lista de **qué clientes entraron por
+domicilio**, y sobre todo **la alarma de silencio**. Una gráfica en cero se lee igual que "hoy
+no hubo pedidos"; no distingue "el flujo está roto" de "fue un martes flojo".
+
+### 24.3 Lo que se pide
+
+**A. En el AIOS — semáforo de n8n por sede.** El AIOS ya tiene la fila de tarjetas y el
+semáforo por sede (v1.3.0); esto es una señal más. Mínimo viable: *cuándo fue la última vez que
+n8n tocó a este tenant*. Los crons ya escriben en `message_logs` y la cola en `send_queue`, así
+que el dato se puede derivar sin instrumentar nada nuevo.
+
+**B. En el dashboard de cada restaurante — apartado de domicilios.** Qué clientes se cargaron,
+cuándo, y con qué pedido. Más la alarma: *"llevas N días sin un solo pedido de domicilio,
+cuando tu promedio es M"*. La comparación tiene que ser contra el propio historial del tenant —
+un umbral fijo le sirve a Sushi Service y no a una barbería.
+
+**C. Cómo escala el flujo a los otros restaurantes.** Es la parte que menos definida está y
+engancha con **§18**: con coexistencia el "cuadro" del pedido cae en la misma bandeja que las
+conversaciones con comensales, y el webhook de Zernio ya no puede responder texto libre. Hoy
+hay dos versiones del workflow (`v3` y `v4`) y **no está documentado cuál es la vigente ni qué
+cambió**, lo cual es un problema por sí solo si hay que replicarlo 25 veces.
+
+### Preguntas para el dueño — antes de escribir código
+
+1. **¿Cuántos días de silencio son "está roto"?** ¿Fijo, o derivado del promedio del tenant?
+2. **¿Quién recibe la alarma: tú en el AIOS, o el restaurante en su dashboard?** Cambia dónde
+   se construye. Al restaurante puede alarmarlo un día flojo.
+3. **¿`v3` o `v4` es el workflow vigente?** Sin eso, replicarlo a 25 clientes es adivinar.
+4. **¿El apartado de domicilios es solo lectura, o desde ahí se configura el flujo?** §18 pedía
+   *"una parte reservada para domicilios para explicarles cómo funciona y conectar algo si hace
+   falta"* — eso último suena a configuración.
+5. **¿Un restaurante sin domicilios debe ver el apartado?** Si no, hace falta una bandera por
+   tenant que diga si tiene el flujo activo.
+
+### Nota de diseño
+
+Vale más una señal tosca y visible que una métrica fina que nadie mira. **La alarma de silencio
+(B) es la que resuelve el problema que el dueño describió**; la lista de clientes cargados es lo
+que permite confirmar que volvió a funcionar. Si hay que priorizar, la alarma va primero.
+
+
 ---
 
 **Este documento se generó con una auditoría de 10 agentes en paralelo** (Twilio/acoplamiento,

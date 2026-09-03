@@ -95,6 +95,63 @@ con 23502 y **el alta entera falla** (la función es atómica).
 
 ---
 
+## [2026-09-03] - Auditoría: el DEFAULT puente de `tenant_id` (00030) nunca se aplicó
+
+### Tipo de cambio
+- **ADDED**: `docs/superpowers/specs/2026-09-03-default-puente-tenant.md` — auditoría completa: qué hace la 00030, confirmación de que 00028 es la única fuente del DEFAULT puente en las 18 tablas, inventario línea por línea de las 26 escrituras `.insert()`/`.upsert()` de `src/` a esas tablas (las 26 pasan `tenant_id` explícito), revisión de `aios_provision_tenant` y los 3 scripts de onboarding manual, SQL de solo lectura para detectar contaminación cruzada ya existente, secuencia segura de la ventana y reversión.
+- **CHANGED**: `docs/03-security.md` — nueva sección "Aislamiento entre tenants — el DEFAULT puente de `tenant_id` (00028/00030)", antes de "Reglas INVIOLABLES".
+- **CHANGED**: `CLAUDE.md` — una fila nueva al final de la Tabla de Lookup para `supabase/migrations/00030_drop_tenant_defaults.sql`.
+
+### Archivos afectados
+- `docs/superpowers/specs/2026-09-03-default-puente-tenant.md` — nuevo.
+- `docs/03-security.md` — una sección nueva.
+- `CLAUDE.md` — una fila al final de la Tabla de Lookup.
+
+### Descripción detallada
+
+**No es una implementación. Es una auditoría de solo lectura**, corrida en paralelo a la sesión
+que desarrolla F3 de multi-sede sobre el mismo checkout — sin tocar `src/`, `tests/`,
+`supabase/migrations/`, `n8n/` ni ejecutar una sola sentencia SQL contra ninguna base.
+
+**El hallazgo, verificado por el dueño contra producción:** `customers.tenant_id` (y otras 17
+columnas — la lista completa está en `00025`/`00028`/`00030`, idéntica las tres veces) sigue con
+el `DEFAULT` puente que `00028_seed_sushi_service.sql` dejó en julio apuntando al UUID de Sushi
+Service, pensado para que el código pre-multitenant siguiera insertando sin `tenant_id`. La
+migración que lo retira, `00030_drop_tenant_defaults.sql`, existe en el repo desde 2026-07-05 y
+**nunca se aplicó**. Mientras siga así, un `INSERT` que olvide `tenant_id` en esas 18 tablas no
+falla — cae calladito en Sushi Service, sin error, sin log.
+
+**El trabajo central fue el inventario de escrituras**, porque es lo único que decide si quitar
+el DEFAULT mañana rompe algo: se recorrieron las 35 ocurrencias de `.insert(`/`.upsert(` en 27
+archivos de `src/`, las funciones `SECURITY DEFINER` del AIOS (`aios_provision_tenant` y
+relacionadas, `00036_zernio_provider.sql`) y los 3 scripts de onboarding manual
+(`scripts/seed-new-tenant.sql`, `scripts/alta-frangal.sql`, `scripts/seed-demo-tenant.sql`).
+**Resultado: las 26 escrituras a las 18 tablas en riesgo pasan `tenant_id` explícito, sin una
+sola excepción.** El código de hoy no depende del DEFAULT en ningún camino conocido — el riesgo
+no es "algo se rompe", es la ausencia de una red de seguridad para el próximo `INSERT` que se
+olvide de pasarlo.
+
+Se descartaron del riesgo `auto_reply_cooldown` y `webhook_events_seen` (sin columna `tenant_id`
+en absoluto) y las tablas nacidas después de la 00030 (`reward_grants`, `review_events`,
+`template_versions`, `tenant_wallet_transactions`, `send_queue`) — ninguna tuvo nunca el DEFAULT
+puente, confirmado con `grep` sobre las 41 migraciones.
+
+El doc entrega también: el SQL de solo lectura para buscar datos ya mal atribuidos a Sushi
+Service (colisión de teléfono entre tenants, visitas cuyo `tenant_id` no coincide con el de su
+cliente, punteros de plantilla sospechosos en `admin_settings`), la secuencia paso a paso de la
+ventana (congelar escrituras manuales → fotografía de línea base → aplicar → smoke test → repetir
+fotografía → monitorear `23502` 24-48h) y la reversión (una sola línea `SET DEFAULT` por tabla,
+sin pérdida de datos — no hace falta revertir las 18 si solo una falla).
+
+**Recomendación:** no es una emergencia que tumbe nada hoy — el código actual ya pasa `tenant_id`
+en el 100% de los casos — pero conviene cerrarla antes de las 3 instalaciones nuevas que vienen,
+no necesariamente después de la presentación: es un `ALTER` de metadatos sin downtime, la propia
+migración se auto-protege (aborta si encuentra una fila sin `tenant_id`) y revertir una tabla es
+instantáneo. Si el dueño prefiere no tocar producción tan cerca de la presentación, correr primero
+todo el SQL de solo lectura (cero riesgo) y dejar el `ALTER` para la primera ventana tranquila.
+
+---
+
 ## [2026-09-03 03:05] - Multi-sede F2: `location_id` en las 13 tablas de eventos (00043)
 
 ### Tipo de cambio

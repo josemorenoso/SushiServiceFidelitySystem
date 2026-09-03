@@ -140,3 +140,6 @@
 | `src/components/dashboard/SuperAdminWallets.tsx` | `docs/features/wallet-billing.md` |
 | `src/components/dashboard/WalletCard.tsx` | `docs/features/wallet-billing.md` |
 | `src/app/(dashboard)/dashboard/admin/wallets/*` | `docs/features/wallet-billing.md` |
+| `supabase/migrations/000{41..49}*.sql` | `docs/superpowers/specs/2026-09-02-multisede-design.md` §4 (⚠️ el set de migraciones de multi-sede esta CONSOLIDADO ahi: cada `location_id` va NULLABLE y con FK COMPUESTA `(location_id, tenant_id)` — una FK simple deja apuntar a la sede de otra marca) + `docs/DB_SCHEMA.md` |
+| `src/lib/tenant.ts` | `docs/superpowers/specs/2026-09-02-multisede-design.md` §3 (⚠️ `getTenantByDomain` CONSERVA su firma; la sede viaja por `resolveHostContext()` — cambiar la firma toca 16 archivos de golpe) |
+| `src/app/api/dashboard/location/*` | `docs/superpowers/specs/2026-09-02-multisede-design.md` (⚠️ hace `.single()` sobre `restaurant_locations` filtrando solo por tenant: con 2 sedes activas devuelve 500 y su PUT inserta una tercera fila en vez de actualizar) |

@@ -5,6 +5,47 @@
 
 ---
 
+## [2026-09-02 02:40] - Multi-sede: el dueño decidió, y el spec técnico completo
+
+### Tipo de cambio
+- **ADDED**: `docs/superpowers/specs/2026-09-02-multisede-design.md` — el diseño técnico de "un cliente, varias sedes": modelo de datos, 9 migraciones consolidadas, permisos, mensajería, calendario, dashboard, AIOS y 10 fases.
+- **ADDED**: §23.ter en requerimientos — las 12 decisiones del dueño, el riesgo que aceptó aplazar y una corrección al §23.bis.
+- **CHANGED**: `CLAUDE.md` — filas nuevas en la tabla de lookup.
+
+### Archivos afectados
+- `docs/superpowers/specs/2026-09-02-multisede-design.md` - spec nuevo.
+- `docs/requerimientos/REQUERIMIENTOS_AGOSTO_2026.md` - §23.ter, insertada tras el §23.bis. El §23 y el §23.bis **no se tocaron**.
+- `CLAUDE.md` - lookup de `restaurant_locations`, `src/lib/tenant.ts` y las migraciones nuevas.
+
+### Descripción detallada
+
+**Sin código.** El §23 cerraba con *"no empezar por el schema"* porque todo dependía de una respuesta que faltaba. Ya está: el dueño respondió las 12 preguntas el 2026-09-02.
+
+**Cómo se produjo.** 8 diseños en paralelo (uno por área del producto), consolidados a mano, más 4 sondas de solo lectura contra la base de producción para verificar cada supuesto de schema antes de escribir un `ALTER`.
+
+**La decisión que reordenó el diseño (D1).** El dueño eligió subdominio por sede + QR por sede, con este argumento: *"si es escaneando el QR, o sea el mesero, no vamos a saber toda la primera tanda de clientes por dónde llegó… sabremos de qué sede es de la segunda visita para arriba"*. Es correcto, y es exactamente el hueco que el §23.bis había marcado en la cuarta vía: el registro de un cliente nuevo en modo `auto` (`check-in/route.ts:325-403`) no pasa por auth de mesero. Las dos vías no son rivales: **se ordenan** (actor autenticado → host → NULL). Y sale gratis en el QR, porque el generador usa `window.location.origin` (`dashboard/qr/page.tsx:105`): el QR impreso desde el subdominio de la sede ya sale con la sede.
+
+**Cuatro bugs latentes encontrados de camino, todos verificados en producción.**
+1. La tabla nació como geocerca, así que `lat`/`lon` son `NOT NULL` — pero la geocerca se apagó en mayo de 2026 y la pantalla para cargar coordenadas está deshabilitada bajo un overlay «Próximamente». El AIOS solo manda `locations[]` si vienen las dos (`provisioning.ts:719-731`) y la función solo entra al bucle si el array existe (00036:199), con el comentario explícito *«sin ambos, no se crea la sede»*. Resultado: **un negocio dado de alta sin GPS se crea SIN NINGUNA SEDE**, sin fallar y sin avisar. Ésa es la razón de que `restaurant_locations` tenga ~1 fila entre 4 tenants — y bajo el modelo nuevo es fatal, porque la sede es lo que carga el subdominio, la ficha de Google, los meseros y la atribución.
+2. `tenant_wallet_transactions_message_log_id_fkey` es **`ON DELETE SET NULL`**: derivar el desglose de plata por JOIN significaría perderlo entero el día que se pode `message_logs`. Por eso la sede se denormaliza en el ledger.
+3. `staff_devices.device_fingerprint` **no tiene UNIQUE** (solo un índice normal, 00018:41) y cuatro sitios del código hacen `.single()` sobre él.
+4. `restaurant_locations` **no tiene `UNIQUE (id, tenant_id)`**, que es el soporte necesario para las FK compuestas que impiden atribuir un evento de la marca A a una sede de la marca B.
+
+**Corrección al §23.bis.** Se afirmó que *"el cron de rescate se apaga solo para la segunda sede"*. El encuadre era incorrecto: el reloj de inactividad se queda **de la marca**. Un cliente que come en Envigado todos los viernes no está inactivo para la marca, y mandarle *"hace 20 días que no te vemos"* firmado por Laureles es falso, quema un mensaje y consume cupo. Con reloj por sede recibiría **dos** mensajes el mismo día con **dos** costos. Lo que se parte por sede es la atribución, no el reloj — y la sede que perdió al cliente lo ve igual, en un panel de fuga entre sedes.
+
+**Ocho conflictos entre áreas, resueltos y documentados** en §11 del spec, para que nadie los re-litigue. Los dos más caros: el permiso de sede va **en el tipo** (`LocationScope` opaco, la ruta que se olvide del filtro no compila) y no solo en RLS, porque la app corre con `service_role` en 55 archivos y el RLS ahí no aísla nada; y el alcance vive en una **tabla**, no en un claim del JWT, porque el JWT se escribe a mano con un UPDATE sobre `auth.users` y cada cambio exige re-login.
+
+**Riesgo aceptado y aplazado por el dueño:** qué pasa si una sede se separa o pasa a franquicia. Preguntado, respondió *"no interesa, no hace falta verlo ahorita"*. Queda registrado que no existe función de split, que el §22 había decidido lo contrario para franquicias, y que el diseño deja evidencia (`origin_location_id`, `consent_events.location_id`, `tenant_wallet_transactions.location_id`) pero **no** el reparto.
+
+### Pendiente
+- **Implementar.** F3 (resolución de la sede) es el cuello de botella: sin ella `location_id` nace vacía.
+- **Cerrar la deriva del harness de tests** antes del primer test: `tests/setup/bootstrap.sql:8` dice derivarse de 37 migraciones y hay 40 (con el spec serían 49).
+- **Confirmar la suposición del «recuerdo de reseña»** (§7.2 del spec). Si es de la marca, basta con no aplicar la 00049.
+- **D6 sigue sin decidir.** Antes de elegir "un número por sede", el dueño debe saber que exige aprobar las 13 plantillas **dos veces** ante Meta y que cada sede arranca con su propio escalón de 250/día.
+
+---
+
+
 ## [2026-09-02 23:40] - Fase 1 de §25: los 5 crons vuelven a `vercel.json` (commit local, SIN push)
 
 ### Tipo de cambio

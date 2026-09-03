@@ -1603,6 +1603,106 @@ negocios distintos, que es otro escenario.
 
 
 
+### 23.ter — DECIDIDO por el dueño (2026-09-02). Las 12 respuestas y el spec
+
+> **El §23 y el §23.bis quedan cerrados como diagnóstico.** A partir de aquí el modelo está
+> decidido y lo que falta es implementar.
+>
+> **Spec técnico completo:** `docs/superpowers/specs/2026-09-02-multisede-design.md`
+> (modelo de datos, 9 migraciones consolidadas, permisos, mensajería, calendario, dashboard,
+> AIOS y 10 fases de implementación).
+
+#### Las 12 decisiones
+
+| # | Pregunta | Respuesta del dueño |
+|---|---|---|
+| **D1** | ¿Cómo sabe el sistema en qué sede está el cliente? | **Subdominio por sede + QR por sede**, juntos. |
+| **D2** | ¿Los clientes quedan marcados con su sede? | **Sí**, sede de origen. |
+| **D3** | ¿Premio de Envigado se redime en Laureles? | **Sí.** *"Es parte del sistema."* |
+| **D4** | ¿Billetera y cupo de la marca o de la sede? | **De la marca, con desglose por sede OBLIGATORIAMENTE.** |
+| **D5** | ¿Ficha de Google por sede? | **Sí, cada sede la suya.** |
+| **D6** | ¿Un número de WhatsApp o uno por sede? | **Sin decidir.** El diseño soporta los dos. |
+| **D7** | ¿Mismos precios y menú? | **Sí.** *"Si llegan a necesitar algo muy diferente tratamos a cada sede como negocio independiente y ya."* |
+| **D8** | ¿El evento del calendario es de la marca o de una sede? | **Hay que poder elegir. «Esto es vital».** |
+| **D9** | ¿Cocina central o cada sede su zona? | **Cada sede despacha su zona.** Teléfono de domicilios **por sede**. |
+| **D10** | ¿Un login por sede o selector? | **Los dos: un admin que ve las dos sedes Y cada sede con su clave. OBLIGATORIO.** |
+| **D11** | ¿Un mesero puede estar en las dos sedes? | **No. «Cada mesero es de cada sede, no se juntan jamás».** |
+| **D12** | ¿Qué hay que poder medir? | **Cuántos premios entrega cada sede y su efectividad.** |
+
+Además: **Instagram no se usa** (el campo queda por simetría, sin activar).
+
+#### El razonamiento del dueño sobre D1, que cambió el diseño
+
+> *"Si es escaneando el QR, o sea el mesero, no vamos a saber toda la primera tanda de clientes
+> por dónde llegó; solo sabremos que entró. Sabremos de qué sede es de la segunda visita para
+> arriba."*
+
+Es correcto y es exactamente el hueco que el §23.bis había marcado en la **cuarta vía**: el
+registro de un cliente nuevo en modo `auto` (`check-in/route.ts:325-403`) **no pasa por auth de
+mesero**. El subdominio cubre la primera visita; el mesero cubre de la segunda en adelante y es
+más difícil de falsificar. **Las dos vías no son rivales: se ordenan** (actor autenticado →
+host → NULL).
+
+Y sale gratis en el QR: el generador arma la URL con `window.location.origin`
+(`dashboard/qr/page.tsx:105`), así que **el QR impreso desde el subdominio de la sede ya sale
+con la sede**, sin tocar el generador.
+
+#### Riesgo aceptado y APLAZADO por decisión explícita del dueño
+
+**Qué pasa si una sede se separa, se vende o pasa a franquicia.** Preguntado el 2026-09-02;
+respuesta: *"no interesa, no hace falta verlo ahorita"*. Queda registrado que:
+
+- **No existe ninguna función de split** en las 40 migraciones. Fundir es un `INSERT`; separar
+  exige inventar reglas de negocio (de quién son los puntos, el saldo, los opt-outs, el libro de
+  consentimiento).
+- El §22 había decidido **lo contrario** para franquicias (*"cada franquiciado es un tenant
+  propio"*). Si la segunda sede fuera de otro dueño, esta arquitectura es la equivocada.
+- La regla de escape de D7 (*"si necesitan algo muy diferente, negocio independiente"*) aplica
+  **antes** de unir, no después.
+- El diseño deja la puerta lo más abierta posible: `origin_location_id`, `visits.location_id`,
+  `consent_events.location_id` y `tenant_wallet_transactions.location_id` permitirían
+  reconstruir quién frecuentaba qué y quién gastó cuánto. **El reparto no está diseñado.**
+
+#### Corrección al §23.bis — el cron de reactivación
+
+El §23.bis afirmó que *"la campaña automática de rescate se apaga sola para la segunda sede"*.
+**Ese encuadre era incorrecto.** El diseño mantiene el **reloj de inactividad de la MARCA**:
+
+Un cliente que come en Envigado todos los viernes **no está inactivo para la marca**. Mandarle
+*"hace 20 días que no te vemos"* firmado por Laureles es falso, quema un mensaje, cuenta para la
+regla de las 6 comunicaciones (§20, D-10) y consume cupo de línea. Con reloj por sede, ese
+cliente recibiría **dos** mensajes el mismo día con **dos** costos.
+
+Lo que se parte por sede es la **atribución** (quién manda y quién paga), no el reloj. Y el
+efecto que el §23.bis quería evitar sí se resuelve **sin silencio**: la sede que perdió al
+cliente lo ve en un panel de *"fuga entre sedes"* y puede forzarle una campaña manual.
+
+#### Suposición marcada, pendiente de una palabra del dueño
+
+**El «recuerdo de reseña».** Hoy `customers.google_review_clicked_at` es **una fila por
+cliente**, y no es un flag de UI: es el **candado** que impide acuñar un segundo premio
+(`review.service.ts:208-220`). Con ficha de Google por sede (D5), si el candado sigue siendo de
+la marca, **quien reseñó Envigado nunca vería el pop-up de Laureles y la segunda ficha nace
+muerta**.
+
+El dueño dijo *"me parece bien el recuerdo de reseña"* justo después de pedir ficha por sede, y
+al pedirle precisión respondió que no entendía qué se necesitaba. **Se diseña por sede** (tabla
+`customer_review_state`, migración 00049, aditiva y reversible). Si la intención era lo
+contrario, basta con no aplicar esa migración.
+
+Pendiente aparte y **no aplicada sin orden**: `idx_reward_grants_unique_active_campaign` es por
+`(customer_id, source)` (verificado en producción), así que quien reseñe las dos sedes recibe
+**de vuelta el premio de la primera**, no uno nuevo. Permitir dos premios de reseña activos
+cuesta dos premios por cliente y es decisión de negocio.
+
+#### Lo que sigue sin poder verificarse
+
+Si ya hay teléfonos repetidos entre tenants distintos. Necesita el `SUPABASE_SERVICE_ROLE_KEY`
+del producto: el rol del AIOS no puede leer `customers` (42501). **No es bloqueante** — con 0
+negocios multi-sede, `customers_phone_tenant_key` no está en riesgo.
+
+
+
 ## 24. n8n visible y domicilios auditables (pedido 2026-09-01) — el fallo silencioso
 
 > Pedido textual del dueño: *"en AIOS tengo que ser capaz de ver que el N8N esté funcionando, y

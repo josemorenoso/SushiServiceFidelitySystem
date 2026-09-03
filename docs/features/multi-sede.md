@@ -120,7 +120,93 @@ coordenadas pasan a ser un dato opcional más, y van en pareja o no van.
 
 ## Columnas de sede en las tablas de eventos
 
-<!-- F2 escribe acá. F1 no toca esta sección. -->
+**`00043_location_id_eventos.sql`** le pone la dimensión "sede" a las **13 tablas que registran
+hechos**. Son **18 columnas y todas nacen vacías**: nadie las lee todavía, así que después de
+aplicarla el sistema se comporta exactamente igual que antes. Quien las **llena** es F3; quien las
+**lee**, F5/F6/F7.
+
+| Tabla | Columna(s) | Qué significa |
+|---|---|---|
+| `visits` | `location_id`, `location_source`, `location_conflict` | Dónde ocurrió **y de dónde salió el dato** |
+| `point_transactions` | `location_id` | Dónde se generó el punto |
+| `review_events` | `location_id` | Qué ficha de Google se mostró (D5) |
+| `reward_grants` | `granted_location_id` | Dónde se **ganó** el premio (D12) |
+| `reward_redemptions` | `redeemed_location_id` | Dónde se **entregó** (D3 + D12) |
+| `message_logs` | `location_id`, `line_location_id` | A quién se **imputa** / por qué **línea** salió |
+| `tenant_wallet_transactions` | `location_id` | La sede del asiento contable (D4) |
+| `send_queue` | `location_id` | Que el goteo no pierda la sede |
+| `consent_events` | `location_id` | Evidencia, **no permiso** |
+| `campaigns` | `location_id` | Quién la lanzó |
+| `authorized_numbers` | `location_id` | El operador de domicilios (D9) |
+| `restaurant_events` | `location_id` + `audience_scope` | La audiencia del evento (D8) |
+| `customers` | `origin_location_id`, `last_visit_location_id` | Sede de origen (D2) + caché de "sede de casa" |
+
+### La regla transversal, sin excepciones
+
+Cada columna de sede es **NULLABLE** y lleva **FK COMPUESTA**:
+
+```sql
+(columna, tenant_id) REFERENCES restaurant_locations (id, tenant_id) ON DELETE RESTRICT
+```
+
+- **Compuesta**, porque el aislamiento real no lo da el RLS: son 144 `.eq('tenant_id', …)` a mano en
+  48 archivos, y el que se olvida uno **no recibe ningún error**. La FK compuesta mueve esa garantía al
+  motor: es imposible grabar un hecho de la marca A contra una sede de la marca B. Una FK simple sobre
+  `id` lo permitiría y Postgres no diría nada. Se apoya en `restaurant_locations_id_tenant_key`, que
+  crea F1.
+- **`MATCH SIMPLE`** (el default), a propósito: si alguna columna de la pareja es NULL la FK se da por
+  satisfecha, que es justo lo que necesita una visita histórica (`tenant_id` NOT NULL, `location_id`
+  NULL). **`MATCH FULL` rechazaría cada fila de historia** de los 4 tenants vivos.
+- **`ON DELETE RESTRICT`**, no `SET NULL`: una sede **nunca se borra, se desactiva** con
+  `is_active = false`. `SET NULL` degradaría historia a "sede desconocida" **en silencio** y destruiría
+  justo el dato que D12 pide medir. Con RESTRICT, borrar una sede con historia falla con `23001`.
+
+Cada columna lleva además un **índice parcial** `(tenant_id, columna) WHERE columna IS NOT NULL`:
+Postgres indexa el lado referenciado, nunca el que referencia, así que sin él cada intento de borrar
+una sede haría un seq scan de las 15 tablas — y el filtro por sede del dashboard no tendría por dónde
+entrar. Hoy son 15 índices prácticamente vacíos.
+
+### `restaurant_events` es la EXCEPCIÓN — leerlo antes de tocarla
+
+⚠️ En **todas** las demás tablas `NULL` significa **"sede desconocida"**. En `restaurant_events`
+significaría **"toda la marca"** — dos lecturas opuestas del mismo NULL en el mismo sistema es una
+clase entera de bug. Por eso lleva una columna **explícita**:
+
+- `audience_scope = 'brand'` → exige `location_id IS NULL` (evento de toda la marca).
+- `audience_scope = 'location'` → exige `location_id IS NOT NULL` (evento de una sede).
+
+Lo amarra el CHECK `restaurant_events_audience_pareja_check`, y el `DEFAULT 'brand'` hace que los
+eventos que ya existen **no cambien de comportamiento**.
+
+### `visits.location_source` — la procedencia, no solo la sede
+
+Sin saber **de dónde salió** la sede, una mal resuelta es indistinguible de una bien resuelta y D12 se
+apoyaría en un número que nadie puede auditar. Las 7 vías del CHECK: `staff_user`, `staff_device`,
+`host`, `host_single`, `qr_token`, `authorized_number`, `manual`. Un segundo CHECK exige que
+`location_id` y `location_source` **vayan juntos o no vayan**.
+
+`location_conflict` es **tri-estado** a propósito: `NULL` = no se evaluó (todo el histórico), `false` =
+el QR coincidía, `true` = el QR decía otra sede. Poner `NOT NULL DEFAULT false` habría afirmado
+"verificado, sin conflicto" sobre ~1581 visitas que nadie verificó nunca.
+
+### Dos columnas en `message_logs`, no una
+
+`line_budget()` calcula el p95 transaccional sobre **14 días de `message_logs`**. Con líneas por sede
+ese p95 tiene que ser **por línea**: si no, el volumen de la sede A infla la reserva de la sede B y le
+come el presupuesto, en silencio. `send_reservations` no sirve de reemplazo porque se poda a 7 días.
+
+### Cero backfill
+
+El histórico de los 4 tenants vivos (~1581 `visits`, ~991 `point_transactions`, ~685 `review_events`,
+~1176 `customers`) **se queda en NULL**, y NULL **se muestra** como un cubo propio llamado *"Sin sede"*:
+nunca se reparte ni se esconde. Repartirlo sería adivinar, y el número adivinado terminaría en un
+reporte de plata.
+
+### La guarda de dependencia
+
+La 00043 abre comprobando **por forma, no por nombre** que exista un índice único (o el PK) sobre exactamente
+`(id, tenant_id)` en `restaurant_locations`. Si falta (F1 sin aplicar), aborta entera con `42830` y un
+mensaje que dice qué falta, en vez de fallar 15 veces seguidas o quedar aplicada a medias.
 
 ---
 

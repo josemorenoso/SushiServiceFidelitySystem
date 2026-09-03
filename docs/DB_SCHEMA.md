@@ -155,7 +155,9 @@ erDiagram
 | 18 | [send_queue](#send_queue) | Cola de goteo de envios que no cupieron hoy | SI | Admin: CRUD (via service role, filtrado por tenant en codigo) |
 | 19 | [line_health_snapshots](#line_health_snapshots) | Historial de quality rating y limite de cada linea | SI | Admin: CRUD (via service role, filtrado por tenant en codigo) |
 | 20 | [consent_events](#consent_events) | Libro de evidencia de opt-in/opt-out. **APPEND-ONLY** | SI | SELECT + INSERT unicamente; UPDATE/DELETE revocados |
-| 21 | [template_versions](#template_versions) | Versiones de cada plantilla del catálogo: la vigente, la pendiente de Meta y el historial | SI | Admin: CRUD (vía service role, filtrado por tenant en código) |
+| 21 | [point_transactions](#point_transactions) | Movimientos de puntos (el libro mayor del motor de puntos) | SI | Admin: SELECT; Service: SELECT/INSERT |
+| 22 | [tenant_wallet_transactions](#tenant_wallet_transactions) | Billetera prepagada COP por tenant: recargas, ajustes y débitos | SI | Super admin: ALL |
+| 23 | [template_versions](#template_versions) | Versiones de cada plantilla del catálogo: la vigente, la pendiente de Meta y el historial | SI | Admin: CRUD (vía service role, filtrado por tenant en código) |
 
 ---
 
@@ -184,8 +186,15 @@ erDiagram
 | `imported_contact_id` | `uuid` | SI | `NULL` | FK → imported_contacts(id) ON DELETE SET NULL. Trazabilidad si el cliente vino de un contacto importado (Golden Bullet, migración 00023) |
 | `google_review_clicked_at` | `timestamptz` | SI | `NULL` | **Nueva (00032).** El cliente fue al link de reseñas de Google → **nunca más** se le muestra el pop-up (R6.b). Es el gate: lo lee `getReviewPromptState()` |
 | `google_review_postponed_at` | `timestamptz` | SI | `NULL` | **Nueva (00032).** Tocó "La próxima lo hago" → **sí** se le vuelve a mostrar, en su próximo check-in. Informativo: el gate NO lo consulta |
+| `origin_location_id` | `uuid` | SI | `NULL` | **Nueva (00043).** Sede donde se REGISTRÓ el cliente (D2). Corregible solo por el admin de marca. NULL = sede desconocida (todo el histórico). FK **compuesta** `(origin_location_id, tenant_id)` → `restaurant_locations(id, tenant_id)` ON DELETE **RESTRICT** |
+| `last_visit_location_id` | `uuid` | SI | `NULL` | **Nueva (00043).** Caché de la sede de la última visita ("sede de casa"). Derivable de `visits`, se guarda por velocidad. La verdad canónica de "los clientes de una sede" será la vista `customer_location_membership` (00046, F5), no esta columna. Misma FK compuesta RESTRICT |
 | `created_at` | `timestamptz` | NO | `now()` | Fecha de creación |
 | `updated_at` | `timestamptz` | NO | `now()` | Última actualización |
+
+> **Multi-sede (00043):** `customers_phone_tenant_key UNIQUE (phone, tenant_id)` **NO se toca**. Un tenant
+> es una MARCA, así que sigue habiendo **una fila por persona y marca** — y por eso los puntos, el tier y
+> las visitas quedan unificados entre sedes sin escribir una línea de código. Las dos columnas de sede
+> DESCRIBEN al cliente, no lo parten.
 
 > **Por qué la memoria de la reseña vive en la DB y no en el navegador:** el check-in del cliente es
 > *stateless* (cero `localStorage`, cero cookies) y el cliente se identifica **solo por teléfono**. Una
@@ -199,6 +208,8 @@ erDiagram
 | `customers_phone_key` | `phone` | UNIQUE |
 | `idx_customers_checkin_location` | `(checkin_lat, checkin_lon)` | BTREE (parcial: WHERE checkin_lat IS NOT NULL) |
 | `idx_customers_whatsapp_opt_out` | `whatsapp_opt_out_at` | BTREE (parcial: WHERE whatsapp_opt_out_at IS NOT NULL) |
+| `idx_customers_origin_location_id` | `(tenant_id, origin_location_id)` | BTREE (parcial: WHERE origin_location_id IS NOT NULL) |
+| `idx_customers_last_visit_location_id` | `(tenant_id, last_visit_location_id)` | BTREE (parcial: WHERE last_visit_location_id IS NOT NULL) |
 
 **Políticas RLS:**
 
@@ -240,6 +251,9 @@ CREATE POLICY "admin_update_customers" ON customers
 | `raw_message` | `text` | SI | `NULL` | Mensaje raw (domicilios) |
 | `table_number` | `integer` | SI | `NULL` | Número de mesa (staff_scan) |
 | `registered_by_staff_id` | `uuid` | SI | `NULL` | FK a staff_users — quién registró la visita |
+| `location_id` | `uuid` | SI | `NULL` | **Nueva (00043).** Sede donde ocurrió la visita. NULL = **sede desconocida** (histórico, o ninguna de las 4 vías del spec §3.1 pudo resolverla) y se MUESTRA como el cubo "Sin sede" |
+| `location_source` | `text` | SI | `NULL` | **Nueva (00043).** De dónde salió `location_id`: `staff_user` \| `staff_device` \| `host` \| `host_single` \| `qr_token` \| `authorized_number` \| `manual` (CHECK). Va **junto** con `location_id`: las dos o ninguna |
+| `location_conflict` | `boolean` | SI | `NULL` | **Nueva (00043).** TRI-ESTADO: NULL = no se evaluó · `false` = el QR coincidía con la sede resuelta · `true` = el QR decía OTRA sede. El QR solo **detecta** el conflicto, nunca gana |
 | `created_at` | `timestamptz` | NO | `now()` | Fecha de la visita |
 
 **Foreign Keys:**
@@ -248,6 +262,7 @@ CREATE POLICY "admin_update_customers" ON customers
 |---------|------------|-----------|
 | `customer_id` | `customers(id)` | CASCADE |
 | `registered_by_staff_id` | `staff_users(id)` | SET NULL |
+| `(location_id, tenant_id)` | `restaurant_locations(id, tenant_id)` | **RESTRICT** |
 
 ---
 
@@ -292,6 +307,7 @@ CREATE POLICY "admin_update_customers" ON customers
 | `source` | `text` | NO | `'manual'` | Origen real: 'manual', 'calendar', 'reactivation', 'birthday', **'reward_reminder'** (migración 00031). Usado por `filterByMonthlyCap` (cuenta manual+calendar+reactivation+reward_reminder; NO cuenta birthday). |
 | `media_url` | `text` | SI | `NULL` | URL pública del media adjunto (Supabase Storage bucket `event-media`) si la campaña usa plantilla `twilio/media`. |
 | `media_type` | `text` | SI | `NULL` | 'image' o 'video'. NULL para campañas de solo texto. |
+| `location_id` | `uuid` | SI | `NULL` | **Nueva (00043).** Sede que lanzó la campaña. NULL = sede desconocida, o campaña de marca. ⚠️ El **reloj de inactividad** de los crons de rescate sigue siendo **de la MARCA** (§8.2 del spec): lo que se parte por sede es la ATRIBUCIÓN, no el reloj. FK compuesta RESTRICT |
 
 **Índices nuevos (00012):**
 
@@ -334,6 +350,7 @@ CREATE POLICY "admin_update_customers" ON customers
 | `phone` | `text` | NO | - | Número celular del mesero |
 | `name` | `text` | NO | - | Nombre del mesero |
 | `is_active` | `boolean` | NO | `true` | Si está activo |
+| `location_id` | `uuid` | SI | `NULL` | **Nueva (00043).** Sede del operador de domicilios (D9). Es la señal **autenticada** de la que sale la sede de un pedido: el celular que manda el cuadro ya se contrasta contra esta tabla (`twilio-incoming/route.ts:121-127`) y la firma de Twilio ya se valida. NULL = sede desconocida. FK compuesta RESTRICT |
 | `created_at` | `timestamptz` | NO | `now()` | Fecha de registro |
 
 **Índices:**
@@ -427,6 +444,8 @@ CREATE POLICY "admin_insert_settings" ON admin_settings
 | `campaign_id` | `uuid` | SI | `NULL` | FK a `campaigns(id)`. Se llena cuando el evento se ejecuta. |
 | `status` | `text` | NO | `'planned'` | 'planned' \| 'scheduled' \| 'sent' \| 'cancelled' \| 'failed' |
 | `blackout_days` | `integer` | NO | `5` | Días antes del evento donde campañas manuales se bloquean (0-30) |
+| `location_id` | `uuid` | SI | `NULL` | **Nueva (00043).** ⚠️ **La única tabla del schema donde NULL NO significa "sede desconocida".** Aquí NULL solo es válido con `audience_scope='brand'`, y entonces significa **"toda la marca"**. FK compuesta RESTRICT |
+| `audience_scope` | `text` | **NO** | `'brand'` | **Nueva (00043).** A quién va dirigido el evento (D8, marcado **vital** por el dueño): `'brand'` = toda la marca (exige `location_id` NULL) \| `'location'` = una sede (exige `location_id` NOT NULL). DEFAULT `'brand'` para que los eventos que ya existen **no cambien de comportamiento** |
 | `created_at` | `timestamptz` | NO | `now()` | Creación |
 | `updated_at` | `timestamptz` | NO | `now()` | Última actualización |
 
@@ -435,6 +454,7 @@ CREATE POLICY "admin_insert_settings" ON admin_settings
 | Columna | Referencia | On Delete |
 |---------|------------|-----------|
 | `campaign_id` | `campaigns(id)` | SET NULL |
+| `(location_id, tenant_id)` | `restaurant_locations(id, tenant_id)` | **RESTRICT** |
 
 **Índices:**
 
@@ -624,6 +644,8 @@ CREATE POLICY "admin_delete_staff_devices" ON staff_devices FOR DELETE USING (au
 | `error_message` | `text` | SI | `NULL` | Detalle del error. |
 | `sent_at` | `timestamptz` | SI | `NULL` | Cuándo se aceptó el envío en Twilio. |
 | `delivered_at` | `timestamptz` | SI | `NULL` | Se llenará desde el webhook de status callback (tarea futura). |
+| `location_id` | `uuid` | SI | `NULL` | **Nueva (00043).** Sede a la que se **imputa** el mensaje (D4: billetera de la marca, con desglose por sede obligatorio). NULL = sede desconocida. FK compuesta RESTRICT |
+| `line_location_id` | `uuid` | SI | `NULL` | **Nueva (00043).** Sede dueña de la **línea** de WhatsApp por la que salió (D6). **No es lo mismo** que `location_id`: `line_budget()` calcula el p95 transaccional sobre **14 días de esta tabla** y, con líneas por sede, ese p95 tiene que ser **por línea** — si no, el volumen de la sede A infla la reserva de la sede B y le come el presupuesto en silencio. `send_reservations` no sirve (se poda a 7 días). FK compuesta RESTRICT |
 | `created_at` | `timestamptz` | NO | `now()` | Fecha de creación del registro. |
 
 **Foreign Keys:**
@@ -631,6 +653,8 @@ CREATE POLICY "admin_delete_staff_devices" ON staff_devices FOR DELETE USING (au
 | Columna | Referencia | On Delete |
 |---------|------------|-----------|
 | `customer_id` | `customers(id)` | SET NULL |
+| `(location_id, tenant_id)` | `restaurant_locations(id, tenant_id)` | **RESTRICT** |
+| `(line_location_id, tenant_id)` | `restaurant_locations(id, tenant_id)` | **RESTRICT** |
 
 **Índices:**
 
@@ -674,6 +698,7 @@ CREATE POLICY "service_update_message_logs" ON message_logs
 | `table_number` | `integer` | SI | `NULL` | Mesa |
 | `notes` | `text` | SI | `NULL` | Notas |
 | `pos_reference` | `text` | SI | `NULL` | Ticket/factura del POS para conciliación |
+| `redeemed_location_id` | `uuid` | SI | `NULL` | **Nueva (00043).** Sede donde se **ENTREGÓ** físicamente el premio (D3 + D12). Es la que responde *"cuántos premios entrega cada sede"*. NULL = sede desconocida. FK compuesta RESTRICT |
 | `created_at` | `timestamptz` | NO | `now()` | - |
 
 **Índices:** `idx_reward_redemptions_customer (customer_id, redeemed_at DESC)`, `idx_reward_redemptions_staff`, `idx_reward_redemptions_date`, `idx_reward_redemptions_pos`, índice único parcial `idx_reward_redemptions_unique_mystery_box (mystery_box_result_id) WHERE NOT NULL` (anti-duplicado), índice único parcial **`idx_reward_redemptions_unique_grant (grant_id) WHERE grant_id IS NOT NULL`** (00031 — anti doble-entrega: si dos meseros tocan "Entregar" sobre el mismo premio otorgado al mismo tiempo, el segundo INSERT choca con un 23505 que `recordRedemption()` traduce a `already_redeemed`; la garantía vive en la base de datos, no en la UI).
@@ -771,6 +796,7 @@ CREATE POLICY "service_update_message_logs" ON message_logs
 | `reminder_sent_at` | `timestamptz` | SI | `NULL` | Cuándo se envió el recordatorio de vencimiento (cron `reward-reminder`) |
 | `granted_at` | `timestamptz` | NO | `now()` | Momento en que se otorgó el premio |
 | `redeemed_at` | `timestamptz` | SI | `NULL` | Lo llena el trigger `mark_grant_redeemed()` al entregarse |
+| `granted_location_id` | `uuid` | SI | `NULL` | **Nueva (00043).** Sede donde se **GANÓ** el premio (D12). Cruzada con `reward_redemptions.redeemed_location_id` da la **matriz origen → destino** que convierte D3 (*"el premio ganado en una sede se reclama en otra"*) de política invisible en número. NULL = sede desconocida. FK compuesta RESTRICT |
 | `created_at` | `timestamptz` | NO | `now()` | Fecha de creación del registro |
 
 **Índices:**
@@ -807,6 +833,7 @@ CREATE POLICY "service_update_message_logs" ON message_logs
 | `customer_id` | `uuid` | NO | - | FK → customers(id) ON DELETE CASCADE |
 | `action` | `text` | NO | - | CHECK: `'shown'` \| `'clicked'` \| `'postponed'` |
 | `grant_id` | `uuid` | SI | `NULL` | FK → reward_grants(id) ON DELETE SET NULL. Solo en `'clicked'`: el premio otorgado por la reseña. Permite cruzar el funnel con la entrega real |
+| `location_id` | `uuid` | SI | `NULL` | **Nueva (00043).** Sede cuya **ficha de Google** se mostró (D5: ficha por sede). NULL = sede desconocida. FK compuesta RESTRICT |
 | `created_at` | `timestamptz` | NO | `now()` | - |
 
 **Índices:**
@@ -893,6 +920,161 @@ CREATE POLICY "tenant_all_template_versions" ON template_versions FOR ALL
 
 ---
 
+### point_transactions
+
+> El libro mayor del motor de puntos (migración 00013). Una fila por movimiento, con el saldo
+> resultante congelado en `balance_after`. Ver `docs/features/points-mystery-box.md`.
+>
+> **Sección creada por la 00043**, que le agrega la sede: la tabla llevaba desde la 00013 sin
+> documentar aquí, y una columna nueva sobre una tabla invisible es una columna que nadie encuentra.
+
+| Columna | Tipo | Nullable | Default | Descripción |
+|---------|------|----------|---------|-------------|
+| `id` | `uuid` | NO | `gen_random_uuid()` | PK |
+| `tenant_id` | `uuid` | NO | - | FK → tenants(id). Añadida por 00025/00028 |
+| `customer_id` | `uuid` | NO | - | FK → customers(id) ON DELETE CASCADE |
+| `points` | `integer` | NO | - | Movimiento (los puntos nunca se descuentan: `awardPoints()` es el único escritor) |
+| `source` | `text` | NO | - | Origen del movimiento (`checkin`, `admin_adjustment`, …) |
+| `reference_id` | `uuid` | SI | `NULL` | Referencia libre al hecho que lo originó |
+| `balance_after` | `integer` | NO | - | Snapshot del saldo resultante |
+| `location_id` | `uuid` | SI | `NULL` | **Nueva (00043).** Sede donde se generó el punto. NULL = sede desconocida. Los puntos siguen siendo **de la MARCA**: esta columna atribuye, no separa saldos |
+| `created_at` | `timestamptz` | NO | `now()` | - |
+
+**Foreign Keys:**
+
+| Columna | Referencia | On Delete |
+|---------|------------|-----------|
+| `customer_id` | `customers(id)` | CASCADE |
+| `tenant_id` | `tenants(id)` | RESTRICT |
+| `(location_id, tenant_id)` | `restaurant_locations(id, tenant_id)` | **RESTRICT** |
+
+**Índices:** `idx_point_transactions_customer (customer_id, created_at DESC)`, `idx_point_transactions_source (source)`, `idx_point_transactions_tenant (tenant_id)`, `idx_point_transactions_location_id (tenant_id, location_id) WHERE location_id IS NOT NULL` (00043).
+
+**RLS:** admin SELECT (`auth.role()='authenticated'`); service SELECT/INSERT (`true`).
+
+---
+
+### tenant_wallet_transactions
+
+> Billetera prepagada en COP por tenant (migración 00027; el **débito** llega en la 00033).
+> Recargas, ajustes, reembolsos y débitos automáticos. Ver `docs/features/wallet-billing.md`.
+>
+> **Sección creada por la 00043.**
+
+| Columna | Tipo | Nullable | Default | Descripción |
+|---------|------|----------|---------|-------------|
+| `id` | `uuid` | NO | `gen_random_uuid()` | PK |
+| `tenant_id` | `uuid` | NO | - | FK → tenants(id) ON DELETE RESTRICT |
+| `type` | `text` | NO | - | `topup` \| `adjustment` \| `refund` \| `debit` (el último lo añade la 00033) |
+| `amount_cop` | `numeric` | NO | - | Positivo = recarga; negativo = ajuste/débito |
+| `amount_usd` | `numeric` | SI | `NULL` | USD fondeado en Twilio, si aplica |
+| `usd_cop_rate` | `numeric` | SI | `NULL` | TRM usada en la conversión |
+| `notes` | `text` | SI | `NULL` | Referencia del pago (Nequi ID, etc.) |
+| `created_by` | `text` | NO | - | UUID del super_admin que lo registró |
+| `message_log_id` | `uuid` | SI | `NULL` | **(00033)** FK → message_logs(id) **ON DELETE SET NULL**, con UNIQUE parcial → idempotencia del débito |
+| `unit_price_cop` | `numeric` | SI | `NULL` | **(00033)** Snapshot del precio unitario al momento del cobro |
+| `quantity` | `integer` | SI | `NULL` | **(00033)** Cantidad cobrada |
+| `source` | `text` | SI | `NULL` | **(00033)** `manual` \| `wompi` \| `system` |
+| `external_ref` | `text` | SI | `NULL` | **(00033)** UNIQUE parcial `(source, external_ref)` |
+| `location_id` | `uuid` | SI | `NULL` | **Nueva (00043).** Sede a la que se imputa el movimiento (D4). **Se DENORMALIZA, no se deriva** — ver la nota de abajo. NULL = sede desconocida |
+| `created_at` | `timestamptz` | NO | `now()` | - |
+
+> **Por qué la sede se denormaliza y no se saca con un JOIN.** `tenant_wallet_transactions_message_log_id_fkey`
+> es **`ON DELETE SET NULL`** (verificado en producción). Derivar la sede por JOIN contra `message_logs`
+> significaría **perderla entera, e irrecuperablemente**, el día que se pode esa tabla: todos los débitos
+> quedarían sin sede a la vez. Un asiento contable no puede colgar de una FK que se anula. Es el mismo
+> criterio por el que la 00033 ya guarda `unit_price_cop` como snapshot.
+
+**Foreign Keys:**
+
+| Columna | Referencia | On Delete |
+|---------|------------|-----------|
+| `tenant_id` | `tenants(id)` | RESTRICT |
+| `message_log_id` | `message_logs(id)` | **SET NULL** |
+| `(location_id, tenant_id)` | `restaurant_locations(id, tenant_id)` | **RESTRICT** |
+
+**Índices:** `idx_wallet_txns_tenant (tenant_id, created_at DESC)`, `idx_tenant_wallet_transactions_location_id (tenant_id, location_id) WHERE location_id IS NOT NULL` (00043).
+
+**RLS:** `super_admin_all_wallet_txns` FOR ALL — `USING/WITH CHECK (is_super_admin())`.
+
+---
+
+### send_queue
+
+> Cola de goteo de los envíos que no cupieron hoy (migración 00037; el arriendo `claimed_at` y las
+> funciones de drenado, en la 00038). Ver `docs/features/send-governance.md`.
+>
+> **Sección creada por la 00043.** La fila 18 del Índice de Tablas apuntaba a un ancla inexistente.
+
+| Columna | Tipo | Nullable | Default | Descripción |
+|---------|------|----------|---------|-------------|
+| `id` | `uuid` | NO | `gen_random_uuid()` | PK |
+| `tenant_id` | `uuid` | NO | - | FK → tenants(id) ON DELETE CASCADE |
+| `phone` | `text` | NO | - | Destino |
+| `customer_id` | `uuid` | SI | `NULL` | FK → customers(id) ON DELETE CASCADE |
+| `imported_contact_id` | `uuid` | SI | `NULL` | FK → imported_contacts(id) ON DELETE CASCADE |
+| `campaign_id` | `uuid` | SI | `NULL` | FK → campaigns(id) ON DELETE CASCADE |
+| `priority` | `smallint` | NO | - | 0-4 (CHECK) |
+| `message_type` | `text` | NO | - | Tipo de mensaje (espejo de `message_class_map`) |
+| `template_sid` | `text` | NO | - | Puntero de plantilla |
+| `variables` | `jsonb` | NO | `'{}'` | Variables de la plantilla |
+| `media_url` / `media_type` | `text` | SI | `NULL` | Media opcional |
+| `status` | `text` | NO | `'queued'` | `queued` \| `sent` \| `failed` \| `cancelled` \| `expired` |
+| `not_before` | `timestamptz` | NO | `now()` | No enviar antes de |
+| `expires_at` | `timestamptz` | SI | `NULL` | Vencido = **nunca** se envía |
+| `attempts` | `smallint` | NO | `0` | Reintentos |
+| `last_error` | `text` | SI | `NULL` | - |
+| `claimed_at` | `timestamptz` | SI | `NULL` | **(00038)** Arriendo del drenador, no un estado |
+| `enqueued_at` / `sent_at` | `timestamptz` | | | - |
+| `message_log_id` | `uuid` | SI | `NULL` | FK → message_logs(id) ON DELETE SET NULL |
+| `location_id` | `uuid` | SI | `NULL` | **Nueva (00043).** Sede del envío encolado, para que el goteo **no pierda la sede** entre encolar y drenar. Se copiará a `message_logs.location_id` al enviar (F6). NULL = sede desconocida |
+
+**Foreign Keys:**
+
+| Columna | Referencia | On Delete |
+|---------|------------|-----------|
+| `tenant_id` | `tenants(id)` | CASCADE |
+| `customer_id` | `customers(id)` | CASCADE |
+| `campaign_id` | `campaigns(id)` | CASCADE |
+| `message_log_id` | `message_logs(id)` | SET NULL |
+| `(location_id, tenant_id)` | `restaurant_locations(id, tenant_id)` | **RESTRICT** |
+
+**Índices:** el único parcial anti-duplicado `(tenant_id, phone, COALESCE(campaign_id, centinela), message_type) WHERE status='queued'` (00038 — el de la 00037 dejaba sin proteger los items sin `campaign_id`, porque en Postgres dos NULL nunca colisionan), `idx_send_queue_drain`, `idx_send_queue_drain_tenant`, `idx_send_queue_campaign`, `idx_send_queue_expires`, `idx_send_queue_location_id (tenant_id, location_id) WHERE location_id IS NOT NULL` (00043).
+
+---
+
+### consent_events
+
+> Libro de evidencia de opt-in/opt-out (migración 00037). **APPEND-ONLY**: `UPDATE` y `DELETE` están
+> revocados para `anon` y `authenticated`, y no hay política que los permita — un libro que se puede
+> editar no es evidencia. Ver `docs/features/send-governance.md`.
+>
+> **Sección creada por la 00043.** La fila 20 del Índice de Tablas apuntaba a un ancla inexistente.
+
+| Columna | Tipo | Nullable | Default | Descripción |
+|---------|------|----------|---------|-------------|
+| `id` | `uuid` | NO | `gen_random_uuid()` | PK |
+| `tenant_id` | `uuid` | NO | - | FK → tenants(id) ON DELETE CASCADE |
+| `customer_id` | `uuid` | SI | `NULL` | FK → customers(id) ON DELETE SET NULL |
+| `phone` | `text` | NO | - | Siempre disponible, aunque no haya customer |
+| `event` | `text` | NO | - | `opt_in` \| `opt_out` (CHECK) |
+| `channel` | `text` | NO | - | `checkin_qr` \| `whatsapp_reply` \| `import` \| `manual` \| `staff` (CHECK) |
+| `consent_text` | `text` | SI | `NULL` | El texto **exacto** que vio el cliente (las plantillas cambian) |
+| `evidence` | `jsonb` | NO | `'{}'` | Evidencia adicional |
+| `location_id` | `uuid` | SI | `NULL` | **Nueva (00043).** Sede donde se registró el consentimiento. **Es EVIDENCIA, NO PERMISO**: el opt-in/opt-out sigue siendo **de la MARCA** (§6.4 del spec) — un cliente que dice *"no me escriban"* no lo dice por sede. Esta columna solo permite reconstruir dónde ocurrió el hecho. NULL = sede desconocida |
+| `occurred_at` | `timestamptz` | NO | `now()` | - |
+
+**Foreign Keys:**
+
+| Columna | Referencia | On Delete |
+|---------|------------|-----------|
+| `tenant_id` | `tenants(id)` | CASCADE |
+| `customer_id` | `customers(id)` | SET NULL |
+| `(location_id, tenant_id)` | `restaurant_locations(id, tenant_id)` | **RESTRICT** |
+
+**Índices:** `idx_consent_events_lookup (tenant_id, phone, occurred_at DESC)`, `idx_consent_events_location_id (tenant_id, location_id) WHERE location_id IS NOT NULL` (00043).
+
+---
 ## Storage Buckets
 
 ### event-media
@@ -956,6 +1138,7 @@ CREATE POLICY "tenant_all_template_versions" ON template_versions FOR ALL
 | 40 | `00040_is_super_admin_security_definer.sql` | 2026-09-01 | **Versiona un ALTER que solo existia aplicado A MANO en produccion.** `is_super_admin()` pasa a `SECURITY DEFINER SET search_path = pg_catalog, public`, con el MISMO cuerpo de la 00024. **Por que:** la funcion llama a `auth.jwt()`, y el rol `aios_constelarys` (00035 v2) no tiene USAGE sobre el schema `auth`. Como `tenants` tiene RLS y ese rol no es dueno ni tiene BYPASSRLS, sus SELECT evaluan las policies — y ahi conviven `aios_constelarys_select_tenants USING (true)` con `super_admin_all_tenants USING (is_super_admin())`. Postgres **no garantiza cortocircuitar el OR**, asi que evaluaba `is_super_admin()` en el contexto del rol que llama y el SELECT entero moria con `42501 permission denied for schema auth`. Sin esta migracion, reconstruir la base desde `supabase/migrations/` deja el AIOS roto sin pista de por que. **Es seguro:** `auth.jwt()` lee un ajuste de SESION, no un permiso del rol, asi que correr como `postgres` devuelve los mismos claims del que llama — no hay escalada. **No otorga ni revoca nada:** el EXECUTE a PUBLIC tiene que seguir, porque las policies la invocan como `anon` y `authenticated`. **Deuda que NO cierra:** `current_tenant_id()` tiene el mismo defecto (verificado: devuelve 42501) y se deja intacta a proposito — cambiarla altera el RLS de cada tabla multitenant y es decision del dueno. | Pendiente |
 | 41 | `00041_locations_first_class.sql` | 2026-09-03 | **`restaurant_locations` deja de ser una geocerca y pasa a SER LA SEDE** (F1 del spec `docs/superpowers/specs/2026-09-02-multisede-design.md`). Columnas nuevas: `slug`, `domain`, `config jsonb NOT NULL DEFAULT '{}'`, `is_primary`, `sort_order`. **`lat`/`lon` pasan a NULLABLE** con `CHECK ((lat IS NULL) = (lon IS NULL))` — la tabla nació en la 00014 para la geocerca anti QR-scam, apagada desde v1.0.5-3, y ese `NOT NULL` hacía que el AIOS solo mandara `locations[]` con las dos coordenadas: **un negocio dado de alta sin coordenadas nacía SIN NINGUNA SEDE, en silencio** (por eso los 4 tenants vivos suman ~1 fila). Constraint **`restaurant_locations_id_tenant_key UNIQUE (id, tenant_id)`** — ⚠️ **nombre de contrato, no se cambia**: es el soporte de TODAS las FK compuestas `(location_id, tenant_id)` de la 00043; una FK simple dejaría grabar una visita de la marca A con la sede de la marca B. Índice único **GLOBAL** parcial sobre `domain` + único parcial `(tenant_id, slug)`. Trigger `trg_restaurant_locations_domain_guard` (SECURITY DEFINER, `search_path` fijo): unicidad **cruzada** contra `tenants.domain`, que **permite el solape solo dentro del mismo tenant** — es lo que deja que la sede principal repita el subdominio ya impreso en los QR sin reimprimir nada. CHECK de formato de `slug` y `domain`, espejo de `src/lib/domains.ts` del AIOS (va también en la base porque 55 archivos escriben con `service_role`, que bypasa RLS). **NO toca RLS ni ninguna fila de historia.** Sin `CREATE INDEX CONCURRENTLY`: el arnés de tests manda el archivo entero en un `client.query()` y moriría con 25001. | Pendiente |
 | 42 | `00042_sede_principal_tenants_vivos.sql` | 2026-09-03 | **Migración de DATOS** (F1). Le da a cada tenant que ya existe su *"Sede principal"* y le delega el subdominio ya impreso en sus QR. Por tenant: **0 sedes** → crea `'Sede principal'` (`slug='sede-principal'`, `is_primary=true`, `domain = tenants.domain`, sin coordenadas); **1 sede** → la **adopta** (le pone `slug`/`domain` si faltan y `is_primary=true`) en vez de crear una segunda; **≥2 sedes** → **no la toca** y avisa con `RAISE WARNING`, porque elegir mal delegaría el subdominio impreso a la sede equivocada. **NO TOCA UNA SOLA FILA DE HISTORIA**: `visits`, `point_transactions`, `review_events` y `customers` se quedan como están, y cuando la 00043 les agregue `location_id` nace NULL y **se queda en NULL** — NULL significa "sede desconocida" y **SE MUESTRA** como un cubo propio llamado *"Sin sede"*, nunca se reparte ni se esconde. **Idempotente** (los `COALESCE` no pisan nada puesto a mano). `tenants.domain` e `idx_tenants_domain` (00029) **no se tocan**: `getTenantByDomain` sigue resolviendo igual y los 4 tenants Twilio funcionan exactamente como antes. | Pendiente |
+| 43 | `00043_location_id_eventos.sql` | 2026-09-03 | **F2 de multi-sede: la dimensión "sede" en las 13 tablas de HECHOS.** 18 columnas nuevas, **todas vacías**: `visits` (`location_id` + `location_source` + `location_conflict`), `point_transactions`, `review_events`, `message_logs` (**dos**: `location_id` = a quién se imputa, `line_location_id` = por qué línea salió), `tenant_wallet_transactions`, `send_queue`, `consent_events`, `campaigns`, `authorized_numbers`, `restaurant_events` (+ `audience_scope`), `reward_grants.granted_location_id` (dónde se GANÓ), `reward_redemptions.redeemed_location_id` (dónde se ENTREGÓ), `customers` (`origin_location_id` + `last_visit_location_id`). **Regla transversal sin excepciones:** cada columna es NULLABLE y lleva **FK COMPUESTA** `(columna, tenant_id) REFERENCES restaurant_locations (id, tenant_id) ON DELETE RESTRICT` — una FK simple dejaría atribuir un hecho de la marca A a una sede de la marca B y el motor no diría nada; `RESTRICT` y no `SET NULL` porque una sede **nunca se borra, se desactiva** con `is_active=false`, y `SET NULL` degradaría historia a "sede desconocida" en silencio. `MATCH SIMPLE` (el default) es deliberado: `MATCH FULL` rechazaría cada fila de historia. **CERO backfill:** el histórico se queda en NULL = "sede desconocida", y se MUESTRA. **Cero cambio de comportamiento:** nadie lee estas columnas todavía (las llena F3, las lee F5/F6/F7), así que los 4 tenants Twilio siguen igual. `restaurant_events` es la **única** tabla donde NULL no significa "sede desconocida" — por eso lleva `audience_scope ('brand'\|'location') DEFAULT 'brand'` con CHECK que lo amarra a `location_id`. Abre con una **guarda** que aborta con 42830 si falta el `UNIQUE (id, tenant_id)` de la 00041, para no quedar aplicada a medias. | Pendiente |
 
 ### `tenant_id` en las 18 tablas de negocio
 

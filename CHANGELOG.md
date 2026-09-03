@@ -95,6 +95,59 @@ con 23502 y **el alta entera falla** (la función es atómica).
 
 ---
 
+## [2026-09-03 03:05] - Multi-sede F2: `location_id` en las 13 tablas de eventos (00043)
+
+### Tipo de cambio
+- **ADDED**: `supabase/migrations/00043_location_id_eventos.sql` — la dimensión "sede" en las 13 tablas que registran hechos. **18 columnas, todas vacías.**
+- **CHANGED**: `docs/DB_SCHEMA.md` — columnas nuevas en 9 secciones existentes, **4 secciones de tabla creadas** y la fila 43 del historial de migraciones.
+- **CHANGED**: `docs/features/multi-sede.md` — sección "Columnas de sede en las tablas de eventos" (el hueco que F1 dejó reservado).
+- **CHANGED**: `CLAUDE.md` — 5 filas nuevas en la tabla de lookup.
+
+### Archivos afectados
+- `supabase/migrations/00043_location_id_eventos.sql` - migración nueva (F2 de §10 del spec).
+- `docs/DB_SCHEMA.md` - índice de tablas, 9 secciones actualizadas, 4 secciones nuevas, historial.
+- `docs/features/multi-sede.md` - solo la sección reservada a F2.
+- `CLAUDE.md` - lookup.
+
+### Descripción detallada
+
+**Qué hace.** Agrega `location_id` (y sus acompañantes) a `visits`, `point_transactions`, `review_events`, `reward_grants`, `reward_redemptions`, `message_logs`, `tenant_wallet_transactions`, `send_queue`, `consent_events`, `campaigns`, `authorized_numbers`, `restaurant_events` y `customers`. **Nada más.** Todas las columnas nacen vacías y **nadie las lee todavía**: después de aplicarla el sistema se comporta exactamente igual que antes — mismos envíos, mismos crons, mismas campañas, y los 4 tenants Twilio intactos. Quien las llena es F3; quien las lee, F5/F6/F7.
+
+**La regla transversal, sin excepciones.** Cada columna de sede es NULLABLE y lleva FK **compuesta** `(columna, tenant_id) REFERENCES restaurant_locations (id, tenant_id) ON DELETE RESTRICT`. Compuesta porque el aislamiento real no lo da el RLS —son 144 `.eq('tenant_id', …)` a mano en 48 archivos y el que se olvida uno no recibe ningún error—: la FK compuesta mueve esa garantía al motor, y grabar un hecho de la marca A contra la sede de la marca B se vuelve imposible. `RESTRICT` y no `SET NULL` porque una sede **nunca se borra, se desactiva** con `is_active=false`, y `SET NULL` degradaría historia a "sede desconocida" en silencio justo el día que alguien lo intente.
+
+**`MATCH SIMPLE` es deliberado.** Con el default, si alguna columna de la pareja es NULL la FK se da por satisfecha — que es justo lo que necesita una visita histórica (`tenant_id` NOT NULL, `location_id` NULL). `MATCH FULL` exige "todas NULL o ninguna" y **rechazaría cada fila de historia** de los 4 tenants vivos. Queda escrito en la migración para que nadie lo "corrija" después.
+
+**Cero backfill.** El histórico se queda en NULL. NULL = "sede desconocida" y **se muestra** como un cubo propio llamado *"Sin sede"*: no se reparte ni se esconde. Repartirlo sería adivinar, y el número adivinado terminaría en un reporte de plata.
+
+**Un error encontrado en la guarda que venía en el encargo.** La guarda de dependencia comprueba por forma (`array_agg(attname) = ARRAY['id','tenant_id']`) para que F1 pueda bautizar su constraint como quiera. Tal cual venía **no funciona**: `pg_attribute.attname` es de tipo `name`, así que `array_agg(...)` devuelve `name[]` y compararlo con un `text[]` muere con `42883 operator does not exist: name[] = text[]` — es decir, la guarda habría abortado **siempre**, con el error equivocado, incluso con la 00041 aplicada. Corregido con un `::text` explícito y verificado en los dos sentidos.
+
+**Tres decisiones donde el spec no bajaba al detalle.**
+1. **`visits.location_conflict` es `boolean` NULLABLE, tri-estado**, no `NOT NULL DEFAULT false`: `NULL` = no se evaluó, `false` = el QR coincidía, `true` = el QR decía otra sede. Un `DEFAULT false` habría afirmado "verificado, sin conflicto" sobre ~1581 visitas que nadie verificó jamás — exactamente la clase de mentira silenciosa contra la que el spec avisa.
+2. **Un índice parcial `(tenant_id, columna) WHERE columna IS NOT NULL` por cada columna de sede** (15 en total). Postgres indexa el lado referenciado, nunca el que referencia: sin ellos, cada intento de borrar una sede haría un seq scan de 15 tablas y el filtro por sede del dashboard no tendría por dónde entrar. Hoy están prácticamente vacíos. **Nunca `CONCURRENTLY`**: el harness manda el archivo entero en un solo `client.query()` y el protocolo simple lo envuelve en transacción implícita → `25001`.
+3. **Las 4 secciones de tabla que faltaban en `DB_SCHEMA.md` se crearon** (`point_transactions`, `tenant_wallet_transactions`, `send_queue`, `consent_events`) en vez de anotarse como deuda: se les añade una columna, y una columna nueva sobre una tabla sin documentar es una columna que nadie encuentra. Con eso el índice pasa de 5 anclas muertas a 3.
+
+### Verificación
+
+Arnés **aislado** (`embedded-postgres` propio, data dir en el scratchpad y puerto 55437) para no pisar el `.pgdata-test` de la sesión de F1, que comparte checkout. **Todo en verde:**
+
+- Con la 00041 **sin** aplicar, la 00043 aborta con `42830` y su mensaje, y **no deja ni una columna creada**.
+- Con 00041 + 00042 aplicadas (las de F1, tal cual), la 00043 entra y su bloque de verificación confirma 18 columnas, 15 FK compuestas RESTRICT, 15 índices y 4 CHECK. **Re-aplicarla entera es idempotente.**
+- Las 18 columnas son nullable salvo `audience_scope`; las 15 FK son de 2 columnas y `confdeltype = 'r'`.
+- **El punto de toda la migración:** un evento de la marca A contra la sede de la marca B se rechaza con `23503` en **las 15 columnas**, una por una. La misma fila con la sede propia entra, y con NULL también.
+- `visits`: las 7 vías de `location_source` se aceptan; sede sin procedencia, procedencia sin sede y una vía inventada se rechazan con `23514`.
+- `restaurant_events`: `brand`+sin sede y `location`+con sede entran; `location` sin sede, `brand` con sede y un scope inventado se rechazan con `23514`. Un evento escrito **como hoy** (sin tocar las columnas nuevas) sale con `audience_scope='brand'` y `location_id NULL`.
+- Borrar una sede con visitas falla con **`23001`** (`restrict_violation`, no `23503`) — la prueba de que es `RESTRICT` de verdad y no `NO ACTION`. Desactivarla con `is_active=false` sí funciona: la vía correcta.
+
+### Pendiente / deuda que NO cierra esta entrada
+
+- **`## Diagrama ER` de `docs/DB_SCHEMA.md`**: no se tocó. Es un único bloque mermaid (colisión segura entre sesiones) y ya estaba obsoleto por su cuenta — su bloque `customers` ni siquiera tiene `tenant_id`. Se cierra aparte, en **una sola sesión**, después de F1+F2.
+- **3 anclas muertas** que quedan en el Índice de Tablas: `message_class_map`, `send_reservations` y `line_health_snapshots` siguen sin sección. No se tocan aquí porque la 00043 no les añade nada.
+- **«Las 37 migraciones originales…»** en `docs/features/testing.md:61` y sus espejos en `tests/setup/`: hoy son 43. Ningún test compara ese número (son comentarios sin assert). Deuda aparte.
+- **`tests/` sigue sin una sola prueba** de clientes, visitas, puntos, check-in ni redención. La 00043 se aplica sola en el harness (`readdirSync` + `sort`), pero **no hay ningún test que la interrogue**: lo verificado aquí vive en un arnés temporal, no en el repo. Escribir `tests/db/multisede.test.ts` es trabajo aparte.
+- **`docs/API_DOCS.md` no se tocó**: F2 no añade ni cambia ningún endpoint.
+
+---
+
 ## [2026-09-02 02:40] - Multi-sede: el dueño decidió, y el spec técnico completo
 
 ### Tipo de cambio

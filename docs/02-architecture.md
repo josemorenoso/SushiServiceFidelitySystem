@@ -12,6 +12,7 @@
 | clsx + tailwind-merge | Merge de clases CSS | latest |
 | shadcn/ui | Componentes UI pre-diseñados | latest |
 | twilio | SDK para envío de WhatsApp | 5.13.x |
+| openai | Parseo con IA de los pedidos de domicilio (`gpt-4o-mini`) — Fase 2 de §25, 2026-09-03 | 7.9.x |
 | tw-animate-css | Animaciones CSS para Tailwind | 1.4.x |
 | typescript | Tipado estático | 5.x |
 | lucide-react | Iconos | latest |
@@ -109,11 +110,18 @@ Cliente detecta visita reciente (polling) → Pantalla cambia automáticamente a
   → Muestra puntos ganados, saldo, roadmap de tiers
 ```
 
-### Domicilios (WhatsApp)
+### Domicilios (WhatsApp) — dentro del producto desde 2026-09-03
 ```
-Mesero reenvía mensaje → Twilio Webhook → /api/webhook/delivery
-  → Valida número autorizado → Extrae datos → Supabase UPSERT → +1 visita
+Operador reenvía el cuadro del pedido
+  → Twilio → /api/webhook/twilio-incoming    (responde TwiML al operador)
+  └ Zernio → /api/webhook/zernio             (responde 200, sin texto de vuelta)
+  → Valida firma → authorized_numbers (trae también location_id: la sede sale gratis)
+  → processDeliveryMessage()
+      → OpenAI gpt-4o-mini extrae nombre/celular/dirección/pago/monto/ciudad
+      → registerDeliveryOrder(): cliente + visita + puntos + tiers + plantilla WhatsApp
 ```
+Ya **no** hay reenvío a n8n (Fase 2 de §25). `/api/webhook/delivery` sigue existiendo con el
+mismo contrato para llamadores externos. Ver `docs/features/delivery-webhook.md`.
 
 ### Campañas Automáticas (Cron)
 ```
@@ -137,6 +145,8 @@ Admin login (Supabase Auth) → /dashboard → Métricas, Clientes, Recompensas,
 | `TWILIO_WHATSAPP_NUMBER` | Número WhatsApp de Twilio (ej: whatsapp:+14155238886) | privada | SI |
 | `CRON_SECRET` | Secret para proteger rutas cron | privada | SI |
 | `WEBHOOK_DELIVERY_SECRET` | Secret para webhook de domicilios (n8n) | privada | SI |
+| `OPENAI_API_KEY` | Key de OpenAI para el parseo con IA de los domicilios (`gpt-4o-mini`). **Sin ella no entra ningún pedido de domicilio** — ver `docs/features/delivery-ai-parsing.md` | privada | SI (si el tenant recibe domicilios) |
+| `N8N_DOMICILIOS_WEBHOOK_URL` | 🔻 **Muerta desde la Fase 2 de §25.** Ya no se lee en ningún sitio | privada | NO |
 | `NEXT_PUBLIC_GOOGLE_MAPS_REVIEW_URL` | URL de reseñas Google Maps | pública | SI |
 | `RESTAURANT_WHATSAPP_LINK` | Enlace wa.me del restaurante para el auto-responder | privada | SI |
 | `NEXT_PUBLIC_BRAND_NAME` | Nombre completo del restaurante (ej: "Sushi Service") | pública | SI |

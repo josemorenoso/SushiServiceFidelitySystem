@@ -174,7 +174,8 @@ sola vez** ahí y las comparten todos los tenants — NO se crea una copia por c
 | `SUPABASE_SERVICE_ROLE_KEY` | **Servidor** | Service role key — NUNCA exponer al cliente |
 | `CRON_SECRET` | **Servidor** | Secret para autenticar crons (32 chars aleatorios). Mismo valor en n8n para todos los clientes. |
 | `WEBHOOK_DELIVERY_SECRET` | **Servidor** | Secret compartido con n8n para `/api/webhook/delivery`. Mismo valor en n8n para todos los clientes. |
-| `N8N_DOMICILIOS_WEBHOOK_URL` | **Servidor** | URL del webhook n8n de domicilios (W1) — un único workflow compartido, ver §5 |
+| `OPENAI_API_KEY` | **Servidor** | 🆕 **Fase 2 de §25 (2026-09-03).** Key de OpenAI para el parseo con IA de los domicilios (`gpt-4o-mini`). **Hay que crearla en Vercel ANTES de desplegar: sin ella no entra ni un pedido de domicilio.** Antes vivía en las credenciales de n8n. Nada más del producto la usa |
+| `N8N_DOMICILIOS_WEBHOOK_URL` | ~~Servidor~~ | 🔻 **MUERTA desde la Fase 2.** Ya no se lee en ningún sitio: el flujo de domicilios corre dentro del producto. Se puede borrar del proyecto cuando se apague el VPS |
 | `N8N_GOOGLE_CONTACTS_WEBHOOK_URL` | **Servidor** | URL webhook n8n Google Contacts (W3, opcional) |
 | `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_WHATSAPP_NUMBER` / `TWILIO_MESSAGING_SERVICE_SID` | **Servidor** | Cuenta **master** (Sushi Service). Sirve de *fallback* cuando un tenant no tiene su propia subcuenta configurada — ver `getTwilioClient()` en `src/services/whatsapp.service.ts` |
 | `NEXT_PUBLIC_BRAND_NAME` / `NEXT_PUBLIC_BRAND_SHORT` / `NEXT_PUBLIC_GOOGLE_MAPS_REVIEW_URL` / `RESTAURANT_WHATSAPP_LINK` | Pública / Servidor | Branding **default del sistema** — solo se usa si un tenant no tiene su propio `config` en la tabla `tenants`. Ver `src/lib/branding.ts` |
@@ -366,7 +367,8 @@ Method: HTTP POST
 ```
 
 El webhook de Vercel decide internamente:
-- Si el remitente está en `authorized_numbers` → reenvía a n8n (workflow W1)
+- Si el remitente está en `authorized_numbers` → **procesa el pedido de domicilio ahí mismo**
+  (parseo con IA + registro). Desde la Fase 2 de §25 ya **no** se reenvía a n8n
 - Si es cliente/desconocido → auto-responder redirige al número humano
 
 ### Configurar Opt-Out (palabras clave en español)
@@ -438,28 +440,35 @@ INSERT INTO authorized_numbers (phone, name, is_active) VALUES
 > | «Cron Recordatorio de Premios» | `/api/cron/reward-reminder` | 🔻 en retirada → `vercel.json` |
 > | «Cron Calendario» (W2) | `/api/cron/calendar-dispatch` | 🔻 en retirada → `vercel.json` |
 > | queue-drain (W4) | `/api/cron/queue-drain` | 🔻 en retirada → `vercel.json` |
-> | **W1 · delivery-webhook** | domicilios | ✅ **SIGUE ACTIVO** |
-> | W3 · google-contacts-sync | Google Contacts | ⏸️ diferido (Fase 3) |
+> | **W1 · delivery-webhook** | domicilios | 🔻 **SIN TRÁFICO desde la Fase 2 (2026-09-03)** |
+> | W3 · google-contacts-sync | Google Contacts | ⏸️ diferido (Fase 3) — **lo último que usa el VPS** |
 >
 > **Ojo con los nombres:** el nombre del fichero no es el nombre que se ve en n8n.
 > `cron_reward-reminder.json` aparece como **«Cron Recordatorio de Premios»**, y
 > `cron_calendar-dispatch.json` como **«Cron Calendario»**.
 >
-> #### ⛔ El VPS NO se apaga al terminar la Fase 1
+> #### ✅ 2026-09-03 — la Fase 2 está escrita: el VPS ya se puede apagar (cuando se despliegue)
 >
-> Domicilios **no es un cron**: es un reenvío HTTP en caliente desde dos webhooks de la app
-> hacia `N8N_DOMICILIOS_WEBHOOK_URL` (`twilio-incoming/route.ts:130` y
-> `webhook/zernio/route.ts:171`). Apagar el VPS antes de la Fase 2 corta los pedidos de
-> domicilio de todos los tenants, y **los dos canales fallan distinto**:
+> Domicilios **no era un cron**: era un reenvío HTTP en caliente desde dos webhooks de la app
+> hacia `N8N_DOMICILIOS_WEBHOOK_URL`. Eso **ya no existe**. Las dos rutas parsean con IA y
+> registran el pedido en proceso (`processDeliveryMessage()` en
+> `src/services/delivery.service.ts`), así que **W1 deja de recibir tráfico por sí solo**: su
+> webhook lo disparaba nuestra línea de reenvío y nadie más. No hay que desactivarlo, aunque
+> hacerlo tampoco molesta.
 >
-> - **Twilio** degrada ruidosamente: el `catch` devuelve TwiML y el mesero ve
->   *«❌ Error procesando el pedido. Intenta de nuevo en un momento.»*
->   (`twilio-incoming/route.ts:155-157`).
-> - **Zernio** falla **en silencio**: devuelve 200 vacío y el pedido se pierde sin que nadie
->   se entere (`webhook/zernio/route.ts:186`). Es exactamente el fallo que denuncia §24.
+> **De paso se arregló el fallo silencioso que denunciaba §24.** Antes los dos canales fallaban
+> distinto: Twilio devolvía TwiML de error y Zernio devolvía **200 vacío, perdiendo el pedido
+> sin que nadie se enterara**. Ahora todo camino de fallo pasa por un embudo único que deja una
+> línea `[Delivery][FALLO]` con el motivo real — el prefijo es estable y sirve para montar una
+> alerta de log en Vercel sin tocar código.
 >
-> El VPS se apaga **solo cuando la Fase 2 esté en producción** (decisión del dueño,
-> 2026-09-02). Hasta entonces sigue encendido sirviendo W1.
+> **Antes de desplegar hay que crear `OPENAI_API_KEY` en Vercel** (ver §2). Sin ella el
+> producto no puede leer los pedidos y el operador recibe *«avisa al administrador»*.
+>
+> **Lo único que sigue necesitando el VPS es W3 (Google Contacts), y es opcional:** la Fase 3
+> está diferida (§25.7, respuesta 1) y `syncGoogleContact()` hace no-op si falta
+> `N8N_GOOGLE_CONTACTS_WEBHOOK_URL`. Apagar el VPS deja de sincronizar contactos de Google y
+> **no rompe nada más**.
 >
 > #### Procedimiento de apagado de los 5 Schedule Trigger
 >
@@ -492,11 +501,33 @@ estorban) o limpiarlas cuando haya tiempo.
 
 ---
 
-### W1 · delivery-webhook (activo)
+### W1 · delivery-webhook (🔻 sin tráfico desde 2026-09-03 — Fase 2 de §25)
 
-**Propósito:** Registrar pedidos de domicilio que llegan por WhatsApp del mesero.
+**Propósito:** Registrar pedidos de domicilio que llegan por WhatsApp del operador.
 
-**Flujo:**
+**Flujo VIGENTE — sin n8n:**
+```
+Operador WhatsApp → Twilio → /api/webhook/twilio-incoming (Vercel)
+                  └ Zernio  → /api/webhook/zernio          (Vercel)
+  → valida firma → SELECT id, location_id FROM authorized_numbers (la sede sale gratis)
+  → processDeliveryMessage()
+      → OpenAI gpt-4o-mini (parsea texto libre)   ← OPENAI_API_KEY en Vercel
+      → registerDeliveryOrder(): cliente + visita + puntos + tiers
+      → plantilla de WhatsApp al cliente
+      → Google Contacts vía n8n W3 (opcional, no-op sin su variable)
+  → Twilio: TwiML al operador · Zernio: 200
+```
+
+> **Lo que hacía n8n W1 y ya no hace nadie:** extraer remitente y body, llamar a OpenAI,
+> parsear el JSON y hacer `POST /api/webhook/delivery`. El workflow sigue importado en la
+> instancia y **no se tocó**, pero nadie dispara su webhook. Ver
+> `docs/features/delivery-webhook.md` y `docs/features/delivery-ai-parsing.md`.
+>
+> **Alta de un cliente nuevo:** ya no hay ningún paso de n8n para domicilios. Antes había que
+> asegurarse de que la instancia tuviera el workflow al día; ahora el parseo viaja con el
+> deploy de Vercel.
+
+**Flujo histórico (hasta 2026-09-03), por si hay que auditar un pedido viejo:**
 ```
 Mesero WhatsApp → Twilio → /api/webhook/twilio-incoming (Vercel)
   → detecta número autorizado → reenvía a n8n W1
@@ -815,13 +846,16 @@ credenciales para todos los envíos de este tenant — no las del master.
    ```
 3. El admin debe hacer login (no solo refrescar) para que el JWT traiga el `tenant_id` nuevo.
 
-### Paso 6 — n8n (normalmente NADA que hacer)
+### Paso 6 — n8n (desde la Fase 2 de §25: NADA que hacer, sin excepciones)
 
-- W1 (delivery), birthday, reactivation y calendar-dispatch ya están configurados para procesar
-  cualquier tenant activo automáticamente (ver §5). Un tenant nuevo con `is_active=true` entra
-  solo.
-- Única excepción: si el nodo HTTP de W1 todavía no tiene el campo `tenant_slug` agregado (ver
-  §5, W1) — se hace una sola vez, no por cliente.
+- **Domicilios ya no pasa por n8n** (2026-09-03). El parseo con IA viaja con el deploy de
+  Vercel, así que un tenant nuevo no necesita que nadie toque la instancia. La excepción del
+  `tenant_slug` en el nodo HTTP de W1 **desapareció con el reenvío**.
+- Los 5 crons ya viven en `vercel.json` (Fase 1) y procesan cualquier tenant activo
+  automáticamente. Un tenant nuevo con `is_active=true` entra solo.
+- ⚠️ **Lo que SÍ hay que hacer una vez por proyecto Vercel, no por cliente:** que exista
+  `OPENAI_API_KEY` (ver §2). Es compartida por todos los tenants, igual que `CRON_SECRET`.
+- Lo único que queda en n8n es W3 (Google Contacts), opcional y diferido.
 
 ### Paso 7 — Plantillas WhatsApp
 
@@ -903,7 +937,8 @@ El orden importa: al revés se envía desde el master.
 ### Vercel (proyecto compartido `sushi-service-fidelity-system` — NO uno nuevo)
 - [ ] Dominio del cliente agregado en Settings → Domains
 - [ ] Registro DNS creado y propagado (verificar con `nslookup`/panel de Vercel)
-- [ ] Cero env vars nuevas necesarias (todas son compartidas, ver §2)
+- [ ] Cero env vars nuevas **por cliente** (todas son compartidas, ver §2)
+- [ ] 🆕 `OPENAI_API_KEY` existe en el proyecto — **una sola vez, no por cliente**. Sin ella este cliente no puede recibir domicilios (Fase 2 de §25)
 
 ### Twilio (subcuenta del cliente)
 - [ ] Número WhatsApp asignado al Messaging Service (`scripts/twilio-setup.mjs`)
@@ -912,9 +947,9 @@ El orden importa: al revés se envía desde el master.
 - [ ] Plantillas creadas o SIDs existentes asignados en Dashboard → Ajustes
 - [ ] Números de meseros insertados en `authorized_numbers` con el `tenant_id` correcto
 
-### n8n (normalmente cero cambios)
-- [ ] Confirmar que el nodo HTTP de W1 (delivery) ya envía `tenant_slug` en el body — si no, agregarlo una sola vez (ver §5)
-- [ ] Confirmar que birthday/reactivation NO tienen `?tenant=` fijo (para que este cliente entre solo) — si lo tienen, quitarlo una sola vez (ver §5)
+### n8n (desde 2026-09-03: cero cambios, y pronto cero n8n)
+- [ ] ~~Confirmar que el nodo HTTP de W1 (delivery) envía `tenant_slug`~~ — **ya no aplica**: domicilios no pasa por n8n (Fase 2 de §25)
+- [ ] Confirmar que birthday/reactivation NO tienen `?tenant=` fijo — solo si sus Schedule Trigger siguen encendidos; la Fase 1 los mueve a `vercel.json`
 
 ### Dashboard
 - [ ] Reward tiers configurados (puntos + mystery box prizes)

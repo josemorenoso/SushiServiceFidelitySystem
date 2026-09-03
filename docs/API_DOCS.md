@@ -650,9 +650,19 @@ Registra la entrega física de un premio. Desde la migración 00031 (v2.3.0), el
 
 ### Webhook Delivery (Domicilios)
 
-**`POST /api/webhook/delivery`** — Protegido por `x-webhook-secret` (llamado desde n8n)
+**`POST /api/webhook/delivery`** — Protegido por `x-webhook-secret`
 
-Recibe datos pre-parseados por n8n y registra cliente + visita en la DB.
+Recibe un pedido **ya parseado** y registra cliente + visita + puntos en la DB.
+
+> 🔄 **2026-09-03 — Fase 2 de §25: este endpoint ya NO es el camino principal.**
+> `POST /api/webhook/twilio-incoming` y `POST /api/webhook/zernio` ahora parsean el mensaje del
+> operador con OpenAI y llaman **directamente** a `registerDeliveryOrder()`
+> (`src/services/delivery.service.ts`), sin dar la vuelta por HTTP ni por n8n.
+>
+> **El contrato de abajo no cambió ni un campo**, a propósito: `n8n/domicilios_whatsapp_v4.json`
+> sigue desplegado en el VPS y lo llamaría si alguien disparara su webhook. En la práctica deja
+> de recibir tráfico solo, porque ese webhook lo disparaba nuestra línea de reenvío.
+> Ver `docs/features/delivery-webhook.md`.
 
 **Headers:**
 - `x-webhook-secret` — Secret compartido con n8n (`WEBHOOK_DELIVERY_SECRET`)

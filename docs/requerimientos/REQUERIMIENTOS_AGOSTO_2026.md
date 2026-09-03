@@ -1966,12 +1966,65 @@ producción (Vercel mantiene el último deploy bueno) pero bloquea cualquier dep
 | Fase | Estado | Qué falta |
 |---|---|---|
 | **Fase 1 — los 5 crons** | ✅ **escrita y commiteada en local (2026-09-02)** | Confirmar Pro → push a `main` → `vercel crons ls` (5 entradas) → `vercel crons run /api/cron/birthday` y revisar el log → apagar los 5 Schedule Trigger en n8n y **comprobarlo en su UI** |
-| **Fase 2 — domicilios** | ⬜ sin empezar | Traer al producto lo que hace `domicilios_whatsapp_v4.json` (extraer remitente y texto, OpenAI `gpt-4o-mini`, parsear, registrar). `/api/webhook/delivery` ya existe: llamar al servicio directamente, no dar la vuelta por HTTP. Exige añadir dependencia y variable de entorno de OpenAI (hoy no existen). **Bloquea el apagado del VPS.** Al migrarlo, arreglar también el fallo silencioso de `webhook/zernio:186` |
+| **Fase 2 — domicilios** | ✅ **escrita y commiteada en local (2026-09-03)**, rama `feat/fase2-domicilios` | Crear `OPENAI_API_KEY` en Vercel → push + deploy → mandar un pedido de prueba desde un número de `authorized_numbers` y ver el TwiML ✅ → poner `"delivery_default_city": "Envigado"` en `tenants.config` de Sushi Service → **ya se puede apagar el VPS** |
 | **Fase 3 — Google Contacts** | ⏸️ diferida | Ver respuesta 1 |
 
 > Recordatorio del **orden**, que es donde más fácil se cuela un error: el VPS se apaga
 > **después** de la Fase 2, no después de la Fase 1. Los 5 Schedule Trigger se apagan en la
 > Fase 1; el VPS sigue vivo sirviendo W1.
+
+### 25.9 Qué hizo la Fase 2 (2026-09-03) y qué queda vivo en n8n
+
+Lo que se trajo al producto (`docs/features/delivery-webhook.md`,
+`docs/features/delivery-ai-parsing.md`):
+
+- El **prompt de extracción literal** del nodo «IA Extrae Datos del Pedido»
+  (`src/constants/delivery-ai.ts`) y el **parseo defensivo** del nodo «Parsear Respuesta IA»
+  (`parseDeliveryAiJson()`, función pura): limpieza de backticks, `^3\d{9}$` sobre el celular,
+  normalización del monto. Con 33 pruebas y **cero llamadas reales a OpenAI**.
+- El registro completo, llamando al servicio **directo**: `registerDeliveryOrder()` es la
+  lógica que estaba dentro de `/api/webhook/delivery`, movida a
+  `src/services/delivery.service.ts` sin cambiarle el comportamiento. La ruta HTTP sigue
+  existiendo con el mismo contrato.
+- **El arreglo del fallo silencioso de `webhook/zernio`**: todo camino de fallo pasa por un
+  embudo único que deja `[Delivery][FALLO]` con el motivo real, el tenant, el operador y el
+  mensaje. Antes, un reenvío fallido devolvía 200 vacío y el pedido desaparecía.
+- **Y un segundo fallo silencioso, un escalón más arriba, que encontró la revisión
+  adversarial de esta misma fase**: las dos rutas descartaban el `error` de la consulta a
+  `authorized_numbers`. `supabase-js` **no lanza** — devuelve `{ data: null, error }` — así
+  que un timeout del pooler daba un `null` **indistinguible de «no es un operador»**: el
+  pedido se iba por el camino del cliente normal, con su auto-respuesta amable y **cero
+  `[Delivery][FALLO]`**. Ahora las dos leen `error` y reportan `remitente_no_verificable`.
+  El patrón venía de antes de esta fase, pero la promesa de «nada falla en silencio» es
+  de esta fase, así que se cierra aquí.
+
+**Dos cosas que salieron gratis y una que hay que configurar:**
+
+1. **La sede.** F3 tuvo que pedirle a n8n que reenviara el campo `remitente` para poder
+   resolver `authorized_numbers.location_id`. Al traer el flujo al producto, el remitente es
+   el mismo número que la ruta acaba de autorizar, y `location_id` viene en **ese mismo
+   `SELECT`**. **Esa línea del workflow de n8n queda muerta y NO hay que desplegarla a los 25
+   clientes** — es el ahorro principal de esta fase.
+2. **El alta de un cliente nuevo ya no toca n8n para nada** (ver §6, Paso 6 de
+   `docs/04-deployment.md`).
+3. ⚠️ **La ciudad.** El prompt de n8n tenía «Por defecto: Envigado» **horneado**. Eso, en un
+   producto de 25 marcas, le escribe Envigado en `customers.city` a todo el mundo. Ahora sale
+   de `tenants.config.delivery_default_city`; **sin configurar, la IA no inventa ciudad**.
+   Sushi Service necesita `"Envigado"` ahí para comportarse igual que hoy.
+
+**Qué queda vivo en n8n después de la Fase 2:**
+
+| Workflow | Estado |
+|---|---|
+| Los 5 crons | Se apagan con el despliegue de la Fase 1 (ya escrita en `vercel.json`) |
+| `domicilios_whatsapp_v3/v4` | Siguen importados pero **sin tráfico**: su webhook lo disparaba nuestra línea de reenvío. No hay que desactivarlos |
+| `google_contacts_sync` (W3) | **Lo único que el VPS sigue sirviendo de verdad.** Fase 3 diferida (§25.7, respuesta 1). `syncGoogleContact()` hace no-op sin su variable: apagar el VPS deja de sincronizar contactos de Google y no rompe nada más |
+
+**Deuda que la Fase 2 NO cierra, y no le toca:** el registro de un pedido perdido es hoy el
+**log de Vercel**, no una tabla. La lista de «qué clientes entraron por domicilio» y la
+**alarma de silencio** son §24-B, con su propia migración. Cuando esa tabla exista, el
+`INSERT` va dentro de `logDeliveryIntakeFailure()` y en ningún otro sitio — por eso el embudo
+es una función y no un `console.error` suelto en cada `catch`.
 
 
 ---

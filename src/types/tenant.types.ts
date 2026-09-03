@@ -21,6 +21,18 @@ export interface TenantConfig {
   google_maps_url?: string // URL de reseña en Google Maps
   delivery_phone?: string // teléfono de domicilios (fallback del link de WhatsApp)
   /**
+   * Ciudad por defecto de los pedidos de domicilio (Fase 2 de §25).
+   *
+   * La usa el prompt de extracción con IA (`src/constants/delivery-ai.ts`) cuando la
+   * dirección no nombra una ciudad. El workflow de n8n tenía «Envigado» HORNEADO —
+   * correcto para un solo restaurante, veneno para 25: le escribiría esa ciudad en
+   * `customers.city` a los clientes de todas las marcas.
+   *
+   * **Sin configurar, la IA no inventa ciudad y `customers.city` queda `null`.**
+   * ⚠️ Sushi Service necesita `"Envigado"` aquí para comportarse igual que hoy.
+   */
+  delivery_default_city?: string
+  /**
    * Emoji de marca que se hornea en las plantillas de WhatsApp del estilo
    * `calido`. Opcional: sin él se usa el de `business_type`
    * (`resolveTemplateEmoji()` en src/constants/template-catalog.ts).

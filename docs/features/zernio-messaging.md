@@ -120,8 +120,19 @@ Contraparte de `twilio-incoming/route.ts` para tenants Zernio.
 - `message.received` → resuelve el tenant por `payload.account` contra `tenants.zernio_account_id`
   (sin match: log + 200, nunca 5xx — Zernio reintenta agresivo si no obtiene 2xx). Reutiliza el
   criterio de opt-out/opt-in de `twilio-incoming` (mismos keywords, duplicados a propósito — ver
-  comentario en el archivo). Si el remitente es un mesero autorizado (`authorized_numbers`), reenvía a
-  n8n con el MISMO formato plano `Body`/`From`/`To`/`tenant_slug` que usa Twilio hoy — n8n no se toca.
+  comentario en el archivo). Si el remitente es un mesero autorizado (`authorized_numbers`),
+  **procesa el pedido de domicilio ahí mismo**: parseo con IA + registro, vía
+  `processDeliveryMessage()`. 🔄 **Cambió el 2026-09-03 (Fase 2 de §25):** antes reenviaba a n8n
+  con el formato plano `Body`/`From`/`To`/`tenant_slug`; ahora no sale nada del proceso salvo la
+  llamada a OpenAI. Ver `docs/features/delivery-webhook.md`.
+  - ⚠️ **Aquí estaba el fallo silencioso de §24**, y quedó arreglado: si el reenvío fallaba, la ruta
+    devolvía 200 vacío y el pedido desaparecía. Ahora todo fallo deja una línea `[Delivery][FALLO]`
+    con el motivo real. Se sigue devolviendo 200 a propósito (un 5xx hace que Zernio desactive el
+    webhook tras 10 fallos, y eso costaría los pedidos de todos los tenants Zernio).
+  - ⏱️ Este camino ahora hace una llamada a OpenAI, así que puede exceder los 5 s que pide Zernio y
+    provocar un reintento. **No duplica**: el dedup por `event_id` corre ANTES, ver abajo.
+  - ✉️ Sigue sin haber confirmación para el operador en este canal (Zernio solo envía plantillas
+    aprobadas, nunca texto libre). Pendiente: una plantilla propia para eso.
 - `message.delivered` / `message.read` / `message.failed` → `UPDATE message_logs WHERE twilio_sid =
   message.id` (status + `delivered_at` si delivered, `error_code`/`error_message` si failed). Esto es
   en realidad la **primera vez** que algo alimenta el status de entrega en `message_logs` — Twilio
@@ -140,7 +151,8 @@ duplicados y fuera de orden:
   `.not('status', 'in', '(delivered,read)')` — un `failed` tardío no puede deshacer una entrega o lectura
   ya confirmadas.
 - **Dedup por `event_id`** (`handleMessageReceived()`): antes de cualquier efecto de negocio (opt-out,
-  forward a n8n) se hace `INSERT` en `webhook_events_seen` (PK `(provider, event_id)`, migración 00036);
+  **registro del domicilio** — que desde la Fase 2 de §25 ya no es un `fetch` a n8n sino la creación
+  del cliente, la visita y los puntos, o sea que un duplicado costaría de verdad) se hace `INSERT` en `webhook_events_seen` (PK `(provider, event_id)`, migración 00036);
   un `23505` (evento ya visto) responde `200 {received:true, duplicate:true}` sin repetir el efecto. Si
   la tabla no existe todavía en un entorno (`42P01`), es fail-open: loguea y sigue sin dedup.
 - **Sender sin `phoneNumber` (BSUID)**: desde abril-2026 Meta puede mandar el `businessScopedUserId`

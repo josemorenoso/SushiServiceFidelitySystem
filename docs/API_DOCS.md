@@ -49,11 +49,23 @@ Webhooks validan origen por número autorizado o `x-webhook-secret`. Cron jobs v
 | POST | /api/webhook/delivery | Recibir datos de domicilio (n8n/Twilio) | x-webhook-secret |
 | POST | /api/webhook/twilio-incoming | Auto-responder mensajes entrantes al número | Twilio Signature |
 | POST | /api/webhook/zernio | Webhook Zernio: mensajes entrantes (tenants `messaging_provider='zernio'`) + status de entrega (`message_logs`) + **aprobación de plantillas** (`whatsapp.template.status_updated` → cambio de puntero, ver `docs/features/whatsapp-templates.md`) | X-Zernio-Signature (HMAC-SHA256, obligatoria) |
-| GET/POST | /api/cron/birthday | Enviar felicitaciones de cumpleaños | CRON_SECRET |
-| GET/POST | /api/cron/reactivation | Enviar reactivaciones (días configurables, default 21/25) + otorga premio de campaña con `expires_at` | CRON_SECRET |
-| GET/POST | /api/cron/calendar-dispatch | Auto-enviar eventos del calendario vencidos (disparado por n8n) | CRON_SECRET |
-| GET/POST | /api/cron/reward-reminder | Barrido de vencidos + recordatorio de premio por vencer (disparado por n8n) | CRON_SECRET |
-| GET/POST | /api/cron/queue-drain | Drena la cola de goteo respetando presupuesto y prioridad (disparado por n8n, W4, cada 15 min) | CRON_SECRET |
+| GET/POST | /api/cron/birthday | Enviar felicitaciones de cumpleaños (`0 13 * * *`) | CRON_SECRET |
+| GET/POST | /api/cron/reactivation | Enviar reactivaciones (días configurables, default 21/25) + otorga premio de campaña con `expires_at` (`0 15 * * *`) | CRON_SECRET |
+| GET/POST | /api/cron/calendar-dispatch | Auto-enviar eventos del calendario vencidos (`*/15 * * * *`) | CRON_SECRET |
+| GET/POST | /api/cron/reward-reminder | Barrido de vencidos + recordatorio de premio por vencer (`0 16 * * *`) | CRON_SECRET |
+| GET/POST | /api/cron/queue-drain | Drena la cola de goteo respetando presupuesto y prioridad (`*/15 * * * *`) | CRON_SECRET |
+
+> **Quién dispara los 5 crons (2026-09-02).** Desde este commit están **declarados en
+> `vercel.json`** con las cadencias de la tabla — calco 1:1 de las que ya tenían los Schedule
+> Trigger de n8n. **Declarado no es disparando:** el commit es local y sin push, así que hoy
+> el disparador vivo sigue siendo **n8n**. Vercel empieza a dispararlos cuando se despliegue a
+> producción con plan Pro activo (Hobby solo admite crons diarios y una expresión `*/15` hace
+> fallar el build), y en ese mismo movimiento se apagan los 5 Schedule Trigger de n8n —
+> los dos a la vez = doble disparo. Detalle en `docs/04-deployment.md` §2 y §5.
+>
+> Vercel Cron invoca **GET** y manda solo `Authorization: Bearer $CRON_SECRET`, que es
+> exactamente lo que valida `validateCronSecret()`: por eso la migración no cambió una sola
+> línea de código de negocio.
 | GET | /api/dashboard/metrics | Métricas generales | Admin Cookie |
 | GET | /api/dashboard/send-queue | Cola de goteo del tenant, filtrable por `campaign_id`/`status`, paginada | Admin Cookie |
 | DELETE | /api/dashboard/send-queue/:id | Cancela un item de la cola (`status='cancelled'`, no lo borra) | Admin Cookie |
@@ -650,8 +662,9 @@ Recibe datos pre-parseados por n8n y registra cliente + visita en la DB.
 **Query param `?tenant=slug` (opcional, v2.4.0):**
 - **Con `?tenant=`** → procesa solo ese tenant, response = resultado plano (shape de abajo).
 - **Sin `?tenant=`** → procesa **todos los tenants activos** (`getActiveTenants()`) en un solo
-  disparo, uno no tumba a los demás si falla (`Promise.allSettled`). Este es el modo
-  recomendado para el Schedule Trigger de n8n — un cliente nuevo entra solo, sin tocar n8n.
+  disparo, uno no tumba a los demás si falla (`Promise.allSettled`). Este es el modo que usan
+  tanto el Schedule Trigger de n8n como la entrada de `vercel.json` (ninguno lleva `?tenant=`):
+  un cliente nuevo entra solo, sin tocar el disparador.
 
 **Response 200 (con `?tenant=`):**
 ```json
@@ -730,7 +743,10 @@ Si ninguno está configurado, retorna `{ ok: false, error: "..." }` sin enviar.
 
 **Query param `?tenant=slug`:** mismo comportamiento opcional que los demás crons — con `?tenant=` procesa uno solo, sin él procesa todos los tenants activos (`getActiveTenants()`, `Promise.allSettled`) y agrega `tenants_processed` + `results[]` a la response.
 
-> **Quién lo dispara:** al igual que `calendar-dispatch`, NO está en `vercel.json`. Lo dispara **n8n**.
+> **Quién lo dispara:** declarado en `vercel.json` con `0 16 * * *` (= 11:00 de Colombia) desde
+> 2026-09-02, pero **hoy lo sigue disparando n8n** — el workflow «Cron Recordatorio de Premios».
+> El disparo por Vercel empieza al desplegar a producción con plan Pro, y ahí se apaga el
+> Schedule Trigger de n8n. Ver `docs/04-deployment.md` §2.
 
 Hace dos cosas, en este orden, por cada tenant:
 
@@ -781,7 +797,16 @@ Hace dos cosas, en este orden, por cada tenant:
 
 Busca eventos con `send_mode='auto'`, `status='scheduled'` y `scheduled_send_at <= now()` y ejecuta su auto-envío (`executeAutoEvent`).
 
-> **Quién lo dispara:** NO está en `vercel.json`. Lo dispara **n8n self-hosted** (Schedule Trigger cada 15 min → HTTP POST con el header `Authorization: Bearer CRON_SECRET`). Decisión tomada para no exigir plan Vercel Pro (`*/15` + ser el 3er cron superaría el límite de Hobby). `birthday` y `reactivation` siguen como crons de Vercel (2 diarios, caben en Hobby).
+> **Quién lo dispara:** declarado en `vercel.json` con `*/15 * * * *` desde 2026-09-02, pero
+> **hoy lo sigue disparando n8n self-hosted** — el workflow «Cron Calendario» (Schedule Trigger
+> cada 15 min → HTTP POST con `Authorization: Bearer CRON_SECRET`). El disparo por Vercel
+> empieza al desplegar a producción con plan Pro, y ahí se apaga el Schedule Trigger de n8n.
+>
+> *Corrección de dos afirmaciones que había aquí:* (1) el límite de Hobby **no** es la cantidad
+> de crons —son 100 por proyecto en todos los planes— sino la **frecuencia**: 1 vez al día, así
+> que lo que exige Pro es la cadencia `*/15`, no "ser el 3er cron". (2) `birthday` y
+> `reactivation` **no** seguían siendo crons de Vercel: se habían movido a n8n el 2026-07-05,
+> cuando `vercel.json` quedó en `{"crons": []}`. Vuelven a `vercel.json` con este cambio.
 
 **Response 200:**
 ```json
@@ -1320,7 +1345,7 @@ Actualiza una configuración por clave.
 ## Calendar — Eventos del calendario operativo
 
 > Capa de datos + auto-envío del calendario. Los eventos se crean y persisten con o sin media (imagen/video).
-> **El auto-envío está activo:** los eventos con `send_mode='auto'` y `status='scheduled'` se disparan vía `POST /api/cron/calendar-dispatch` (programado en n8n self-hosted) o manualmente con `POST .../events/:id/dispatch`. El envío real con media sigue dependiendo de que Meta apruebe las plantillas `twilio/media`.
+> **El auto-envío está activo:** los eventos con `send_mode='auto'` y `status='scheduled'` se disparan vía `/api/cron/calendar-dispatch` (hoy programado en n8n self-hosted; ya declarado en `vercel.json` con `*/15 * * * *`) o manualmente con `POST .../events/:id/dispatch`. El envío real con media sigue dependiendo de que Meta apruebe las plantillas `twilio/media`.
 
 ### Listar eventos del rango
 

@@ -1770,14 +1770,34 @@ tres cabrían incluso en Hobby.
       ]
     }
 
-> ⚠️ **OJO CON LA ZONA HORARIA — es el error más fácil de toda la migración.**
-> Las cadencias de arriba son las que tiene n8n, y sus workflows corren en hora de **Bogotá**.
-> Vercel Cron interpreta las expresiones en **UTC**, y Colombia es UTC-5. Copiar
-> `0 13 * * *` tal cual haría que los cumpleaños salieran a las **8am UTC = 3am en Colombia**.
-> Hay que sumar 5 horas: 8am Bogotá → `0 13 * * *` en UTC ya es correcto SI el trigger de n8n
-> estaba en UTC, y `0 18 * * *` si estaba en hora local. **Verificar workflow por workflow en
-> n8n cuál es su zona configurada antes de convertir** — `docs/04-deployment.md` §5 ya avisa
-> de esta trampa. Las de `*/15` no se ven afectadas.
+> ⚠️ **CORRECCIÓN 2026-09-02 — esta advertencia estaba INVERTIDA. NO sumar 5 horas.**
+>
+> Lo que decía este bloque: *"los workflows de n8n corren en hora de Bogotá… hay que sumar 5
+> horas"*. **Es falso, y seguirlo habría sido el error real de la migración**: desplazaría los
+> tres crons diarios a 18:00/20:00/21:00 UTC = 1pm/3pm/4pm en Colombia.
+>
+> **Lo que dicen los propios JSON del repo** (verificado archivo por archivo el 2026-09-02):
+> las expresiones diarias **ya llevan la conversión a UTC horneada**.
+>
+> - `n8n/cron_reward-reminder.json:20` — `"notes": "16:00 UTC = 11:00 Colombia…"`, con
+>   `"expression": "0 16 * * *"`. Lo dice el propio autor del workflow.
+> - `n8n/cron_queue-drain.json:20` — *"Cada 15 min es indiferente a la zona horaria (a
+>   diferencia de los crons diarios, que llevan la conversión UTC→Colombia dentro de la
+>   expresión)"*.
+> - `cron_birthday.json` — nodo «Diario 8am» con `0 13 * * *` (13 UTC = 8am Colombia). ✔
+> - `cron_reactivation.json` — nodo «Diario 10am» con `0 15 * * *` (15 UTC = 10am). ✔
+>
+> **Conclusión: copiar las expresiones VERBATIM es lo correcto.** Es lo que hace la Fase 1.
+>
+> **Lo que sigue sin poder verificarse desde el repo:** ninguno de los 5 JSON declara clave
+> `timezone` (su `settings` solo trae `executionOrder`), así que la hora **efectiva** dependía
+> del `GENERIC_TIMEZONE` de la instancia. La intención documentada es UTC, pero eso es
+> intención, no configuración. **Prueba empírica, 30 segundos, hacerla antes de desplegar:**
+> abrir *Executions* de «Cron Cumpleaños» en n8n y mirar la hora de la última corrida. ~13:00
+> ⇒ la instancia era UTC y la migración no mueve nada; ~08:00 ⇒ era hora local, hoy los
+> mensajes salen a la 1pm y hay que restar 5 horas antes de desplegar.
+>
+> Las cadencias `*/15` no se ven afectadas en ningún caso.
 
 **Fase 2 — domicilios.** Hoy `twilio-incoming` (`route.ts:130`) y `zernio` (`route.ts:171`)
 reenvían a `N8N_DOMICILIOS_WEBHOOK_URL`. n8n extrae remitente y texto, llama a OpenAI
@@ -1817,17 +1837,41 @@ responde *"¿está vivo?"* sin construir nada — la mitad de lo que pide §24. 
 sigue haciendo falta**: la alarma de silencio de domicilios, porque un cron vivo que procesa
 cero pedidos se ve igual que uno vivo con pedidos.
 
-### 25.7 Preguntas abiertas
+### 25.7 Preguntas abiertas — RESPONDIDAS por el dueño el 2026-09-02
 
-1. **¿Se migra Google Contacts o se apaga?** Si nadie usa esos contactos, apagarlo ahorra la
-   parte más cara de la migración.
-2. **¿`v3` o `v4` es el workflow de domicilios vigente?** Ya anotado en §24; sigue sin
-   respuesta y ahora bloquea la Fase 2.
-3. **¿Se apaga el VPS de n8n al terminar, o se deja como respaldo?** Si se deja, hay que
-   garantizar que sus triggers quedan inactivos.
-4. **¿La cadencia `*/15` de la cola de goteo y el calendario sigue siendo la correcta?** Pro
-   permite hasta cada minuto; la migración es buen momento para revisarla, pero cambiarla es
-   decisión del dueño, no efecto colateral.
+Las cuatro quedaron cerradas. Se dejan con su respuesta para que nadie las re-pregunte:
+
+1. **¿Se migra Google Contacts o se apaga?** → **Ninguna de las dos: se difiere.** La Fase 3 no
+   se hace ahora, y cuando se haga el diseño pedido es **otro**: un botón para que el propio
+   cliente conecte SU cuenta de Google. La credencial OAuth compartida que hoy vive en n8n **no
+   se replica**. No bloquea nada (`syncGoogleContact()` ya es fire-and-forget y hace no-op si
+   falta la variable de entorno).
+2. **¿`v3` o `v4` es el workflow de domicilios vigente?** → **`domicilios_whatsapp_v4.json`**.
+   `v3` queda documentado como histórico. (Los dos registran el mismo webhook path `domicilios`,
+   así que solo uno puede estar activo a la vez.)
+3. **¿Se apaga el VPS de n8n al terminar?** → **Sí, pero SOLO cuando la Fase 2 esté en
+   producción.** Durante la Fase 1 el VPS sigue encendido sirviendo domicilios. Apagarlo antes
+   rompe los pedidos **en silencio** en el canal Zernio (`webhook/zernio/route.ts:186` devuelve
+   200 vacío) — es exactamente el fallo que denuncia §24.
+4. **¿La cadencia `*/15` sigue siendo la correcta?** → **Sí, se mantiene tal cual.** No se toca
+   en esta migración.
+
+**Y una quinta decisión, sobre el orden de ejecución:** la Fase 1 se deja **commiteada en local
+sin push**. El push y el deploy esperan a que el dueño confirme que el plan **Pro está activo**,
+porque con Hobby una expresión `*/15` hace fallar el build de `main` — y un build roto no tumba
+producción (Vercel mantiene el último deploy bueno) pero bloquea cualquier deploy posterior.
+
+### 25.8 Estado de ejecución
+
+| Fase | Estado | Qué falta |
+|---|---|---|
+| **Fase 1 — los 5 crons** | ✅ **escrita y commiteada en local (2026-09-02)** | Confirmar Pro → push a `main` → `vercel crons ls` (5 entradas) → `vercel crons run /api/cron/birthday` y revisar el log → apagar los 5 Schedule Trigger en n8n y **comprobarlo en su UI** |
+| **Fase 2 — domicilios** | ⬜ sin empezar | Traer al producto lo que hace `domicilios_whatsapp_v4.json` (extraer remitente y texto, OpenAI `gpt-4o-mini`, parsear, registrar). `/api/webhook/delivery` ya existe: llamar al servicio directamente, no dar la vuelta por HTTP. Exige añadir dependencia y variable de entorno de OpenAI (hoy no existen). **Bloquea el apagado del VPS.** Al migrarlo, arreglar también el fallo silencioso de `webhook/zernio:186` |
+| **Fase 3 — Google Contacts** | ⏸️ diferida | Ver respuesta 1 |
+
+> Recordatorio del **orden**, que es donde más fácil se cuela un error: el VPS se apaga
+> **después** de la Fase 2, no después de la Fase 1. Los 5 Schedule Trigger se apagan en la
+> Fase 1; el VPS sigue vivo sirviendo W1.
 
 
 ---

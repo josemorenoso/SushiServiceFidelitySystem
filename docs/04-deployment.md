@@ -1,7 +1,9 @@
 # Despliegue e Infraestructura — Constelarys Fidelity System
 
-> **Última actualización:** 2026-07-07 — v2.4.0, arquitectura **multitenant** (un solo
-> Vercel + un solo Supabase compartidos por todos los clientes; ver §1 y §6).
+> **Última actualización:** 2026-09-02 — los 5 crons vuelven a `vercel.json` (Fase 1 de la
+> migración n8n → Vercel, §25 de requerimientos). Ver §2 «Crons en `vercel.json`» y §5.
+> Base: 2026-07-07 — v2.4.0, arquitectura **multitenant** (un solo Vercel + un solo Supabase
+> compartidos por todos los clientes; ver §1 y §6).
 > **Documento único** que reemplaza: `INFRAESTRUCTURA.md`, `DEPLOYMENT_GUIDE.md`, `CONFIGURACIONES_TWILIO_SISTEMA.md`, `n8n-workflows/README.md`
 > Para plantillas WhatsApp (textos, variables, lógica de selección) → [`docs/PLANTILLAS.md`](./PLANTILLAS.md)
 > Para MCP Server de Twilio en el IDE → [`docs/TWILIO_MCP_SETUP.md`](./TWILIO_MCP_SETUP.md)
@@ -44,16 +46,20 @@
 │  /api/check-in              → Registro QR + WhatsApp bienvenida          │
 │  /api/webhook/delivery      → Registro domicilio + WhatsApp cliente      │
 │  /api/webhook/twilio-incoming → Auto-responder (redirige al humano)      │
-│  /api/cron/birthday         → Felicitaciones cumpleaños (disparado por n8n) │
-│  /api/cron/reactivation     → Re-engagement inactivos (disparado por n8n)  │
+│  /api/cron/birthday         → Felicitaciones cumpleaños                  │
+│  /api/cron/reactivation     → Re-engagement inactivos                    │
+│  /api/cron/reward-reminder  → Recordatorio de premios + barrido vencidos │
+│  /api/cron/calendar-dispatch→ Auto-envío de eventos del calendario       │
+│  /api/cron/queue-drain      → Drenado de la cola de goteo                │
 │  /api/dashboard/*           → Dashboard admin (auth requerida)           │
 │  /api/staff/*               → App mesero (auth staff)                   │
 │                                                                          │
-│  vercel.json → "crons": [] (VACÍO desde 2026-07-05). birthday y         │
-│  reactivation se disparan SOLO desde n8n — ver §5. Antes corrían         │
-│  duplicados (Vercel nativo + n8n a la vez); el propio código los         │
-│  des-duplicaba vía hasRecentCampaignMessage(), pero gastaba recursos     │
-│  doble y tenía un riesgo latente de carrera si coincidían al segundo.    │
+│  vercel.json → los 5 crons DECLARADOS desde 2026-09-02 (§2). Entre       │
+│  2026-07-05 y esa fecha estuvo VACÍO y el disparo vivía en n8n.          │
+│  ⚠️ Declarado ≠ disparando: el disparo empieza al desplegar a            │
+│  producción con plan Pro, y en ESE mismo movimiento se apagan los 5      │
+│  Schedule Trigger de n8n. Los dos a la vez = doble disparo (ya pasó      │
+│  en julio de 2026; ver §2).                                              │
 └────────────────────┬────────────────────┬────────────────────────────────┘
                      │                    │
           ┌──────────┘                    └──────────┐
@@ -71,26 +77,50 @@
 ┌─────────────────────────────────────────────────────────────┐
 │  n8n VPS SELF-HOSTED  (https://n8n.almojabananet.me)        │
 │                                                             │
-│  W1 · delivery-webhook   (activo)                          │
-│     Twilio → parseo texto libre (OpenAI) → /api/webhook/delivery  │
-│     → Google Contacts sync                                  │
+│  W1 · delivery-webhook   (ACTIVO — el motivo por el que el │
+│     VPS sigue encendido). Twilio/Zernio → parseo texto      │
+│     libre (OpenAI) → /api/webhook/delivery → Google Contacts│
+│     Migrarlo es la Fase 2 (§25); hasta entonces NO se apaga.│
 │                                                             │
-│  W2 · calendar-dispatch  (activo) ← NUEVO v2.1.0           │
+│  W2 · calendar-dispatch  (EN RETIRADA — pasa a vercel.json) │
 │     Schedule */15 min → POST /api/cron/calendar-dispatch    │
-│     (evita exigir plan Vercel Pro — 3er cron + cadencia)    │
 │                                                             │
 │  W3 · google-contacts-sync  (pendiente de crear)            │
 │     Webhook → Google Contacts API (create/update)           │
+│                                                             │
+│  W4 · queue-drain        (EN RETIRADA — pasa a vercel.json) │
+│  + Cron Cumpleaños / Reactivación / Recordatorio de Premios │
+│     (EN RETIRADA — pasan a vercel.json, ver §2 y §5)        │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-> **⚠️ Nota UTC / Colombia:** Colombia es UTC-5. Si el Schedule Trigger de n8n usa UTC,
-> `0 8 * * *` = 3:00 AM Colombia | `0 13 * * *` = 8:00 AM Colombia. Verificar la zona
-> horaria configurada en cada workflow de n8n ("Cron Birthday" / "Cron Reactivación")
-> para confirmar a qué hora Colombia realmente disparan.
-> **`vercel.json` ya NO dispara estos 2 crons (desde 2026-07-05) — el disparo real
-> vive 100% en n8n.** No agregar de vuelta esas entradas sin apagar antes las de n8n
-> (evitar volver al doble disparo).
+> **⚠️ Nota UTC / Colombia:** Colombia es UTC−5, y **Vercel Cron interpreta siempre las
+> expresiones en UTC**. Las tres cadencias diarias que hay en `vercel.json` ya vienen
+> expresadas en UTC — se copiaron tal cual de n8n, donde la conversión ya estaba hecha:
+> `0 13` = 8:00 AM Colombia · `0 15` = 10:00 AM · `0 16` = 11:00 AM.
+>
+> **Supuesto explícito (decisión del dueño, 2026-09-02):** ninguno de los 5 JSON de n8n
+> declara clave `timezone` (`settings` solo trae `executionOrder`), así que su hora real
+> dependía del `GENERIC_TIMEZONE` de la instancia, que no vive en el repo. Se toma como
+> buena la **intención documentada** en el propio repo: `n8n/cron_reward-reminder.json`
+> anota *"16:00 UTC = 11:00 Colombia"*, y los nodos se llaman «Diario 8am» (`0 13`),
+> «Diario 10am» (`0 15`) y «Diario 11:00» (`0 16`). Con eso, mover las expresiones a
+> Vercel **conserva la hora**.
+>
+> ⛔ **NO sumar 5 horas.** §25 de requerimientos advertía de sumarlas; esa advertencia
+> estaba invertida y quedó corregida el 2026-09-02 (ver §25.4). Aplicarla desplazaría los
+> tres crons diarios a las 18:00/20:00/21:00 UTC = 1pm/3pm/4pm Colombia.
+>
+> **Cómo comprobarlo empíricamente antes del despliegue** (30 segundos, y es la única
+> prueba real): abrir la pestaña *Executions* de «Cron Cumpleaños» en n8n y mirar la hora
+> de la última ejecución. Si dice ~13:00 la instancia estaba en UTC y la migración no
+> cambia nada; si dice ~08:00, estaba en hora local y hoy los mensajes salen a la 1pm —
+> en ese caso hay que restar 5 horas a las tres expresiones antes de desplegar.
+>
+> **Regla que sobrevive de julio de 2026:** no tener a la vez una entrada en `vercel.json`
+> y su Schedule Trigger activo en n8n. Cuando esto se escribió, `vercel.json` ya declara
+> los 5 crons **pero los triggers de n8n siguen encendidos** — el despliegue y el apagado
+> son un solo movimiento, ver §2.
 
 ---
 
@@ -102,7 +132,7 @@
 |------|-----------|
 | Framework | Next.js 16.2 (App Router) — TypeScript, TailwindCSS v4, shadcn/ui |
 | Deploy | Vercel — auto-deploy desde GitHub `main` |
-| Plan | Hobby (gratis) — **en migración a Pro, ver §25 de requerimientos** |
+| Plan | Hobby (gratis) — **en migración a Pro, ver §25 de requerimientos**. ⚠️ `vercel.json` ya declara dos crons `*/15`, que Hobby NO acepta: **hasta que Pro esté activo, un push a `main` hace fallar el build** (ver «Crons en `vercel.json`» más abajo) |
 
 ```bash
 # Deploy manual (requiere Vercel CLI)
@@ -166,17 +196,67 @@ fila en `tenants` (ver §6) con:
 
 ```json
 {
-  "crons": []
+  "crons": [
+    { "path": "/api/cron/birthday", "schedule": "0 13 * * *" },
+    { "path": "/api/cron/reactivation", "schedule": "0 15 * * *" },
+    { "path": "/api/cron/reward-reminder", "schedule": "0 16 * * *" },
+    { "path": "/api/cron/calendar-dispatch", "schedule": "*/15 * * * *" },
+    { "path": "/api/cron/queue-drain", "schedule": "*/15 * * * *" }
+  ]
 }
 ```
 
-> **Vacío a propósito desde 2026-07-05.** `birthday` y `reactivation` se disparaban
-> ANTES desde aquí (Vercel nativo) Y desde n8n al mismo tiempo — doble disparo diario.
-> El código los des-duplicaba (`hasRecentCampaignMessage()`), así que el cliente final
-> nunca recibió mensajes repetidos, pero se gastaba el trabajo dos veces y existía un
-> riesgo de carrera si ambos disparos coincidían al segundo. Se decidió dejar **solo
-> n8n** como disparador único — ver [§5](#crons-de-birthdayreactivacion-via-n8n).
-> `calendar-dispatch` tampoco está aquí — lo dispara n8n (ver [§5 W2](#w2--calendar-dispatch)). Agregar un 3er cron con cadencia `*/15` exigiría plan Vercel Pro. ⚠️ **Obsoleto — ver la corrección del 2026-09-02 más arriba: el límite es la frecuencia, no la cantidad.**
+**Estado vigente desde 2026-09-02** (Fase 1 de la migración n8n → Vercel, §25 de
+`docs/requerimientos/REQUERIMIENTOS_AGOSTO_2026.md`). Las 5 expresiones son un calco 1:1
+de las que tenían los Schedule Trigger de n8n: **cero cambio de cadencia**. Horas en UTC;
+`0 13`/`0 15`/`0 16` = 8:00/10:00/11:00 AM Colombia — ver la nota UTC de §1.
+
+**Por qué no hizo falta código.** Los 5 endpoints ya exportaban `GET` (el método que invoca
+Vercel Cron) y `validateCronSecret()` (`src/lib/validators/cron.ts`) ya espera
+`Authorization: Bearer $CRON_SECRET`, que es exactamente el header que Vercel Cron manda
+solo. n8n los llamaba por `POST` sin body y ninguno de los 5 lee el body, así que el cambio
+`POST`→`GET` es semánticamente nulo. Ninguno lleva `?tenant=`: sin ese parámetro recorren
+todos los tenants activos, así que basta **una entrada por endpoint**, no una por cliente.
+
+#### ⚠️ Declarado no es lo mismo que disparando — tres condiciones antes de darlo por hecho
+
+1. **Plan Pro activo.** Hobby limita la frecuencia a 1 vez al día; una expresión `*/15`
+   **hace fallar el build** con *"Hobby accounts are limited to daily cron jobs"*. Con el
+   equipo en Hobby, un push a `main` no tumba producción (Vercel mantiene el último deploy
+   bueno) pero **bloquea todo deploy posterior** hasta arreglarlo.
+2. **Deployment de producción.** Vercel Cron solo corre en producción, nunca en previews.
+3. **Apagar los 5 Schedule Trigger de n8n en el MISMO movimiento.** Ver el procedimiento
+   completo en [§5](#5-plataforma-n8n-self-hosted).
+
+Verificación tras el deploy: `vercel crons ls` debe listar las 5 entradas, y
+`vercel crons run /api/cron/birthday` permite dispararlo a mano y leer el log.
+
+> **Historia — por qué esto estuvo vacío entre 2026-07-05 y 2026-09-02 (superado, no borrado).**
+> `birthday` y `reactivation` se disparaban desde aquí Y desde n8n a la vez — doble disparo
+> diario. El código los des-duplicaba (`hasRecentCampaignMessage()`), así que el cliente final
+> nunca recibió mensajes repetidos, pero se gastaba el trabajo dos veces y había riesgo de
+> carrera si ambos coincidían al segundo. La salida de entonces fue dejar **solo n8n**. La
+> decisión se revierte el 2026-09-02 por dos motivos (§25.1): n8n es un punto único de fallo
+> sin alarma, y el plan Hobby **prohíbe el uso comercial**, que es lo que este producto hace.
+> La lección de julio no se tira: se convierte en la regla de la condición 3.
+>
+> ⚠️ Esa red de seguridad **no cubre todo**: `hasRecentCampaignMessage()` protege las
+> campañas, y `reward-reminder` se sella con `reminder_sent_at`. `calendar-dispatch` no
+> tiene equivalente. El único inmune por diseño es `queue-drain`, porque `claim_send_queue()`
+> usa `FOR UPDATE SKIP LOCKED`. Por eso el apagado de n8n no es «un paso posterior».
+
+#### Duración de las funciones
+
+Con Fluid Compute el límite por defecto es **300 s en todos los planes** (Pro y Enterprise
+pueden subir a 800 s). `queue-drain` es el único que declara `maxDuration = 300`
+explícitamente; los otros cuatro heredan ese mismo valor por defecto.
+
+Cambia **quién corta**, y conviene tenerlo presente: con n8n el timeout era del cliente
+(n8n se rendía a los 30-70 s pero la función seguía viva hasta terminar); con Vercel Cron
+el corte lo hace la plataforma y mata la corrida a media tanda. `birthday`, `reactivation`
+y `calendar-dispatch` recorren su audiencia en bucle **secuencial**, sin tope de filas y con
+una llamada de red al proveedor por cliente, así que a volumen suficiente pueden toparse con
+los 300 s. No bloquea la Fase 1 con el volumen actual; queda anotado como riesgo en §9.
 
 ---
 
@@ -345,6 +425,51 @@ INSERT INTO authorized_numbers (phone, name, is_active) VALUES
 **Instancia compartida:** `https://n8n.almojabananet.me`
 **VPS:** servidor compartido almojabananet — costo ~$5-10/mes total para todos los clientes.
 
+> ### 🔻 2026-09-02 — esta sección está EN RETIRADA (Fase 1 de §25)
+>
+> Los **5 crons** de aquí abajo pasan a `vercel.json` (ver §2). Lo que sigue documentado en
+> esta sección es el estado **todavía vigente hoy** y el **procedimiento de apagado**, no una
+> guía para montarlos de nuevo.
+>
+> | Workflow en la UI de n8n | Endpoint | Estado |
+> |---|---|---|
+> | «Cron Cumpleaños» | `/api/cron/birthday` | 🔻 en retirada → `vercel.json` |
+> | «Cron Reactivación» | `/api/cron/reactivation` | 🔻 en retirada → `vercel.json` |
+> | «Cron Recordatorio de Premios» | `/api/cron/reward-reminder` | 🔻 en retirada → `vercel.json` |
+> | «Cron Calendario» (W2) | `/api/cron/calendar-dispatch` | 🔻 en retirada → `vercel.json` |
+> | queue-drain (W4) | `/api/cron/queue-drain` | 🔻 en retirada → `vercel.json` |
+> | **W1 · delivery-webhook** | domicilios | ✅ **SIGUE ACTIVO** |
+> | W3 · google-contacts-sync | Google Contacts | ⏸️ diferido (Fase 3) |
+>
+> **Ojo con los nombres:** el nombre del fichero no es el nombre que se ve en n8n.
+> `cron_reward-reminder.json` aparece como **«Cron Recordatorio de Premios»**, y
+> `cron_calendar-dispatch.json` como **«Cron Calendario»**.
+>
+> #### ⛔ El VPS NO se apaga al terminar la Fase 1
+>
+> Domicilios **no es un cron**: es un reenvío HTTP en caliente desde dos webhooks de la app
+> hacia `N8N_DOMICILIOS_WEBHOOK_URL` (`twilio-incoming/route.ts:130` y
+> `webhook/zernio/route.ts:171`). Apagar el VPS antes de la Fase 2 corta los pedidos de
+> domicilio de todos los tenants, y **los dos canales fallan distinto**:
+>
+> - **Twilio** degrada ruidosamente: el `catch` devuelve TwiML y el mesero ve
+>   *«❌ Error procesando el pedido. Intenta de nuevo en un momento.»*
+>   (`twilio-incoming/route.ts:155-157`).
+> - **Zernio** falla **en silencio**: devuelve 200 vacío y el pedido se pierde sin que nadie
+>   se entere (`webhook/zernio/route.ts:186`). Es exactamente el fallo que denuncia §24.
+>
+> El VPS se apaga **solo cuando la Fase 2 esté en producción** (decisión del dueño,
+> 2026-09-02). Hasta entonces sigue encendido sirviendo W1.
+>
+> #### Procedimiento de apagado de los 5 Schedule Trigger
+>
+> Se hace **en el mismo movimiento** que el despliegue de los crons, no después:
+>
+> 1. Desplegar `main` a producción con Pro activo y comprobar `vercel crons ls` (5 entradas).
+> 2. En la UI de n8n, desactivar el toggle de los 5 workflows de la tabla de arriba.
+> 3. **Comprobarlo en la propia UI de n8n** — que quedaron inactivos se verifica, no se asume.
+> 4. Dejar W1 (delivery-webhook) **encendido**.
+
 > **Desde v2.3.0 (multitenant) n8n deja de necesitar variables por-cliente.** Con un solo
 > Vercel project, todos los tenants comparten la misma URL base y los mismos secrets — n8n
 > distingue de qué cliente es cada request por el campo `tenant_slug` (W1) o por procesar TODOS
@@ -426,10 +551,13 @@ curl -X POST https://n8n.almojabananet.me/webhook-test/[path-del-webhook] \
 
 ---
 
-### W2 · calendar-dispatch (activo — v2.1.0)
+### W2 · calendar-dispatch (🔻 en retirada — activo hasta el despliegue de la Fase 1)
 
 **Propósito:** Disparar el auto-envío de eventos del calendario cada 15 minutos.
-No está en `vercel.json` porque `*/15` requiere plan Vercel Pro. (Lo del "3er cron" quedó obsoleto — ver corrección del 2026-09-02.)
+Desde 2026-09-02 esta cadencia vive en `vercel.json` (§2); el workflow «Cron Calendario»
+sigue activo hasta que se despliegue y se apague su Schedule Trigger. La cadencia `*/15`
+sigue exigiendo plan Pro — lo que quedó obsoleto es lo del "3er cron": el límite de Hobby
+es la frecuencia, no la cantidad (corrección del 2026-09-02).
 
 **Nodo 1 — Schedule Trigger:**
 - Trigger Interval: `Minutes` → cada `15`
@@ -526,12 +654,13 @@ Fire-and-forget — si falla, el check-in/delivery NO se rompe (timeout 10s, log
 
 ---
 
-### W4 · queue-drain (activo — v2.13.0)
+### W4 · queue-drain (🔻 en retirada — activo hasta el despliegue de la Fase 1)
 
 **Propósito:** drenar la cola de goteo (`send_queue`). Desde el Bloque 2, una campaña que no cabe en
 el presupuesto de línea del día no pierde a los destinatarios sobrantes: los encola, y este workflow
-los va enviando en los días siguientes. Tampoco está en `vercel.json` — una cadencia `*/15` en Vercel
-exigiría plan Pro, y `"crons": []` es la decisión vigente desde 2026-07-05 (ver §2).
+los va enviando en los días siguientes. Desde 2026-09-02 esta cadencia está declarada en
+`vercel.json` (ver §2); la cadencia `*/15` sigue exigiendo plan Pro. El Schedule Trigger de n8n
+sigue siendo el disparador vivo hasta que se despliegue la Fase 1 y se apague.
 
 **Nodo 1 — Schedule Trigger:**
 - Trigger Interval: `Custom (Cron)` → `*/15 * * * *`
@@ -559,12 +688,17 @@ Si llega `{"error":"No autorizado"}` → el `CRON_SECRET` no coincide entre n8n 
 > **Requiere la migración `00038_send_queue_drain.sql` aplicada.** Sin ella el endpoint responde 500
 > (`claim_send_queue` no existe). Aplicar primero `00037` y luego `00038` en el SQL Editor.
 
-### Crons de birthday/reactivation vía n8n
+### Crons de birthday/reactivation vía n8n (🔻 en retirada)
 
-> **Mecanismo oficial desde 2026-07-05** (antes corría en paralelo con Vercel nativo,
-> causando doble disparo — ver nota en §2). `vercel.json` tiene `"crons": []`: n8n es
-> ahora el ÚNICO disparador de estos dos. Confirmar en cada workflow ("Cron Birthday",
-> "Cron Reactivación") la zona horaria real del Schedule Trigger — puede no ser UTC.
+> **Mecanismo oficial entre 2026-07-05 y 2026-09-02** (antes corría en paralelo con Vercel
+> nativo, causando doble disparo — ver la nota histórica de §2). Desde el 2026-09-02 los dos
+> están declarados en `vercel.json`; n8n sigue siendo el disparador vivo únicamente hasta que
+> se despliegue la Fase 1 y se apaguen los workflows **«Cron Cumpleaños»** y
+> **«Cron Reactivación»**. Lo que sigue documenta ese estado de transición.
+>
+> Antes de apagarlos, confirmar en la pestaña *Executions* de cada workflow la hora real a la
+> que dispararon — es la única forma de saber la zona horaria efectiva de la instancia (los
+> JSON no declaran `timezone`). Ver la nota UTC de §1.
 >
 > **v2.4.0 — onboarding sin tocar n8n:** `/api/cron/birthday` y `/api/cron/reactivation`
 > ahora aceptan `?tenant=slug` **opcional**. Si se omite, procesan TODOS los tenants activos
@@ -585,7 +719,10 @@ Si llega `{"error":"No autorizado"}` → el `CRON_SECRET` no coincide entre n8n 
 - HTTP Request: `POST {{$env.APP_URL}}/api/cron/reactivation` (sin `?tenant=` → todos los clientes)
 - Header: `Authorization: Bearer {{$env.CRON_SECRET}}`
 
-> Si se migran, eliminar esas entradas de `vercel.json` para evitar doble disparo.
+> ⚠️ **Instrucción invertida el 2026-09-02.** Antes decía *"si se migran, eliminar esas
+> entradas de `vercel.json`"*. Ahora es al revés: las entradas de `vercel.json` son el destino,
+> y lo que se apaga es el Schedule Trigger de n8n. Seguir la frase antigua desharía la
+> migración. Procedimiento correcto: el bloque de retirada al principio de §5.
 
 ---
 
@@ -800,7 +937,7 @@ El orden importa: al revés se envía desde el master.
 
 | Servicio | Plan | USD/mes | Notas |
 |----------|------|:-------:|-------|
-| Vercel | Hobby (gratis) | $0 | Hasta 100 GB bandwidth. Suficiente para 1 restaurante. |
+| Vercel | Hobby (gratis) → **Pro** | $0 → **$20/mes por EQUIPO** | Hobby **prohíbe el uso comercial** y no admite crons `*/15`. Pro se cobra por equipo, no por proyecto: los $20 cubren los ~20 proyectos de `josemorenosos-projects` (producto + AIOS), con $20 de crédito de uso incluido. Repartido entre clientes es ~$1/cliente. Ver §25 de requerimientos. |
 | Supabase | Free tier | $0 | 500 MB DB, 2 GB storage, 50K auth users. |
 | VPS n8n | Compartido entre clientes | ~$3-5 | Un VPS de $15-20/mes para 3-5 clientes. |
 | Dominio | Opcional | $0-1 | Vercel subdomain gratis o dominio custom. |
@@ -853,7 +990,11 @@ El orden importa: al revés se envía desde el master.
 | Riesgo | Probabilidad | Impacto | Mitigación |
 |--------|:-----------:|:-------:|------------|
 | Quality rating Twilio degradado (opt-outs > 0.5%) | Media | Alto | Cap mensual 3 msg/cliente, copy no agresivo, botón SALIR en todas las MARKETING |
-| n8n VPS caído = domicilios no se registran + calendar no dispara | Media | Alto | Monitoreo del VPS, health check alertas, botón "Enviar ahora" en dashboard como fallback |
+| n8n VPS caído = domicilios no se registran (+ los 5 crons, hasta que se despliegue la Fase 1) | Media | Alto | Monitoreo del VPS, health check alertas, botón "Enviar ahora" en dashboard como fallback. La Fase 1 saca los 5 crons del VPS; domicilios sigue dependiendo de él hasta la Fase 2 (§25) |
+| **Push a `main` con el equipo en plan Hobby** — `vercel.json` declara dos crons `*/15` que Hobby rechaza | Alta si se pushea antes de tiempo | Alto | El build falla con *"Hobby accounts are limited to daily cron jobs"*. No tumba producción (Vercel mantiene el último deploy bueno) pero **bloquea todo deploy posterior**. Confirmar Pro activo ANTES del push (§2) |
+| **Doble disparo** — un cron en `vercel.json` y su Schedule Trigger de n8n encendidos a la vez | Alta si el apagado se deja "para después" | Medio | Apagar los 5 triggers en el MISMO movimiento del despliegue y comprobarlo en la UI de n8n (§5). Solo `queue-drain` es inmune por diseño (`FOR UPDATE SKIP LOCKED`) |
+| **Zona horaria de n8n no verificada** — los JSON no declaran `timezone`; si la instancia no era UTC, la migración mueve la hora de envío 5 h | Baja | Medio | Mirar la hora de la última ejecución en *Executions* de «Cron Cumpleaños» antes de desplegar (§1, nota UTC) |
+| Cron cortado a media tanda por el límite de 300 s — `birthday`, `reactivation` y `calendar-dispatch` recorren su audiencia en bucle secuencial, sin tope de filas y con una llamada de red por cliente | Baja hoy, sube con el volumen | Medio | Con n8n el timeout era del cliente y la función seguía viva; con Vercel Cron corta la plataforma. Los tenants se procesan en paralelo (`Promise.allSettled`), así que escala con el tenant más grande, no con la suma. Si aparece, declarar `maxDuration` o paginar |
 | Supabase Free tier límite (500 MB) | Baja | Medio | Migrar a Pro ($25/mes) cuando se acerque al límite |
 | Plantillas `twilio/media` sin aprobar por Meta | Alta | Medio | El calendario funciona; solo el envío con imagen/video queda bloqueado |
 | CRON_SECRET no configurado en Vercel | Baja | Alto | `validateCronSecret()` rechaza todo con 401 — verificar en pre-launch |

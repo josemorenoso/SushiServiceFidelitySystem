@@ -1,3 +1,9 @@
 {
-  "crons": []
+  "crons": [
+    { "path": "/api/cron/birthday", "schedule": "0 13 * * *" },
+    { "path": "/api/cron/reactivation", "schedule": "0 15 * * *" },
+    { "path": "/api/cron/reward-reminder", "schedule": "0 16 * * *" },
+    { "path": "/api/cron/calendar-dispatch", "schedule": "*/15 * * * *" },
+    { "path": "/api/cron/queue-drain", "schedule": "*/15 * * * *" }
+  ]
 }

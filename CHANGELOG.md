@@ -5,6 +5,59 @@
 
 ---
 
+## [2026-09-02 23:40] - Fase 1 de §25: los 5 crons vuelven a `vercel.json` (commit local, SIN push)
+
+### Tipo de cambio
+- **ADDED**: `vercel.json` declara los 5 crons del producto. Era literalmente `{"crons": []}`.
+- **CHANGED**: `docs/04-deployment.md` — §1, §2, §5, §8 y §9 reescritos donde afirmaban que `vercel.json` estaba vacío y que n8n era el disparador único.
+- **CHANGED**: 5 docs satélite que repetían la misma afirmación (`API_DOCS.md`, `campaigns.md`, `calendar.md`, `send-governance.md`, `reward-grants.md`) y 2 comentarios de cabecera en los `route.ts` de los crons.
+- **FIXED**: §25.4 de requerimientos tenía la **advertencia de zona horaria invertida** — mandaba sumar 5 horas y eso habría desplazado los tres crons diarios.
+- **FIXED**: dos afirmaciones que ya eran falsas **desde julio de 2026** y que nadie había corregido (ver «Lo que ya mentía»).
+
+### Archivos afectados
+- `vercel.json` - de `{"crons": []}` a 5 entradas: birthday `0 13 * * *`, reactivation `0 15 * * *`, reward-reminder `0 16 * * *`, calendar-dispatch `*/15 * * * *`, queue-drain `*/15 * * * *`.
+- `docs/04-deployment.md` - cabecera; diagrama de §1 (los 5 endpoints + el estado real de `vercel.json`); nota UTC/Colombia reescrita con el supuesto explícito y la prueba empírica; fila del plan en §2; sección canónica «Crons en `vercel.json`» reescrita entera (las 3 condiciones para que «declarado» pase a «disparando» + duración de funciones); §5 con el bloque de retirada, la tabla de nombres reales de los workflows y el procedimiento de apagado; W2 y W4 remarcados; §8 fila de costo Vercel (Hobby → Pro); §9 con 4 riesgos nuevos.
+- `docs/API_DOCS.md` - las 5 filas del índice ahora llevan su cadencia + bloque de «quién dispara»; bloques de `reward-reminder` y `calendar-dispatch` corregidos; nota de `?tenant=`; nota del auto-envío del calendario.
+- `docs/features/campaigns.md` - la nota fechada de 2026-07-05 se marca superada (no se borra) y se añade la nota de la vuelta atrás.
+- `docs/features/calendar.md` - las 3 apariciones de «lo dispara n8n / no está en vercel.json».
+- `docs/features/send-governance.md` - sección «El drenador» + por qué `queue-drain` es el único inmune al doble disparo + lista de archivos tocados.
+- `docs/features/reward-grants.md` - fila de la tabla de endpoints, checklist y sección nueva «Disparo del cron de recordatorio».
+- `src/app/api/cron/queue-drain/route.ts` - **solo comentarios** de cabecera. Cero lógica.
+- `src/app/api/cron/reward-reminder/route.ts` - **solo comentarios** de cabecera. Cero lógica.
+- `docs/requerimientos/REQUERIMIENTOS_AGOSTO_2026.md` - §25.4 corregida; §25.7 pasa de «preguntas abiertas» a «respondidas»; §25.8 nueva con el estado de ejecución de las 3 fases.
+- `CLAUDE.md` - filas de lookup de `vercel.json` y `n8n/*.json`.
+
+### Descripción detallada
+
+**Solo configuración.** Ni una línea de lógica de negocio. Los únicos `.ts` tocados lo son en comentarios de cabecera que habrían quedado mintiendo.
+
+**Por qué no hizo falta código.** Verificado endpoint por endpoint: los 5 exportan `GET` (`birthday:149`, `reactivation:395`, `reward-reminder:244`, `calendar-dispatch:58`, `queue-drain:112`) además de `POST`, y `validateCronSecret()` (`src/lib/validators/cron.ts:8-18`) espera `Authorization: Bearer $CRON_SECRET`, que es exactamente el header que Vercel Cron manda solo. n8n los llamaba por `POST` **sin body**, y ninguno de los 5 lee el body — no hay una sola llamada a `request.json()`/`.text()`/`formData()` en los cinco archivos. El cambio `POST`→`GET` es semánticamente nulo. Ninguno lleva `?tenant=`, así que siguen recorriendo todos los tenants activos: **una entrada por endpoint, no una por cliente**.
+
+**La zona horaria: §25 lo tenía al revés.** §25.4 advertía que los workflows de n8n corrían en hora de Bogotá y que había que **sumar 5 horas**. Los propios JSON del repo dicen lo contrario — las expresiones diarias **ya llevan la conversión a UTC horneada**: `n8n/cron_reward-reminder.json:20` anota textualmente *"16:00 UTC = 11:00 Colombia"*, `cron_queue-drain.json:20` aclara que *"los crons diarios llevan la conversión UTC→Colombia dentro de la expresión"*, y los nodos se llaman «Diario 8am» (`0 13`), «Diario 10am» (`0 15`) y «Diario 11:00» (`0 16`). Copiar verbatim es lo correcto; sumar 5 h habría mandado los cumpleaños a la 1pm. Corregido en §25.4 y documentado en la nota UTC de §1.
+
+Lo que **no** se puede resolver desde el repo: ninguno de los 5 JSON declara clave `timezone` (su `settings` solo trae `executionOrder`), así que la hora efectiva dependía del `GENERIC_TIMEZONE` de la instancia. Se toma la intención documentada como supuesto **explícito** (decisión del dueño: *"irrelevante, pon la más adecuada"*), y queda anotada la prueba empírica de 30 segundos: mirar la hora de la última corrida en *Executions* de «Cron Cumpleaños».
+
+**Declarado no es disparando — y por eso no hay push.** El equipo `josemorenosos-projects` estaba en plan **Hobby**, que solo admite crons diarios: una expresión `*/15` **hace fallar el build** (*"Hobby accounts are limited to daily cron jobs"*). Un build roto en `main` no tumba producción —Vercel mantiene el último deploy bueno— pero **bloquea cualquier deploy posterior**. Por eso la Fase 1 se queda commiteada en local y el push espera confirmación de que Pro está activo.
+
+**Lo que ya mentía antes de este cambio.** Dos afirmaciones llevaban falsas desde el 2026-07-05 y sobrevivieron dos meses: `API_DOCS.md:784` y `calendar.md:269` decían que *"birthday y reactivation siguen como crons de Vercel"* cuando se habían movido a n8n y `vercel.json` estaba vacío. Ambas repetían además que el límite de Hobby era la **cantidad** de crons; es la **frecuencia** (100 crons por proyecto en todos los planes, 1 vez al día en Hobby). Corregidas de paso.
+
+**El riesgo de secuencia, escrito donde se va a leer.** Apagar el VPS de n8n al terminar la Fase 1 rompería domicilios, y de forma asimétrica: en Twilio el mesero **ve** un error (`twilio-incoming/route.ts:155-157` devuelve TwiML *"❌ Error procesando el pedido"*), pero en Zernio el pedido **se pierde en silencio** — `webhook/zernio/route.ts:186` devuelve 200 vacío. Es el fallo que denuncia §24. Queda escrito en §5 de deployment: se apagan los 5 Schedule Trigger, **no el VPS**; el VPS cae después de la Fase 2.
+
+**Qué NO se hizo, a propósito (Mandamiento I).** No se añadió `maxDuration` a los 4 crons que no lo declaran, aunque el cambio de disparador cambia quién corta: con n8n el timeout era del cliente y la función seguía viva; con Vercel Cron corta la plataforma a los 300 s. Añadirlo es código y nadie lo pidió — queda como riesgo anotado en §9. Tampoco se añadió la clave `$schema` a `vercel.json`, para que el archivo sea el calco literal de lo aprobado en §25.4. Y no se tocaron los 4 archivos de `docs/archive/` que mencionan `vercel.json`: están archivados por definición.
+
+### Pendiente
+- **El push.** Espera confirmación de que el plan Pro está activo. Después: push a `main` → verificar que el build no falla → `vercel crons ls` debe listar las 5 entradas → `vercel crons run /api/cron/birthday` y revisar el log → apagar los 5 Schedule Trigger en n8n y **comprobarlo en su UI** (no asumirlo). Vercel Cron solo corre en deployments de producción, nunca en previews.
+- **Antes del push, 30 segundos bien gastados:** confirmar en *Executions* de n8n la hora real de disparo, por si la instancia no estaba en UTC.
+- **Fase 2 (domicilios) sin empezar.** Bloquea el apagado del VPS. Al hacerla, arreglar el fallo silencioso de `webhook/zernio:186`.
+- `docs/archive/` conserva 4 ficheros con afirmaciones sobre `vercel.json` (dos con horarios equivocados). Son archivo histórico; se dejan como están.
+
+### Request original
+> "Vamos a migrar todo el sistema de N8N hacia Vercel, voy a ir comprando la suscripción pero tu tienes que documentar todo, dame el promt para hacerlo en otra sesión"
+>
+> Y en esta sesión, sobre la ejecución de la Fase 1: *"Fase 1: dejar TODO listo (vercel.json + docs + CHANGELOG) y commitear en local, SIN PUSH. El push y el deploy esperan a que el dueño confirme que Pro está activo."* · Sobre la zona horaria: *"irrelevante, pon la más adecuada"*.
+
+---
+
 ## [2026-09-02 01:05] - §23.bis: el multi-sede verificado contra la base real, la cuarta vía y 8 preguntas nuevas
 
 ### Tipo de cambio

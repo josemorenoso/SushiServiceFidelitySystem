@@ -68,7 +68,7 @@ posteriores al escaneo — cuando el cliente todavía no había elegido su premi
 
 1. El cron agresivo envía el WhatsApp y **otorga el premio** con `expires_at = hoy + N días`.
 2. El cliente ve *"Disponible: 1/2 sushi gratis — vence en 3 días"* en su tarjeta, cada vez que la abre.
-3. Si no vuelve, a los `N - días_antes` recibe **un** recordatorio (cron n8n, sujeto al cap mensual).
+3. Si no vuelve, a los `N - días_antes` recibe **un** recordatorio (cron diario, sujeto al cap mensual).
 4. Cuando vuelve y el mesero lo escanea, el premio **le salta en la pantalla** → un toque, entregado.
 5. Si no vuelve nunca, el grant queda `expired` y cuenta en "Vencidos sin reclamar".
 
@@ -82,7 +82,7 @@ posteriores al escaneo — cuando el cliente todavía no había elegido su premi
 | `POST` | `/api/mystery-box/resolve` | Pública | Ahora otorga el grant además del resultado |
 | `GET/POST/PATCH/DELETE` | `/api/dashboard/campaign-rewards` | Admin | CRUD del catálogo |
 | `GET` | `/api/dashboard/redemptions/summary` | Admin | Ahora incluye métricas de grants |
-| `GET/POST` | `/api/cron/reward-reminder` | `CRON_SECRET` | Barrido de vencidos + recordatorio. **Disparado por n8n.** |
+| `GET/POST` | `/api/cron/reward-reminder` | `CRON_SECRET` | Barrido de vencidos + recordatorio. **Hoy lo dispara n8n**; ya declarado en `vercel.json` (`0 16 * * *`) — ver «Disparo del cron de recordatorio» al final. |
 
 Detalle completo en [`API_DOCS.md`](../API_DOCS.md).
 
@@ -158,7 +158,11 @@ plantilla agresiva de 4 variables sigue funcionando sin cambios.
       devuelven error (la UI degrada con un toast, no revienta).
 - [ ] **Crear las plantillas de Twilio** y aprobarlas: la agresiva necesita `{{4}}` premio y
       `{{5}}` fecha límite; el recordatorio es una plantilla nueva.
-- [ ] **Importar `n8n/cron_reward-reminder.json`** en n8n y activarlo.
+- [x] **Importar `n8n/cron_reward-reminder.json`** en n8n y activarlo. — Hecho: el workflow
+      **"Cron Recordatorio de Premios"** está activo en n8n y es quien dispara el recordatorio hoy.
+- [ ] **Desplegar `vercel.json` a producción con el plan Pro activo** y, en el **mismo movimiento**,
+      apagar el Schedule Trigger de **"Cron Recordatorio de Premios"** en n8n. Ver «Disparo del cron de
+      recordatorio» al final.
 - [ ] **Crear los premios del catálogo** en `/dashboard/campaign-rewards` y elegir uno en
       Ajustes > Premio de Reactivación Agresiva.
 
@@ -189,3 +193,32 @@ solo otorgar un grant con otro `source`.
   Ahora `staff_override` está **exento** del requisito de ancla: es un registro de auditoría escrito a mano
   (p. ej. una integración de POS), no un flujo automático, así que la protección de doble entrega no aplica
   a ese caso. El resto de orígenes siguen obligados a venir anclados.
+
+---
+
+## Disparo del cron de recordatorio (2026-09-02)
+
+`/api/cron/reward-reminder` **no cambió ni una línea de código** en este movimiento: sigue exportando `GET`
+y `POST` y sigue validando `CRON_SECRET`. Vercel Cron invoca el `GET` mandando solo el header
+`Authorization: Bearer $CRON_SECRET`, que es exactamente lo que ya espera `validateCronSecret()`. Lo único
+que cambia es **quién lo llama**.
+
+- **Hoy lo llama n8n.** El workflow **"Cron Recordatorio de Premios"** (`n8n/cron_reward-reminder.json`)
+  lo dispara a las **16:00 UTC = 11:00 de Colombia**.
+- **En este commit se declara en `vercel.json`.** El archivo, que hasta ahora era literalmente
+  `{"crons": []}`, pasa a declarar `/api/cron/reward-reminder` con **`0 16 * * *`**: un calco 1:1 de la
+  expresión que ya tenía el Schedule Trigger de n8n. **Cero cambio de cadencia y cero cambio de hora** — la
+  expresión ya estaba en UTC, no hay que sumarle las 5 horas de Colombia.
+- **Todavía no dispara desde Vercel.** El commit es local y sin push: el equipo estaba en plan Hobby, que
+  solo admite crons diarios, y las expresiones `*/15` que entran en el mismo `vercel.json`
+  (`/api/cron/calendar-dispatch` y `/api/cron/queue-drain`) hacen **fallar el build**. El push espera a que
+  el dueño confirme que el plan Pro está activo. Es decir: **queda declarado en `vercel.json`; el disparo
+  efectivo empieza cuando se despliegue a producción con Pro activo.**
+
+> ⚠️ **Un cron en `vercel.json` y su Schedule Trigger de n8n encendidos a la vez = doble disparo.** Por eso
+> el trigger de "Cron Recordatorio de Premios" se apaga en el **mismo movimiento** del despliegue, ni antes
+> ni después. Hoy sigue encendido, que es lo correcto mientras Vercel no dispare.
+
+El VPS de n8n **no se apaga**: sigue sirviendo los domicilios (webhook en caliente hacia
+`N8N_DOMICILIOS_WEBHOOK_URL`). Sólo se apagan los Schedule Trigger de los crons migrados; esa es la Fase 2
+y aún no ha ocurrido.

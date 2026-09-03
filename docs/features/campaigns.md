@@ -26,7 +26,7 @@
 
 ---
 
-## Nota de infraestructura (v1.4.1 — 2026-07-05)
+## Nota de infraestructura (v1.4.1 — 2026-07-05) — ⚠️ superada el 2026-09-02, ver abajo
 
 `/api/cron/birthday` y `/api/cron/reactivation` (lógica de negocio sin cambios, ver más abajo)
 eran invocados EN PARALELO por dos disparadores: el cron nativo de Vercel (`vercel.json`) y un
@@ -34,6 +34,28 @@ workflow n8n del mismo nombre. El código ya los des-duplicaba vía `hasRecentCa
 (el cliente final nunca recibió mensajes repetidos), pero se decidió dejar **n8n como único
 disparador** para simplificar operación y eliminar el riesgo latente de carrera. `vercel.json`
 quedó con `"crons": []`. Detalle completo → `docs/04-deployment.md` §2 y §5.
+
+## Nota de infraestructura (2026-09-02) — la vuelta atrás
+
+La decisión de julio se revierte: los **5 crons vuelven a `vercel.json`** (`birthday` a las
+`0 13 * * *`, `reactivation` a las `0 15 * * *`, más `reward-reminder`, `calendar-dispatch` y
+`queue-drain`). Las cadencias son un calco 1:1 de las que ya tenían los Schedule Trigger de n8n:
+**cero cambio de horario y cero cambio de código de negocio** — los endpoints ya exportaban `GET`
+y Vercel Cron manda exactamente el `Authorization: Bearer $CRON_SECRET` que valida
+`validateCronSecret()`.
+
+**Por qué se revierte** (§25.1 de requerimientos): n8n es un punto único de fallo sin alarma —
+si el VPS se cae se detienen cumpleaños, reactivación, recordatorios, calendario y la cola de
+goteo, y nadie se entera; el de cumpleaños ni siquiera es recuperable. Y el plan **Hobby de
+Vercel prohíbe el uso comercial**, que es exactamente lo que este producto hace.
+
+**Estado real:** el commit es local y sin push. Hoy el disparador vivo **sigue siendo n8n**; el
+disparo por Vercel empieza al desplegar a producción con plan Pro activo.
+
+> **La lección de julio no se tira, se convierte en regla:** por cada entrada que se agrega a
+> `vercel.json` se apaga su Schedule Trigger en n8n **en el mismo movimiento**, y se comprueba en
+> la UI de n8n. Los dos encendidos a la vez = doble disparo. Y ojo: `hasRecentCampaignMessage()`
+> protege a `birthday` y `reactivation`, pero `calendar-dispatch` no tiene equivalente.
 
 ---
 

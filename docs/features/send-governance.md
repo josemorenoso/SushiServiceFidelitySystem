@@ -193,9 +193,30 @@ vacía. Marcarla `completed` con 200 pendientes le mentiría al operador.
 
 ## El drenador
 
-`POST /api/cron/queue-drain` — **lo dispara n8n cada 15 min** (workflow W4,
-`n8n/cron_queue-drain.json`), no Vercel: `vercel.json` tiene `"crons": []` a propósito desde
-2026-07-05 (ver `docs/04-deployment.md` §2).
+`POST`/`GET /api/cron/queue-drain` — se dispara **cada 15 min**.
+
+> **Quién lo dispara — histórico (hasta 2026-09-02).** El único disparador era n8n (workflow W4,
+> `n8n/cron_queue-drain.json`), no Vercel: `vercel.json` tenía `"crons": []` desde el 2026-07-05, la
+> decisión que zanjó el doble disparo de `birthday`/`reactivation` (ver `docs/04-deployment.md` §2).
+> Para `queue-drain` pesaba además otra razón: el equipo de Vercel estaba en plan **Hobby**, que solo
+> admite crons diarios — una expresión `*/15` hace **fallar el build**.
+>
+> **Cambio del 2026-09-02.** `vercel.json` ya **declara** los 5 crons, `queue-drain` entre ellos, con la
+> cadencia calcada 1:1 de los Schedule Trigger de n8n (`*/15 * * * *`): **cero cambio de cadencia**.
+> Vercel Cron invoca **GET** y manda solo `Authorization: Bearer $CRON_SECRET`, que es exactamente lo
+> que valida `validateCronSecret()`, y el endpoint ya exportaba `GET` y `POST` — por eso **no cambia una
+> sola línea de código de negocio**.
+>
+> **Estado real:** el commit es **local y sin push**; el disparo efectivo empieza cuando esto se
+> despliegue a producción **con el plan Pro activo**. Hasta entonces, quien dispara sigue siendo n8n.
+>
+> ⚠️ **Un cron en `vercel.json` y su Schedule Trigger de n8n activos a la vez = doble disparo** — es
+> la misma piedra de julio. Por eso los 5 triggers de n8n ("Cron Cumpleaños", "Cron Reactivación",
+> "Cron Recordatorio de Premios", "Cron Calendario" y el de la cola de goteo) se apagan en el **mismo
+> movimiento** del despliegue. Hoy siguen encendidos.
+>
+> El VPS de n8n **no se apaga**: sigue sirviendo domicilios (W1, webhook en caliente desde
+> `twilio-incoming` y `zernio` hacia `N8N_DOMICILIOS_WEBHOOK_URL`). Eso es la Fase 2 y aún no está hecha.
 
 Orden de trabajo de cada invocación:
 
@@ -215,12 +236,17 @@ Devuelve `{ processed, sent, failed, skipped, expired, tenants, has_more, cursor
 
 ### El reclamo (claim) — por qué existe
 
-n8n dispara cada 15 min, pero una invocación lenta puede solaparse con la siguiente, y n8n reintenta
+El disparo es cada 15 min, pero una invocación lenta puede solaparse con la siguiente, y n8n reintenta
 ante un timeout de red. Sin protección, las dos corridas leen los mismos items `queued` y **el
 cliente recibe el mensaje dos veces**.
 
 `claim_send_queue()` lo resuelve con `FOR UPDATE SKIP LOCKED`: la segunda invocación **salta** las
 filas que la primera bloqueó, en vez de esperarlas. Las dos se reparten la cola.
+
+Esto hace de `queue-drain` el **único** de los 5 crons que tolera un doble disparo: si por accidente
+quedaran activos a la vez el cron de Vercel y el Schedule Trigger de n8n, se repartirían la cola en vez
+de duplicar envíos. **Los otros 4 no tienen esa garantía** — por eso el apagado de los triggers de n8n
+va en el mismo movimiento del despliegue, no después.
 
 El estado de "reclamado" es un **arriendo** (`claimed_at`), no un estado nuevo en el CHECK de
 `status`. Un arriendo vencido (10 min) se vuelve a tomar solo, así que un drenador que muera a mitad
@@ -330,7 +356,9 @@ Corregido en el bloque 13 de `00037` (la migración **no estaba aplicada** todav
 - `src/app/api/cron/queue-drain/route.ts`
 - `src/app/api/dashboard/line-budget/route.ts`, `send-queue/route.ts`, `send-queue/[id]/route.ts`
 - `src/app/api/dashboard/campaigns/manual/route.ts` (split enviar-hoy / encolar)
-- `n8n/cron_queue-drain.json` (W4)
+- `n8n/cron_queue-drain.json` (W4 — disparador vigente hasta que el despliegue con Pro encienda el cron
+  de Vercel y se apague este trigger)
+- `vercel.json` (declara el cron `*/15 * * * *` de `queue-drain` desde 2026-09-02)
 - `tests/` — ver `docs/features/testing.md`
 
 ## Pendiente (bloques siguientes del spec)

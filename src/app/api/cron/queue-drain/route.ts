@@ -5,9 +5,17 @@
  * Feature doc: docs/features/send-governance.md
  * Workflow n8n: n8n/cron_queue-drain.json (W4)
  *
- * ⚠️ NO LO DISPARA VERCEL. `vercel.json` tiene `"crons": []` a propósito desde
- * 2026-07-05: los crons corrían duplicados (Vercel nativo + n8n a la vez) y se
- * dejó n8n como disparador único. Ver docs/04-deployment.md §2 y §5.
+ * ⚠️ HISTÓRICO (2026-07-05): `vercel.json` estuvo en `"crons": []` a propósito
+ * porque los crons corrían duplicados (Vercel nativo + n8n a la vez) y se dejó
+ * n8n como disparador único. De ahí sale la regla que SIGUE VIGENTE: un cron en
+ * `vercel.json` y su Schedule Trigger de n8n encendidos a la vez = doble disparo.
+ *
+ * 2026-09-02: este cron vuelve a quedar DECLARADO en `vercel.json`, con la misma
+ * cadencia de 15 minutos que ya tenía el Schedule Trigger de n8n (calco 1:1, cero
+ * cambio de cadencia). El disparo efectivo empieza cuando se despliegue a
+ * producción con el plan Pro activo, y en ESE MISMO movimiento se apaga el
+ * Schedule Trigger de n8n/cron_queue-drain.json. Hasta entonces el disparador
+ * vivo sigue siendo n8n. Ver docs/04-deployment.md §2 y §5.
  * Cadencia: cada 15 minutos.
  *
  * QUÉ HACE, EN ORDEN
@@ -68,7 +76,7 @@ function getServiceClient() {
 
 /**
  * Presupuesto de tiempo por invocación (spec §3.4). Se corta solo y devuelve
- * `has_more`; la siguiente corrida de n8n (15 min después) sigue donde quedó.
+ * `has_more`; la siguiente corrida del cron (15 min después) sigue donde quedó.
  */
 const TIME_BUDGET_MS = 50_000
 

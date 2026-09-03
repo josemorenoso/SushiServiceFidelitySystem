@@ -2,7 +2,7 @@
 
 > Estado: 🟢 Operativo. Plantilla de imagen **aprobada por Meta** en la cuenta master.
 > Migración: `supabase/migrations/00012_calendar_events_and_media.sql`
-> Última actualización: 2026-08-21 (v2.8.3)
+> Última actualización: 2026-09-02 (los 5 crons quedan declarados en `vercel.json`; el disparo sigue en n8n hasta el despliegue con Pro)
 
 ## Fixes v2.8.3 (2026-08-21) — por qué el calendario "no hacía nada"
 
@@ -239,7 +239,7 @@ El admin puede hacer override con `force: true` si entiende el trade-off.
 | Service extendido (a modificar) | `src/services/campaign.service.ts` — añade `filterByMonthlyCap`, `filterByBlackout`, `getActiveBlackouts` |
 | Twilio service (a modificar) | `src/services/whatsapp.service.ts` — soporte `mediaUrl` |
 | Endpoints | `src/app/api/dashboard/calendar/{events,events/[id],events/[id]/dispatch,media-upload}/route.ts` |
-| Cron | `src/app/api/cron/calendar-dispatch/route.ts` — disparado por n8n self-hosted (Schedule cada 15 min → HTTP POST con Bearer `CRON_SECRET`). No está en `vercel.json`. |
+| Cron | `src/app/api/cron/calendar-dispatch/route.ts` — declarado en `vercel.json` (`*/15 * * * *`) desde 2026-09-02, pero hoy lo sigue disparando el workflow de n8n "Cron Calendario" (Schedule cada 15 min → HTTP POST con Bearer `CRON_SECRET`). El disparo por Vercel empieza cuando se despliegue a producción con plan Pro activo; en ese mismo movimiento se apaga el Schedule Trigger de n8n (los dos activos a la vez = doble disparo). |
 | UI (a crear) | `src/app/(dashboard)/dashboard/calendar/page.tsx` + `src/components/dashboard/Calendar/*` |
 | Constantes (a modificar) | `src/constants/rewards.ts` — añadir `MONTHLY_MARKETING_CAP=3`, `DEFAULT_PRE_EVENT_BLACKOUT_DAYS=5` |
 | Setup Twilio (a modificar) | `scripts/twilio-setup.mjs` — crear las 2 plantillas `twilio/media` |
@@ -266,7 +266,9 @@ Estos componentes están implementados pero dependen de que Meta apruebe las pla
 - [x] Plantillas Twilio `event_template_image` y `event_template_video` vía `scripts/twilio-create-media-templates.mjs`
 - [x] Soporte `mediaUrl` en `sendTemplateMessage` ([src/services/whatsapp.service.ts](../../src/services/whatsapp.service.ts))
 - [x] `executeAutoEvent` en `calendar.service.ts` (el path de envío)
-- [x] Cron `/api/cron/calendar-dispatch` disparado por **n8n self-hosted** (Schedule cada 15 min → HTTP POST con `Authorization: Bearer CRON_SECRET`). NO está en `vercel.json` a propósito: `*/15` + ser el 3er cron exigiría plan Vercel Pro. birthday/reactivation siguen en Vercel cron (2 crons diarios → caben en Hobby).
+- [x] Cron `/api/cron/calendar-dispatch`, disparado hoy por **n8n self-hosted** (workflow "Cron Calendario": Schedule cada 15 min → HTTP POST con `Authorization: Bearer CRON_SECRET`).
+  - *Histórico (hasta 2026-09-01):* estaba fuera de `vercel.json` porque una cadencia `*/15` exige plan Vercel Pro — el límite de Hobby es la **frecuencia** (1 vez al día), no la cantidad de crons (100 por proyecto en todos los planes). Y birthday/reactivation tampoco "seguían en Vercel cron": se habían movido a n8n el 2026-07-05 y `vercel.json` quedó en `{"crons": []}`.
+  - **2026-09-02:** `vercel.json` vuelve a declarar los 5 crons y `calendar-dispatch` entra con `*/15 * * * *` — calco 1:1 de la expresión que ya tenía su Schedule Trigger en n8n, cero cambio de cadencia y cero cambio de código de negocio (el endpoint ya exportaba GET, y Vercel Cron invoca GET mandando solo `Authorization: Bearer $CRON_SECRET`, justo lo que valida `validateCronSecret()`). El commit es **local y sin push**: con plan Hobby una expresión `*/15` hace fallar el build, así que el disparo efectivo empieza cuando se despliegue a producción con Pro activo. En ese mismo movimiento se apagan los 5 Schedule Trigger de n8n — un cron en `vercel.json` y su trigger de n8n activos a la vez = **doble disparo**. Se apagan los triggers, no el VPS: n8n sigue sirviendo domicilios.
 - [x] Dispatch manual `POST /api/dashboard/calendar/events/[id]/dispatch` + botón "Enviar ahora"/"Reintentar" en `EventDetailDrawer`
 - [x] Alerta en `EventDetailDrawer` cuando falta `event_template_image_sid` / `event_template_video_sid`
 - [ ] Modificaciones a crons existentes:
@@ -297,7 +299,7 @@ El pipeline de envío está implementado. Las plantillas `twilio/media` se crean
 - Planificar eventos con metadata y media en el calendario
 - Listar/editar/cancelar desde el dashboard
 - Calcular cap mensual y blackouts sobre la audiencia
-- Pipeline de envío automático vía `calendar-dispatch`, disparado por n8n self-hosted (Schedule cada 15 min → HTTP POST con Bearer `CRON_SECRET`)
+- Pipeline de envío automático vía `calendar-dispatch`, hoy disparado por n8n self-hosted ("Cron Calendario": Schedule cada 15 min → HTTP POST con Bearer `CRON_SECRET`) y ya declarado en `vercel.json` (`*/15 * * * *`); el disparo por Vercel empieza al desplegar a producción con Pro activo, y ahí se apaga el trigger de n8n
 - Envío/reintento manual desde el dashboard (`POST .../events/[id]/dispatch`, botón "Enviar ahora")
 - Alerta visual si falta la plantilla Twilio requerida según `media_type`
 - Reemplazo dinámico de media URL al enviar (Twilio usa `mediaUrl` para sobreescribir la URL de ejemplo de la plantilla aprobada)

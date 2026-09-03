@@ -20,7 +20,12 @@ import type { Tenant } from '@/types/tenant.types'
 /**
  * Cron de recordatorio de vencimiento de premio.
  *
- * Disparado por n8n (igual que reactivation y birthday; `vercel.json` está en `crons: []`).
+ * Disparador: hoy n8n ("Cron Recordatorio de Premios"), igual que reactivation y birthday.
+ * Desde 2026-09-02 también queda DECLARADO en `vercel.json` a las 16:00 UTC (= 11:00 en
+ * Colombia), calco 1:1 del Schedule Trigger de n8n: cero cambio de cadencia. El disparo
+ * efectivo empieza cuando se despliegue a producción con el plan Pro activo, y en ese mismo
+ * movimiento se apaga el Schedule Trigger de n8n — los dos encendidos a la vez = doble
+ * disparo. Hasta entonces el disparador vivo sigue siendo n8n.
  *
  * Hace dos cosas, en este orden:
  *   1. BARRIDO — marca `expired` los premios cuya fecha ya pasó. Corre SIEMPRE, aunque el

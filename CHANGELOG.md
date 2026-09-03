@@ -5,6 +5,96 @@
 
 ---
 
+## [2026-09-03 02:35] - Multi-sede F1: `restaurant_locations` pasa a SER la sede
+
+### Tipo de cambio
+- **ADDED**: `supabase/migrations/00041_locations_first_class.sql` — `restaurant_locations` deja de ser una geocerca: gana `slug`, `domain`, `config`, `is_primary`, `sort_order`; `lat`/`lon` pasan a NULLABLE con CHECK pareado; nace `restaurant_locations_id_tenant_key UNIQUE (id, tenant_id)`, el soporte de todas las FK compuestas de F2.
+- **ADDED**: `supabase/migrations/00042_sede_principal_tenants_vivos.sql` — migración de DATOS: le da su "Sede principal" a cada tenant que ya existe y le delega el subdominio ya impreso en sus QR.
+- **ADDED**: `docs/features/multi-sede.md` — doc de la feature (exigido por el Protocolo, paso 5).
+- **FIXED** (repo AIOS, commit aparte): `Level 2.0/aios-constelarys/src/lib/actions/provisioning.ts` — la sede ahora se crea SIEMPRE. Antes, sin coordenadas, el tenant nacía sin ninguna sede y en silencio.
+- **CHANGED**: `docs/DB_SCHEMA.md` — sección `restaurant_locations`, fila 9 del Índice de Tablas, fila del Resumen RLS y filas 00041/00042 del Historial de Migraciones.
+- **CHANGED**: `CLAUDE.md` — fila de lookup de `docs/features/multi-sede.md`.
+
+### Archivos afectados
+- `supabase/migrations/00041_locations_first_class.sql` — nuevo.
+- `supabase/migrations/00042_sede_principal_tenants_vivos.sql` — nuevo.
+- `docs/features/multi-sede.md` — nuevo.
+- `docs/DB_SCHEMA.md` — cuatro puntos, todos dentro del territorio de F1.
+- `CLAUDE.md` — una fila al final de la Tabla de Lookup.
+- `Level 2.0/aios-constelarys/src/lib/actions/provisioning.ts` — **otro repo** (`Cada1_AIOS`), commit propio.
+
+### Descripción detallada
+
+Implementa la **Fase 1** de `docs/superpowers/specs/2026-09-02-multisede-design.md` (§10). Es la
+fase que convierte la sede en una entidad de verdad. **Nadie la lee todavía**: ninguna línea de
+TypeScript del producto consulta las columnas nuevas — eso es F3. Por eso F1 es desplegable sola.
+
+**`restaurant_locations` era una geocerca.** Nació en la 00014 para el anti QR-scam que está
+apagado desde v1.0.5-3, y por eso `lat`/`lon` eran `NOT NULL`. Ese `NOT NULL` tenía una
+consecuencia que nadie había atado: el AIOS solo mandaba `locations[]` si venían **las dos**
+coordenadas, y `aios_provision_tenant` (00036:199-213) solo entra a su bucle si el array existe.
+Resultado: **un negocio dado de alta sin coordenadas se creaba sin NINGUNA sede, en silencio** —
+y por eso los 4 tenants vivos suman ~1 fila en toda la tabla. El arreglo es doble y va junto: la
+columna nullable (00041) **y** que el AIOS cree la sede siempre (provisioning.ts).
+
+**`restaurant_locations_id_tenant_key UNIQUE (id, tenant_id)` es el contrato con F2.** Es
+redundante para la unicidad (`id` ya es PK) e imprescindible para la referencia: Postgres exige
+que el lado referenciado de una FK compuesta tenga un índice único que cubra exactamente esas
+columnas. Sin él, la 00043 solo podría poner `FK (location_id) → id`, y **una FK simple deja
+grabar una visita de la marca A con la sede de la marca B**. El nombre no se cambia.
+
+**El subdominio ya impreso baja a la sede sin reimprimir nada.** `tenants.domain` no se toca e
+`idx_tenants_domain` (00029) sigue igual; la sede principal de cada tenant **repite** ese mismo
+dominio. Como un índice único por tabla no puede impedir que la sede de la marca A se quede con
+el dominio principal de la marca B, va un trigger de unicidad cruzada que permite el solape
+**solo dentro del mismo tenant** — que es exactamente el caso de la 00042.
+
+**El histórico se queda en NULL.** La 00042 solo escribe en `restaurant_locations` (verificado
+con un grep sobre el archivo sin comentarios, en el arnés). `visits` (~1581),
+`point_transactions` (~991), `review_events` (~685) y `customers` (~1176) no se tocan: cuando F2
+les agregue `location_id`, nace NULL y se queda NULL. NULL = "sede desconocida", y **se muestra**
+como un cubo propio llamado *"Sin sede"*, nunca se reparte ni se esconde (§4 y §12 del spec).
+
+**Los 4 tenants Twilio no se rompen.** `getTenantByDomain` sigue resolviendo por `tenants.domain`,
+las policies de RLS de la 00026 quedan idénticas, y ningún camino de envío, de check-in ni de
+campaña consulta las columnas nuevas. Después de la 00042 funcionan exactamente igual que antes.
+
+### Verificación
+
+Arnés **aislado** (`embedded-postgres` propio, en su propio directorio de datos y su propio
+puerto — el `.pgdata-test` del repo es una ruta fija que `tests/setup/global-postgres.ts:73`
+borra al arrancar, y hay otra sesión trabajando en paralelo sobre el mismo árbol):
+**62 comprobaciones en verde, 0 fallas**. Cubre las 42 migraciones aplicadas en orden, la
+estructura entera de la 00041, el `UNIQUE (id, tenant_id)` con su definición exacta, los CHECK de
+formato (rechaza `https://…`, mayúsculas, espacios, rutas y dominios de un solo label), el CHECK
+pareado de lat/lon, la unicidad de `domain` y `slug`, el trigger cruzado en INSERT **y** en
+UPDATE, el caso "tenant sin ninguna sede" de la 00042, la idempotencia de las dos migraciones
+reaplicadas dos veces y —lo que le importa a F2— **una FK compuesta real declarada contra
+`restaurant_locations_id_tenant_key`, que acepta el evento con la sede de su propia marca, acepta
+`location_id` NULL y rechaza con 23503 el evento de la marca A con la sede de la marca B**.
+
+### Decisiones tomadas y lo que quedó abierto
+
+- **`config` va sin whitelist.** El spec pide la columna en §4/00041, pero la función espejo
+  `merge_location_config()` y el CHECK de las 4 claves permitidas viven en §7.1, que **no lleva
+  número de migración**. Se agrega la columna y nada más; lo otro se decide aparte.
+- **El trigger cruzado es de una sola dirección** (sede → `tenants.domain`), que es lo que pide
+  el §3.3 textualmente. Falta el simétrico sobre `tenants`. Anotado como deuda en
+  `docs/features/multi-sede.md`; hoy no es explotable.
+- **`is_primary` no tiene índice único por tenant.** No está en el spec y no se agrega por cuenta
+  propia. Anotado como deuda.
+- **Nada de `CREATE INDEX CONCURRENTLY`**: el arnés manda el archivo entero en un solo
+  `client.query()`, que el protocolo simple envuelve en transacción implícita → moriría con 25001.
+  La tabla tiene ~1 fila.
+
+### ⚠️ Orden de despliegue (dos repos)
+
+`00041` **primero**, en el Supabase del producto. Recién después el AIOS. Si el AIOS se despliega
+antes, `aios_provision_tenant` manda lat/lon NULL contra un `NOT NULL` que todavía existe, revienta
+con 23502 y **el alta entera falla** (la función es atómica).
+
+---
+
 ## [2026-09-02 02:40] - Multi-sede: el dueño decidió, y el spec técnico completo
 
 ### Tipo de cambio

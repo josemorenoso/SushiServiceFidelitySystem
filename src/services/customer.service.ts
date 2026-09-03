@@ -36,6 +36,11 @@ export async function createCustomer(params: {
   accepts_marketing?: boolean
   /** false cuando la primera visita debe validarla un mesero (checkin_first_visit_free='false') */
   countFirstVisit?: boolean
+  /**
+   * Sede donde se registró (D2 / `customers.origin_location_id`, migración 00043).
+   * `null` = sede desconocida. Multi-sede F3.
+   */
+  originLocationId?: string | null
 }): Promise<Customer> {
   const supabase = getServiceClient()
   const countFirst = params.countFirstVisit ?? true
@@ -46,11 +51,18 @@ export async function createCustomer(params: {
       name: params.name,
       birthday: params.birthday,
       city: params.city,
+      // ⚠️ `tenant_id` EXPLÍCITO, siempre. La 00030 nunca se aplicó: la columna todavía
+      // tiene un DEFAULT puente que apunta a Sushi Service, así que un INSERT que lo
+      // omita se va callado al tenant equivocado.
       tenant_id: params.tenantId,
       total_visits: countFirst ? 1 : 0,
       last_visit_at: countFirst ? new Date().toISOString() : null,
       source_channels: params.source ?? 'qr',
       accepts_marketing: params.accepts_marketing ?? true,
+      origin_location_id: params.originLocationId ?? null,
+      // La primera visita ocurre donde se registró, así que la "sede de casa" nace igual
+      // que el origen. Se recalcula en cada `incrementVisit()`.
+      last_visit_location_id: countFirst ? params.originLocationId ?? null : null,
     })
     .select()
     .single()
@@ -62,7 +74,20 @@ export async function createCustomer(params: {
   return data
 }
 
-export async function incrementVisit(customerId: string, currentVisits: number, source?: 'qr' | 'delivery' | 'staff_scan'): Promise<Customer> {
+export async function incrementVisit(
+  customerId: string,
+  currentVisits: number,
+  source?: 'qr' | 'delivery' | 'staff_scan',
+  /**
+   * Sede de ESTA visita (multi-sede F3). Refresca el caché
+   * `customers.last_visit_location_id` = "su sede de casa".
+   *
+   * `null`/omitido NO borra el valor anterior: una visita cuya sede no se pudo resolver es
+   * "sede desconocida", y pisar con NULL la última sede conocida degradaría el dato en
+   * silencio — justo lo que el §6.1 del spec necesita para atribuir un mensaje.
+   */
+  locationId?: string | null
+): Promise<Customer> {
   const supabase = getServiceClient()
   const newVisits = currentVisits + 1
 
@@ -70,6 +95,10 @@ export async function incrementVisit(customerId: string, currentVisits: number, 
   const updateData: Record<string, unknown> = {
     total_visits: newVisits,
     last_visit_at: new Date().toISOString(),
+  }
+
+  if (locationId) {
+    updateData.last_visit_location_id = locationId
   }
 
   if (source) {

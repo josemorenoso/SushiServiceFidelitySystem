@@ -1,6 +1,11 @@
 import { createClient } from '@supabase/supabase-js'
 import { createClient as createSSRClient } from '@/lib/supabase/server'
 import type { Tenant } from '@/types/tenant.types'
+import {
+  pickLocationForHost,
+  type ActiveLocation,
+  type HostLocationSource,
+} from '@/lib/location-resolver'
 
 // Cliente service-role para resolver tenants en rutas públicas / webhooks (sin cookies).
 function getServiceClient() {
@@ -38,6 +43,121 @@ export async function getTenantByDomain(host: string | null | undefined): Promis
     .single()
   if (error || !data) return null
   return data as Tenant
+}
+
+/**
+ * Marca + SEDE resueltas desde el host. Es la vía 3 del §3.1 del spec de multi-sede.
+ *
+ * ⚠️ `getTenantByDomain()` de arriba **CONSERVA SU FIRMA INTACTA**: cambiarla para que
+ * devolviera también la sede tocaría 16 archivos de golpe. La sede viaja por aquí.
+ */
+export interface HostContext {
+  /** `null` = ni la marca ni ninguna sede reclaman este host (el llamador responde 404). */
+  tenant: Tenant | null
+  /** Sede resuelta por el host, o `null` = sede desconocida. */
+  locationId: string | null
+  /** Procedencia del dato: `'host'` (subdominio de la sede) o `'host_single'` (§3.2). */
+  locationSource: HostLocationSource | null
+  /**
+   * `true` cuando el host es el dominio RAÍZ y la marca tiene 2+ sedes activas.
+   * El registro de un cliente nuevo responde **409 con `locationChoices`** (§3.2).
+   */
+  requiresLocationChoice: boolean
+  /** Las sedes entre las que elegir. Vacío salvo en el caso del 409. */
+  locationChoices: ActiveLocation[]
+}
+
+const EMPTY_HOST_CONTEXT: HostContext = {
+  tenant: null,
+  locationId: null,
+  locationSource: null,
+  requiresLocationChoice: false,
+  locationChoices: [],
+}
+
+const LOCATION_COLUMNS = 'id, name, slug, domain, is_primary'
+
+/**
+ * Resuelve MARCA + SEDE a partir del host de la petición. Fase F3 de multi-sede.
+ *
+ * Spec: `docs/superpowers/specs/2026-09-02-multisede-design.md` §3.1, §3.2 y §3.3.
+ * La decisión de QUÉ sede sale del host es pura y vive en `pickLocationForHost()`
+ * (`src/lib/location-resolver.ts`); aquí solo está el I/O.
+ *
+ * DOS CAMINOS PARA LLEGAR A LA MARCA
+ * ──────────────────────────────────
+ *   1. `tenants.domain`               → el dominio raíz, el que ya está impreso en los QR.
+ *   2. `restaurant_locations.domain`  → el subdominio propio de una sede (único GLOBAL,
+ *      00041). Sin este segundo camino, `laureles.marca.com` devolvería 404 y la sede
+ *      2..N no podría existir: `getTenantByDomain()` solo mira `tenants`.
+ *
+ * FALLA BLANDO EN LA SEDE, NUNCA EN LA MARCA
+ * ──────────────────────────────────────────
+ * Si la consulta de sedes falla, se devuelve la marca con sede `null` ("sede desconocida")
+ * en vez de propagar el error. El check-in es el camino más caliente del producto: perder
+ * la atribución de una visita es un dato menos; tumbar el check-in es un cliente menos.
+ */
+export async function resolveHostContext(host: string | null | undefined): Promise<HostContext> {
+  const domain = normalizeHost(host)
+  if (!domain) return EMPTY_HOST_CONTEXT
+
+  let tenant = await getTenantByDomain(host)
+
+  // Camino 2: el host es el subdominio de una sede, no el de la marca.
+  if (!tenant) {
+    const supabase = getServiceClient()
+    const { data: sede } = await supabase
+      .from('restaurant_locations')
+      .select('tenant_id')
+      .eq('domain', domain)
+      .eq('is_active', true)
+      .maybeSingle()
+
+    if (!sede?.tenant_id) return EMPTY_HOST_CONTEXT
+
+    const porSede = await getTenantById(sede.tenant_id as string)
+    // `getTenantById` no filtra `is_active`; `getTenantByDomain` sí. Se iguala el criterio
+    // para que un subdominio de sede no reviva una marca desactivada.
+    if (!porSede || porSede.is_active === false) return EMPTY_HOST_CONTEXT
+    tenant = porSede
+  }
+
+  const activas = await getActiveLocations(tenant.id)
+  const pick = pickLocationForHost(domain, normalizeHost(tenant.domain), activas)
+
+  return {
+    tenant,
+    locationId: pick.locationId,
+    locationSource: pick.source,
+    requiresLocationChoice: pick.requiresChoice,
+    locationChoices: pick.choices,
+  }
+}
+
+/**
+ * Sedes activas de una marca, en el orden en que se le muestran a una persona:
+ * la principal primero, después `sort_order`, y `name` como desempate estable.
+ *
+ * El `.eq('tenant_id', …)` no es decorativo: la app corre con `service_role` en 55
+ * archivos, así que el RLS no aísla nada. El aislamiento son estos filtros a mano.
+ */
+export async function getActiveLocations(tenantId: string): Promise<ActiveLocation[]> {
+  if (!tenantId) return []
+  const supabase = getServiceClient()
+  const { data, error } = await supabase
+    .from('restaurant_locations')
+    .select(LOCATION_COLUMNS)
+    .eq('tenant_id', tenantId)
+    .eq('is_active', true)
+    .order('is_primary', { ascending: false })
+    .order('sort_order', { ascending: true })
+    .order('name', { ascending: true })
+
+  if (error || !data) {
+    if (error) console.error('[Tenant] No se pudieron leer las sedes:', error.message)
+    return []
+  }
+  return data as ActiveLocation[]
 }
 
 /** Todos los tenants activos — usado por crons que procesan todos los clientes en un solo disparo (birthday, reactivation). */

@@ -136,7 +136,16 @@ export async function logReviewEvent(
   action: ReviewAction,
   customerId: string,
   tenantId: string,
-  grantId: string | null = null
+  grantId: string | null = null,
+  /**
+   * Sede cuya ficha de Google se mostró (D5, `review_events.location_id` de la 00043).
+   * Multi-sede F3. `null` = sede desconocida.
+   *
+   * ⚠️ El evento `'shown'` NO pasa por aquí: lo escribe la función SQL
+   * `log_review_shown_deduped()` (00032), que no recibe sede. Ponérsela exige un
+   * `CREATE OR REPLACE` en una migración nueva, y F3 no lleva migración.
+   */
+  locationId: string | null = null
 ): Promise<void> {
   const supabase = getServiceClient()
   const { error } = await supabase.from('review_events').insert({
@@ -144,6 +153,7 @@ export async function logReviewEvent(
     customer_id: customerId,
     action,
     grant_id: grantId,
+    location_id: locationId,
   })
 
   // El tracking no puede tumbar el flujo del cliente: una impresión perdida es un dato
@@ -200,7 +210,9 @@ export interface ReviewClickResult {
  */
 export async function registerReviewClick(
   customer: Customer,
-  tenant: Tenant
+  tenant: Tenant,
+  /** Sede desde la que se abrió el pop-up (D5, multi-sede F3). `null` = desconocida. */
+  locationId: string | null = null
 ): Promise<ReviewClickResult> {
   const supabase = getServiceClient()
   const config = await getReviewConfig(tenant.id)
@@ -230,7 +242,7 @@ export async function registerReviewClick(
   }
 
   if (!config.rewardId || !config.rewardTitle) {
-    await logReviewEvent('clicked', customer.id, tenant.id)
+    await logReviewEvent('clicked', customer.id, tenant.id, null, locationId)
     return { prize_title: null, expires_at: null }
   }
 
@@ -252,7 +264,7 @@ export async function registerReviewClick(
       // devolvemos ESE premio con su expiry REAL —no `null`—, para que la cuenta regresiva
       // del modal sea la verdadera y no desaparezca en el reintento.
       const existing = await getActiveReviewGrant(customer.id, tenant.id)
-      await logReviewEvent('clicked', customer.id, tenant.id, existing?.id ?? null)
+      await logReviewEvent('clicked', customer.id, tenant.id, existing?.id ?? null, locationId)
       return {
         prize_title: existing?.prize_title ?? config.rewardTitle,
         expires_at: existing?.expires_at ?? null,
@@ -262,11 +274,11 @@ export async function registerReviewClick(
     // devolvía `config.rewardTitle` y el cliente veía "Tu regalo: X" sin un grant que lo
     // respaldara, imposible de redimir por el mesero).
     console.error('[Review] No se pudo otorgar el premio por reseña:', granted.error)
-    await logReviewEvent('clicked', customer.id, tenant.id)
+    await logReviewEvent('clicked', customer.id, tenant.id, null, locationId)
     return { prize_title: null, expires_at: null }
   }
 
-  await logReviewEvent('clicked', customer.id, tenant.id, granted.grant.id)
+  await logReviewEvent('clicked', customer.id, tenant.id, granted.grant.id, locationId)
 
   return {
     prize_title: granted.grant.prize_title,
@@ -275,7 +287,12 @@ export async function registerReviewClick(
 }
 
 /** "La próxima lo hago" — sin culpa. Se le vuelve a mostrar en su próximo check-in. */
-export async function registerReviewPostpone(customer: Customer, tenantId: string): Promise<void> {
+export async function registerReviewPostpone(
+  customer: Customer,
+  tenantId: string,
+  /** Sede desde la que se aplazó (D5, multi-sede F3). `null` = desconocida. */
+  locationId: string | null = null
+): Promise<void> {
   const supabase = getServiceClient()
 
   const { error } = await supabase
@@ -288,7 +305,7 @@ export async function registerReviewPostpone(customer: Customer, tenantId: strin
     console.error('[Review] Error sellando el aplazamiento:', error.message)
   }
 
-  await logReviewEvent('postponed', customer.id, tenantId)
+  await logReviewEvent('postponed', customer.id, tenantId, null, locationId)
 }
 
 // ═══════════════════════════════════════════════════════════════

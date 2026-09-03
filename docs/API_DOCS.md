@@ -5,8 +5,16 @@
 - **Dashboard endpoints** — Cookie-based (Supabase SSR, sesión admin via `supabase.auth.getUser()`)
 - **Staff endpoints públicos** (`/api/staff/*`) — Bearer Token (Staff JWT) o `X-Device-Token`
 - **Webhooks / Cron** — `x-webhook-secret` o `CRON_SECRET`
-**Última actualización:** 2026-07-11
-> **Nota:** Validación de geolocalización está en **STANDBY** (v1.0.5-3). El backend no valida GPS por defecto. Puede reactivarse descomentando el bloque en `src/app/api/check-in/route.ts`.
+**Última actualización:** 2026-09-03
+> **Nota (geolocalización):** el backend **no valida GPS** y ya no hay nada que descomentar: el
+> bloque de geocerca que dormía comentado en `src/app/api/check-in/route.ts` **se borró** en
+> multi-sede F3 (spec §3.5). Como control de acceso lo reemplazó, con ventaja, la exigencia de
+> `source === 'staff_scan'`; y su query no filtraba `tenant_id` y usaba `.single()`, así que
+> descomentarlo con 2 sedes activas rompía el check-in con `PGRST116` para **todos** los
+> clientes de **todos** los tenants. Los campos `lat`/`lon` del body se siguen aceptando y se
+> ignoran.
+> **Nota (multi-sede):** desde F3 el `Host` de la petición resuelve **marca + sede**
+> (`resolveHostContext()`). Ver `docs/features/multi-sede.md`.
 
 ---
 
@@ -230,6 +238,41 @@ Endpoint unificado con 3 acciones: `lookup`, `register`, `checkin`.
 > Si el registro lo hace un mesero autenticado (`registered_by_staff_id` o `device_token` válidos), la visita se cuenta de inmediato y responde `message: "welcome"` con `source='staff_scan'`.
 > ⚠️ El response 403 "Validación requerida" en register fue **eliminado en v1.6.0** — reemplazado por el flujo `registered_pending_scan`.
 
+**Response 409 (`Ya registrado`):**
+```json
+{ "error": "Ya registrado", "message": "Este número ya está registrado" }
+```
+
+**Response 409 (`Sede requerida`) — multi-sede F3, spec §3.2:**
+> ⚠️ **Hay DOS 409 distintos en `register`.** Se distinguen por el campo `error`, y solo el de
+> sede trae `locations[]`.
+
+Se devuelve cuando el `Host` de la petición es el **dominio raíz de la marca** y la marca tiene
+**2 o más sedes activas**: no hay forma honesta de saber en cuál está la persona, y adivinar
+metería su registro —y todas sus visitas futuras— en el reporte de la sede equivocada.
+
+```json
+{
+  "error": "Sede requerida",
+  "message": "Este negocio tiene varias sedes. Abre el enlace de la sede donde estás para registrarte.",
+  "locations": [
+    { "id": "uuid", "name": "Sede principal", "slug": "sede-principal", "domain": "marca.com" },
+    { "id": "uuid", "name": "Laureles", "slug": "laureles", "domain": "laureles.marca.com" }
+  ]
+}
+```
+
+**Cómo se resuelve:** el cliente abre el `domain` de su sede y repite el registro. Ese host
+resuelve por la vía `host` y no vuelve a preguntar. **El endpoint no acepta hoy un
+`location_id` en el body**: el spec define el 409 y la lista, pero no qué
+`visits.location_source` le correspondería a una sede elegida a mano por el cliente (las 7 vías
+del CHECK no incluyen ese caso), así que no se inventa. Ver la deuda #9 de
+`docs/features/multi-sede.md`.
+
+> **Interruptor de compatibilidad (§8.3):** con **0 o 1** sedes activas este 409 **nunca** se
+> dispara. Los 4 tenants vivos tienen exactamente una sede, así que para ellos el registro se
+> comporta hoy igual que antes de F3.
+
 #### Check-in (cliente existente)
 **Request (auto QR):**
 ```json
@@ -275,10 +318,8 @@ X-Device-Token: {device_fingerprint}
 { "error": "QR inválido", "message": "El código QR del cliente ha expirado o es inválido." }
 ```
 
-**Response 403 (ubicación requerida — modo estricto):**
-```json
-{ "error": "Ubicación requerida", "message": "El restaurante requiere activar la ubicación para hacer check-in" }
-```
+> **El `403 "Ubicación requerida"` ya no existe.** Salía del bloque de geocerca comentado, que
+> se borró en multi-sede F3 (spec §3.5). `lat`/`lon` se aceptan y se ignoran.
 
 > **Nota:** Ya no existe cap de 24h entre check-ins. Los clientes pueden acumular visitas ilimitadas por día.
 
@@ -626,9 +667,20 @@ Recibe datos pre-parseados por n8n y registra cliente + visita en la DB.
   "metodo_pago": "efectivo",
   "monto_total": 45000,
   "raw_message": "Pedido de Juan...",
-  "tenant_slug": "sushi-service"
+  "tenant_slug": "sushi-service",
+  "remitente": "3001112233"
 }
 ```
+
+> **Sede del pedido (multi-sede F3, D9 / spec §3.4):** `remitente` es el **celular del
+> operador** que reenvió el cuadro del pedido. Se contrasta contra `authorized_numbers`
+> (`phone` + `tenant_id` + `is_active`) y de ahí sale `authorized_numbers.location_id`, que se
+> estampa en `visits.location_id` con `location_source = 'authorized_number'`. Es una señal
+> **autenticada**: la firma de Twilio ya se valida en `twilio-incoming/route.ts:82-84` y el
+> número no lo elige el cliente.
+> **Es OPCIONAL.** El workflow `n8n/domicilios_whatsapp_v4.json` ya lo calculaba y lo
+> **descartaba**; F3 lo reenvía. Mientras el dueño no despliegue a mano el workflow nuevo en
+> n8n, los pedidos entran exactamente igual, con sede desconocida (`location_id = NULL`).
 
 > **Multitenant (v2.4.0):** `tenant_slug` es **obligatorio** — identifica a qué cliente
 > pertenece el pedido (`getTenantBySlug()`). `twilio-incoming/route.ts` lo inyecta

@@ -10,7 +10,7 @@
 
 import { validatePhone } from '@/lib/validators/phone'
 import { rateLimit } from '@/lib/rate-limit'
-import { getTenantByDomain } from '@/lib/tenant'
+import { resolveHostContext } from '@/lib/tenant'
 import { findCustomerByPhone } from '@/services/customer.service'
 import type { Customer } from '@/types/database.types'
 import type { Tenant } from '@/types/tenant.types'
@@ -18,7 +18,18 @@ import type { Tenant } from '@/types/tenant.types'
 export type PhoneRequestFailure = 'invalid_phone' | 'rate_limited' | 'no_tenant' | 'no_customer'
 
 export type PhoneRequestResult =
-  | { ok: true; tenant: Tenant; customer: Customer; cleaned: string }
+  | {
+      ok: true
+      tenant: Tenant
+      customer: Customer
+      cleaned: string
+      /**
+       * Sede resuelta por el host (multi-sede F3, §3.1 vía 3 del spec).
+       * `null` = sede desconocida — el dominio raíz de una marca con 2+ sedes, o un host
+       * que no es de ninguna sede. Se propaga a `review_events.location_id`.
+       */
+      locationId: string | null
+    }
   | { ok: false; reason: PhoneRequestFailure; retryAfterSeconds?: number }
 
 export async function resolvePhoneRequest(params: {
@@ -37,11 +48,14 @@ export async function resolvePhoneRequest(params: {
   const rl = rateLimit(`${params.rateLimitKey}:${cleaned}`, params.rateLimitMax, params.rateLimitWindowMs ?? 60_000)
   if (!rl.allowed) return { ok: false, reason: 'rate_limited', retryAfterSeconds: rl.retryAfterSeconds }
 
-  const tenant = await getTenantByDomain(params.host)
+  // `resolveHostContext` en vez de `getTenantByDomain`: resuelve la misma marca por el
+  // dominio raíz Y además reconoce el subdominio propio de una sede, que es como llega la
+  // sede 2..N. La marca resuelta es idéntica en el caso de hoy (1 sede por tenant).
+  const { tenant, locationId } = await resolveHostContext(params.host)
   if (!tenant) return { ok: false, reason: 'no_tenant' }
 
   const customer = await findCustomerByPhone(cleaned, tenant.id)
   if (!customer) return { ok: false, reason: 'no_customer' }
 
-  return { ok: true, tenant, customer, cleaned }
+  return { ok: true, tenant, customer, cleaned, locationId }
 }

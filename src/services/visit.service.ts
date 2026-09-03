@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import type { Visit } from '@/types/database.types'
+import type { LocationResolution } from '@/lib/location-resolver'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -21,6 +22,14 @@ export async function createVisit(params: {
   rawMessage?: string
   tableNumber?: number | null
   registeredByStaffId?: string | null
+  /**
+   * Sede + procedencia + conflicto, tal como los resolvió `@/lib/location-resolver`
+   * (multi-sede F3, columnas de la migración 00043).
+   *
+   * Omitirlo deja la visita con `location_id = NULL`, que significa **sede desconocida**
+   * y se MUESTRA como el cubo "Sin sede": nunca se reparte ni se esconde.
+   */
+  location?: LocationResolution | null
 }): Promise<Visit> {
   const supabase = getServiceClient()
   const insertPayload: Record<string, unknown> = {
@@ -40,6 +49,21 @@ export async function createVisit(params: {
   // Only include registered_by_staff_id if present (requires migration 00015)
   if (params.registeredByStaffId != null) {
     insertPayload.registered_by_staff_id = params.registeredByStaffId
+  }
+
+  // ─── Sede (multi-sede F3, migración 00043) ───
+  // La pareja `location_id` + `location_source` va COMPLETA o no va: lo exige el CHECK
+  // `visits_location_pareja_check`. Si llegara media pareja, se descarta la sede entera en
+  // vez de dejar que el INSERT muera con 23514 dentro del `catch` best-effort del check-in
+  // y la visita se pierda por un dato de atribución.
+  if (params.location?.locationId && params.location.source) {
+    insertPayload.location_id = params.location.locationId
+    insertPayload.location_source = params.location.source
+  }
+  // TRI-ESTADO: solo se escribe cuando de verdad se evaluó. `null` significa "no se evaluó",
+  // y `false` afirmaría "verificado, sin conflicto" sobre algo que nadie verificó.
+  if (params.location?.conflict !== null && params.location?.conflict !== undefined) {
+    insertPayload.location_conflict = params.location.conflict
   }
 
   const { data, error } = await supabase

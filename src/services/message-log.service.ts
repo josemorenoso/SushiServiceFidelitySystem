@@ -33,6 +33,16 @@ export interface RecordMessageLogParams {
   twilioSid?: string | null
   errorCode?: string | null
   errorMessage?: string | null
+  /**
+   * Sede a la que se IMPUTA el mensaje (`message_logs.location_id`, migración 00043).
+   * D4: la billetera es de la marca, pero el desglose por sede es obligatorio.
+   * Multi-sede F3. `null` = sede desconocida, y se MUESTRA como "Sin sede".
+   *
+   * ⚠️ NO es lo mismo que `line_location_id` (la sede DUEÑA DE LA LÍNEA por la que salió).
+   * Esa segunda columna es de D6, que el dueño todavía no decidió, y hoy nadie la escribe:
+   * con una sola línea por marca siempre valdría NULL.
+   */
+  locationId?: string | null
 }
 
 /**
@@ -54,6 +64,7 @@ export async function recordMessageLog(params: RecordMessageLogParams): Promise<
       error_code: params.errorCode ?? null,
       error_message: params.errorMessage ?? null,
       sent_at: params.status === 'sent' ? new Date().toISOString() : null,
+      location_id: params.locationId ?? null,
     })
     if (error) {
       console.error('[MessageLog] No se pudo registrar el mensaje:', error.message)

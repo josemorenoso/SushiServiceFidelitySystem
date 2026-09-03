@@ -5,6 +5,62 @@
 
 ---
 
+## [2026-09-03 13:10] - Multi-sede F3: la sede se AVERIGUA y se ESCRIBE (sin migración)
+
+### Tipo de cambio
+- **ADDED**: `src/lib/location-resolver.ts` — la decisión de sede, PURA y sin un solo import: precedencia `staff_user → staff_device → host → NULL`, la regla de «sede única implícita» del §3.2 y el tri-estado de `location_conflict`. `LOCATION_SOURCES` es el espejo exacto del CHECK `visits_location_source_check`.
+- **ADDED**: `resolveHostContext()` + `getActiveLocations()` en `src/lib/tenant.ts` — resuelven MARCA + SEDE desde el host. Resuelven la marca por DOS caminos: `tenants.domain` (el de siempre) y `restaurant_locations.domain` (el subdominio de la sede 2..N, que hasta hoy daba 404). ⚠️ **`getTenantByDomain` conserva su firma intacta** — cambiarla tocaba 16 archivos de golpe.
+- **ADDED**: `POST /api/check-in` · `action: 'register'` devuelve **409 `"Sede requerida"`** con `locations[]` cuando el host es el dominio raíz de una marca con **2+ sedes activas**. Con 0 o 1 sedes NO se dispara: es el interruptor de compatibilidad del §8.3, así que los 4 tenants vivos se comportan exactamente igual que antes.
+- **ADDED**: claim `loc` **OPCIONAL** en el JWT del QR (`src/lib/utils/qrcode.ts`). **Nunca decide la sede** — solo pone `visits.location_conflict`. Los tokens ya emitidos no lo traen y quedan en `NULL` = "no se evaluó", que es justo lo que describe el COMMENT de la 00043.
+- **ADDED**: sede del pedido de domicilio por `authorized_numbers.location_id` (D9, spec §3.4), desde el `remitente` que el workflow de n8n ya calculaba.
+- **REMOVED**: el bloque de **geocerca comentado** de `src/app/api/check-in/route.ts:209-244` (spec §3.5). Dejarlo era peligroso: su query no filtraba `tenant_id` y usaba `.single()`, así que el primero que lo descomentara con 2 sedes activas rompía el check-in con `PGRST116` para **todos los clientes de todos los tenants**. Como control de acceso ya lo había reemplazado, con ventaja, la exigencia de `source === 'staff_scan'`. `lat`/`lon` se siguen aceptando en el body y se ignoran.
+- **CHANGED**: los escritores de hechos aceptan y escriben la sede — `visit.service.ts` (`location_id` + `location_source` + `location_conflict`), `customer.service.ts` (`origin_location_id`, `last_visit_location_id`), `points.service.ts` (`point_transactions.location_id`), `message-log.service.ts` + `whatsapp.service.ts` (`message_logs.location_id` vía `MessageLogContext`, que ya viajaba por spread a los 10 `recordMessageLog()`), `review.service.ts` (`review_events.location_id`).
+- **CHANGED**: `src/lib/phone-request.ts` pasa de `getTenantByDomain` a `resolveHostContext` y expone `locationId`; `review-action` se lo pasa al servicio. Efecto colateral bueno: los dos endpoints de reseña ahora también funcionan desde el subdominio de una sede.
+- **CHANGED**: `n8n/domicilios_whatsapp_v4.json` — **una línea**: reenvía el `remitente` que el nodo "Parsear Respuesta IA" ya calculaba y **descartaba**. ⚠️ **HAY QUE DESPLEGARLO A MANO EN n8n** (ver abajo).
+- **ADDED**: `tests/unit/location-resolver.test.ts` (27 casos) y `tests/db/multisede-resolucion.test.ts` (21 casos contra el Postgres embebido). El check-in no tenía **ni un test** hasta hoy.
+- **CHANGED**: `docs/features/multi-sede.md` (§3.bis nuevo, F2/F3 marcadas hechas, 6 deudas nuevas — las 8 anteriores NO se borraron), `docs/API_DOCS.md` (el 409 nuevo, `remitente` en el webhook de domicilios, la nota de geolocalización corregida), `src/types/database.types.ts`.
+
+### Archivos afectados
+- `src/lib/location-resolver.ts` — nuevo (puro, cero imports).
+- `src/lib/tenant.ts`, `src/lib/phone-request.ts`, `src/lib/utils/qrcode.ts`
+- `src/app/api/check-in/route.ts`, `src/app/api/check-in/review-action/route.ts`, `src/app/api/webhook/delivery/route.ts`
+- `src/services/visit.service.ts`, `customer.service.ts`, `points.service.ts`, `review.service.ts`, `message-log.service.ts`, `whatsapp.service.ts`
+- `src/types/database.types.ts`
+- `n8n/domicilios_whatsapp_v4.json` — **1 línea**
+- `tests/unit/location-resolver.test.ts`, `tests/db/multisede-resolucion.test.ts` — nuevos
+- `docs/features/multi-sede.md`, `docs/API_DOCS.md`
+
+### ⚠️ QUE TIENE QUE HACER EL DUEÑO A MANO
+**Desplegar `n8n/domicilios_whatsapp_v4.json` en el VPS de n8n.** Este repo NO despliega n8n:
+el archivo es la copia versionada del workflow, y el que corre es el que está cargado en la
+instancia. Sin ese despliegue, `remitente` no llega, `/api/webhook/delivery` no puede resolver
+la sede del operador y **los domicilios siguen entrando con `location_id = NULL`** — que es el
+comportamiento de hoy, no una regresión. Es el workflow ACTIVO y lo único que mantiene vivo el
+VPS: el cambio es de **una sola línea** en el nodo "Parsear Respuesta IA" (agrega `remitente` al
+objeto que ya devuelve; el nodo de la API hace `JSON.stringify($json)` y lo reenvía solo).
+Hay que replicarlo a los 25 clientes.
+
+### Lo que F3 NO hizo, y por qué
+- **NINGUNA migración.** Las 18 columnas ya existían desde la 00043, aplicada en producción. La 00044 está reservada para F4 y agregar un `.sql` cambia el arnés de tests.
+- **`staff_users.location_id` / `staff_devices.location_id` no se leen.** Esas columnas las crea la **00044 (F4)**. La precedencia está cableada y probada, pero recibe `null`. Pedirlas hoy en el `SELECT` daría `42703` en PostgREST → `staff` sería `null` → **403 en cada check-in del producto**.
+- **`send_queue.location_id` y el `review_events` de `'shown'` siguen vacíos**: sus únicos escritores son funciones SQL (`enqueue_send_queue()` de 00038, `log_review_shown_deduped()` de 00032) que no reciben sede. Cambiarlas es una migración.
+- **Cero lecturas nuevas y cero cambios de dashboard** — eso es F6/F7. En particular `src/app/api/dashboard/location/route.ts` **sigue con su `.single()`** (deuda #14).
+- **La cascada de atribución del §6.1** (`last_visit_location_id` → `origin_location_id`) para las campañas masivas es **F6**. `customers.last_visit_location_id` ya se está llenando, así que F6 tendrá de dónde leer.
+
+### Verificación (ejecutada, no supuesta)
+- `npx tsc --noEmit` → limpio, sin salida.
+- `npx eslint src` → 39 problemas: **7 errores, todos preexistentes** (`react-hooks/set-state-in-effect` ×5, `react-hooks/immutability` ×1, `prefer-const` ×1) y **ninguno en un archivo tocado por F3**.
+- `npm run build` → `✓ Compiled successfully in 10.0s`, 71 páginas generadas.
+- `npx vitest run` → **8 archivos, 139 tests, todos en verde** (eran 6 archivos y 91 tests).
+
+### Request original
+> Implementa la FASE F3 de multi-sede: `resolveHostContext()`, la regla de sede única implícita,
+> la precedencia sin inventar variantes, el tri-estado de `location_conflict`, propagar la sede a
+> los escritores, los domicilios por `authorized_numbers`, y BORRAR la geocerca comentada.
+> F3 no lleva migración nueva.
+
+---
+
 ## [2026-09-03 02:35] - Multi-sede F1: `restaurant_locations` pasa a SER la sede
 
 ### Tipo de cambio

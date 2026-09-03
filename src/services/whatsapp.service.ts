@@ -48,6 +48,20 @@ export interface MessageLogContext {
   customerId?: string | null
   /** welcome | checkin | tier_unlocked | points_earned_near | points_earned_far | safe_reward | mystery_box | golden_box | delivery | ... */
   messageType: string
+  /**
+   * Sede a la que se imputa el mensaje (`message_logs.location_id`, 00043 / multi-sede F3).
+   *
+   * Se estampa AL ENVIAR y se congela: si la atribución fuera un JOIN vivo contra la última
+   * visita, el informe de plata de agosto cambiaría en septiembre porque el cliente cambió de
+   * sede — y un informe de plata que se mueve solo no lo cree nadie (§6.1 del spec).
+   *
+   * Hoy solo la llenan los envíos con **sede del acto** (check-in, registro, domicilio). La
+   * cascada de respaldo del §6.1 (`last_visit_location_id` → `origin_location_id`), que es la
+   * que le pondría sede a las campañas masivas, es **F6**: toca el desglose de plata.
+   *
+   * Viaja por spread (`{ ...logContext }`) a los 10 `recordMessageLog()` de este archivo.
+   */
+  locationId?: string | null
 }
 
 /**

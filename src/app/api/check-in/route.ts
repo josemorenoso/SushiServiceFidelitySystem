@@ -12,7 +12,8 @@ import { verifyCustomerQRToken, generateCustomerQRToken } from '@/lib/utils/qrco
 import { markConverted } from '@/services/imported-contacts.service'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { jwtVerify } from 'jose'
-import { getTenantByDomain } from '@/lib/tenant'
+import { resolveHostContext } from '@/lib/tenant'
+import { resolveVisitLocation, type LocationResolution } from '@/lib/location-resolver'
 import type { Tenant } from '@/types/tenant.types'
 
 function getServiceClient() {
@@ -99,7 +100,12 @@ async function sendCheckinTemplate(
   phone: string,
   variables: Record<string, string>,
   tenant: Tenant,
-  customerId?: string | null
+  customerId?: string | null,
+  /**
+   * Sede a la que se imputa el mensaje (D4 / `message_logs.location_id`, multi-sede F3).
+   * Es la "sede del acto" del §6.1: el check-in que acaba de ocurrir.
+   */
+  locationId?: string | null
 ): Promise<WhatsAppSendStatus> {
   if (!templateSid) {
     console.warn(`[CheckIn] No hay plantilla configurada para "${templateType}" — mensaje NO enviado. Configúrala en Dashboard > Ajustes.`)
@@ -109,6 +115,7 @@ async function sendCheckinTemplate(
     const res = await sendTemplateMessage(phone, templateSid, variables, tenant, {
       customerId: customerId ?? null,
       messageType: templateType,
+      locationId: locationId ?? null,
     })
     if (!res) {
       // sendTemplateMessage devuelve null cuando Twilio no está configurado o el envío falló
@@ -142,9 +149,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // ─── RESOLVER TENANT POR DOMINIO ───
+    // ─── RESOLVER MARCA + SEDE POR DOMINIO (multi-sede F3, spec §3.1-§3.3) ───
+    // `resolveHostContext` reemplaza a `getTenantByDomain` aquí porque además de la marca
+    // devuelve la SEDE: el subdominio propio de una sede (`host`), o la «sede única
+    // implícita» del dominio raíz cuando la marca tiene exactamente una sede activa
+    // (`host_single`). `getTenantByDomain` conserva su firma y sus otros 15 llamadores.
     const host = request.headers.get('host')
-    const tenant = await getTenantByDomain(host)
+    const hostContext = await resolveHostContext(host)
+    const tenant = hostContext.tenant
     if (!tenant) {
       return NextResponse.json(
         { error: 'Restaurante no reconocido', message: 'No se pudo identificar el restaurante para este dominio' },
@@ -206,42 +218,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // ─── VALIDACIÓN DE GEOLOCALIZACIÓN — STANDBY (desactivado v1.0.5-3) ───
-    // const { lat, lon } = body
-    // const { data: geoStrictRow } = await getServiceClient()
-    //   .from('admin_settings')
-    //   .select('value')
-    //   .eq('key', 'geo_strict_mode')
-    //   .single()
-    // const geoStrictMode = geoStrictRow?.value === 'true'
-
-    // if (geoStrictMode && (lat == null || lon == null)) {
-    //   return NextResponse.json(
-    //     { error: 'Ubicación requerida', message: 'El restaurante requiere activar la ubicación para hacer check-in' },
-    //     { status: 403 }
-    //   )
-    // }
-
-    // if (lat != null && lon != null) {
-    //   const { data: location } = await getServiceClient()
-    //     .from('restaurant_locations')
-    //     .select('lat, lon, radius_meters')
-    //     .eq('is_active', true)
-    //     .single()
-
-    //   if (location) {
-    //     const distance = calculateDistanceMeters(
-    //       lat, lon,
-    //       Number(location.lat), Number(location.lon)
-    //     )
-    //     if (distance > location.radius_meters) {
-    //       return NextResponse.json(
-    //         { error: 'Fuera del local', message: `Debes estar dentro del restaurante para hacer check-in (${Math.round(distance)}m de distancia)` },
-    //         { status: 403 }
-    //       )
-    //     }
-    //   }
-    // }
+    // ─── La geocerca comentada SE BORRÓ en F3 (spec §3.5) ───
+    // Estuvo aquí comentada desde v1.0.5-3. Como control de acceso ya la reemplazó, con
+    // ventaja, la exigencia de `source === 'staff_scan'` de más abajo. Como resolver de sede
+    // era la peor de las cuatro vías del §3.1. Y dejarla comentada era PELIGROSO: su query no
+    // filtraba `tenant_id` y usaba `.single()`, así que el primero que la descomentara cuando
+    // existan 2 sedes rompería el check-in con PGRST116 para TODOS los clientes de TODOS los
+    // tenants. El campo `lat`/`lon` del body se sigue aceptando y se ignora.
 
     // ─── LOOKUP: buscar si el cliente existe ───
     if (action === 'lookup') {
@@ -261,6 +244,9 @@ export async function POST(request: NextRequest) {
             sub: customer.id,
             phone: cleaned,
             name: customer.name || 'Cliente',
+            // Claim `loc`: la sede desde la que se generó el QR. SOLO detecta conflicto al
+            // escanear, nunca decide la sede de la visita (§3.1 y conflicto 7 de §11).
+            ...(hostContext.locationId ? { loc: hostContext.locationId } : {}),
           })
           console.log('[CheckIn] QR token generado OK')
         } catch (qrErr) {
@@ -304,6 +290,31 @@ export async function POST(request: NextRequest) {
       if (existing) {
         return NextResponse.json(
           { error: 'Ya registrado', message: 'Este número ya está registrado' },
+          { status: 409 }
+        )
+      }
+
+      // ─── SEDE REQUERIDA (multi-sede F3, spec §3.2) ───
+      // El host es el dominio RAÍZ de una marca con 2+ sedes activas: no hay forma honesta
+      // de saber en cuál está la persona, y adivinar metería su registro y todas sus visitas
+      // futuras en el reporte de la sede equivocada. Se responde 409 con la lista para que
+      // ELIJA: cada sede trae su `domain`, y abrir ese subdominio resuelve por la vía `host`.
+      //
+      // Con 0 o 1 sedes activas esto NO se dispara: es el interruptor de compatibilidad del
+      // §8.3. Los 4 tenants vivos tienen exactamente una sede, así que para ellos el registro
+      // se comporta hoy exactamente igual que antes de F3.
+      if (hostContext.requiresLocationChoice) {
+        return NextResponse.json(
+          {
+            error: 'Sede requerida',
+            message: 'Este negocio tiene varias sedes. Abre el enlace de la sede donde estás para registrarte.',
+            locations: hostContext.locationChoices.map((l) => ({
+              id: l.id,
+              name: l.name,
+              slug: l.slug,
+              domain: l.domain,
+            })),
+          },
           { status: 409 }
         )
       }
@@ -357,6 +368,19 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      // ─── SEDE DEL REGISTRO (multi-sede F3, precedencia del §3.1) ───
+      // Sin `staff_users.location_id` / `staff_devices.location_id` la precedencia cae
+      // directo al host — y el registro en modo `auto` nunca pasó por auth de mesero de
+      // todos modos, que es justo el argumento por el que el host es imprescindible (§3.1).
+      const regLocation = resolveVisitLocation({
+        // ⚠️ Las dos vías más fuertes llegan con la migración 00044, que es F4. Están
+        // cableadas aquí para que F4 sea una línea, no un rediseño.
+        staffLocationId: null,
+        deviceLocationId: null,
+        hostLocationId: hostContext.locationId,
+        hostSource: hostContext.locationSource,
+      })
+
       const customer = await createCustomer({
         phone: cleaned,
         name: name.trim(),
@@ -365,6 +389,8 @@ export async function POST(request: NextRequest) {
         tenantId: tenant.id,
         accepts_marketing: body.accepts_marketing ?? true,
         countFirstVisit: !pendingStaffScan,
+        // D2: dónde se registró. Corregible solo por el admin de marca.
+        originLocationId: regLocation.locationId,
       })
 
       // ─── Conversión Golden Bullet ───
@@ -396,6 +422,7 @@ export async function POST(request: NextRequest) {
             tenantId: tenant.id,
             tableNumber: body.table_number ?? null,
             registeredByStaffId: regResolvedStaffId,
+            location: regLocation,
           })
         } catch (visitErr) {
           console.error('[CheckIn] Error creando visita (registro continuará):', visitErr)
@@ -409,7 +436,7 @@ export async function POST(request: NextRequest) {
       let welcomePoints = { pointsAwarded: 0, newBalance: 0 }
       if (!pendingStaffScan) {
         try {
-          welcomePoints = await awardWelcomeBonus(customer.id, tenant.id)
+          welcomePoints = await awardWelcomeBonus(customer.id, tenant.id, regLocation.locationId)
         } catch (err) {
           console.error('[CheckIn] Error otorgando puntos de bienvenida:', err)
         }
@@ -430,7 +457,8 @@ export async function POST(request: NextRequest) {
           cleaned,
           { '1': customer.name, '2': String(welcomePoints.newBalance), '3': tiersRoadmap },
           tenant,
-          customer.id
+          customer.id,
+          regLocation.locationId
         )
       }
 
@@ -464,6 +492,7 @@ export async function POST(request: NextRequest) {
             sub: customer.id,
             phone: cleaned,
             name: customer.name || 'Cliente',
+            ...(regLocation.locationId ? { loc: regLocation.locationId } : {}),
           })
         } catch (qrErr) {
           console.error('[CheckIn] Error generando QR token post-registro:', qrErr)
@@ -541,9 +570,14 @@ export async function POST(request: NextRequest) {
       const supabase = getServiceClient()
 
       // Validar QR token del cliente (firma + expiración)
+      // El claim `loc` se guarda para DETECTAR conflicto de sede, nunca para decidirla:
+      // el QR lo arma el navegador del cliente con el subdominio que tenga abierto, que
+      // puede ser un enlace guardado de otra sede (§3.1, conflicto 7 de §11 del spec).
+      let qrLocationId: string | null = null
       if (qrToken) {
         try {
-          await verifyCustomerQRToken(qrToken)
+          const qrPayload = await verifyCustomerQRToken(qrToken)
+          qrLocationId = qrPayload.loc ?? null
         } catch {
           return NextResponse.json(
             { error: 'QR inválido', message: 'El código QR del cliente ha expirado o es inválido.' },
@@ -597,20 +631,50 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      const updated = await incrementVisit(customer.id, customer.total_visits, source)
+      // ─── SEDE DE LA VISITA (multi-sede F3, precedencia del §3.1) ───
+      // mesero → dispositivo → host → NULL. El mesero GANA sobre el host: un cliente parado
+      // en Laureles puede abrir su enlace guardado de `envigado.marca.com`, y si ganara el
+      // host la visita se acreditaría a Envigado y el reporte de D12 mentiría sin que nadie
+      // lo note. El mesero es de UNA sede (D11) y está físicamente donde ocurre la visita.
+      const visitLocation: LocationResolution = resolveVisitLocation({
+        // ⚠️ F4 (migración 00044) agrega `staff_users.location_id` y
+        // `staff_devices.location_id`. Hasta entonces estas dos vías no tienen fuente y la
+        // precedencia cae al host. NO se pueden pedir en el SELECT de arriba: la columna no
+        // existe todavía y PostgREST devolvería 42703 → `staff` sería null → 403 en CADA
+        // check-in del producto.
+        staffLocationId: null,
+        deviceLocationId: null,
+        hostLocationId: hostContext.locationId,
+        hostSource: hostContext.locationSource,
+        qrLocationId,
+      })
+
+      const updated = await incrementVisit(
+        customer.id,
+        customer.total_visits,
+        source,
+        visitLocation.locationId
+      )
       const visit = await createVisit({
         customerId: customer.id,
         source,
         tenantId: tenant.id,
         tableNumber: body.table_number ?? null,
         registeredByStaffId: resolvedStaffId,
+        location: visitLocation,
       })
 
       // Otorgar puntos aleatorios por la visita
       const previousPoints = customer.total_points ?? 0
       let pointsResult = { pointsAwarded: 0, newBalance: previousPoints }
       try {
-        pointsResult = await awardVisitPoints(customer.id, visit.id, source, tenant.id)
+        pointsResult = await awardVisitPoints(
+          customer.id,
+          visit.id,
+          source,
+          tenant.id,
+          visitLocation.locationId
+        )
         console.log(`[CheckIn] Puntos otorgados: +${pointsResult.pointsAwarded} → balance=${pointsResult.newBalance} (prev=${previousPoints})`)
       } catch (err) {
         console.error('[CheckIn] ERROR otorgando puntos (se usa fallback 0):', err)
@@ -649,7 +713,8 @@ export async function POST(request: NextRequest) {
           cleaned,
           { '1': updated.name, '2': newTier.tier_name, '3': newTier.safe_reward_title, '4': tiersRoadmapText },
           tenant,
-          customer.id
+          customer.id,
+          visitLocation.locationId
         )
       } else if (isFirstVisit) {
         // Primera visita verificada por el mesero: mensaje de BIENVENIDA, no de "sumaste puntos",
@@ -660,7 +725,8 @@ export async function POST(request: NextRequest) {
           cleaned,
           { '1': updated.name, '2': String(pointsResult.newBalance), '3': tiersRoadmapText },
           tenant,
-          customer.id
+          customer.id,
+          visitLocation.locationId
         )
       } else {
         // Sin tier nuevo: puntos sumados. Cada caso usa SU plantilla — sin fallback engañoso.
@@ -677,7 +743,8 @@ export async function POST(request: NextRequest) {
               '4': nextTierInfo!.tier.safe_reward_title,
             },
             tenant,
-            customer.id
+            customer.id,
+            visitLocation.locationId
           )
         } else {
           whatsappStatus = await sendCheckinTemplate(
@@ -691,7 +758,8 @@ export async function POST(request: NextRequest) {
               '4': tiersRoadmapText,
             },
             tenant,
-            customer.id
+            customer.id,
+            visitLocation.locationId
           )
         }
       }

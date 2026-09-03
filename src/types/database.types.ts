@@ -1,3 +1,5 @@
+import type { LocationSource } from '@/lib/location-resolver'
+
 export interface Customer {
   id: string
   phone: string
@@ -20,6 +22,14 @@ export interface Customer {
   google_review_clicked_at: string | null
   /** Tocó "La próxima lo hago" → sí se le vuelve a mostrar (migración 00032). */
   google_review_postponed_at: string | null
+  /**
+   * Sede donde se REGISTRÓ el cliente (D2, migración 00043). NULL = sede desconocida.
+   * No parte al cliente: `customers_phone_tenant_key (phone, tenant_id)` NO se toca, y por
+   * eso los puntos siguen unificados entre sedes sin escribir una línea de código.
+   */
+  origin_location_id: string | null
+  /** Caché de la sede de su última visita ("sede de casa", 00043). NULL = desconocida. */
+  last_visit_location_id: string | null
   created_at: string
   updated_at: string
 }
@@ -35,6 +45,12 @@ export interface Visit {
   raw_message: string | null
   table_number: number | null
   registered_by_staff_id: string | null
+  /** Sede donde ocurrió la visita (00043). NULL = SEDE DESCONOCIDA, y se MUESTRA. */
+  location_id: string | null
+  /** De dónde salió `location_id`. Va junto con él (CHECK `visits_location_pareja_check`). */
+  location_source: LocationSource | null
+  /** TRI-ESTADO: null = no se evaluó · false = el QR coincidía · true = el QR decía otra sede. */
+  location_conflict: boolean | null
   created_at: string
 }
 

@@ -65,14 +65,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 })
     }
 
-    const { tenant, customer } = resolved
+    // `locationId` = la sede que resolvió el host (multi-sede F3). Se propaga a
+    // `review_events.location_id` para poder medir el embudo POR FICHA DE GOOGLE (D5).
+    const { tenant, customer, locationId } = resolved
 
     if (action === 'postponed') {
-      await registerReviewPostpone(customer, tenant.id)
+      await registerReviewPostpone(customer, tenant.id, locationId)
       return NextResponse.json({ ok: true })
     }
 
-    const result = await registerReviewClick(customer, tenant)
+    const result = await registerReviewClick(customer, tenant, locationId)
     return NextResponse.json({ ok: true, ...result })
   } catch (error) {
     console.error('[ReviewAction] Error:', error)

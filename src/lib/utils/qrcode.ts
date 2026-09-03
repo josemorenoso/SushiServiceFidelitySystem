@@ -15,6 +15,19 @@ export interface CustomerQRToken {
   phone: string
   name: string
   ts: number        // timestamp de generación (segundos epoch)
+  /**
+   * Sede desde la que se generó el QR (multi-sede F3, §3.1 del spec).
+   *
+   * ⚠️ **NUNCA DECIDE LA SEDE DE LA VISITA.** Es la única señal que el cliente puede
+   * falsificar —el QR se arma con el subdominio que él tenga abierto, y ese puede ser un
+   * enlace guardado de otra sede—, así que solo sirve para poner
+   * `visits.location_conflict` (`true` = el QR decía otra sede). Ver conflicto 7 de §11.
+   *
+   * OPCIONAL a propósito: los tokens ya emitidos no lo traen, y sin él
+   * `location_conflict` queda en `NULL` = "no se evaluó", que es exactamente lo que
+   * describe el COMMENT de la columna en la 00043.
+   */
+  loc?: string
 }
 
 /**
@@ -57,6 +70,8 @@ export async function verifyCustomerQRToken(token: string): Promise<CustomerQRTo
     phone: payload.phone,
     name: payload.name,
     ts: payload.ts,
+    // Ausente en todos los tokens anteriores a F3: se omite en vez de inventarlo.
+    ...(typeof payload.loc === 'string' ? { loc: payload.loc } : {}),
   }
 }
 
@@ -90,7 +105,13 @@ export function decodeCustomerQRTokenUnsafe(token: string): CustomerQRToken | nu
     ) {
       return null
     }
-    return { sub: payload.sub, phone: payload.phone, name: payload.name, ts: payload.ts }
+    return {
+      sub: payload.sub,
+      phone: payload.phone,
+      name: payload.name,
+      ts: payload.ts,
+      ...(typeof payload.loc === 'string' ? { loc: payload.loc } : {}),
+    }
   } catch {
     return null
   }

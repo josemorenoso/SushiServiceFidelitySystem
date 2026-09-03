@@ -7,7 +7,7 @@
 |---|---|
 | **Diseño técnico completo** | `docs/superpowers/specs/2026-09-02-multisede-design.md` |
 | **Contexto de negocio** | `docs/requerimientos/REQUERIMIENTOS_AGOSTO_2026.md` §23, §23.bis, §23.ter |
-| **Estado** | F1 implementada (00041 + 00042 + arreglo del AIOS). F2..F10 pendientes. |
+| **Estado** | F1, F2 y **F3** implementadas. Las migraciones 00041, 00042 y 00043 estan APLICADAS en produccion. F4..F10 pendientes. |
 
 **El diseño ya está decidido: las 12 decisiones del dueño (D1..D12) están tomadas y no se
 re-litigan.** Si algo de este doc contradice al spec, manda el spec.
@@ -32,8 +32,8 @@ re-litigan.** Si algo de este doc contradice al spec, manda el spec.
 | Fase | Contenido | Estado |
 |---|---|---|
 | **F1** | 00041 + 00042: la sede como entidad, `UNIQUE (id, tenant_id)`, dominio por sede, sede canónica de los tenants vivos + el arreglo del AIOS | ✅ **hecha** |
-| **F2** | 00043: `location_id` en las tablas de eventos, todas NULL | 🔜 en curso, sesión aparte |
-| **F3** | `resolveHostContext()`, regla de sede única implícita, propagación a los escritores, **borrar la geocerca comentada** | ⏳ |
+| **F2** | 00043: `location_id` en las tablas de eventos, todas NULL | ✅ **hecha** (aplicada en produccion) |
+| **F3** | `resolveHostContext()`, regla de sede única implícita, propagación a los escritores, **borrar la geocerca comentada** | ✅ **hecha** — ver §3.bis |
 | **F4** | 00044 + login del mesero por sede (D11) | ⏳ |
 | **F5** | 00046 + calendario, crons y domicilios con el interruptor de ≥2 sedes (D8, D9) | ⏳ |
 | **F6** | Desglose por sede en el dashboard (D4, D12) | ⏳ |
@@ -42,7 +42,8 @@ re-litigan.** Si algo de este doc contradice al spec, manda el spec.
 | **F9** | 00048: `location_messaging`, cupo por línea, plantillas por línea | ⏳ solo si D6 = número por sede |
 | **F10** | 00049: `customer_review_state` | ⏳ confirmar la suposición §7.2 |
 
-**F3 es el cuello de botella**: sin resolución de sede, `location_id` nace vacía.
+~~**F3 es el cuello de botella**~~ — ya no lo es: desde F3 las columnas de la 00043 se llenan
+solas en el check-in, el registro y los domicilios. Lo que sigue vacío y por qué está en §3.bis.
 
 ---
 
@@ -210,6 +211,104 @@ mensaje que dice qué falta, en vez de fallar 15 veces seguidas o quedar aplicad
 
 ---
 
+## 3.bis — F3: cómo se averigua la sede (lo que ya corre)
+
+> Spec: §3 completo. Código: `src/lib/location-resolver.ts` (puro) + `resolveHostContext()`
+> en `src/lib/tenant.ts` (el I/O). **F3 no llevó migración**: todas las columnas ya existían
+> desde la 00043.
+
+### La precedencia, exacta
+
+```
+staff_users.location_id  →  staff_devices.location_id  →  host  →  NULL
+```
+
+El **mesero autenticado GANA sobre el host**. El caso que lo justifica: un cliente parado en
+Laureles abre su enlace guardado de `envigado.marca.com`; si ganara el host, la visita se
+acreditaría a Envigado y el reporte de D12 mentiría sin que nadie lo note. El mesero es de UNA
+sede (D11), está físicamente donde ocurre la visita y su credencial la emite el sistema.
+
+El claim **`loc` del JWT del QR NUNCA decide** la sede: lo arma el navegador del cliente con el
+subdominio que tenga abierto. Solo pone `visits.location_conflict`.
+
+> ⚠️ **Las dos vías más fuertes están cableadas pero HOY NO TIENEN FUENTE.**
+> `staff_users.location_id` y `staff_devices.location_id` los crea la migración **00044**, que
+> es **F4**. `resolveVisitLocation()` ya las recibe y les da prioridad; el check-in les pasa
+> `null` y lo dice en un comentario. **No se pueden pedir en el `SELECT` de `staff_users` hasta
+> que la 00044 esté aplicada**: PostgREST devolvería `42703`, `staff` sería `null` y el
+> check-in respondería **403 a todos los meseros del producto**.
+
+### La regla del dominio raíz — «sede única implícita»
+
+| Host | Sedes activas | Resultado | `location_source` |
+|---|---|---|---|
+| subdominio de una sede | cualquiera | esa sede | `host` |
+| dominio raíz de la marca | **1** | esa sede | `host_single` |
+| dominio raíz de la marca | **2+** | **sin sede** + `409` con la lista | — |
+| dominio raíz de la marca | 0 | sin sede, sin preguntar | — |
+| host desconocido | — | sin marca → 404 | — |
+
+Esto le da a Sushi Service, Don Alirio, Frangal y Demo **atribución perfecta y gratis**: sin
+subdominio nuevo y **sin reimprimir un solo QR**. Y se auto-corrige — el día que uno abra su
+segunda sede, el dominio raíz deja de atribuir automáticamente.
+
+El dominio raíz manda **aunque la sede principal repita ese mismo dominio** (que es lo que hace
+la 00042). Resolver por coincidencia exacta de `domain` haría que la marca con 2 sedes le
+siguiera atribuyendo todo a la principal, en silencio.
+
+`resolveHostContext()` además resuelve la marca por **dos** caminos: `tenants.domain` (lo de
+siempre) y `restaurant_locations.domain` (el subdominio de la sede 2..N). Sin el segundo,
+`laureles.marca.com` devolvería 404. **`getTenantByDomain` conserva su firma intacta.**
+
+### El 409 del registro
+
+`POST /api/check-in` con `action: 'register'` responde **409 `"Sede requerida"`** con
+`locations[]` (id, name, slug, domain). El cliente abre el `domain` de su sede y repite: ese
+host resuelve por `host` y no se vuelve a preguntar. **El endpoint no acepta un `location_id`
+en el body** — ver la deuda #9.
+
+Con **0 o 1** sedes activas este 409 **no se dispara nunca**: es el interruptor de
+compatibilidad del §8.3 del spec.
+
+### Qué columna llena cada camino
+
+| Escritor | Columnas que llena | Procedencia |
+|---|---|---|
+| `POST /api/check-in` · `register` | `visits.location_id/location_source`, `customers.origin_location_id`, `customers.last_visit_location_id`, `point_transactions.location_id`, `message_logs.location_id` | `host` / `host_single` |
+| `POST /api/check-in` · `checkin` | las mismas + `visits.location_conflict` | `host` / `host_single` (y `staff_user`/`staff_device` cuando llegue F4) |
+| `POST /api/webhook/delivery` | las mismas (sin conflicto) | `authorized_number` |
+| `POST /api/check-in/review-action` | `review_events.location_id` | la del host |
+
+`visits.location_source` y `location_id` **van juntos o no van** — lo impone el CHECK, y el
+resolver lo cumple por construcción: nunca asigna uno sin el otro.
+`location_conflict` es **TRI-ESTADO**: `NULL` = no se evaluó (no hubo claim `loc`, o no se
+resolvió sede) · `false` = el QR coincidía · `true` = el QR decía otra sede. **Nunca se escribe
+`false` por defecto.**
+
+### La geocerca comentada: BORRADA
+
+El bloque que dormía comentado en `src/app/api/check-in/route.ts:209-244` **ya no está**
+(spec §3.5). Como control de acceso lo reemplazó, con ventaja, la exigencia de
+`source === 'staff_scan'`. Y dejarlo era peligroso: su query no filtraba `tenant_id` y usaba
+`.single()`, así que el primero que lo descomentara con 2 sedes activas rompería el check-in
+con `PGRST116` para **todos los clientes de todos los tenants**. `lat`/`lon` se siguen
+aceptando en el body y se ignoran.
+
+### Cómo se verifica
+
+- `tests/unit/location-resolver.test.ts` — la **decisión**: precedencia, sede única implícita,
+  el flag del 409 y el tri-estado, sin base de datos.
+- `tests/db/multisede-resolucion.test.ts` — el **contrato con el schema**, contra el Postgres
+  embebido con las 43 migraciones aplicadas: que lo que el resolver produce es exactamente lo
+  que los CHECK aceptan, que media pareja se rechaza con `23514`, que el tri-estado se guarda
+  como tri-estado, que la FK compuesta rechaza con `23503` la visita de la marca A contra la
+  sede de la marca B, y que una sede con historia no se puede borrar (`23001`).
+
+Las sedes se leen en el test con **la misma consulta** que `getActiveLocations()`, para que si
+las dos se separan, se separen a la vista.
+
+---
+
 ## 4. Reglas que valen para todas las fases
 
 - **`location_id` es SIEMPRE nullable**, con **FK compuesta** `(location_id, tenant_id)
@@ -248,6 +347,12 @@ Ninguna de éstas se cierra por cuenta propia: son decisiones del dueño o de un
 | 6 | **La separación de una sede** (venta, franquicia, socio distinto). | Riesgo **aceptado y aplazado por el dueño** (2026-09-02). No hay función de split y no se inventa: fundir es un `INSERT`, separar exige inventar de quién son los puntos, el saldo, los opt-outs y el libro de consentimiento. |
 | 7 | **Ningún premio tiene precio en ninguna tabla.** | D12 ("efectividad por sede") solo puede responderse en **conteos y tasas, nunca en pesos**. Hay que decirlo en pantalla. |
 | 8 | **Adoptar el histórico** para un tenant de una sola sede es posible y es **irreversible**. | No se ejecuta sin orden explícita del dueño. |
+| 9 | **El 409 de sede no acepta una elección por `location_id`.** El spec define el 409 y la lista de sedes «para que el cliente elija», pero **no dice qué `visits.location_source` le correspondería** a una sede elegida a mano: las 7 vías del CHECK no contemplan ese caso (`manual` es «corrección explícita de un admin»). | No se inventa una vía nueva ni se reutiliza una que significa otra cosa. Hoy la elección se hace **abriendo el subdominio de la sede**, que resuelve por `host` y ya está especificado. Decisión del dueño o de F7 (cuando exista el selector). |
+| 10 | **`send_queue.location_id` sigue vacía.** El único INSERT posible pasa por la función SQL `enqueue_send_queue()` (00038:271-291), que no tiene esa columna en su lista. | Llenarla exige `CREATE OR REPLACE` de esa función, o sea **una migración**. F3 no lleva migración (la 00044 está reservada para F4). Va con F5/F6. |
+| 11 | **`review_events.location_id` se llena en `clicked`/`postponed` pero NO en `shown`.** El evento `shown` lo escribe la función SQL `log_review_shown_deduped()` (00032:97-115), que no recibe sede. | Mismo caso que #10: es un `CREATE OR REPLACE` en una migración. Mientras tanto, el **denominador** del embudo de reseñas por sede queda incompleto — hay que decirlo en pantalla cuando F6 lo dibuje. |
+| 12 | **`message_logs.location_id` solo la llena la «sede del acto»** (check-in, registro, domicilio). Las campañas masivas (`birthday`, `reactivation`, `reward_reminder`, `calendar_event`, `manual`, `import`) siguen en NULL. | La cascada de respaldo del §6.1 (`last_visit_location_id` → `origin_location_id`) es **F6**: toca el desglose de plata (D4), y F3 tiene prohibido cambiar lecturas de dashboard. `customers.last_visit_location_id` ya se está llenando, así que F6 tendrá de dónde leer. |
+| 13 | **`message_logs.line_location_id`, `tenant_wallet_transactions.location_id`, `campaigns.location_id`, `reward_grants.granted_location_id`, `reward_redemptions.redeemed_location_id` y `consent_events.location_id` siguen vacías.** | Fuera del alcance de F3. `line_location_id` depende de **D6**, que el dueño no decidió (F9). Las de premios son F6 (la matriz origen→destino de D12). `consent_events` **no tiene un solo escritor en TypeScript** — la tabla existe desde la 00037 y nadie inserta en ella. |
+| 14 | **`src/app/api/dashboard/location/route.ts` sigue con su `.single()`.** Filtra solo por tenant: con 2 sedes activas devuelve 500, y su `PUT` inserta una tercera fila en vez de actualizar. Este doc decía «se arregla en F3». | **NO se arregló en F3**: el alcance de la sesión de F3 excluyó explícitamente tocar lecturas y pantallas de dashboard (eso es F6/F7). Contradicción real entre este doc y el alcance ejecutado, dejada por escrito a propósito. Ningún tenant vivo tiene 2 sedes, así que hoy no es explotable. |
 
 ---
 
@@ -277,5 +382,12 @@ sede de la marca B**.
 | `supabase/migrations/00041_locations_first_class.sql` | La sede como entidad. |
 | `supabase/migrations/00042_sede_principal_tenants_vivos.sql` | Sede canónica de los tenants vivos. |
 | `Level 2.0/aios-constelarys/src/lib/actions/provisioning.ts` | La sede se crea siempre (**repo aparte**: `Cada1_AIOS`). |
-| `src/app/api/dashboard/location/*` | ⚠️ Hace `.single()` sobre `restaurant_locations` filtrando **solo por tenant**: con 2 sedes activas devuelve 500, y su PUT inserta una tercera fila en vez de actualizar. **Se arregla en F3, no antes.** |
-| `src/lib/tenant.ts` | `getTenantByDomain` **conserva su firma** — la sede viaja por `resolveHostContext()` (F3). Cambiar la firma toca 16 archivos de golpe. |
+| `supabase/migrations/00043_location_id_eventos.sql` | 18 columnas de sede en 13 tablas de hechos. **Aplicada en producción.** |
+| `src/lib/location-resolver.ts` | **F3.** La decisión pura: precedencia, sede única implícita y tri-estado. Cero imports, cero I/O. |
+| `src/lib/tenant.ts` | **F3.** `resolveHostContext()` + `getActiveLocations()`. `getTenantByDomain` **conserva su firma**: cambiarla toca 16 archivos de golpe. |
+| `src/lib/utils/qrcode.ts` | **F3.** Claim `loc` **opcional** en el JWT del QR. Los tokens ya emitidos no lo traen → `location_conflict` queda en `NULL`, que es «no se evaluó». |
+| `src/app/api/check-in/route.ts` | **F3.** Resuelve marca+sede, el 409 de sede, propaga a visits/customers/puntos/mensajes. Aquí se **borró** la geocerca comentada. |
+| `src/app/api/webhook/delivery/route.ts` | **F3.** Sede del pedido por `authorized_numbers.location_id` (D9). |
+| `n8n/domicilios_whatsapp_v4.json` | **F3, una línea.** Reenvía el `remitente` que ya calculaba y descartaba. ⚠️ **El dueño tiene que desplegarlo a mano en n8n** — este repo no despliega n8n. |
+| `tests/unit/location-resolver.test.ts` · `tests/db/multisede-resolucion.test.ts` | **F3.** La decisión y el contrato con el schema. |
+| `src/app/api/dashboard/location/*` | ⚠️ Sigue con su `.single()` filtrando **solo por tenant**: con 2 sedes activas devuelve 500 y su PUT inserta una tercera fila. **NO se arregló en F3** — ver la deuda #14. |

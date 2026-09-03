@@ -9,7 +9,56 @@ import { getMultipleSettings } from '@/services/settings.service'
 import { syncGoogleContact } from '@/services/google-contacts-sync.service'
 import { rateLimit, getClientIp } from '@/lib/rate-limit'
 import { getTenantBySlug } from '@/lib/tenant'
+import { resolveDirectLocation, type LocationResolution } from '@/lib/location-resolver'
+import { createClient as createServiceClient } from '@supabase/supabase-js'
 import type { Tenant } from '@/types/tenant.types'
+
+function getServiceClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) throw new Error('Missing Supabase env vars')
+  return createServiceClient(url, key)
+}
+
+/**
+ * Sede del pedido de domicilio (D9, spec §3.4).
+ *
+ * Sale del **celular del operador** que reenvió el cuadro del pedido, contrastado contra
+ * `authorized_numbers` — la misma tabla que `twilio-incoming/route.ts:121-127` ya usa para
+ * decidir si el mensaje se reenvía a n8n. Es una señal **autenticada**: la firma de Twilio se
+ * valida antes (`twilio-incoming:82-84`) y el número no lo elige el cliente.
+ *
+ * Falla blando: si no se puede resolver, el pedido se registra igual con sede desconocida.
+ * Un domicilio sin atribuir es un dato menos; un domicilio perdido es un cliente menos.
+ */
+async function resolveDeliveryLocation(
+  remitente: string | null | undefined,
+  tenantId: string
+): Promise<LocationResolution> {
+  const phone = (remitente ?? '').replace(/\D/g, '').slice(-10)
+  if (phone.length !== 10) return resolveDirectLocation(null, 'authorized_number')
+
+  try {
+    const { data, error } = await getServiceClient()
+      .from('authorized_numbers')
+      .select('location_id')
+      .eq('phone', phone)
+      // El aislamiento por marca no lo da el RLS (la app corre con service_role): es este
+      // filtro escrito a mano. Sin él, el operador de OTRA marca resolvería sede aquí.
+      .eq('tenant_id', tenantId)
+      .eq('is_active', true)
+      .maybeSingle()
+
+    if (error) {
+      console.error('[Delivery] No se pudo resolver la sede del operador:', error.message)
+      return resolveDirectLocation(null, 'authorized_number')
+    }
+    return resolveDirectLocation((data?.location_id as string | null) ?? null, 'authorized_number')
+  } catch (err) {
+    console.error('[Delivery] Excepción resolviendo la sede del operador:', err instanceof Error ? err.message : err)
+    return resolveDirectLocation(null, 'authorized_number')
+  }
+}
 
 interface DeliveryRequestBody {
   nombre_cliente: string
@@ -21,6 +70,14 @@ interface DeliveryRequestBody {
   ciudad?: string | null
   birthday?: string | null
   tenant_slug: string
+  /**
+   * Celular del OPERADOR que reenvió el pedido (10 dígitos). Es la sede del pedido (D9).
+   *
+   * ⚠️ Lo calcula `n8n/domicilios_whatsapp_v4.json` desde el `From` de Twilio y hasta F3 lo
+   * DESCARTABA. Opcional a propósito: mientras el dueño no despliegue el workflow nuevo en
+   * n8n, los pedidos siguen entrando exactamente igual, con sede desconocida.
+   */
+  remitente?: string | null
 }
 
 function parseBirthday(raw: string | null | undefined): string | null {
@@ -40,7 +97,9 @@ async function sendDeliveryTemplate(
   phone: string,
   variables: Record<string, string>,
   customerId: string | null,
-  tenant: Tenant
+  tenant: Tenant,
+  /** Sede a la que se imputa el mensaje (D4, multi-sede F3). */
+  locationId?: string | null
 ): Promise<void> {
   if (!templateSid) {
     console.warn(`[Delivery] No hay plantilla configurada para "${templateType}" — mensaje NO enviado.`)
@@ -51,6 +110,7 @@ async function sendDeliveryTemplate(
     await sendTemplateMessage(phone, templateSid, variables, tenant, {
       customerId,
       messageType: templateType,
+      locationId: locationId ?? null,
     })
   } catch (err) {
     console.error(`[Delivery] Error enviando plantilla ${templateType}:`, err)
@@ -107,6 +167,9 @@ export async function POST(request: NextRequest) {
 
     const customerName = nombre_cliente?.trim() || 'Cliente Domicilio'
 
+    // ─── SEDE DEL PEDIDO (D9, multi-sede F3) ───
+    const deliveryLocation = await resolveDeliveryLocation(body.remitente, tenant.id)
+
     let customer = await findCustomerByPhone(cleaned, tenant.id)
     let isNew = false
     let action: 'created' | 'updated' = 'updated'
@@ -121,11 +184,17 @@ export async function POST(request: NextRequest) {
         city: ciudad ?? null,
         tenantId: tenant.id,
         source: 'delivery',
+        originLocationId: deliveryLocation.locationId,
       })
       isNew = true
       action = 'created'
     } else {
-      customer = await incrementVisit(customer.id, customer.total_visits, 'delivery')
+      customer = await incrementVisit(
+        customer.id,
+        customer.total_visits,
+        'delivery',
+        deliveryLocation.locationId
+      )
       if (ciudad && !customer.city) {
         await updateCustomerCityIfNull(customer.id, ciudad)
       }
@@ -143,6 +212,7 @@ export async function POST(request: NextRequest) {
       paymentMethod: metodo_pago ?? undefined,
       amount: monto_total ?? undefined,
       rawMessage: raw_message ?? undefined,
+      location: deliveryLocation,
     })
 
     const settings = await getMultipleSettings([
@@ -156,7 +226,7 @@ export async function POST(request: NextRequest) {
     let welcomePoints = { pointsAwarded: 0, newBalance: 0 }
     if (isNew) {
       try {
-        welcomePoints = await awardWelcomeBonus(customer.id, tenant.id)
+        welcomePoints = await awardWelcomeBonus(customer.id, tenant.id, deliveryLocation.locationId)
       } catch (err) {
         console.error('[Delivery] Error otorgando puntos de bienvenida:', err)
       }
@@ -171,7 +241,13 @@ export async function POST(request: NextRequest) {
     if (!isNew) {
       const previousPoints = customer.total_points ?? 0
       try {
-        pointsResult = await awardVisitPoints(customer.id, visit.id, 'delivery', tenant.id)
+        pointsResult = await awardVisitPoints(
+          customer.id,
+          visit.id,
+          'delivery',
+          tenant.id,
+          deliveryLocation.locationId
+        )
         console.log(`[Delivery] Puntos otorgados: +${pointsResult.pointsAwarded} → balance=${pointsResult.newBalance} (prev=${previousPoints})`)
       } catch (err) {
         console.error('[Delivery] ERROR otorgando puntos (se usa fallback 0):', err)
@@ -200,14 +276,14 @@ export async function POST(request: NextRequest) {
         '1': customer.name,
         '2': String(pointsResult.newBalance),
         '3': tiersRoadmapText,
-      }, customer.id, tenant)
+      }, customer.id, tenant, deliveryLocation.locationId)
     } else if (newTier) {
       await sendDeliveryTemplate(settings.tier_unlocked_template_sid, 'tier_unlocked', cleaned, {
         '1': customer.name,
         '2': newTier.tier_name,
         '3': newTier.safe_reward_title,
         '4': tiersRoadmapText,
-      }, customer.id, tenant)
+      }, customer.id, tenant, deliveryLocation.locationId)
     } else {
       const isNearTier = nextTierInfo && nextTierInfo.pointsRemaining <= 30
       const targetSid = isNearTier
@@ -219,7 +295,7 @@ export async function POST(request: NextRequest) {
           '2': String(pointsResult.pointsAwarded),
           '3': String(pointsResult.newBalance),
           '4': isNearTier ? nextTierInfo!.tier.safe_reward_title : tiersRoadmapText,
-        }, customer.id, tenant)
+        }, customer.id, tenant, deliveryLocation.locationId)
       } else {
         console.warn('[Delivery] No hay plantilla de puntos configurada (points_earned_near/far_template_sid). Mensaje WhatsApp NO enviado.')
       }

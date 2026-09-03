@@ -74,6 +74,12 @@ export async function awardPoints(params: {
   source: PointTransactionSource
   tenantId: string
   referenceId?: string | null
+  /**
+   * Sede donde se generó el punto (`point_transactions.location_id`, migración 00043).
+   * Multi-sede F3. Los puntos siguen siendo de la MARCA: esta columna ATRIBUYE, no separa
+   * saldos — `customers.total_points` no se toca.
+   */
+  locationId?: string | null
 }): Promise<{ pointsAwarded: number; newBalance: number }> {
   const supabase = getServiceClient()
 
@@ -119,6 +125,7 @@ export async function awardPoints(params: {
       tenant_id: params.tenantId,
       reference_id: params.referenceId ?? null,
       balance_after: newBalance,
+      location_id: params.locationId ?? null,
     })
 
   if (txErr) {
@@ -140,7 +147,9 @@ export async function awardVisitPoints(
   customerId: string,
   visitId: string,
   source: 'qr' | 'delivery' | 'staff_scan',
-  tenantId: string
+  tenantId: string,
+  /** Sede de la visita que genera el punto (multi-sede F3). `null` = sede desconocida. */
+  locationId?: string | null
 ): Promise<{ pointsAwarded: number; newBalance: number }> {
   const supabase = getServiceClient()
   const config = await getPointsConfig(tenantId)
@@ -173,6 +182,7 @@ export async function awardVisitPoints(
     source: txSource,
     tenantId,
     referenceId: visitId,
+    locationId,
   })
 }
 
@@ -183,7 +193,12 @@ export async function awardVisitPoints(
  * 75-90 sobre un umbral de 150, más de la mitad del premio se regala antes de que vuelva.
  * Por eso el calibrador lo ajusta junto con los puntos por visita.
  */
-export async function awardWelcomeBonus(customerId: string, tenantId: string): Promise<{ pointsAwarded: number; newBalance: number }> {
+export async function awardWelcomeBonus(
+  customerId: string,
+  tenantId: string,
+  /** Sede donde se registró el cliente (multi-sede F3). `null` = sede desconocida. */
+  locationId?: string | null
+): Promise<{ pointsAwarded: number; newBalance: number }> {
   const config = await getPointsConfig(tenantId)
   const bonus = generateWelcomeBonusPoints(config)
 
@@ -196,6 +211,7 @@ export async function awardWelcomeBonus(customerId: string, tenantId: string): P
     points: bonus,
     source: 'welcome_bonus',
     tenantId,
+    locationId,
   })
 }
 

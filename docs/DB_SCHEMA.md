@@ -143,7 +143,7 @@ erDiagram
 | 6 | [authorized_numbers](#authorized_numbers) | Números de meseros autorizados | SI | Admin: CRUD completo |
 | 7 | [admin_settings](#admin_settings) | Configuración del admin (key-value) | SI | Admin: SELECT, INSERT, UPDATE |
 | 8 | [restaurant_events](#restaurant_events) | Calendario operativo de eventos/promos con media | SI | Admin: CRUD completo |
-| 9 | [restaurant_locations](#restaurant_locations) | Ubicación del restaurante para validación de geolocalización | SI | Admin: ALL, Service: SELECT |
+| 9 | [restaurant_locations](#restaurant_locations) | **LA SEDE** del negocio (dejó de ser solo la geocerca): subdominio, ficha de Google, meseros y atribución | SI | Tenant: ALL (`tenant_all_restaurant_locations`, 00026) |
 | 10 | [staff_users](#staff_users) | Cuentas de meseros (login con PIN) | SI | Service: ALL (backend maneja auth) |
 | 11 | [staff_devices](#staff_devices) | Dispositivos de confianza registrados por supervisor | SI | Service: ALL |
 | 12 | [message_logs](#message_logs) | Tracking de TODOS los mensajes WhatsApp (transaccionales + campañas) | SI | Admin: lectura; Service: INSERT/UPDATE |
@@ -468,36 +468,70 @@ CREATE POLICY "service_update_restaurant_events" ON restaurant_events FOR UPDATE
 
 ### restaurant_locations
 
-> Ubicación del restaurante para validación de geolocalización anti QR-scam.
+> **LA SEDE.** Nació en la 00014 como "un punto en el mapa" para la geocerca anti QR-scam (hoy
+> apagada, v1.0.5-3). Desde la **00041** es la entidad *sede*: carga el subdominio, la ficha de
+> Google, el teléfono de domicilios, los meseros y toda la atribución por sede.
+> Ver `docs/features/multi-sede.md` y `docs/superpowers/specs/2026-09-02-multisede-design.md`.
 
 | Columna | Tipo | Nullable | Default | Descripción |
 |---------|------|----------|---------|-------------|
 | `id` | `uuid` | NO | `gen_random_uuid()` | PK |
+| `tenant_id` | `uuid` | NO | - | FK → `tenants(id)` (00025/00028) |
 | `name` | `text` | NO | `'Sede principal'` | Nombre de la sede |
 | `address` | `text` | SI | `NULL` | Dirección del local |
-| `lat` | `numeric(10,8)` | NO | - | Latitud |
-| `lon` | `numeric(11,8)` | NO | - | Longitud |
-| `radius_meters` | `integer` | NO | `20` | Radio permitido para check-in (metros) |
-| `is_active` | `boolean` | NO | `true` | Si la ubicación está activa |
+| `slug` | `text` | SI | `NULL` | **00041.** Identificador estable dentro de la marca (`sede-principal`, `laureles`). Kebab-case, 1..63 |
+| `domain` | `text` | SI | `NULL` | **00041.** Subdominio propio de la sede. Único **GLOBAL** |
+| `config` | `jsonb` | NO | `'{}'` | **00041.** Override por sede de `tenants.config`. **Vacío = hereda la marca** |
+| `is_primary` | `boolean` | NO | `false` | **00041.** La sede que hereda el dominio y el material impreso |
+| `sort_order` | `integer` | NO | `0` | **00041.** Orden de presentación |
+| `lat` | `numeric(10,8)` | **SI** | `NULL` | **00041: era NOT NULL.** Latitud — **opcional** |
+| `lon` | `numeric(11,8)` | **SI** | `NULL` | **00041: era NOT NULL.** Longitud — **opcional** |
+| `radius_meters` | `integer` | NO | `20` | Radio de la geocerca (apagada) |
+| `is_active` | `boolean` | NO | `true` | Una sede **nunca se borra: se desactiva** |
 | `created_at` | `timestamptz` | NO | `now()` | Fecha de creación |
-| `updated_at` | `timestamptz` | NO | `now()` | Última actualización |
+| `updated_at` | `timestamptz` | NO | `now()` | Última actualización (trigger `handle_updated_at`) |
 
-**Políticas RLS:**
+**Constraints e índices (00041):**
+
+| Nombre | Qué es | Por qué |
+|---|---|---|
+| `restaurant_locations_id_tenant_key` | `UNIQUE (id, tenant_id)` | ⚠️ **CONTRATO — el nombre no se cambia.** Es el soporte de **todas** las FK compuestas `(location_id, tenant_id)` de la 00043. Redundante para la unicidad (`id` ya es PK), imprescindible para la referencia: sin él solo se podría poner `FK (location_id) → id`, y **una FK simple deja grabar una visita de la marca A con la sede de la marca B** |
+| `idx_restaurant_locations_domain` | `UNIQUE (domain) WHERE domain IS NOT NULL` | Un host resuelve a **una** sede en todo el producto. Global, no por tenant — igual que `idx_tenants_domain` (00029) |
+| `idx_restaurant_locations_tenant_slug` | `UNIQUE (tenant_id, slug) WHERE slug IS NOT NULL` | Dos marcas pueden tener cada una su sede `laureles` |
+| `restaurant_locations_latlon_pair_check` | `CHECK ((lat IS NULL) = (lon IS NULL))` | Media coordenada no es una ubicación: `calculate_distance()` (00014) la convertiría en NULL sin avisar |
+| `restaurant_locations_slug_format_check` | kebab-case, 1..63 | Espejo de `isValidSubdomainLabel` del AIOS |
+| `restaurant_locations_domain_format_check` | hostname minúsculas, ≥2 labels, sin esquema ni ruta, ≤253 | Espejo de `isValidHostname` del AIOS. Va **también** en la base: 55 archivos escriben con `service_role`, que bypasa RLS |
+
+**Trigger de unicidad CRUZADA (00041):**
 
 ```sql
-CREATE POLICY "admin_all_restaurant_locations" ON restaurant_locations
-  FOR ALL USING (auth.role() = 'authenticated');
-CREATE POLICY "service_select_restaurant_locations" ON restaurant_locations
-  FOR SELECT USING (true);
+-- trg_restaurant_locations_domain_guard  BEFORE INSERT OR UPDATE OF domain, tenant_id
+-- restaurant_locations_domain_guard() — SECURITY DEFINER, search_path fijo.
+-- Un índice único por tabla no puede impedir que la sede de la marca A se quede con el
+-- dominio principal de la marca B. El solape se PERMITE solo dentro del mismo tenant,
+-- que es exactamente el caso de la 00042 (la sede principal repite el dominio impreso).
 ```
 
-**Seed data:**
+> ⚠️ **Deuda:** el guardarraíl es de **una sola dirección**. Falta el simétrico sobre `tenants`
+> (un tenant nuevo tomando un `domain` que ya usa la sede de otra marca). Ver
+> `docs/features/multi-sede.md` §5.
 
-| name | address | lat | lon | radius_meters |
-|------|---------|-----|-----|---------------|
-| Sede principal | Actualizar dirección | 6.244203 | -75.581211 | 20 |
+**Políticas RLS** (de la 00026 — la 00041/00042 **no las tocan**):
+
+```sql
+CREATE POLICY "tenant_all_restaurant_locations" ON restaurant_locations FOR ALL
+  USING      (tenant_id = current_tenant_id() OR is_super_admin())
+  WITH CHECK (tenant_id = current_tenant_id() OR is_super_admin());
+```
+
+**Datos (00042):** cada tenant que ya existía recibió su *"Sede principal"* (`slug =
+'sede-principal'`, `is_primary = true`) con el subdominio ya impreso delegado desde
+`tenants.domain`. **Sin coordenadas**: la geocerca está apagada y exigirlas es justo lo que
+dejaba a los tenants sin ninguna sede. El tenant que ya tenía una fila la **adopta** en vez de
+crear una segunda.
 
 ---
+
 
 ### staff_users
 
@@ -920,6 +954,8 @@ CREATE POLICY "tenant_all_template_versions" ON template_versions FOR ALL
 | 38 | `00038_send_queue_drain.sql` | 2026-08-30 | **Cola de goteo (Bloque 2).** `send_queue` gana `claimed_at` — un **arriendo**, no un estado nuevo en el CHECK: dos invocaciones del drenador (n8n reintentando, o una corrida lenta solapándose) leerían los mismos items y el cliente recibiria el mensaje dos veces. **Anti-duplicado arreglado:** el indice de la 00037 era `(tenant_id, phone, campaign_id)` y en Postgres dos NULL nunca colisionan, asi que los items encolados por un cron (sin `campaign_id`) NO estaban protegidos; ahora es `(tenant_id, phone, COALESCE(campaign_id, centinela), message_type)`. Indices nuevos `idx_send_queue_drain_tenant` (el de la 00037 no llevaba `tenant_id`, asi que el round-robin del spec no lo podia usar) e `idx_send_queue_expires`. Funciones: `claim_send_queue()` (**atomica via `FOR UPDATE SKIP LOCKED`** — dos drenadores se reparten la cola en vez de duplicar; el UPDATE va dentro de un CTE porque el RETURNING de un UPDATE no respeta el ORDER BY del subselect), `expire_send_queue()`, `send_queue_pending_tenants()`, `send_queue_depth()`, `send_queue_finished_campaigns()` (cierra campanas cuya cola se vacio por cancelacion o vencimiento, caminos que no pasan por el envio), `enqueue_send_queue(jsonb)` (**va en SQL y no en `.upsert()` porque el `onConflict` de supabase-js solo admite listas de columnas y jamas podria apuntar a un indice parcial sobre expresion — caeria en la PK y el anti-duplicado no se aplicaria, en silencio**). **Bloque 9-10: blindaje de permisos.** `REVOKE ... FROM PUBLIC` **no basta en Supabase**: las default privileges conceden EXECUTE **nominal** a `anon` y `authenticated`, asi que toda funcion SECURITY DEFINER quedaba llamable con la anon key del navegador. Se nombran los roles, y el bloque 10 cierra tambien las de la 00035/00036 — incluida `aios_provision_tenant()`, que **crea tenants** y estaba abierta en produccion. Cola de goteo (v2.13.0, Bloque 2). | Pendiente |
 | 39 | `00039_template_catalog.sql` | 2026-08-30 | **Catálogo estándar de plantillas.** Tabla nueva `template_versions`: guarda a la vez la plantilla **vigente** (`is_current`) y la **pendiente** de aprobación de Meta (`status='pending'`) de cada uno de los 13 mensajes, más el historial y **quién editó, cuándo y si aceptó la advertencia** (`edited_by`, `edited_by_email`, `disclaimer_accepted_at`) — requisito duro de la decisión 3 del dueño. Tres índices que son **invariantes, no optimizaciones**: `idx_template_versions_one_current` (una sola vigente por slot — `admin_settings` nunca queda ambiguo), `idx_template_versions_one_pending` (una sola edición en revisión por slot — dos pendientes competirían por el mismo puntero al aprobarse) y `idx_template_versions_provider_ref` (el `name` es único por WABA en Meta). Seed de `admin_settings.template_style='calido'` **solo en tenants `messaging_provider='zernio'`** — los 4 tenants Twilio no se tocan (decisión 6, textual: "déjalos así, ni los toques"). RLS por tenant. **`admin_settings.*_template_sid` sigue siendo el puntero vigente y su contrato NO cambia**: el camino de envío no se tocó, y con `template_versions` vacía el sistema envía igual que antes. Plantillas de WhatsApp (v2.12.0, §12). **Numeración: es la 00039 y no la 00038 porque esa la tomó `00038_send_queue_drain.sql`.** | Pendiente |
 | 40 | `00040_is_super_admin_security_definer.sql` | 2026-09-01 | **Versiona un ALTER que solo existia aplicado A MANO en produccion.** `is_super_admin()` pasa a `SECURITY DEFINER SET search_path = pg_catalog, public`, con el MISMO cuerpo de la 00024. **Por que:** la funcion llama a `auth.jwt()`, y el rol `aios_constelarys` (00035 v2) no tiene USAGE sobre el schema `auth`. Como `tenants` tiene RLS y ese rol no es dueno ni tiene BYPASSRLS, sus SELECT evaluan las policies — y ahi conviven `aios_constelarys_select_tenants USING (true)` con `super_admin_all_tenants USING (is_super_admin())`. Postgres **no garantiza cortocircuitar el OR**, asi que evaluaba `is_super_admin()` en el contexto del rol que llama y el SELECT entero moria con `42501 permission denied for schema auth`. Sin esta migracion, reconstruir la base desde `supabase/migrations/` deja el AIOS roto sin pista de por que. **Es seguro:** `auth.jwt()` lee un ajuste de SESION, no un permiso del rol, asi que correr como `postgres` devuelve los mismos claims del que llama — no hay escalada. **No otorga ni revoca nada:** el EXECUTE a PUBLIC tiene que seguir, porque las policies la invocan como `anon` y `authenticated`. **Deuda que NO cierra:** `current_tenant_id()` tiene el mismo defecto (verificado: devuelve 42501) y se deja intacta a proposito — cambiarla altera el RLS de cada tabla multitenant y es decision del dueno. | Pendiente |
+| 41 | `00041_locations_first_class.sql` | 2026-09-03 | **`restaurant_locations` deja de ser una geocerca y pasa a SER LA SEDE** (F1 del spec `docs/superpowers/specs/2026-09-02-multisede-design.md`). Columnas nuevas: `slug`, `domain`, `config jsonb NOT NULL DEFAULT '{}'`, `is_primary`, `sort_order`. **`lat`/`lon` pasan a NULLABLE** con `CHECK ((lat IS NULL) = (lon IS NULL))` — la tabla nació en la 00014 para la geocerca anti QR-scam, apagada desde v1.0.5-3, y ese `NOT NULL` hacía que el AIOS solo mandara `locations[]` con las dos coordenadas: **un negocio dado de alta sin coordenadas nacía SIN NINGUNA SEDE, en silencio** (por eso los 4 tenants vivos suman ~1 fila). Constraint **`restaurant_locations_id_tenant_key UNIQUE (id, tenant_id)`** — ⚠️ **nombre de contrato, no se cambia**: es el soporte de TODAS las FK compuestas `(location_id, tenant_id)` de la 00043; una FK simple dejaría grabar una visita de la marca A con la sede de la marca B. Índice único **GLOBAL** parcial sobre `domain` + único parcial `(tenant_id, slug)`. Trigger `trg_restaurant_locations_domain_guard` (SECURITY DEFINER, `search_path` fijo): unicidad **cruzada** contra `tenants.domain`, que **permite el solape solo dentro del mismo tenant** — es lo que deja que la sede principal repita el subdominio ya impreso en los QR sin reimprimir nada. CHECK de formato de `slug` y `domain`, espejo de `src/lib/domains.ts` del AIOS (va también en la base porque 55 archivos escriben con `service_role`, que bypasa RLS). **NO toca RLS ni ninguna fila de historia.** Sin `CREATE INDEX CONCURRENTLY`: el arnés de tests manda el archivo entero en un `client.query()` y moriría con 25001. | Pendiente |
+| 42 | `00042_sede_principal_tenants_vivos.sql` | 2026-09-03 | **Migración de DATOS** (F1). Le da a cada tenant que ya existe su *"Sede principal"* y le delega el subdominio ya impreso en sus QR. Por tenant: **0 sedes** → crea `'Sede principal'` (`slug='sede-principal'`, `is_primary=true`, `domain = tenants.domain`, sin coordenadas); **1 sede** → la **adopta** (le pone `slug`/`domain` si faltan y `is_primary=true`) en vez de crear una segunda; **≥2 sedes** → **no la toca** y avisa con `RAISE WARNING`, porque elegir mal delegaría el subdominio impreso a la sede equivocada. **NO TOCA UNA SOLA FILA DE HISTORIA**: `visits`, `point_transactions`, `review_events` y `customers` se quedan como están, y cuando la 00043 les agregue `location_id` nace NULL y **se queda en NULL** — NULL significa "sede desconocida" y **SE MUESTRA** como un cubo propio llamado *"Sin sede"*, nunca se reparte ni se esconde. **Idempotente** (los `COALESCE` no pisan nada puesto a mano). `tenants.domain` e `idx_tenants_domain` (00029) **no se tocan**: `getTenantByDomain` sigue resolviendo igual y los 4 tenants Twilio funcionan exactamente como antes. | Pendiente |
 
 ### `tenant_id` en las 18 tablas de negocio
 
@@ -967,7 +1003,7 @@ $$ LANGUAGE plpgsql;
 | authorized_numbers | Admin | Admin | Admin | Admin |
 | admin_settings | Admin | Admin | Admin | NO |
 | restaurant_events | Admin + Service | Admin + Service | Admin + Service | Admin |
-| restaurant_locations | Admin + Service | Admin | Admin | Admin |
+| restaurant_locations | Tenant | Tenant | Tenant | Tenant |
 | staff_users | Admin + Service | Admin + Service | Admin + Service | Admin |
 | staff_devices | Admin + Service | Admin + Service | Admin + Service | Admin |
 | message_logs | Admin | Service | Service | NO |

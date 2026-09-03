@@ -332,24 +332,29 @@ export async function POST(request: NextRequest) {
       // Sin auth, el registro continúa pero la visita queda PENDIENTE del escaneo del mesero.
       let regStaffAuthValid = false
       let regResolvedStaffId: string | null = null
+      // Multi-sede F4: las dos vías más fuertes de la precedencia del §3.1, ya con fuente
+      // (`staff_users.location_id` / `staff_devices.location_id`, migración 00044).
+      let regStaffLocationId: string | null = null
+      let regDeviceLocationId: string | null = null
       let pendingStaffScan = false
       if (checkinMode === 'staff_verified' && !firstVisitFree) {
         const supabase = getServiceClient()
         if (registered_by_staff_id) {
           const { data: staff } = await supabase
             .from('staff_users')
-            .select('id, is_active')
+            .select('id, is_active, location_id')
             .eq('id', registered_by_staff_id)
             .eq('tenant_id', tenant.id)
             .single()
           if (staff && staff.is_active) {
             regStaffAuthValid = true
             regResolvedStaffId = staff.id
+            regStaffLocationId = staff.location_id ?? null
           }
         } else if (device_token) {
           const { data: device } = await supabase
             .from('staff_devices')
-            .select('id, staff_user_id, is_trusted, expires_at')
+            .select('id, staff_user_id, is_trusted, expires_at, location_id')
             .eq('device_fingerprint', device_token)
             .eq('is_trusted', true)
             .eq('tenant_id', tenant.id)
@@ -359,6 +364,7 @@ export async function POST(request: NextRequest) {
               regStaffAuthValid = true
               // Atribuir la visita al mesero dueño del dispositivo (si lo tiene).
               regResolvedStaffId = device.staff_user_id ?? null
+              regDeviceLocationId = device.location_id ?? null
             }
           }
         }
@@ -368,15 +374,14 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // ─── SEDE DEL REGISTRO (multi-sede F3, precedencia del §3.1) ───
-      // Sin `staff_users.location_id` / `staff_devices.location_id` la precedencia cae
-      // directo al host — y el registro en modo `auto` nunca pasó por auth de mesero de
-      // todos modos, que es justo el argumento por el que el host es imprescindible (§3.1).
+      // ─── SEDE DEL REGISTRO (multi-sede, precedencia del §3.1) ───
+      // El registro en modo `auto` nunca pasa por auth de mesero, así que ahí las dos vías
+      // fuertes llegan vacías y la precedencia cae al host — que es justo el argumento por el
+      // que el host es imprescindible (§3.1). En modo `staff_verified` con la primera visita
+      // no libre sí hubo auth, y desde F4 esa auth trae sede.
       const regLocation = resolveVisitLocation({
-        // ⚠️ Las dos vías más fuertes llegan con la migración 00044, que es F4. Están
-        // cableadas aquí para que F4 sea una línea, no un rediseño.
-        staffLocationId: null,
-        deviceLocationId: null,
+        staffLocationId: regStaffLocationId,
+        deviceLocationId: regDeviceLocationId,
         hostLocationId: hostContext.locationId,
         hostSource: hostContext.locationSource,
       })
@@ -567,6 +572,9 @@ export async function POST(request: NextRequest) {
 
       let staffAuthValid = false
       let resolvedStaffId: string | null = null
+      // Multi-sede F4: las vías 1 y 2 del §3.1, ya con fuente (migración 00044).
+      let staffLocationId: string | null = null
+      let deviceLocationId: string | null = null
       const supabase = getServiceClient()
 
       // Validar QR token del cliente (firma + expiración)
@@ -590,18 +598,19 @@ export async function POST(request: NextRequest) {
       if (registered_by_staff_id) {
         const { data: staff } = await supabase
           .from('staff_users')
-          .select('id, is_active')
+          .select('id, is_active, location_id')
           .eq('id', registered_by_staff_id)
           .eq('tenant_id', tenant.id)
           .single()
         if (staff && staff.is_active) {
           staffAuthValid = true
           resolvedStaffId = staff.id
+          staffLocationId = staff.location_id ?? null
         }
       } else if (device_token) {
         const { data: device } = await supabase
           .from('staff_devices')
-          .select('id, staff_user_id, is_trusted, expires_at')
+          .select('id, staff_user_id, is_trusted, expires_at, location_id')
           .eq('device_fingerprint', device_token)
           .eq('is_trusted', true)
           .eq('tenant_id', tenant.id)
@@ -612,6 +621,11 @@ export async function POST(request: NextRequest) {
             // Atribuir la visita al mesero dueño del dispositivo (si lo tiene):
             // sin esto, todo escaneo desde dispositivo quedaba sin mesero en visits.
             resolvedStaffId = device.staff_user_id ?? null
+            // Vía 2 del §3.1. Se usa la sede DEL DISPOSITIVO, no la del mesero al que está
+            // atribuido: el mesero no se autenticó aquí, el aparato sí. El trigger
+            // `trg_staff_devices_sede_coherente` (00044) garantiza que, cuando las dos se
+            // conocen, son la misma — así que la distinción solo importa cuando una es NULL.
+            deviceLocationId = device.location_id ?? null
             // Actualizar last_used_at del dispositivo
             await supabase
               .from('staff_devices')
@@ -636,14 +650,17 @@ export async function POST(request: NextRequest) {
       // en Laureles puede abrir su enlace guardado de `envigado.marca.com`, y si ganara el
       // host la visita se acreditaría a Envigado y el reporte de D12 mentiría sin que nadie
       // lo note. El mesero es de UNA sede (D11) y está físicamente donde ocurre la visita.
+      // F4 (migración 00044) le dio fuente a las dos vías fuertes: se piden en el SELECT de
+      // arriba y llegan aquí con valor. Un mesero o un dispositivo sin sede asignada manda
+      // `null` y la precedencia cae al host, exactamente como antes de F4.
+      // NOTA: aquí NO se responde 403 por discrepancia entre el host y la sede del mesero.
+      // El 403 del §5.3 es del LOGIN del mesero (`/api/staff/login`), no de esta ruta: el
+      // cliente puede perfectamente llegar con un enlace guardado de otra sede, y ése es
+      // justo el caso para el que existe la precedencia. La discrepancia se REGISTRA en
+      // `visits.location_conflict`, no se bloquea.
       const visitLocation: LocationResolution = resolveVisitLocation({
-        // ⚠️ F4 (migración 00044) agrega `staff_users.location_id` y
-        // `staff_devices.location_id`. Hasta entonces estas dos vías no tienen fuente y la
-        // precedencia cae al host. NO se pueden pedir en el SELECT de arriba: la columna no
-        // existe todavía y PostgREST devolvería 42703 → `staff` sería null → 403 en CADA
-        // check-in del producto.
-        staffLocationId: null,
-        deviceLocationId: null,
+        staffLocationId,
+        deviceLocationId,
         hostLocationId: hostContext.locationId,
         hostSource: hostContext.locationSource,
         qrLocationId,

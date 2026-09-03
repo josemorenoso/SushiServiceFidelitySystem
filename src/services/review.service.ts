@@ -169,7 +169,16 @@ export async function logReviewEvent(
  * Recargar la pantalla de éxito no debe contar como una segunda impresión: si lo hiciera,
  * el denominador del funnel se infla y la tasa de conversión miente hacia abajo.
  */
-export async function logReviewShown(customerId: string, tenantId: string): Promise<void> {
+export async function logReviewShown(
+  customerId: string,
+  tenantId: string,
+  /**
+   * Sede cuya ficha de Google se mostró (D5). Multi-sede F4: hasta la 00044 el evento
+   * `'shown'` nacía SIEMPRE sin sede, así que el DENOMINADOR del embudo de reseñas por sede
+   * quedaba incompleto mientras el numerador (`clicked`) sí la traía. `null` = desconocida.
+   */
+  locationId: string | null = null
+): Promise<void> {
   const supabase = getServiceClient()
 
   // Dedup en UNA sola sentencia SQL (INSERT ... WHERE NOT EXISTS, vía RPC de la 00032): una
@@ -177,10 +186,16 @@ export async function logReviewShown(customerId: string, tenantId: string): Prom
   // check-then-act se estrecha a lo que dura la sentencia. Es un contador de impresiones, no
   // dinero: no se busca atomicidad perfecta, solo dejar de inflar el denominador del funnel
   // en recargas y reintentos.
+  // ⚠️ EL DEDUPE SIGUE SIENDO POR (tenant, cliente), NO POR SEDE — a propósito. Meterle la
+  // sede subiría un número que el panel ya reporta hoy, y cambiar hacia arriba una métrica
+  // existente al pasar una migración es justo lo que este diseño evita. Consecuencia para
+  // F6: si el mismo cliente ve el recuerdo en dos sedes dentro de la ventana, cuenta UNA vez
+  // y se le atribuye a la PRIMERA. Hay que decirlo en pantalla cuando F6 dibuje el embudo.
   const { error } = await supabase.rpc('log_review_shown_deduped', {
     p_tenant_id: tenantId,
     p_customer_id: customerId,
     p_within_hours: REVIEW_SHOWN_DEDUPE_HOURS,
+    p_location_id: locationId,
   })
 
   if (error) {

@@ -49,13 +49,18 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(HIDDEN)
     }
 
-    const { tenant, customer } = resolved
+    const { tenant, customer, locationId } = resolved
     const state = await getReviewPromptState(customer, tenant)
 
     // La impresión se sella aquí, no en el navegador: es el único punto que sabe con
     // certeza que el modal se va a renderizar. Deduplicado a 12h por si el cliente recarga.
+    //
+    // Multi-sede F4 (deuda #11): la sede viaja hasta `review_events.location_id`. Antes de la
+    // 00044 la función SQL que escribe este evento no recibía sede, así que el DENOMINADOR
+    // del embudo de reseñas nacía vacío mientras el numerador (`clicked`, que escribe
+    // `logReviewEvent`) sí la traía — dos mitades del mismo embudo medidas distinto.
     if (state.show) {
-      await logReviewShown(customer.id, tenant.id)
+      await logReviewShown(customer.id, tenant.id, locationId)
     }
 
     return NextResponse.json(state)

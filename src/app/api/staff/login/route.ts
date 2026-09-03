@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { SignJWT } from 'jose'
 import bcrypt from 'bcryptjs'
 import { createClient } from '@supabase/supabase-js'
-import { getTenantByDomain } from '@/lib/tenant'
+import { resolveHostContext } from '@/lib/tenant'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -19,7 +19,14 @@ function getStaffSecret() {
 
 export async function POST(request: NextRequest) {
   try {
-    const tenant = await getTenantByDomain(request.headers.get('host'))
+    // Multi-sede F4 (D11). `resolveHostContext` en vez de `getTenantByDomain` por dos
+    // razones, las dos imprescindibles para que exista el login POR SEDE:
+    //   1. Resuelve la marca también por `restaurant_locations.domain`. Sin eso, el mesero
+    //      de la sede 2 abre `laureles.marca.com/mesero` y recibe un 404 "Restaurante no
+    //      reconocido" — no hay login de sede posible.
+    //   2. Trae la sede del host, que es la mitad del guardarraíl del §5.3.
+    const hostContext = await resolveHostContext(request.headers.get('host'))
+    const tenant = hostContext.tenant
     if (!tenant) {
       return NextResponse.json({ error: 'Restaurante no reconocido' }, { status: 404 })
     }
@@ -37,7 +44,7 @@ export async function POST(request: NextRequest) {
     const supabase = getServiceClient()
     const { data: staff } = await supabase
       .from('staff_users')
-      .select('id, name, phone, pin, role, is_active')
+      .select('id, name, phone, pin, role, is_active, location_id')
       .eq('phone', phone)
       .eq('tenant_id', tenant.id)
       .single()
@@ -64,6 +71,30 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // ─── D11: el mesero es de UNA sede, y entra por el enlace de ESA sede ───
+    // Guardarraíl del §5.3 del spec. Solo actúa cuando las DOS sedes son conocidas:
+    //   · mesero sin sede asignada (`location_id` NULL, que es todo el parque de hoy) → pasa.
+    //   · host que no resuelve sede (marca con 0 o 2+ sedes en el dominio raíz)      → pasa.
+    // Así ningún mesero de los 4 tenants vivos se queda fuera el día que se aplique la 00044,
+    // y el rechazo solo aparece cuando alguien de verdad se equivocó de enlace.
+    //
+    // Va DESPUÉS de validar el PIN a propósito: contestar "estás en otra sede" antes de
+    // comprobar la clave le diría a cualquiera qué celulares existen y en qué sede están.
+    if (
+      hostContext.locationId &&
+      staff.location_id &&
+      hostContext.locationId !== staff.location_id
+    ) {
+      return NextResponse.json(
+        {
+          error: 'Sede incorrecta',
+          message:
+            'Estás en el enlace de otra sede. Abre el enlace de tu sede para iniciar sesión.',
+        },
+        { status: 403 }
+      )
+    }
+
     // Actualizar last_login_at
     await supabase
       .from('staff_users')
@@ -71,6 +102,10 @@ export async function POST(request: NextRequest) {
       .eq('id', staff.id)
 
     // Generar JWT (8 horas)
+    // ⚠️ La sede NO va dentro del JWT (§5.3): dura 8 horas, así que reasignar de sede a un
+    // mesero tardaría hasta 8 horas en verse y no habría forma de revocarlo. Vive en la fila
+    // de `staff_users` y se relee en cada petición — el check-in ya hacía ese SELECT de
+    // todos modos, así que el ahorro de meterla en el token sería cero.
     const token = await new SignJWT({
       sub: staff.id,
       phone: staff.phone,
@@ -89,6 +124,9 @@ export async function POST(request: NextRequest) {
         name: staff.name,
         phone: staff.phone,
         role: staff.role,
+        // Para MOSTRAR de qué sede es el mesero, no para autorizar: la autorización la
+        // decide la fila, que se relee en cada petición. `null` = sin sede asignada.
+        location_id: staff.location_id ?? null,
       },
     })
   } catch (error) {

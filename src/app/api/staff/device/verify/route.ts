@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { getTenantByDomain } from '@/lib/tenant'
+import { resolveHostContext } from '@/lib/tenant'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -11,7 +11,11 @@ function getServiceClient() {
 
 export async function POST(request: NextRequest) {
   try {
-    const tenant = await getTenantByDomain(request.headers.get('host'))
+    // Multi-sede F4 (D11): `resolveHostContext` resuelve la marca TAMBIEN por
+    // `restaurant_locations.domain`. Sin eso, el mesero de la sede 2 abre
+    // `laureles.marca.com/mesero` y toda esta superficie responde 404. `getTenantByDomain`
+    // solo mira `tenants.domain` y CONSERVA su firma: la sede viaja por aqui.
+    const tenant = (await resolveHostContext(request.headers.get('host'))).tenant
     if (!tenant) {
       return NextResponse.json({ error: 'Restaurante no reconocido' }, { status: 404 })
     }

@@ -61,6 +61,86 @@ Hay que replicarlo a los 25 clientes.
 
 ---
 
+## [2026-09-03 14:50] - Multi-sede F4: el mesero es de UNA sede (D11) + las 3 deudas que llevaban migración
+
+### Tipo de cambio
+- **ADDED**: `supabase/migrations/00044_meseros_por_sede.sql` — `staff_users.location_id` y `staff_devices.location_id`. Las dos NULLABLE y con **FK COMPUESTA** `(location_id, tenant_id) REFERENCES restaurant_locations (id, tenant_id) ON DELETE RESTRICT` + índice parcial, que es la regla transversal que la 00043 dejó establecida: una FK simple deja asignar un mesero de la marca A a una sede de la marca B y el motor **no dice nada**.
+- **ADDED**: `staff_devices_fingerprint_tenant_key UNIQUE (device_fingerprint, tenant_id)` — tapa una bomba **verificada**. Hasta hoy `device_fingerprint` solo tenía índice NORMAL (00018:41) y **SIETE** sitios del código hacen `.single()` sobre él (`staff-auth.ts`, `check-in` ×2, `device/register`, `device/verify`, `staff/me`, `staff/stats`). Dos filas iguales dentro de un tenant = `PGRST116` = el mesero ve *"dispositivo no reconocido"* **para siempre**, sin que el mensaje diga la causa.
+- **ADDED**: dos triggers de coherencia de D11 (23514). `trg_staff_devices_sede_coherente` impide que un dispositivo quede a nombre de un mesero de otra **sede** o de otra **marca** — lo de la marca no lo cubre ninguna FK, porque `staff_devices_staff_user_id_fkey` es **simple** sobre `staff_users(id)`. `trg_staff_users_sede_coherente` es la dirección simétrica: mover de sede a un mesero con dispositivos en la sede vieja se **rechaza** en vez de arrastrarlos. El spec pedía "un trigger" y describía un sentido; el invariante es simétrico y esta misma fase abre el segundo camino de escritura (`PATCH /api/dashboard/staff` acepta `location_id`), así que hacer cumplir la mitad habría sido el fallo silencioso de siempre.
+- **ADDED**: `tests/db/multisede-meseros.test.ts` — **28 comprobaciones** contra el Postgres embebido con las 44 migraciones: `23503` para el mesero de la marca A contra la sede de la marca B, `23001` al borrar una sede con meseros o con dispositivos, `23514` en los dos triggers, `23505` en el fingerprint repetido (y el mismo fingerprint permitido **entre** marcas), `staff_users_phone_tenant_key` impidiendo dos filas del mismo celular, la precedencia leída de filas REALES, y las dos funciones SQL escribiendo la sede.
+- **CHANGED**: **se enciende la precedencia que F3 dejó inerte.** `POST /api/check-in` pide ahora `location_id` en sus `SELECT` a `staff_users` y `staff_devices` (las dos ramas, `register` y `checkin`) y se lo pasa a `resolveVisitLocation()`. Las vías 1 y 2 del §3.1 dejan de recibir `null`. Los 27 tests unitarios de F3 **no se tocaron**: describían este comportamiento y ahora son ciertos.
+- **CHANGED**: `POST /api/staff/login` — **login del mesero POR SEDE (D11)**. Resuelve el host con `resolveHostContext()`, y si el host dice una sede y la fila del mesero dice otra responde **403 «Estás en el enlace de otra sede»**. Antes ese caso salía como un 401 *"PIN incorrecto"*, que le hace pensar al mesero que olvidó su clave. Va **después** de validar el PIN: contestar antes le diría a cualquiera qué celulares existen y en qué sede están. ⚠️ **La sede NO entra al JWT** (§5.3): dura 8h, así que reasignar tardaría hasta 8 horas en verse y no habría revocación — y el ahorro sería cero, porque el check-in ya hacía ese SELECT.
+- **CHANGED**: `staff/me`, `staff/stats`, `staff/device/register`, `staff/device/verify`, `staff/pending-rewards` y `reward-redeem` pasan de `getTenantByDomain()` a `resolveHostContext()`. Sin esto no hay login por sede posible: toda la superficie del mesero devolvía **404** en el subdominio de la sede 2, porque `getTenantByDomain` solo mira `tenants.domain`. Es **estrictamente aditivo** — `resolveHostContext` empieza llamando a `getTenantByDomain`, así que para los 4 tenants vivos resuelve exactamente lo mismo.
+- **CHANGED**: `POST /api/staff/device/register` — el dispositivo **hereda la sede de su mesero dueño**. Es la única fuente que no hay que inventar, y es lo que hace que `staff_devices.location_id` se llene sin pantalla nueva. Además ahora **comprueba el error de escritura** (antes lo descartaba): 23514/23505 salen como 409 en vez de un falso `success: true`.
+- **CHANGED**: `GET/POST/PATCH /api/dashboard/staff` aceptan y devuelven `location_id`, validando que la sede sea **activa y de esta marca** (400 `Sede inválida`) y traduciendo el 23514 del trigger a un **409 `Conflicto de sede`**. ⚠️ El **selector** en la pantalla es F7 — F4 entregó el mecanismo, no el control (deuda #16).
+- **FIXED**: **deuda #10** — `enqueue_send_queue(jsonb)` copia `send_queue.location_id`. `CREATE OR REPLACE` de verdad (la firma no cambia), así que conserva el `REVOKE ALL … FROM PUBLIC, anon, authenticated` de 00038:334 y no hay ventana sin función. `EnqueueItem.locationId` en `send-queue.service.ts`.
+- **FIXED**: **deuda #11** — `log_review_shown_deduped` gana un 4º parámetro `p_location_id uuid DEFAULT NULL`, así que el evento `'shown'` (el **denominador** del embudo de reseñas) deja de nacer sin sede mientras el numerador sí la traía. ⚠️ **Exigió `DROP` + `CREATE`, no `CREATE OR REPLACE`**: añadir un parámetro no reemplaza la función, crea una **sobrecarga**, y la llamada de 3 argumentos de `review.service.ts` habría pasado a ser **ambigua (42725)** — rompiendo el registro de impresiones en producción, dentro de un `catch` que solo escribe en consola. El `DEFAULT` al final hace que el orden de despliegue no importe.
+- **FIXED**: **deuda #14** — `src/app/api/dashboard/location/route.ts`. Y con una corrección al diagnóstico que este repo tenía por escrito: **el bug no era el `.single()`**, era que el `PUT` **descartaba el error** de su sonda de existencia. Con 2 sedes, `.single()` devuelve error y `data = null` → `existing` queda null → cae al `else` → **INSERT de una TERCERA fila**, en silencio, con `is_primary = false`. Esa sede fantasma entra en `getActiveLocations()` y rompe la «sede única implícita» de toda la marca. Cambiarlo a `.maybeSingle()` **no habría arreglado nada**.
+
+### Archivos afectados
+- `supabase/migrations/00044_meseros_por_sede.sql` (nuevo)
+- `tests/db/multisede-meseros.test.ts` (nuevo)
+- `src/app/api/check-in/route.ts`, `src/app/api/check-in/review-prompt/route.ts`
+- `src/app/api/staff/login/route.ts`, `me/route.ts`, `stats/route.ts`, `device/register/route.ts`, `device/verify/route.ts`, `pending-rewards/route.ts`
+- `src/app/api/reward-redeem/route.ts`
+- `src/app/api/dashboard/staff/route.ts`, `src/app/api/dashboard/location/route.ts`
+- `src/services/send-queue.service.ts`, `src/services/review.service.ts`
+- `docs/features/multi-sede.md` (§3.ter nueva), `docs/DB_SCHEMA.md`, `docs/API_DOCS.md`, `CLAUDE.md`
+
+### Las decisiones que había que tomar, y cuáles se tomaron
+
+**Qué pasa con los meseros que ya existen (lo pedía el encargo, textual).** Se quedan con
+`location_id` **NULL**, que significa *"mesero sin sede asignada"*, **se muestra**, y no se
+backfillea. Adivinar la sede de un mesero es adivinar la sede de cada visita que registre a partir
+de mañana, y ese número termina en el reporte de efectividad por sede (D12). Lo importante es que
+**un mesero con NULL sigue trabajando exactamente igual que antes**: no aporta señal, la
+precedencia cae al host, su dispositivo hereda NULL, y el 403 nuevo **no lo toca** — solo se
+dispara cuando el host dice una sede **y** el mesero tiene una **y** son distintas. La migración no
+puede sacar del trabajo a nadie. Asignar sede es una acción deliberada del dueño, por API.
+
+**El 403 del login NO es el mismo caso que el check-in.** Se lee fácil como una contradicción, así
+que quedó escrito en `docs/features/multi-sede.md` §3.ter: en el **login** el actor es el mesero y
+el enlace equivocado es su error → 403. En el **check-in** el actor es el cliente, que perfectamente
+puede llegar con un enlace guardado de otra sede — y ése es justo el caso para el que existe la
+precedencia → gana el mesero, no se bloquea nada, y la discrepancia se registra en
+`visits.location_conflict`. Bloquear ahí sería negarle el check-in a un cliente que está de pie
+frente al mesero.
+
+**El dedupe de `'shown'` sigue siendo por `(tenant, cliente)` y NO por sede.** Decisión, no olvido:
+meterle la sede subiría un número que el panel **ya reporta hoy**, y cambiar hacia arriba una
+métrica existente al pasar una migración es exactamente lo que este diseño evita. Consecuencia
+para F6, que hay que decir en pantalla: si el mismo cliente ve el recuerdo en dos sedes dentro de
+la ventana de 12h, cuenta **una vez**, atribuido a la **primera**.
+
+### Verificación (las 4, con salida real)
+- `npx tsc --noEmit` → **sin salida** (limpio)
+- `npx eslint src` → **39 problemas, 7 errores** — los mismos 7 preexistentes, en 7 archivos que
+  esta fase **no tocó** (`mesero/scan/page.tsx`, `dashboard/reward-tiers/route.ts`,
+  `CampaignEfficiencyChart`, `ROICard`, `SegmentRadar`, `useDashboardAnalytics`, `useStaffAuth`).
+  **Ninguno nuevo.**
+- `npm run build` → **compila**
+- `npx vitest run` → **9 archivos / 167 tests, todos en verde**. Baseline antes de F4: 8 / 139.
+  **+1 archivo, +28 tests. Ninguno reescrito.**
+
+### ⚠️ Para el dueño
+- **La 00044 NO está aplicada.** Hay que correrla en el SQL Editor de Supabase (este proyecto no
+  usa el CLI). **Va ANTES de desplegar este código**: al revés, el `SELECT` del check-in pide una
+  columna que no existe, PostgREST devuelve `42703`, `staff` queda `null` y el check-in responde
+  **403 a TODOS los meseros del producto**.
+- La migración **aborta y nombra los duplicados** si ya hay `device_fingerprint` repetidos dentro
+  de un tenant, en vez de deduplicar por su cuenta: borrar una fila de `staff_devices` saca del
+  trabajo al dispositivo de alguien, y eso lo decide el dueño.
+- **No se hizo push.** Los commits siguen locales.
+
+### Request original
+> Implementa la FASE F4 de multi-sede: la 00044 (`staff_users.location_id` y
+> `staff_devices.location_id`), encender la precedencia que F3 dejó inerte, D11 («cada mesero es
+> de cada sede, no se juntan jamás») y cerrar las deudas de F3 que llevan migración —
+> `send_queue.location_id`, el `'shown'` de `review_events` y el `.single()` de
+> `/api/dashboard/location`.
+
+---
+
 ## [2026-09-03 02:35] - Multi-sede F1: `restaurant_locations` pasa a SER la sede
 
 ### Tipo de cambio

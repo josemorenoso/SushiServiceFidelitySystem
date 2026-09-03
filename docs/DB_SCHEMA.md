@@ -568,13 +568,26 @@ crear una segunda.
 | `last_login_at` | `timestamptz` | SI | `NULL` | Última vez que hizo login |
 | `created_at` | `timestamptz` | NO | `now()` | Fecha de creación |
 | `updated_at` | `timestamptz` | NO | `now()` | Última actualización |
+| `tenant_id` | `uuid` | **NO** | ⚠️ ver nota | **00025 + 00028.** La marca. ⚠️ Arrastra el **DEFAULT puente** de la 00028 (apunta a Sushi Service) porque la **00030 nunca se aplicó** en producción: un INSERT que lo omita se va callado al tenant equivocado. Pasarlo SIEMPRE explícito |
+| `location_id` | `uuid` | SI | `NULL` | **Nueva (00044).** Sede a la que pertenece el mesero (**D11**: *"cada mesero es de cada sede, no se juntan jamás"*). NULL = **mesero sin sede asignada**, y SE MUESTRA: no se adivina ni se reparte. Es la **vía 1 —la más fuerte—** de la precedencia del §3.1, por encima del host. Vive en la FILA y **nunca en el JWT** del mesero (§5.3): el JWT dura 8h, así que reasignar de sede tardaría hasta 8 horas en verse. FK **compuesta** `(location_id, tenant_id)` → `restaurant_locations(id, tenant_id)` ON DELETE **RESTRICT** |
 
-**Índices:**
+**Índices y constraints:**
 
 | Nombre | Columnas | Tipo |
 |--------|----------|------|
 | `staff_users_pkey` | `id` | PRIMARY KEY |
-| `staff_users_phone_key` | `phone` | UNIQUE |
+| `staff_users_phone_tenant_key` | `(phone, tenant_id)` | UNIQUE — ⚠️ **es lo que hace cumplir D11 en el motor**: un celular = una fila = una sede. Cambiarlo a `(phone, location_id)` permitiría dos filas del mismo celular, o sea *"el mesero trabaja en las dos"*, que es lo prohibido. **La 00044 NO lo toca.** (**00028**; el `staff_users_phone_key` global de la 00018 lo borró la **00025**) |
+| `idx_staff_users_phone` | `phone` | btree — **NO único**, solo búsqueda |
+| `idx_staff_users_active` | `is_active` | btree |
+| `idx_staff_users_tenant` | `tenant_id` | btree (00025) |
+| `idx_staff_users_location_id` | `(tenant_id, location_id)` | btree **parcial** `WHERE location_id IS NOT NULL` (00044). Postgres indexa el lado referenciado, nunca el que referencia: sin él, desactivar una sede haría seq scan |
+
+**Foreign Keys:**
+
+| Columna | Referencia | On Delete |
+|---------|------------|-----------|
+| `tenant_id` | `tenants(id)` | RESTRICT |
+| `(location_id, tenant_id)` | `restaurant_locations(id, tenant_id)` | **RESTRICT** (00044) |
 
 **Políticas RLS:**
 
@@ -589,7 +602,8 @@ CREATE POLICY "admin_delete_staff_users" ON staff_users FOR DELETE USING (auth.r
 
 | Nombre | Evento | Función |
 |--------|--------|---------|
-| `trg_staff_users_updated_at` | BEFORE UPDATE | `handle_updated_at()` |
+| `on_staff_users_updated` | BEFORE UPDATE | `handle_updated_at()` |
+| `trg_staff_users_sede_coherente` | BEFORE UPDATE OF `location_id` | `staff_user_sede_coherente()` (00044) — **rechaza con 23514** mover de sede a un mesero que tiene dispositivos en la sede vieja. Un dispositivo es un aparato FÍSICO que está donde está: arrastrarlo reasignaría en silencio las visitas de una tablet que nadie movió del mostrador. Hay que reasignar o desvincular los dispositivos primero |
 
 ---
 
@@ -608,12 +622,34 @@ CREATE POLICY "admin_delete_staff_users" ON staff_users FOR DELETE USING (auth.r
 | `expires_at` | `timestamptz` | SI | `NULL` | Fecha de expiración (NULL = nunca expira) |
 | `last_used_at` | `timestamptz` | SI | `NULL` | Última vez que se usó |
 | `created_at` | `timestamptz` | NO | `now()` | Fecha de creación |
+| `tenant_id` | `uuid` | **NO** | ⚠️ ver nota | **00025 + 00028.** La marca. ⚠️ Mismo DEFAULT puente vivo que `staff_users.tenant_id`: pasarlo SIEMPRE explícito |
+| `location_id` | `uuid` | SI | `NULL` | **Nueva (00044).** Sede del dispositivo (**vía 2** de la precedencia del §3.1: por debajo del mesero autenticado y por encima del host). NULL = sede desconocida. **La hereda del mesero dueño** al registrarse (`POST /api/staff/device/register`). FK **compuesta** `(location_id, tenant_id)` → `restaurant_locations(id, tenant_id)` ON DELETE **RESTRICT** |
+
+**Índices y constraints:**
+
+| Nombre | Columnas | Tipo |
+|--------|----------|------|
+| `staff_devices_pkey` | `id` | PRIMARY KEY |
+| `staff_devices_fingerprint_tenant_key` | `(device_fingerprint, tenant_id)` | UNIQUE — **nueva (00044)**. ⚠️ Tapa una bomba **verificada**: hasta la 00044 `device_fingerprint` solo tenía índice NORMAL (00018:41) y **siete** sitios del código hacen `.single()` sobre él. Dos filas iguales dentro de un tenant = `PGRST116` = el mesero no puede escanear y el mensaje dice *"dispositivo no reconocido"*. Compuesto con `tenant_id`, no global: el fingerprint lo genera el navegador y dos marcas podrían coincidir sin que sea error de nadie |
+| `idx_staff_devices_fingerprint` | `device_fingerprint` | btree (00018) — **redundante** desde la 00044 (el UNIQUE nuevo lo lidera). Se deja: borrar un índice que no molesta no era trabajo de F4 |
+| `idx_staff_devices_staff` | `staff_user_id` | btree |
+| `idx_staff_devices_trusted` | `(is_trusted, expires_at)` | btree |
+| `idx_staff_devices_tenant` | `tenant_id` | btree (00025) |
+| `idx_staff_devices_location_id` | `(tenant_id, location_id)` | btree **parcial** `WHERE location_id IS NOT NULL` (00044) |
 
 **Foreign Keys:**
 
 | Columna | Referencia | On Delete |
 |---------|------------|-----------|
-| `staff_user_id` | `staff_users(id)` | SET NULL |
+| `staff_user_id` | `staff_users(id)` | **CASCADE** — ⚠️ borrar un mesero borra sus dispositivos. (Este doc decía *SET NULL*; **00018:31 dice CASCADE** y así está en la base) |
+| `tenant_id` | `tenants(id)` | RESTRICT |
+| `(location_id, tenant_id)` | `restaurant_locations(id, tenant_id)` | **RESTRICT** (00044) |
+
+**Triggers:**
+
+| Nombre | Evento | Función |
+|--------|--------|---------|
+| `trg_staff_devices_sede_coherente` | BEFORE INSERT OR UPDATE OF `staff_user_id`, `location_id`, `tenant_id` | `staff_device_sede_coherente()` (00044) — **rechaza con 23514** que un dispositivo quede a nombre de un mesero de **otra sede** o de **otra marca**. Lo de la marca no lo cubre ninguna FK: `staff_devices_staff_user_id_fkey` es una FK **simple** sobre `staff_users(id)`. Solo actúa cuando las dos sedes son **conocidas**: NULL es *"sede desconocida"*, no *"otra sede"*, así que el parque instalado no se toca |
 
 **Políticas RLS:**
 
@@ -1139,6 +1175,7 @@ CREATE POLICY "tenant_all_template_versions" ON template_versions FOR ALL
 | 41 | `00041_locations_first_class.sql` | 2026-09-03 | **`restaurant_locations` deja de ser una geocerca y pasa a SER LA SEDE** (F1 del spec `docs/superpowers/specs/2026-09-02-multisede-design.md`). Columnas nuevas: `slug`, `domain`, `config jsonb NOT NULL DEFAULT '{}'`, `is_primary`, `sort_order`. **`lat`/`lon` pasan a NULLABLE** con `CHECK ((lat IS NULL) = (lon IS NULL))` — la tabla nació en la 00014 para la geocerca anti QR-scam, apagada desde v1.0.5-3, y ese `NOT NULL` hacía que el AIOS solo mandara `locations[]` con las dos coordenadas: **un negocio dado de alta sin coordenadas nacía SIN NINGUNA SEDE, en silencio** (por eso los 4 tenants vivos suman ~1 fila). Constraint **`restaurant_locations_id_tenant_key UNIQUE (id, tenant_id)`** — ⚠️ **nombre de contrato, no se cambia**: es el soporte de TODAS las FK compuestas `(location_id, tenant_id)` de la 00043; una FK simple dejaría grabar una visita de la marca A con la sede de la marca B. Índice único **GLOBAL** parcial sobre `domain` + único parcial `(tenant_id, slug)`. Trigger `trg_restaurant_locations_domain_guard` (SECURITY DEFINER, `search_path` fijo): unicidad **cruzada** contra `tenants.domain`, que **permite el solape solo dentro del mismo tenant** — es lo que deja que la sede principal repita el subdominio ya impreso en los QR sin reimprimir nada. CHECK de formato de `slug` y `domain`, espejo de `src/lib/domains.ts` del AIOS (va también en la base porque 55 archivos escriben con `service_role`, que bypasa RLS). **NO toca RLS ni ninguna fila de historia.** Sin `CREATE INDEX CONCURRENTLY`: el arnés de tests manda el archivo entero en un `client.query()` y moriría con 25001. | Pendiente |
 | 42 | `00042_sede_principal_tenants_vivos.sql` | 2026-09-03 | **Migración de DATOS** (F1). Le da a cada tenant que ya existe su *"Sede principal"* y le delega el subdominio ya impreso en sus QR. Por tenant: **0 sedes** → crea `'Sede principal'` (`slug='sede-principal'`, `is_primary=true`, `domain = tenants.domain`, sin coordenadas); **1 sede** → la **adopta** (le pone `slug`/`domain` si faltan y `is_primary=true`) en vez de crear una segunda; **≥2 sedes** → **no la toca** y avisa con `RAISE WARNING`, porque elegir mal delegaría el subdominio impreso a la sede equivocada. **NO TOCA UNA SOLA FILA DE HISTORIA**: `visits`, `point_transactions`, `review_events` y `customers` se quedan como están, y cuando la 00043 les agregue `location_id` nace NULL y **se queda en NULL** — NULL significa "sede desconocida" y **SE MUESTRA** como un cubo propio llamado *"Sin sede"*, nunca se reparte ni se esconde. **Idempotente** (los `COALESCE` no pisan nada puesto a mano). `tenants.domain` e `idx_tenants_domain` (00029) **no se tocan**: `getTenantByDomain` sigue resolviendo igual y los 4 tenants Twilio funcionan exactamente como antes. | Pendiente |
 | 43 | `00043_location_id_eventos.sql` | 2026-09-03 | **F2 de multi-sede: la dimensión "sede" en las 13 tablas de HECHOS.** 18 columnas nuevas, **todas vacías**: `visits` (`location_id` + `location_source` + `location_conflict`), `point_transactions`, `review_events`, `message_logs` (**dos**: `location_id` = a quién se imputa, `line_location_id` = por qué línea salió), `tenant_wallet_transactions`, `send_queue`, `consent_events`, `campaigns`, `authorized_numbers`, `restaurant_events` (+ `audience_scope`), `reward_grants.granted_location_id` (dónde se GANÓ), `reward_redemptions.redeemed_location_id` (dónde se ENTREGÓ), `customers` (`origin_location_id` + `last_visit_location_id`). **Regla transversal sin excepciones:** cada columna es NULLABLE y lleva **FK COMPUESTA** `(columna, tenant_id) REFERENCES restaurant_locations (id, tenant_id) ON DELETE RESTRICT` — una FK simple dejaría atribuir un hecho de la marca A a una sede de la marca B y el motor no diría nada; `RESTRICT` y no `SET NULL` porque una sede **nunca se borra, se desactiva** con `is_active=false`, y `SET NULL` degradaría historia a "sede desconocida" en silencio. `MATCH SIMPLE` (el default) es deliberado: `MATCH FULL` rechazaría cada fila de historia. **CERO backfill:** el histórico se queda en NULL = "sede desconocida", y se MUESTRA. **Cero cambio de comportamiento:** nadie lee estas columnas todavía (las llena F3, las lee F5/F6/F7), así que los 4 tenants Twilio siguen igual. `restaurant_events` es la **única** tabla donde NULL no significa "sede desconocida" — por eso lleva `audience_scope ('brand'\|'location') DEFAULT 'brand'` con CHECK que lo amarra a `location_id`. Abre con una **guarda** que aborta con 42830 si falta el `UNIQUE (id, tenant_id)` de la 00041, para no quedar aplicada a medias. | Pendiente |
+| 44 | `00044_meseros_por_sede.sql` | 2026-09-03 | **F4 de multi-sede: los meseros por sede (D11)** — *"cada mesero es de cada sede, no se juntan jamás"*. `staff_users.location_id` y `staff_devices.location_id`, NULLABLE las dos y con la **FK COMPUESTA** `(location_id, tenant_id)` ON DELETE **RESTRICT** de la regla transversal, más su índice parcial. **Sin backfill:** los meseros que ya existen se quedan en NULL = *"mesero sin sede asignada"*, siguen trabajando exactamente igual (no aportan señal, la precedencia cae al host) y NINGÚN 403 nuevo los toca. **`staff_users_phone_tenant_key (phone, tenant_id)` NO se toca**: es lo que hace cumplir D11 en el motor. **Tapa una bomba verificada:** `staff_devices_fingerprint_tenant_key UNIQUE (device_fingerprint, tenant_id)` — hasta aquí `device_fingerprint` solo tenía índice normal (00018:41) y **siete** sitios del código hacen `.single()` sobre él; dos filas iguales = `PGRST116` = *"dispositivo no reconocido"* para siempre. Un bloque de guarda ABORTA con 23505 si ya hay duplicados, nombrándolos, en vez de deduplicar por su cuenta (borrar una fila saca del trabajo al dispositivo de alguien). **Dos triggers de coherencia** (`staff_device_sede_coherente()` / `staff_user_sede_coherente()`, ambos 23514): un dispositivo nunca queda a nombre de un mesero de otra sede **ni de otra marca** —esto último no lo cubre ninguna FK, porque `staff_devices_staff_user_id_fkey` es simple—, y mover de sede a un mesero con dispositivos en la sede vieja se rechaza en vez de arrastrarlos. Solo actúan con las dos sedes CONOCIDAS: NULL es *"desconocida"*, no *"otra"*. **Cierra las deudas #10 y #11:** `enqueue_send_queue(jsonb)` se reescribe con `CREATE OR REPLACE` (misma firma → conserva el REVOKE de la 00038) para copiar `send_queue.location_id`; y `log_review_shown_deduped` exige **DROP + CREATE** con un 4º parámetro `p_location_id uuid DEFAULT NULL` — añadir un parámetro NO reemplaza la función, crea una **sobrecarga**, y la llamada de 3 argumentos del servicio pasaría a ser **ambigua (42725)**, rompiendo el registro de impresiones dentro de un `catch` que solo escribe en consola. El DEFAULT al final hace que el orden de despliegue no importe. ⚠️ El **dedupe sigue siendo por (tenant, cliente) y NO por sede**, a propósito: meterle la sede subiría un número que el panel ya reporta hoy. | Pendiente |
 
 ### `tenant_id` en las 18 tablas de negocio
 

@@ -128,13 +128,13 @@ Webhooks validan origen por número autorizado o `x-webhook-secret`. Cron jobs v
 | DELETE | /api/dashboard/calendar/events/:id | Cancelar evento (soft-delete) | Admin Cookie |
 | POST | /api/dashboard/calendar/media-upload | Subir imagen/video a `event-media` | Admin Cookie |
 | DELETE | /api/dashboard/calendar/media-upload?path=X | Borrar asset del bucket | Admin Cookie |
-| GET | /api/dashboard/location | Obtener ubicación del restaurante | Admin Cookie |
-| PUT | /api/dashboard/location | Actualizar ubicación del restaurante | Admin Cookie |
+| GET | /api/dashboard/location | Ubicación de la **sede principal** (F4: ya no revienta con 2 sedes) | Admin Cookie |
+| PUT | /api/dashboard/location | Actualizar la **sede principal** (F4: ya no inserta una tercera fila) | Admin Cookie |
 | GET | /api/dashboard/staff | Listar meseros y dispositivos | Admin Cookie |
-| POST | /api/dashboard/staff | Crear mesero (admin) | Admin Cookie |
-| PATCH | /api/dashboard/staff | Actualizar mesero (toggle, reset PIN) | Admin Cookie |
+| POST | /api/dashboard/staff | Crear mesero (admin) — acepta `location_id` (D11) | Admin Cookie |
+| PATCH | /api/dashboard/staff | Actualizar mesero (toggle, reset PIN, **sede**) | Admin Cookie |
 | DELETE | /api/dashboard/staff | Eliminar mesero | Admin Cookie |
-| POST | /api/staff/login | Login mesero (phone + PIN) | NO |
+| POST | /api/staff/login | Login mesero (phone + PIN) — **403 si es el enlace de otra sede** (D11) | NO |
 | GET | /api/staff/me | Validar sesión mesero | Staff JWT / Device |
 | GET | /api/staff/stats | Visitas registradas hoy | Staff JWT / Device |
 | POST | /api/staff/device/register | Activar dispositivo de confianza | Supervisor PIN |
@@ -1578,6 +1578,10 @@ El admin luego debe usar `url` y `media_type` al llamar a `POST/PATCH /api/dashb
 
 **`POST /api/staff/login`** — Sin autenticación
 
+Desde **multi-sede F4** el host se resuelve con `resolveHostContext()`, no con
+`getTenantByDomain()`: así el mesero de la sede 2 puede entrar por el subdominio de **su** sede
+(`laureles.marca.com`), que antes daba **404 «Restaurante no reconocido»**.
+
 **Request:**
 ```json
 { "phone": "3001234567", "pin": "1234" }
@@ -1586,12 +1590,42 @@ El admin luego debe usar `url` y `media_type` al llamar a `POST/PATCH /api/dashb
 **Response 200:**
 ```json
 {
-  "staff": { "id": "uuid", "name": "Carlos", "phone": "3001234567", "role": "waiter", "is_active": true },
+  "staff": { "id": "uuid", "name": "Carlos", "phone": "3001234567", "role": "waiter", "location_id": null },
   "token": "eyJhbG..."
 }
 ```
 
-**Response 401:** `{ "error": "Credenciales inválidas" }`
+`location_id` es la sede del mesero (**D11**, `staff_users.location_id` de la 00044). `null` =
+**mesero sin sede asignada**, que es el estado de todo el parque actual. Se devuelve **solo para
+mostrarla**: la autorización siempre relee la fila. ⚠️ **La sede NO viaja dentro del JWT** (§5.3
+del spec): el token dura 8 horas, así que reasignar de sede a un mesero tardaría hasta 8 horas en
+verse y no habría forma de revocarlo.
+
+**Response 401:** `{ "error": "No autorizado", "message": "Mesero no encontrado o inactivo" }` ·
+`{ "message": "PIN incorrecto" }`
+
+**Response 403 — `Sede incorrecta` (nuevo en F4, §5.3):**
+```json
+{
+  "error": "Sede incorrecta",
+  "message": "Estás en el enlace de otra sede. Abre el enlace de tu sede para iniciar sesión."
+}
+```
+
+Se dispara **solo** cuando el host resuelve una sede **y** el mesero tiene una **y** son
+distintas. Si cualquiera de las dos es `null`, pasa — por eso ningún mesero de los tenants
+actuales (todos con `location_id` NULL) se queda fuera al aplicar la 00044.
+
+Se comprueba **después** del PIN a propósito: contestar *"estás en otra sede"* antes de validar la
+clave le diría a cualquiera qué celulares existen y en qué sede están.
+
+⚠️ Este 403 es del **login**, no del check-in. `POST /api/check-in` con un mesero de otra sede
+**no bloquea**: ahí gana el mesero (es la vía 1 de la precedencia) y la discrepancia se registra
+en `visits.location_conflict`. En el login el actor es el mesero y el enlace equivocado es su
+error; en el check-in el actor es el cliente, que puede llegar con un enlace guardado de otra sede.
+
+**Response 404:** `{ "error": "Restaurante no reconocido" }` — ni la marca ni ninguna sede
+reclaman ese host.
 
 ---
 
@@ -1690,21 +1724,85 @@ X-Device-Token: {device_fingerprint}
 
 **Request:**
 ```json
-{ "name": "Ana López", "phone": "3009876543", "pin": "5678", "role": "waiter" }
+{ "name": "Ana López", "phone": "3009876543", "pin": "5678", "role": "waiter", "location_id": null }
 ```
 
-**Response 201:** `{ "id": "uuid", "name": "Ana López", "phone": "3009876543", "role": "waiter", "is_active": true, "created_at": "..." }`
+`location_id` (**opcional**, multi-sede F4 / D11) es la sede a la que pertenece el mesero.
+Omitirlo o mandarlo `null` lo deja **sin sede asignada**, que es el estado de todo el parque
+actual y funciona exactamente como siempre: no aporta señal a la resolución de sede, la
+precedencia cae al host, y el 403 de sede del login nunca lo toca.
+
+**Response 201:** `{ "id": "uuid", "name": "Ana López", "phone": "3009876543", "role": "waiter", "is_active": true, "created_at": "...", "location_id": null }`
+
+**Response 400 — `Sede inválida`:** la sede no existe, no está activa, o **es de otra marca**.
+La FK compuesta `(location_id, tenant_id)` de la 00044 ya lo impediría en el motor (23503), pero
+saldría como un 500 sin explicación; esto lo convierte en un 400 que dice qué pasó.
+
+**Response 409 — `Duplicado`:** ya hay un mesero con ese celular en la marca
+(`staff_users_phone_tenant_key`). ⚠️ Ese UNIQUE es lo que hace cumplir **D11 en el motor**: un
+celular = una fila = una sede. No hay forma de crear "el mismo mesero en las dos sedes".
 
 **`PATCH /api/dashboard/staff`** — Admin JWT
 
 **Request:**
 ```json
-{ "id": "uuid", "is_active": false, "pin": "9999", "name": "Ana López 2", "role": "supervisor" }
+{ "id": "uuid", "is_active": false, "pin": "9999", "name": "Ana López 2", "role": "supervisor", "location_id": "uuid-sede" }
 ```
+
+Todos los campos son opcionales; solo se escriben los presentes. Para **quitarle** la sede a un
+mesero hay que mandar `location_id: null` **explícito** — omitir el campo no la toca.
+
+**Response 400 — `Sede inválida`:** igual que en el POST.
+
+**Response 409 — `Conflicto de sede` (nuevo en F4):** el mesero tiene **dispositivos de confianza
+en la sede vieja**. Lo rechaza el trigger `trg_staff_users_sede_coherente` (00044) y el `message`
+trae el texto del motor, que dice cuántos son. Un dispositivo es un aparato **físico** que está
+donde está: arrastrarlo detrás de su dueño reasignaría en silencio las visitas de una tablet que
+nadie movió del mostrador. Hay que reasignar o desvincular esos dispositivos primero.
+
+**`GET /api/dashboard/staff`** devuelve `location_id` en cada mesero y en cada dispositivo.
+`null` se muestra como **«Sin sede»**: nunca se reparte ni se esconde.
+
+> ⚠️ **La pantalla todavía no tiene selector de sede.** F4 entregó el mecanismo (API + base), no
+> el control: un selector de sedes en el panel es **F7** (`LocationScope`, migración 00045), que
+> es donde se decide de una vez cómo se eligen sedes en toda la interfaz. Mientras tanto la
+> asignación se hace por API. Ver la deuda #16 de `docs/features/multi-sede.md`.
 
 **`DELETE /api/dashboard/staff?id=uuid`** — Admin JWT
 
 **Response 200:** `{ "success": true }`
+
+⚠️ Borrar un mesero **borra sus dispositivos de confianza**:
+`staff_devices_staff_user_id_fkey` es `ON DELETE CASCADE` (00018:31).
+
+---
+
+### GET / PUT /api/dashboard/location
+
+La **sede principal** de la marca. Es la pantalla de la geocerca, no un administrador de sedes.
+
+**Auth:** cookie de admin (`supabase.auth.getUser()`). El tenant sale del JWT
+(`requireTenantId()`), **no del host**.
+
+**`GET`** → objeto plano `{ id, name, address, lat, lon, radius_meters, is_active }`, o `null` si
+la marca no tiene ninguna sede activa. **401** si la sesión no trae `tenant_id` (antes salía como
+un 500 sin cuerpo).
+
+**`PUT`** → `{ lat, lon, radius_meters?, address? }`. Actualiza la sede principal; solo crea una
+fila si la marca **no tiene ninguna** sede activa. **400** si faltan o son inválidas las
+coordenadas.
+
+> **Multi-sede F4 — deuda #14, cerrada.** Los dos handlers hacían `.single()` filtrando solo por
+> `tenant_id`, así que con 2 sedes activas el GET devolvía **500** y el PUT —que **descartaba el
+> error** de su sonda— caía al `else` e **insertaba una TERCERA fila** en silencio. Esa sede
+> fantasma entra en `getActiveLocations()` y rompe la «sede única implícita» de toda la marca.
+> Ahora la fila se elige de forma determinista con **el mismo orden que `getActiveLocations()`**
+> (`is_primary` DESC → `sort_order` ASC → `name` ASC) y **se comprueba el error**: ante un fallo
+> de lectura el PUT **no inserta nada**.
+>
+> ⚠️ **El contrato NO cambió** (sigue siendo un objeto plano): devolver la lista rompería
+> `dashboard/settings/page.tsx` en silencio. Editar una sede **distinta de la principal** exige un
+> selector, y el selector es **F7**.
 
 ---
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getPendingGrantsForPresentCustomers } from '@/services/reward-grant.service'
-import { getTenantByDomain } from '@/lib/tenant'
+import { resolveHostContext } from '@/lib/tenant'
 import { resolveStaffAuth } from '@/lib/staff-auth'
 
 /**
@@ -23,7 +23,11 @@ const HOURS_PRESENT = 6
 export async function GET(request: NextRequest) {
   try {
     const host = request.headers.get('host')
-    const tenant = await getTenantByDomain(host)
+    // Multi-sede F4 (D11): `resolveHostContext` resuelve la marca TAMBIEN por
+    // `restaurant_locations.domain`. Sin eso, el mesero de la sede 2 abre
+    // `laureles.marca.com/mesero` y toda esta superficie responde 404. `getTenantByDomain`
+    // solo mira `tenants.domain` y CONSERVA su firma: la sede viaja por aqui.
+    const tenant = (await resolveHostContext(host)).tenant
     if (!tenant) {
       return NextResponse.json(
         { error: 'Restaurante no reconocido', message: 'No se pudo identificar el restaurante para este dominio' },

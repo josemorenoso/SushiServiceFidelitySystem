@@ -76,6 +76,15 @@ export interface EnqueueItem {
    * mañana no vale nada.
    */
   expiresAt?: Date | null
+  /**
+   * Sede a la que pertenece el envío (`send_queue.location_id`, 00043). Multi-sede F4.
+   *
+   * Existe para que **el goteo no pierda la sede entre encolar y drenar**: quien encola sabe
+   * de dónde salió el envío, y el drenador —que corre horas después desde un cron— ya no.
+   * `null` u omitida = sede desconocida, que es lo que manda hoy toda campaña masiva y lo
+   * que seguirá mandando hasta que F6 arme la cascada de respaldo del §6.1.
+   */
+  locationId?: string | null
 }
 
 export interface QueueRow {
@@ -139,6 +148,9 @@ export async function enqueueSendBatch(items: EnqueueItem[]): Promise<{ enqueued
       media_type: item.mediaType ?? null,
       not_before: (item.notBefore ?? new Date()).toISOString(),
       expires_at: item.expiresAt ? item.expiresAt.toISOString() : null,
+      // Multi-sede F4. La lee `enqueue_send_queue()` desde la 00044; antes de esa migración
+      // la función ni siquiera tenía la columna en su INSERT y la sede se perdía en silencio.
+      location_id: item.locationId ?? null,
     }
   })
 

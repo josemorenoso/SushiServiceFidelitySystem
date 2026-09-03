@@ -7,7 +7,7 @@
 |---|---|
 | **Diseño técnico completo** | `docs/superpowers/specs/2026-09-02-multisede-design.md` |
 | **Contexto de negocio** | `docs/requerimientos/REQUERIMIENTOS_AGOSTO_2026.md` §23, §23.bis, §23.ter |
-| **Estado** | F1, F2 y **F3** implementadas. Las migraciones 00041, 00042 y 00043 estan APLICADAS en produccion. F4..F10 pendientes. |
+| **Estado** | F1, F2, F3 y **F4** implementadas. Las migraciones 00041, 00042 y 00043 estan APLICADAS en produccion; la **00044 esta en el repo y NO se ha aplicado todavia**. F5..F10 pendientes. |
 
 **El diseño ya está decidido: las 12 decisiones del dueño (D1..D12) están tomadas y no se
 re-litigan.** Si algo de este doc contradice al spec, manda el spec.
@@ -34,7 +34,7 @@ re-litigan.** Si algo de este doc contradice al spec, manda el spec.
 | **F1** | 00041 + 00042: la sede como entidad, `UNIQUE (id, tenant_id)`, dominio por sede, sede canónica de los tenants vivos + el arreglo del AIOS | ✅ **hecha** |
 | **F2** | 00043: `location_id` en las tablas de eventos, todas NULL | ✅ **hecha** (aplicada en produccion) |
 | **F3** | `resolveHostContext()`, regla de sede única implícita, propagación a los escritores, **borrar la geocerca comentada** | ✅ **hecha** — ver §3.bis |
-| **F4** | 00044 + login del mesero por sede (D11) | ⏳ |
+| **F4** | 00044 + login del mesero por sede (D11) + las dos funciones SQL que perdian la sede | ✅ **hecha** — ver §3.ter |
 | **F5** | 00046 + calendario, crons y domicilios con el interruptor de ≥2 sedes (D8, D9) | ⏳ |
 | **F6** | Desglose por sede en el dashboard (D4, D12) | ⏳ |
 | **F7** | 00045 + `LocationScope` + selector en el panel (D10) | ⏳ |
@@ -231,12 +231,14 @@ sede (D11), está físicamente donde ocurre la visita y su credencial la emite e
 El claim **`loc` del JWT del QR NUNCA decide** la sede: lo arma el navegador del cliente con el
 subdominio que tenga abierto. Solo pone `visits.location_conflict`.
 
-> ⚠️ **Las dos vías más fuertes están cableadas pero HOY NO TIENEN FUENTE.**
-> `staff_users.location_id` y `staff_devices.location_id` los crea la migración **00044**, que
-> es **F4**. `resolveVisitLocation()` ya las recibe y les da prioridad; el check-in les pasa
-> `null` y lo dice en un comentario. **No se pueden pedir en el `SELECT` de `staff_users` hasta
-> que la 00044 esté aplicada**: PostgREST devolvería `42703`, `staff` sería `null` y el
-> check-in respondería **403 a todos los meseros del producto**.
+> ✅ **Las dos vías más fuertes YA TIENEN FUENTE** desde F4 (§3.ter): la 00044 creó
+> `staff_users.location_id` y `staff_devices.location_id`, y el check-in las pide en su
+> `SELECT`. Un mesero o un dispositivo **sin sede asignada** manda `null` y la precedencia
+> cae al host, exactamente igual que antes de F4.
+>
+> ⚠️ **Orden de despliegue, no negociable:** la **00044 se aplica ANTES** de desplegar el
+> código de F4. Al revés, el `SELECT` pide una columna que no existe, PostgREST devuelve
+> `42703`, `staff` queda `null` y el check-in responde **403 a todos los meseros del producto**.
 
 ### La regla del dominio raíz — «sede única implícita»
 
@@ -309,6 +311,155 @@ las dos se separan, se separen a la vista.
 
 ---
 
+
+## 3.ter — F4: el mesero es de UNA sede (D11)
+
+> Spec: §4 (bloque 00044) y §5.3. Migración: `supabase/migrations/00044_meseros_por_sede.sql`.
+> **Literal del dueño (D11):** *«cada mesero es de cada sede, no se juntan jamás»*.
+
+### Lo que la 00044 pone en la base
+
+| Cosa | Para qué |
+|---|---|
+| `staff_users.location_id` | La **vía 1** de la precedencia, la más fuerte. NULLABLE + FK compuesta `(location_id, tenant_id)` ON DELETE RESTRICT + índice parcial |
+| `staff_devices.location_id` | La **vía 2**. Misma regla transversal. La **hereda del mesero dueño** al registrarse |
+| `staff_devices_fingerprint_tenant_key` | `UNIQUE (device_fingerprint, tenant_id)`. Tapa la bomba: ver abajo |
+| `trg_staff_devices_sede_coherente` | Un dispositivo nunca a nombre de un mesero de otra **sede** ni de otra **marca** |
+| `trg_staff_users_sede_coherente` | La dirección simétrica: mover de sede a un mesero con dispositivos en la sede vieja se rechaza |
+
+**`staff_users_phone_tenant_key (phone, tenant_id)` NO se toca.** Es lo que hace cumplir D11
+**en el motor**: un celular = una fila = una sede. Relajarlo a `(phone, location_id)` permitiría
+dos filas del mismo celular — literalmente *"el mesero trabaja en las dos"*, que es lo prohibido.
+
+### Qué pasa con los meseros que YA existen — la decisión, explícita
+
+**Se quedan con `location_id` NULL, y NULL significa «mesero sin sede asignada». No se
+backfillea, no se adivina, y SE MUESTRA.**
+
+Es la misma regla transversal de toda la fase, y aquí tiene un motivo extra: adivinar la sede de
+un mesero es adivinar la sede de **cada visita que ese mesero registre a partir de mañana**, y ese
+número termina en el reporte de efectividad por sede (D12).
+
+Lo que importa es que **un mesero con NULL sigue trabajando exactamente igual que antes de F4**:
+
+- No aporta señal → la precedencia cae al host → el mismo `location_source` de siempre
+  (`host` / `host_single`).
+- El **403 del §5.3 no lo toca**: solo se dispara cuando el host resuelve una sede **y** el
+  mesero tiene una **y** son distintas. Con cualquiera de las dos en NULL, pasa.
+- Su dispositivo hereda NULL y tampoco aporta señal.
+
+O sea: **la migración no puede sacar del trabajo a nadie.** Asignarles sede es una acción
+deliberada del dueño, vía `PATCH /api/dashboard/staff` con `location_id`.
+
+### El login por sede (§5.3)
+
+`POST /api/staff/login` pasa a resolver el host con `resolveHostContext()` en vez de
+`getTenantByDomain()`. Sin ese cambio no hay login por sede posible: el mesero de la sede 2 abre
+`laureles.marca.com/mesero` y recibe un 404 *"Restaurante no reconocido"*, porque
+`getTenantByDomain` solo mira `tenants.domain`. Por lo mismo cambiaron `me`, `stats`,
+`device/register`, `device/verify`, `pending-rewards` y `reward-redeem`: son la misma superficie
+del mesero, y el cambio es **estrictamente aditivo** (`resolveHostContext` empieza llamando a
+`getTenantByDomain`, así que para los 4 tenants vivos resuelve exactamente lo mismo).
+
+Con la marca resuelta, el guardarraíl: **si el host dice una sede y la fila del mesero dice otra
+→ 403 «Estás en el enlace de otra sede»**, con ese texto. Antes ese caso salía como un 401
+*"PIN incorrecto"*, que le hace pensar al mesero que olvidó su clave.
+
+Va **después** de validar el PIN a propósito: contestar *"estás en otra sede"* antes de comprobar
+la clave le diría a cualquiera qué celulares existen y en qué sede están.
+
+### El 403 del login NO es el mismo caso que el check-in
+
+Es la distinción que más fácil se lee como una contradicción, así que queda escrita:
+
+| | Qué pasa si el host dice una sede y el mesero es de otra |
+|---|---|
+| **`POST /api/staff/login`** | **403.** El mesero se equivocó de enlace y hay que decírselo |
+| **`POST /api/check-in`** | **Gana el mesero, sin bloquear nada.** La discrepancia se REGISTRA en `visits.location_conflict` |
+
+No se contradicen: en el login **el actor es el mesero** y el enlace equivocado es su error. En el
+check-in **el actor es el cliente**, que perfectamente puede llegar con un enlace guardado de otra
+sede — y ése es justo el caso para el que existe la precedencia. Bloquear ahí sería negarle el
+check-in a un cliente que está de pie frente al mesero.
+
+### La sede NO va en el JWT del mesero
+
+Vive en la fila de `staff_users` y se relee en cada petición (§5.3). Meterla en el token —que dura
+8 horas— haría que reasignar de sede a un mesero tardara hasta 8 horas en verse, sin forma de
+revocarlo. Y el ahorro sería **cero**: el check-in ya hacía ese `SELECT` a `staff_users` de todos
+modos. Se devuelve en la respuesta de `login` y de `me` solo **para mostrarla**, nunca para
+autorizar.
+
+### La bomba del `device_fingerprint`
+
+`staff_devices.device_fingerprint` solo tenía un índice **normal** (00018:41) y **siete** sitios
+del código hacen `.single()` sobre él (`staff-auth.ts`, `check-in` ×2, `device/register`,
+`device/verify`, `staff/me`, `staff/stats`). `.single()` exige exactamente una fila: con dos,
+PostgREST responde `PGRST116` y el mesero ve *"dispositivo no reconocido"* — **para siempre**, sin
+que el mensaje diga nada de la causa. El `UNIQUE (device_fingerprint, tenant_id)` lo cierra.
+
+Compuesto con `tenant_id` y no global, por el mismo criterio con el que la 00028 recreó los
+uniques que la 00025 tuvo que soltar: el fingerprint lo genera el navegador del dispositivo y dos
+marcas podrían coincidir sin que eso sea error de nadie.
+
+⚠️ Si al aplicar la 00044 **ya existen duplicados**, la migración **ABORTA nombrándolos** en vez
+de deduplicar por su cuenta: borrar una fila de `staff_devices` saca del trabajo al dispositivo de
+alguien, y eso lo decide el dueño.
+
+### Las dos funciones SQL que perdían la sede (deudas #10 y #11)
+
+| Función | Qué cambia | Por qué exigía migración |
+|---|---|---|
+| `enqueue_send_queue(jsonb)` (00038) | Copia `location_id` de cada item a `send_queue.location_id` | La firma **no cambia**, así que es un `CREATE OR REPLACE` de verdad: conserva el `REVOKE ALL … FROM PUBLIC, anon, authenticated` de 00038:334 |
+| `log_review_shown_deduped` (00032) | 4º parámetro `p_location_id uuid DEFAULT NULL` → `review_events.location_id` del evento `'shown'` | ⚠️ **Exige `DROP` primero.** Añadir un parámetro NO reemplaza la función: crea una **sobrecarga**, y la llamada de 3 argumentos del servicio pasaría a ser **ambigua (42725)**. Un `CREATE OR REPLACE` aquí habría roto el registro de impresiones en producción, dentro de un `catch` que solo escribe en consola |
+
+El `DEFAULT NULL` al final hace que el **orden de despliegue deje de importar**: el código viejo,
+que llama con tres argumentos, sigue funcionando contra la función nueva.
+
+> ⚠️ **El dedupe de `'shown'` SIGUE siendo por `(tenant, cliente)` y NO por sede** — decisión, no
+> olvido. Meterle la sede subiría un número que el panel ya reporta hoy, y cambiar hacia arriba una
+> métrica existente al pasar una migración es justo lo que este diseño evita. **Consecuencia para
+> F6:** si el mismo cliente ve el recuerdo en dos sedes dentro de la ventana de 12h, cuenta **una
+> vez** y se le atribuye a la **primera**. Hay que decirlo en pantalla cuando F6 dibuje el embudo
+> por sede.
+
+### `/api/dashboard/location` — la deuda #14, cerrada
+
+El bug **no era el `.single()`**, y por eso conviene dejarlo escrito: era que el `PUT`
+**descartaba el error** de su sonda de existencia (`const { data: existing } = await …`, sin
+`error`). Con 2 sedes, `.single()` devuelve error y `data = null` → `existing` queda null → el
+flujo cae al `else` → **INSERT de una TERCERA fila**, en silencio, con `is_primary = false` y
+`slug`/`domain` en NULL. Esa sede fantasma entra en `getActiveLocations()`, y con ella el dominio
+raíz de la marca deja de resolver «sede única implícita»: rompe la atribución de **todo** el
+producto para ese tenant.
+
+Cambiar `.single()` por `.maybeSingle()` **no habría arreglado nada** — con 2 filas eso también
+devuelve error y `null`. Lo que se hizo:
+
+- Elegir la fila de forma **determinista**, con el **mismo orden que `getActiveLocations()`**
+  (`is_primary` DESC → `sort_order` ASC → `name` ASC) + `limit(1)`.
+- **Comprobar el error** en los dos handlers. Ante un fallo de lectura el PUT **no inserta nada**:
+  insertar "por si acaso" es la operación irreversible.
+- Envolver `requireTenantId()`, que **lanza** cuando el JWT del admin no trae `tenant_id`: antes
+  eso salía como un 500 sin cuerpo; ahora es un 401 que dice que hay que volver a entrar.
+
+⚠️ **El contrato NO cambia:** sigue devolviendo un objeto plano. Devolver la lista rompería
+`dashboard/settings/page.tsx` en silencio (`locationData.lat` → `undefined` → campos vacíos).
+Editar una sede **distinta de la principal** necesita un selector, y el selector es **F7**.
+
+### Cómo se verifica
+
+`tests/db/multisede-meseros.test.ts` — **28 comprobaciones** contra el Postgres embebido con las
+44 migraciones aplicadas: la FK compuesta rechaza con `23503` el mesero de la marca A contra la
+sede de la marca B, una sede con meseros o con dispositivos no se borra (`23001`), los dos
+triggers rechazan con `23514`, el `UNIQUE` del fingerprint rechaza con `23505` dentro de la marca
+y permite el mismo fingerprint entre marcas, `staff_users_phone_tenant_key` sigue impidiendo dos
+filas del mismo celular, la precedencia leída de filas REALES pone `staff_user` por encima del
+host, y las dos funciones SQL escriben la sede (incluida la llamada de 3 argumentos, que sigue
+viva).
+
+---
+
 ## 4. Reglas que valen para todas las fases
 
 - **`location_id` es SIEMPRE nullable**, con **FK compuesta** `(location_id, tenant_id)
@@ -348,11 +499,14 @@ Ninguna de éstas se cierra por cuenta propia: son decisiones del dueño o de un
 | 7 | **Ningún premio tiene precio en ninguna tabla.** | D12 ("efectividad por sede") solo puede responderse en **conteos y tasas, nunca en pesos**. Hay que decirlo en pantalla. |
 | 8 | **Adoptar el histórico** para un tenant de una sola sede es posible y es **irreversible**. | No se ejecuta sin orden explícita del dueño. |
 | 9 | **El 409 de sede no acepta una elección por `location_id`.** El spec define el 409 y la lista de sedes «para que el cliente elija», pero **no dice qué `visits.location_source` le correspondería** a una sede elegida a mano: las 7 vías del CHECK no contemplan ese caso (`manual` es «corrección explícita de un admin»). | No se inventa una vía nueva ni se reutiliza una que significa otra cosa. Hoy la elección se hace **abriendo el subdominio de la sede**, que resuelve por `host` y ya está especificado. Decisión del dueño o de F7 (cuando exista el selector). |
-| 10 | **`send_queue.location_id` sigue vacía.** El único INSERT posible pasa por la función SQL `enqueue_send_queue()` (00038:271-291), que no tiene esa columna en su lista. | Llenarla exige `CREATE OR REPLACE` de esa función, o sea **una migración**. F3 no lleva migración (la 00044 está reservada para F4). Va con F5/F6. |
-| 11 | **`review_events.location_id` se llena en `clicked`/`postponed` pero NO en `shown`.** El evento `shown` lo escribe la función SQL `log_review_shown_deduped()` (00032:97-115), que no recibe sede. | Mismo caso que #10: es un `CREATE OR REPLACE` en una migración. Mientras tanto, el **denominador** del embudo de reseñas por sede queda incompleto — hay que decirlo en pantalla cuando F6 lo dibuje. |
+| ~~10~~ | ~~**`send_queue.location_id` sigue vacía.**~~ **CERRADA en F4 (00044).** El único INSERT posible pasa por la función SQL `enqueue_send_queue()` (00038:271-291), que no tiene esa columna en su lista. | Llenarla exige `CREATE OR REPLACE` de esa función, o sea **una migración**. F3 no lleva migración (la 00044 está reservada para F4). Va con F5/F6. |
+| ~~11~~ | ~~**`review_events.location_id` no se llenaba en `shown`.**~~ **CERRADA en F4 (00044).** Queda una consecuencia viva, que NO es deuda sino decision: el dedupe sigue siendo por `(tenant, cliente)` y no por sede, asi que el mismo cliente en dos sedes dentro de la ventana cuenta UNA vez, atribuido a la primera. F6 tiene que decirlo en pantalla. Texto original: El evento `shown` lo escribe la función SQL `log_review_shown_deduped()` (00032:97-115), que no recibe sede. | Mismo caso que #10: es un `CREATE OR REPLACE` en una migración. Mientras tanto, el **denominador** del embudo de reseñas por sede queda incompleto — hay que decirlo en pantalla cuando F6 lo dibuje. |
 | 12 | **`message_logs.location_id` solo la llena la «sede del acto»** (check-in, registro, domicilio). Las campañas masivas (`birthday`, `reactivation`, `reward_reminder`, `calendar_event`, `manual`, `import`) siguen en NULL. | La cascada de respaldo del §6.1 (`last_visit_location_id` → `origin_location_id`) es **F6**: toca el desglose de plata (D4), y F3 tiene prohibido cambiar lecturas de dashboard. `customers.last_visit_location_id` ya se está llenando, así que F6 tendrá de dónde leer. |
 | 13 | **`message_logs.line_location_id`, `tenant_wallet_transactions.location_id`, `campaigns.location_id`, `reward_grants.granted_location_id`, `reward_redemptions.redeemed_location_id` y `consent_events.location_id` siguen vacías.** | Fuera del alcance de F3. `line_location_id` depende de **D6**, que el dueño no decidió (F9). Las de premios son F6 (la matriz origen→destino de D12). `consent_events` **no tiene un solo escritor en TypeScript** — la tabla existe desde la 00037 y nadie inserta en ella. |
-| 14 | **`src/app/api/dashboard/location/route.ts` sigue con su `.single()`.** Filtra solo por tenant: con 2 sedes activas devuelve 500, y su `PUT` inserta una tercera fila en vez de actualizar. Este doc decía «se arregla en F3». | **NO se arregló en F3**: el alcance de la sesión de F3 excluyó explícitamente tocar lecturas y pantallas de dashboard (eso es F6/F7). Contradicción real entre este doc y el alcance ejecutado, dejada por escrito a propósito. Ningún tenant vivo tiene 2 sedes, así que hoy no es explotable. |
+| ~~14~~ | ~~**`src/app/api/dashboard/location/route.ts` sigue con su `.single()`.**~~ **CERRADA en F4.** Y con una correccion al diagnostico: el bug NO era el `.single()`, era que el `PUT` **descartaba el error** de su sonda — por eso cambiarlo a `.maybeSingle()` no habria arreglado nada. Ver §3.ter. Texto original: Filtra solo por tenant: con 2 sedes activas devuelve 500, y su `PUT` inserta una tercera fila en vez de actualizar. Este doc decía «se arregla en F3». | **NO se arregló en F3**: el alcance de la sesión de F3 excluyó explícitamente tocar lecturas y pantallas de dashboard (eso es F6/F7). Contradicción real entre este doc y el alcance ejecutado, dejada por escrito a propósito. Ningún tenant vivo tiene 2 sedes, así que hoy no es explotable. |
+| 15 | **`staff_devices.staff_user_id` es una FK SIMPLE** a `staff_users(id)` (00018:31, `ON DELETE CASCADE`): nada en la BASE impide atribuir un dispositivo de la marca A a un mesero de la marca B. | **Mitigado, no cerrado.** El trigger `trg_staff_devices_sede_coherente` de la 00044 lo rechaza (23514) buscando al mesero DENTRO de la marca del dispositivo, pero un trigger es mas facil de saltar que una FK. Convertirla en compuesta `(staff_user_id, tenant_id)` exige un `UNIQUE (id, tenant_id)` en `staff_users` que hoy no existe, y eso no esta en el spec. |
+| 16 | **No hay control en el panel para asignarle sede a un mesero.** La API ya lo acepta (`POST`/`PATCH /api/dashboard/staff` con `location_id`) y el `GET` ya lo devuelve, pero el formulario de `/dashboard/staff` no dibuja el selector. | F4 entrego el MECANISMO, no la pantalla. Un selector de sedes en el panel es **F7** (`LocationScope`, 00045), que es donde se decide de una vez como se eligen sedes en toda la interfaz. Mientras tanto la asignacion se hace por API. |
+| 17 | **Las sedes NO se pueden crear ni editar desde el producto**, solo la principal y solo sus coordenadas (`PUT /api/dashboard/location`). | Dar de alta la sede 2..N es el wizard del AIOS, **F8** (00047). No se adelanta: `restaurant_locations` es la 00041 y su superficie de escritura la define esa fase. |
 
 ---
 
@@ -390,4 +544,12 @@ sede de la marca B**.
 | `src/app/api/webhook/delivery/route.ts` | **F3.** Sede del pedido por `authorized_numbers.location_id` (D9). |
 | `n8n/domicilios_whatsapp_v4.json` | **F3, una línea.** Reenvía el `remitente` que ya calculaba y descartaba. ⚠️ **El dueño tiene que desplegarlo a mano en n8n** — este repo no despliega n8n. |
 | `tests/unit/location-resolver.test.ts` · `tests/db/multisede-resolucion.test.ts` | **F3.** La decisión y el contrato con el schema. |
-| `src/app/api/dashboard/location/*` | ⚠️ Sigue con su `.single()` filtrando **solo por tenant**: con 2 sedes activas devuelve 500 y su PUT inserta una tercera fila. **NO se arregló en F3** — ver la deuda #14. |
+| `supabase/migrations/00044_meseros_por_sede.sql` | **F4.** `staff_users.location_id` + `staff_devices.location_id` (D11), el UNIQUE que tapa la bomba del `device_fingerprint`, los 2 triggers de coherencia, y el `CREATE OR REPLACE` / `DROP+CREATE` de las 2 funciones que perdían la sede. **Aún NO aplicada en producción.** |
+| `src/app/api/staff/login/route.ts` | **F4.** Login del mesero **por sede**: `resolveHostContext()` + el 403 «Estás en el enlace de otra sede» del §5.3. La sede **no** entra al JWT. |
+| `src/app/api/staff/*` · `src/app/api/reward-redeem/route.ts` | **F4.** Toda la superficie del mesero resuelve la marca con `resolveHostContext()`, para que `laureles.marca.com/mesero` no sea un 404. Cambio **aditivo**. |
+| `src/app/api/staff/device/register/route.ts` | **F4.** El dispositivo **hereda la sede de su mesero dueño**. Es la única fuente que no hay que inventar. |
+| `src/app/api/dashboard/staff/route.ts` | **F4.** `location_id` en el `GET`, el `POST` y el `PATCH`, con validación de que la sede sea **activa y de esta marca**. El 23514 del trigger sale como **409**. ⚠️ El **selector** en la pantalla es F7 (deuda #16). |
+| `src/app/api/check-in/review-prompt/route.ts` | **F4.** Pasa la sede a `logReviewShown()` → `review_events.location_id` del evento `'shown'` (deuda #11). |
+| `src/services/send-queue.service.ts` · `src/services/review.service.ts` | **F4.** `EnqueueItem.locationId` y el 4º argumento de `log_review_shown_deduped` (deudas #10 y #11). |
+| `src/app/api/dashboard/location/*` | **F4 — deuda #14 CERRADA.** Elige la sede principal con el mismo orden que `getActiveLocations()` y **comprueba el error** de la sonda: el PUT ya no puede insertar una tercera fila. El contrato (objeto plano) **no cambia**. |
+| `tests/db/multisede-meseros.test.ts` | **F4.** 28 comprobaciones contra Postgres real: FK compuesta, RESTRICT, los 2 triggers, el UNIQUE del fingerprint y las 2 funciones SQL. |

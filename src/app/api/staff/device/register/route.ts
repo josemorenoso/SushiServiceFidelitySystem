@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { jwtVerify } from 'jose'
 import bcrypt from 'bcryptjs'
 import { createClient } from '@supabase/supabase-js'
-import { getTenantByDomain } from '@/lib/tenant'
+import { resolveHostContext } from '@/lib/tenant'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -19,7 +19,11 @@ function getStaffSecret() {
 
 export async function POST(request: NextRequest) {
   try {
-    const tenant = await getTenantByDomain(request.headers.get('host'))
+    // Multi-sede F4 (D11): `resolveHostContext` resuelve la marca TAMBIEN por
+    // `restaurant_locations.domain`. Sin eso, el mesero de la sede 2 abre
+    // `laureles.marca.com/mesero` y toda esta superficie responde 404. `getTenantByDomain`
+    // solo mira `tenants.domain` y CONSERVA su firma: la sede viaja por aqui.
+    const tenant = (await resolveHostContext(request.headers.get('host'))).tenant
     if (!tenant) {
       return NextResponse.json({ error: 'Restaurante no reconocido' }, { status: 404 })
     }
@@ -42,7 +46,7 @@ export async function POST(request: NextRequest) {
     // Validar supervisor/admin
     const { data: staff } = await supabase
       .from('staff_users')
-      .select('id, name, pin, role, is_active')
+      .select('id, name, pin, role, is_active, location_id')
       .eq('phone', phone)
       .eq('tenant_id', tenant.id)
       .single()
@@ -78,11 +82,15 @@ export async function POST(request: NextRequest) {
 
     // Resolver a quién queda atribuido el dispositivo: al mesero indicado
     // (si se pasó assign_staff_phone) o al supervisor que lo activa.
-    let ownerStaff = { id: staff.id, name: staff.name }
+    let ownerStaff: { id: string; name: string; location_id: string | null } = {
+      id: staff.id,
+      name: staff.name,
+      location_id: staff.location_id ?? null,
+    }
     if (assign_staff_phone && assign_staff_phone !== phone) {
       const { data: assignee } = await supabase
         .from('staff_users')
-        .select('id, name, is_active')
+        .select('id, name, is_active, location_id')
         .eq('phone', assign_staff_phone)
         .eq('tenant_id', tenant.id)
         .single()
@@ -96,10 +104,21 @@ export async function POST(request: NextRequest) {
           { status: 404 }
         )
       }
-      ownerStaff = { id: assignee.id, name: assignee.name }
+      ownerStaff = {
+        id: assignee.id,
+        name: assignee.name,
+        location_id: assignee.location_id ?? null,
+      }
     }
 
     const finalDeviceName = device_name || `Dispositivo de ${ownerStaff.name}`
+
+    // ─── Multi-sede F4 (D11): la sede del dispositivo se HEREDA de su mesero ───
+    // Es la única fuente que no hay que inventar: el aparato está donde está su dueño, y el
+    // trigger `trg_staff_devices_sede_coherente` (00044) exige justamente que coincidan. Un
+    // mesero sin sede deja el dispositivo sin sede (NULL = desconocida), y entonces la vía 2
+    // de la precedencia no aporta nada y todo cae al host — el comportamiento de siempre.
+    const deviceLocationId = ownerStaff.location_id
 
     // Verificar si ya existe dispositivo con ese fingerprint
     const { data: existing } = await supabase
@@ -109,9 +128,11 @@ export async function POST(request: NextRequest) {
       .eq('tenant_id', tenant.id)
       .single()
 
+    let writeError
     if (existing) {
-      // Actualizar existente (incluye re-atribuir al nuevo dueño)
-      await supabase
+      // Actualizar existente (incluye re-atribuir al nuevo dueño, y con él la sede: si el
+      // aparato pasa a manos de un mesero de otra sede, la sede del aparato lo sigue).
+      const result = await supabase
         .from('staff_devices')
         .update({
           staff_user_id: ownerStaff.id,
@@ -120,25 +141,50 @@ export async function POST(request: NextRequest) {
           expires_at: null,
           last_used_at: new Date().toISOString(),
           device_name: finalDeviceName,
+          location_id: deviceLocationId,
         })
         .eq('id', existing.id)
+        .eq('tenant_id', tenant.id)
+      writeError = result.error
     } else {
       // Crear nuevo
-      await supabase.from('staff_devices').insert({
+      const result = await supabase.from('staff_devices').insert({
         staff_user_id: ownerStaff.id,
         device_fingerprint,
         device_name: finalDeviceName,
         is_trusted: true,
         trusted_at: new Date().toISOString(),
         expires_at: null,
+        // `tenant_id` EXPLÍCITO: la 00030 nunca se aplicó y el DEFAULT puente sigue vivo.
         tenant_id: tenant.id,
+        location_id: deviceLocationId,
       })
+      writeError = result.error
+    }
+
+    if (writeError) {
+      // 23514 = el trigger de coherencia de sede/marca de la 00044.
+      // 23505 = `staff_devices_fingerprint_tenant_key`, la carrera de dos activaciones
+      //         simultáneas del mismo aparato — que antes de la 00044 creaba dos filas y
+      //         dejaba el dispositivo inutilizable para siempre por el `.single()`.
+      console.error('[DeviceRegister] Error guardando dispositivo:', writeError)
+      const conflicto = writeError.code === '23514' || writeError.code === '23505'
+      return NextResponse.json(
+        {
+          error: conflicto ? 'Conflicto' : 'Error del servidor',
+          message: conflicto
+            ? writeError.message
+            : 'Ocurrió un error activando el dispositivo',
+        },
+        { status: conflicto ? 409 : 500 }
+      )
     }
 
     return NextResponse.json({
       success: true,
       message: `Dispositivo activado a nombre de ${ownerStaff.name}`,
       assigned_to: ownerStaff.name,
+      location_id: deviceLocationId,
     })
   } catch (error) {
     console.error('[DeviceRegister] Error:', error)

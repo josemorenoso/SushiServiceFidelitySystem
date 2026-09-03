@@ -11,6 +11,35 @@ function getServiceClient() {
   return createServiceClient(url, key)
 }
 
+/**
+ * Valida que `location_id` sea una sede ACTIVA DE ESTA MARCA. Multi-sede F4 (D11).
+ *
+ * La FK compuesta de la 00044 ya impide grabar la sede de otra marca (23503), pero un 23503
+ * crudo sale por el `catch` como un 500 sin explicación. Esto lo convierte en un 400 que
+ * dice qué pasó, y de paso rechaza las sedes DESACTIVADAS —que la FK sí aceptaría— porque
+ * asignar un mesero a una sede cerrada es un error de dedo, no una intención.
+ *
+ * Devuelve `undefined` si es válida, o el mensaje de error si no lo es.
+ */
+async function sedeInvalida(
+  db: ReturnType<typeof getServiceClient>,
+  tenantId: string,
+  locationId: string
+): Promise<string | undefined> {
+  const { data, error } = await db
+    .from('restaurant_locations')
+    .select('id')
+    // El `.eq('tenant_id', …)` es el aislamiento real: esta ruta usa `service_role`.
+    .eq('tenant_id', tenantId)
+    .eq('id', locationId)
+    .eq('is_active', true)
+    .maybeSingle()
+
+  if (error) return 'No se pudo verificar la sede'
+  if (!data) return 'La sede no existe, no está activa o no pertenece a este restaurante'
+  return undefined
+}
+
 // ─── GET: listar meseros + dispositivos ───
 export async function GET() {
   try {
@@ -22,9 +51,11 @@ export async function GET() {
 
     const tenantId = await requireTenantId()
     const db = getServiceClient()
+    // `location_id` desde F4 (00044). NULL = mesero sin sede asignada, y SE MUESTRA: no se
+    // adivina ni se reparte. La pantalla lo pinta como «Sin sede».
     const { data: staffList, error } = await db
       .from('staff_users')
-      .select('id, name, phone, role, is_active, last_login_at, created_at')
+      .select('id, name, phone, role, is_active, last_login_at, created_at, location_id')
       .eq('tenant_id', tenantId)
       .order('created_at', { ascending: false })
 
@@ -34,7 +65,7 @@ export async function GET() {
 
     const { data: devices } = await db
       .from('staff_devices')
-      .select('id, staff_user_id, device_name, is_trusted, trusted_at, expires_at, last_used_at')
+      .select('id, staff_user_id, device_name, is_trusted, trusted_at, expires_at, last_used_at, location_id')
       .eq('tenant_id', tenantId)
       .order('trusted_at', { ascending: false })
 
@@ -55,7 +86,15 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { name, phone, pin, role = 'waiter' } = body
+    // `location_id` (D11): opcional. Omitirlo deja al mesero SIN sede, que es exactamente el
+    // estado de todo el parque actual y sigue funcionando igual que siempre.
+    const { name, phone, pin, role = 'waiter', location_id = null } = body as {
+      name?: string
+      phone?: string
+      pin?: string
+      role?: string
+      location_id?: string | null
+    }
 
     if (!name || !phone || !pin) {
       return NextResponse.json(
@@ -75,6 +114,13 @@ export async function POST(request: NextRequest) {
     const tenantId = await requireTenantId()
     const db = getServiceClient()
 
+    if (location_id) {
+      const problema = await sedeInvalida(db, tenantId, location_id)
+      if (problema) {
+        return NextResponse.json({ error: 'Sede inválida', message: problema }, { status: 400 })
+      }
+    }
+
     const { data, error } = await db
       .from('staff_users')
       .insert({
@@ -82,9 +128,12 @@ export async function POST(request: NextRequest) {
         phone,
         pin: hashedPin,
         role,
+        // `tenant_id` EXPLÍCITO siempre: la 00030 nunca se aplicó en producción y la columna
+        // arrastra un DEFAULT puente que manda a Sushi Service todo INSERT que lo omita.
         tenant_id: tenantId,
+        location_id: location_id ?? null,
       })
-      .select('id, name, phone, role, is_active, created_at')
+      .select('id, name, phone, role, is_active, created_at, location_id')
       .single()
 
     if (error) {
@@ -117,7 +166,15 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { id, is_active, pin, name, role } = body
+    const { id, is_active, pin, name, role, location_id } = body as {
+      id?: string
+      is_active?: boolean
+      pin?: string
+      name?: string
+      role?: string
+      /** D11. `null` explícito = quitarle la sede al mesero; ausente = no se toca. */
+      location_id?: string | null
+    }
 
     if (!id) {
       return NextResponse.json(
@@ -142,15 +199,37 @@ export async function PATCH(request: NextRequest) {
 
     const tenantId = await requireTenantId()
     const db = getServiceClient()
+
+    // D11: mover de sede a un mesero. `null` explícito lo deja sin sede.
+    if (location_id !== undefined) {
+      if (location_id !== null) {
+        const problema = await sedeInvalida(db, tenantId, location_id)
+        if (problema) {
+          return NextResponse.json({ error: 'Sede inválida', message: problema }, { status: 400 })
+        }
+      }
+      updateData.location_id = location_id
+    }
+
     const { data, error } = await db
       .from('staff_users')
       .update(updateData)
       .eq('id', id)
       .eq('tenant_id', tenantId)
-      .select('id, name, phone, role, is_active, updated_at')
+      .select('id, name, phone, role, is_active, updated_at, location_id')
       .single()
 
     if (error) {
+      // El trigger `trg_staff_users_sede_coherente` (00044) rechaza con 23514 mover de sede a
+      // un mesero que tiene dispositivos en la sede vieja. Un aparato físico está donde está:
+      // arrastrarlo reasignaría en silencio las visitas de una tablet que nadie movió del
+      // mostrador. Se traduce a un 409 con el mensaje del motor, que ya dice qué hacer.
+      if (error.code === '23514') {
+        return NextResponse.json(
+          { error: 'Conflicto de sede', message: error.message },
+          { status: 409 }
+        )
+      }
       throw error
     }
 

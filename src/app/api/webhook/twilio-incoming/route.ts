@@ -4,6 +4,11 @@ import { createClient } from '@supabase/supabase-js'
 import { setWhatsappOptOut, clearWhatsappOptOut } from '@/services/customer.service'
 import { getTenantByWhatsappNumber } from '@/lib/tenant'
 import { resolveBranding, type Branding } from '@/lib/branding'
+import {
+  logDeliveryIntakeFailure,
+  processDeliveryMessage,
+  type DeliveryIntakeResult,
+} from '@/services/delivery.service'
 
 // Keywords de opt-out/in alineados con el Messaging Service de Twilio
 // (ver docs/features/twilio-opt-out.md). Twilio normalmente los intercepta
@@ -42,6 +47,41 @@ function buildMessage(intent: keyof typeof KEYWORDS | 'default', branding: Brand
       return `📍 Para dirección e indicaciones comunícate con nosotros directamente.${redirect}`
     default:
       return `👋 Hola, este número de *${brandName}* es exclusivo para mensajes automáticos 🔔\n\nPara hablar con nosotros:${redirect}\n\n¡Te respondemos rápido!`
+  }
+}
+
+/**
+ * Qué se le contesta al operador tras procesar su cuadro de pedido.
+ *
+ * Los dos textos del camino feliz y del error de parseo son los de los nodos «Responder
+ * OK Domicilio» y «Responder Error IA» de `n8n/domicilios_whatsapp_v4.json`: el mesero no
+ * nota la migración. Lo que sí cambia es que **un fallo de configuración ya no se
+ * disfraza de pedido mal escrito** — si falta `OPENAI_API_KEY` o la IA está caída, el
+ * operador lee que avise al administrador en vez de reenviar el mensaje veinte veces.
+ * §24: un domicilio no se pierde en silencio.
+ */
+function buildDeliveryReply(outcome: DeliveryIntakeResult): string {
+  if (outcome.ok) {
+    const { order, registration } = outcome
+    const premio = registration.tierUnlocked ? ` 🎁 ${registration.tierUnlocked.name}` : ''
+    const estado = registration.isNew ? 'Nuevo cliente' : 'Cliente actualizado'
+    return `✅ ${estado}: ${order.nombre_cliente} (${order.celular}). Visita #${registration.totalVisits}${premio}`
+  }
+
+  switch (outcome.reason) {
+    case 'ia_no_configurada':
+      return '❌ El lector de pedidos no está configurado (falta la clave de OpenAI). Avisa al administrador — el pedido NO quedó registrado.'
+    case 'ia_error':
+    case 'ia_sin_respuesta':
+      return '❌ El lector de pedidos no respondió. Reenvía el mensaje en un momento — el pedido NO quedó registrado.'
+    case 'registro_fallido':
+      return '❌ Leí el pedido pero no lo pude guardar. Avisa al administrador — el pedido NO quedó registrado.'
+    case 'mensaje_vacio':
+      return '❌ El mensaje llegó vacío. Reenvía el cuadro del pedido con el número de celular del cliente.'
+    default:
+      // 'json_invalido' | 'celular_invalido' | 'celular_invalido_registro' — el texto
+      // literal del nodo «Responder Error IA».
+      return '❌ No pude extraer los datos del pedido. Asegúrate de incluir al menos el número de celular del cliente (10 dígitos). Intenta de nuevo.'
   }
 }
 
@@ -114,46 +154,65 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return new NextResponse(null, { status: 200 })
   }
 
-  // Si el remitente es un mesero autorizado, redirigir a n8n para procesar el pedido
+  // Si el remitente es un mesero autorizado, procesar el pedido de domicilio.
+  //
+  // ⚠️ FASE 2 DE §25 (2026-09-03): esto YA NO se reenvía a n8n. Antes se hacía un POST a
+  // `N8N_DOMICILIOS_WEBHOOK_URL` y se relayaba su TwiML de vuelta; ahora el parseo con IA
+  // y el registro corren aquí mismo (`processDeliveryMessage()`). El workflow
+  // `domicilios_whatsapp_v4` sigue desplegado pero deja de recibir tráfico: su webhook lo
+  // disparaba esta línea y nadie más.
   if (phone.length === 10) {
     try {
       const db = getServiceClient()
-      const { data: authorized } = await db
+      // `location_id` en el MISMO select que decide si el número está autorizado: la sede
+      // del pedido sale gratis, sin una segunda consulta (D9, multi-sede F3).
+      //
+      // ⚠️ `error` SE LEE, no se descarta. supabase-js NO lanza: un fallo vuelve como
+      // `{ data: null, error }` (`shouldThrowOnError` es false salvo `.throwOnError()`).
+      // Si solo se mirara `data`, un timeout del pooler daría `authorized = null`,
+      // indistinguible de «no es un operador», y el pedido se ir�a por el camino del
+      // cliente normal — auto-respuesta amable y CERO `[Delivery][FALLO]`. Justo el fallo
+      // silencioso que esta fase vino a cerrar.
+      const { data: authorized, error: authError } = await db
         .from('authorized_numbers')
-        .select('id')
+        .select('id, location_id')
         .eq('phone', phone)
         .eq('tenant_id', tenant.id)
         .eq('is_active', true)
         .maybeSingle()
 
+      if (authError) {
+        logDeliveryIntakeFailure({
+          tenant,
+          operatorPhone: phone,
+          reason: 'remitente_no_verificable',
+          detail: authError.message,
+          rawMessage: body,
+        })
+        // No se sabe si era un operador o un comensal, así que el texto sirve para los dos
+        // y no miente a ninguno. Callar aquí es perder el pedido.
+        return twimlResponse(
+          '❌ Estamos con un problema técnico y no pude procesar tu mensaje. Si era un pedido, reenvíalo en unos minutos — NO quedó registrado.'
+        )
+      }
+
       if (authorized) {
-        const n8nUrl = process.env.N8N_DOMICILIOS_WEBHOOK_URL
-        if (!n8nUrl) {
-          console.error('[twilio-incoming] N8N_DOMICILIOS_WEBHOOK_URL no configurado')
-          return twimlResponse('❌ Error de configuración en el sistema. Avisa al administrador.')
-        }
+        console.log(`[twilio-incoming] mesero autorizado ${phone} → procesando domicilio (tenant=${tenant.slug})`)
 
-        console.log(`[twilio-incoming] mesero autorizado ${phone} → forwarding a n8n (tenant=${tenant.slug})`)
-
-        // Multitenant: /api/webhook/delivery exige tenant_slug en el body — se lo
-        // inyectamos aquí para que n8n solo tenga que reenviarlo, sin necesitar
-        // su propia lógica de resolución de tenant.
-        const forwardBody = `${rawBody}&tenant_slug=${encodeURIComponent(tenant.slug)}`
-
-        const n8nRes = await fetch(n8nUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: forwardBody,
+        const outcome = await processDeliveryMessage({
+          tenant,
+          rawMessage: body,
+          operatorPhone: phone,
+          operatorLocationId: (authorized.location_id as string | null) ?? null,
         })
 
-        const n8nText = await n8nRes.text()
-        return new NextResponse(n8nText, {
-          status: 200,
-          headers: { 'Content-Type': 'text/xml' },
-        })
+        return twimlResponse(buildDeliveryReply(outcome))
       }
     } catch (err) {
-      console.error('[twilio-incoming] Error forwarding a n8n:', err)
+      // Camino estrecho: ni `processDeliveryMessage()` lanza (devuelve un resultado
+      // discriminado) ni la consulta de arriba lanza (su `error` ya se lee). Lo único que
+      // llega aquí es `getServiceClient()` reventándose por falta de variables de entorno.
+      console.error(`[Delivery][FALLO] reason=cliente_supabase tenant=${tenant.slug} operador=${phone} detalle="${err instanceof Error ? err.message : String(err)}"`)
       return twimlResponse('❌ Error procesando el pedido. Intenta de nuevo en un momento.')
     }
   }

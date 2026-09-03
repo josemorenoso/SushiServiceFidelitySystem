@@ -73,12 +73,23 @@ verificacion, no un efecto colateral.
 | `TWILIO_AUTH_TOKEN` | Solo servidor | En .env.local |
 | `TWILIO_WHATSAPP_NUMBER` | Solo servidor | En .env.local |
 | `CRON_SECRET` | Solo servidor | Valida peticiones a /api/cron/* |
+| `WEBHOOK_DELIVERY_SECRET` | Solo servidor | Fail-closed: sin él `/api/webhook/delivery` responde 503 |
+| `OPENAI_API_KEY` | Solo servidor | Parseo con IA de los domicilios. **NUNCA con prefijo `NEXT_PUBLIC_`.** Solo la lee `src/lib/openai/client.ts`, desde API Routes |
 
 ## Validaciones de Entrada
 - **Número de celular:** Formato colombiano validado (10 dígitos, prefijo 3)
 - **Nombre:** Sanitizado, longitud mínima 2 caracteres
 - **Fecha de nacimiento:** Formato válido, no futura
-- **Webhook de domicilios:** Valida que el número remitente esté en `authorized_numbers`
+- **Webhook de domicilios:** Valida que el número remitente esté en `authorized_numbers` **del
+  tenant que resuelve el número destino** (`.eq('tenant_id', ...)` a mano: el `service_role` no
+  aísla). Desde la Fase 2 de §25 el mensaje del operador se parsea **dentro del producto** con
+  OpenAI y se registra sin salir a n8n; el texto libre del operador **nunca** se interpola en
+  SQL ni se ejecuta — va al `user` message del modelo y todo lo que vuelve pasa por
+  `parseDeliveryAiJson()`, que valida tipo por tipo. Ver `docs/features/delivery-ai-parsing.md`
+- **Fallos de domicilio:** ninguno es silencioso. Todo pedido que no llega a la base deja una
+  línea `[Delivery][FALLO]` con el motivo real (§24). El detalle técnico del error **no** se le
+  muestra al operador: recibe una categoría de acción («reenvía el pedido» / «avisa al
+  administrador»), nunca el mensaje crudo de OpenAI
 - **Cron jobs:** Valida header `Authorization: Bearer {CRON_SECRET}`
 - **Webhook de Zernio** (`/api/webhook/zernio`, tenants `messaging_provider='zernio'`): firma HMAC-SHA256
   obligatoria (`X-Zernio-Signature`, alias `X-Late-Signature`) contra `ZERNIO_WEBHOOK_SECRET`, comparación

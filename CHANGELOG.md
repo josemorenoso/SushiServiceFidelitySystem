@@ -288,6 +288,84 @@ todo el SQL de solo lectura (cero riesgo) y dejar el `ALTER` para la primera ven
 
 ---
 
+## [2026-09-03 15:05] - §25 Fase 2: los domicilios salen de n8n y entran al producto
+
+### Request original
+> *"Vamos a migrar todo el sistema de N8N hacia Vercel"* — Fase 2 de §25 de
+> `docs/requerimientos/REQUERIMIENTOS_AGOSTO_2026.md`: traer al producto lo que hace
+> `n8n/domicilios_whatsapp_v4.json` para poder apagar el VPS.
+
+### Tipo de cambio
+- **ADDED**: `src/constants/delivery-ai.ts` — el **prompt de extracción literal** del nodo «IA Extrae Datos del Pedido», más el modelo (`gpt-4o-mini`), la temperatura (0), los 400 tokens y los timeouts. No se reinventó nada: es el texto que lleva meses en producción.
+- **ADDED**: `src/lib/openai/client.ts` — primer cliente de OpenAI del repo (antes había **cero** referencias; la llamada vivía en un nodo HTTP de n8n con la key en sus credenciales). Mismo patrón perezoso que `lib/twilio/client.ts`. Nueva dependencia: `openai@^7.9.0`.
+- **ADDED**: `src/services/delivery-ai.service.ts` — `extractDeliveryOrder()` (I/O) y `parseDeliveryAiJson()` (**pura**), réplica del nodo «Parsear Respuesta IA»: limpieza de backticks, cadena exacta de `replace` del celular + `^3\d{9}$`, normalización del monto. Cada salida mala lanza `DeliveryExtractionError` con un `reason` tipado.
+- **ADDED**: `processDeliveryMessage()` y `registerDeliveryOrder()` en `src/services/delivery.service.ts`. `registerDeliveryOrder()` es la lógica que estaba **dentro** de `/api/webhook/delivery/route.ts`, movida sin cambiarle el comportamiento para poder llamarla **directo, sin dar la vuelta por HTTP**.
+- **ADDED**: `tests/unit/delivery-ai.test.ts` — 33 casos. El parseo de domicilios llevaba meses en producción **sin una sola prueba**. ⚠️ **Ninguno llama a la API de OpenAI**: la llamada al modelo entra por parámetro (`complete`).
+- **CHANGED**: `src/app/api/webhook/twilio-incoming/route.ts` — ya **no** reenvía a `N8N_DOMICILIOS_WEBHOOK_URL`. Parsea y registra en proceso, y le responde al mesero con el TwiML del nodo «Responder OK Domicilio». Novedad: un fallo de **configuración** ya no se disfraza de «pedido mal escrito».
+- **FIXED**: `src/app/api/webhook/zernio/route.ts` — **el fallo silencioso que denunciaba §24**. Antes, si el reenvío a n8n fallaba (o faltaba la variable), devolvía **200 vacío y el pedido se perdía sin que nadie se enterara**. Ahora todo camino de fallo pasa por `logDeliveryIntakeFailure()`, que deja una línea `[Delivery][FALLO]` con el motivo REAL, el tenant, el operador y el mensaje original. Se sigue devolviendo 200 a propósito: un 5xx hace que Zernio desactive el webhook tras 10 fallos y eso costaría los pedidos de **todos** los tenants Zernio.
+- **FIXED (hallazgo de la revisión adversarial de esta misma fase)**: las **dos** rutas descartaban el `error` de la consulta a `authorized_numbers`. `supabase-js` **no lanza** — devuelve `{ data: null, error }` — así que un timeout del pooler daba un `null` **indistinguible de «este número no es un operador»**: el pedido se iba por el camino del cliente normal (auto-respuesta amable en Twilio, 200 en Zernio) y **no dejaba ni una línea `[Delivery][FALLO]`**. Era el mismo fallo silencioso de §24, un escalón más arriba. Ahora las dos leen `error` y reportan `remitente_no_verificable` por el embudo. El patrón venía de antes de esta fase; la promesa de «nada falla en silencio» es de esta fase, así que se cierra aquí. De paso, los comentarios de los dos `catch` decían que cubrían esa consulta — no la cubían, y ahora dicen la verdad (solo alcanzan a `getServiceClient()`).
+- **CHANGED**: `src/app/api/webhook/delivery/route.ts` — pasa a ser una cáscara HTTP sobre el servicio. **Contrato intacto**, campo por campo y código de estado por código de estado: n8n lo sigue pudiendo llamar hasta que el dueño apague el VPS.
+- **CHANGED**: `src/types/tenant.types.ts` — nuevo `TenantConfig.delivery_default_city` (jsonb, **sin migración**).
+- **CHANGED**: `.env.example`, `CLAUDE.md` (5 filas nuevas en la tabla de lookup), `docs/features/delivery-webhook.md`, `docs/features/delivery-ai-parsing.md` (deja de ser «en n8n»), `docs/04-deployment.md` (§2, §4, §5/W1, Paso 6 del onboarding, checklist), `docs/02-architecture.md`, `docs/03-security.md`, `docs/API_DOCS.md`, `REQUERIMIENTOS_AGOSTO_2026.md` (§25.8 + §25.9 nuevo).
+- **NOT CHANGED**: `n8n/*.json` — **no se tocó ni un workflow**. El VPS lo apaga el dueño a mano.
+
+### 💰 EL AHORRO PRINCIPAL: la línea de n8n de F3 queda MUERTA y NO se despliega a los 25 clientes
+
+Multi-sede F3 (commit `0bc8ed8`) tuvo que pedirle a `n8n/domicilios_whatsapp_v4.json` que
+reenviara el campo `remitente` — el celular del operador — para poder resolver la sede desde
+`authorized_numbers.location_id`. Esa entrada del CHANGELOG decía, en mayúsculas, **«HAY QUE
+DESPLEGARLO A MANO EN n8n»**, y con 25 clientes eso son 25 despliegues manuales de un workflow.
+
+**Al traer el flujo al producto, el remitente ya lo tenemos en la mano**: es el mismo número que
+la ruta acaba de autorizar. Y `location_id` viene en **ese mismo `SELECT`** sobre
+`authorized_numbers` — se cambió `.select('id')` por `.select('id, location_id')` y la sede sale
+**gratis**, sin una segunda consulta.
+
+**Consecuencia: ese despliegue manual de n8n ya no hay que hacerlo. Ni una vez, ni 25.**
+
+### ⚠️ La ciudad por defecto: el único cambio deliberado del prompt
+
+El prompt de n8n terminaba con **«Por defecto: Envigado»** horneado. Correcto sirviendo a un
+solo restaurante; en un producto de 25 marcas le escribe **Envigado** en `customers.city` a los
+clientes de domicilio de todas ellas, sin error y sin log. Ahora el default sale de
+`tenants.config.delivery_default_city` y, **sin configurar, la IA no inventa ciudad**.
+
+### 📝 QUÉ TIENE QUE HACER EL DUEÑO
+
+1. **Crear `OPENAI_API_KEY` en el proyecto Vercel ANTES de desplegar.** Es la única variable
+   nueva. Sin ella no entra ni un domicilio — falla ruidosamente: el operador lee «avisa al
+   administrador» y queda `[Delivery][FALLO] reason=ia_no_configurada` en el log.
+2. **Poner `"delivery_default_city": "Envigado"` en `tenants.config` de Sushi Service**, para
+   conservar el comportamiento actual de la ciudad. Sin esto no se rompe nada: los pedidos entran
+   igual, con `city = null`.
+3. **Apagar el VPS** cuando esto esté en producción (§25.7, respuesta 3). `domicilios_whatsapp_v4`
+   deja de recibir tráfico **por sí solo** — su webhook lo disparaba nuestra línea de reenvío y
+   nadie más. Lo único que muere con el VPS es W3 (Google Contacts): `syncGoogleContact()` hace
+   no-op si falta su variable y **no rompe nada más**.
+4. Borrar `N8N_DOMICILIOS_WEBHOOK_URL` de Vercel: ya no se lee en ningún sitio.
+
+### Deuda que esto NO cierra (a propósito)
+El registro de un pedido perdido es hoy el **log de Vercel**, no una tabla. La lista de «qué
+clientes entraron por domicilio» y la **alarma de silencio** son §24-B, con su propia migración.
+Cuando esa tabla exista, el `INSERT` va **dentro de `logDeliveryIntakeFailure()`** y en ningún
+otro sitio: por eso el embudo es una función y no un `console.error` suelto en cada `catch`.
+
+### Verificación
+- `npx tsc --noEmit` — limpio
+- `npx eslint src` — 7 errores / 32 warnings, **exactamente los mismos que antes** (todos en componentes React sin relación)
+- `npm run build` — OK
+- `TEST_PG_PORT=55440 npx vitest run` — **9 archivos / 172 tests** (baseline: 8 / 139)
+
+### Archivos afectados
+- `src/constants/delivery-ai.ts`, `src/lib/openai/client.ts`, `src/services/delivery-ai.service.ts` — nuevos
+- `src/services/delivery.service.ts`, `src/types/tenant.types.ts`
+- `src/app/api/webhook/twilio-incoming/route.ts`, `src/app/api/webhook/zernio/route.ts`, `src/app/api/webhook/delivery/route.ts`
+- `tests/unit/delivery-ai.test.ts` — nuevo
+- `package.json` (+ `openai`), `.env.example`, `CLAUDE.md`
+- `docs/features/delivery-webhook.md`, `docs/features/delivery-ai-parsing.md`, `docs/04-deployment.md`, `docs/02-architecture.md`, `docs/03-security.md`, `docs/API_DOCS.md`, `docs/requerimientos/REQUERIMIENTOS_AGOSTO_2026.md`
+
+---
+
 ## [2026-09-03 03:05] - Multi-sede F2: `location_id` en las 13 tablas de eventos (00043)
 
 ### Tipo de cambio

@@ -8,7 +8,7 @@
  *     `X-Late-Signature`), y Zernio la trata como OPCIONAL. Este endpoint la
  *     EXIGE siempre — sin ZERNIO_WEBHOOK_SECRET configurado, todo se rechaza.
  *   - El payload es un sobre JSON anidado, nada parecido al Body/From/To plano
- *     de Twilio — hay que traducirlo antes de reenviar a n8n.
+ *     de Twilio — hay que traducirlo antes de usarlo.
  *   - No hay TwiML: Zernio solo exige un 2xx en menos de 5s, sin body ni
  *     formato particular. No hay forma de "responder" al cliente en la misma
  *     petición — una respuesta real requeriría una llamada de salida aparte,
@@ -32,6 +32,7 @@ import type { ZernioTemplateStatus } from '@/lib/zernio/templates'
 import { getTenantByZernioAccountId } from '@/lib/tenant'
 import { setWhatsappOptOut, clearWhatsappOptOut } from '@/services/customer.service'
 import { applyProviderTemplateStatus } from '@/services/template.service'
+import { logDeliveryIntakeFailure, processDeliveryMessage } from '@/services/delivery.service'
 
 // Mismos keywords que twilio-incoming/route.ts (duplicados a propósito: son
 // ~2 líneas estables y extraerlos a un módulo compartido es más cambio del
@@ -80,7 +81,10 @@ function normalizeZernioPhone(raw: string | null | undefined): string {
  * F5 (post-review): dedup de webhooks por evento. Zernio reintenta hasta 7 veces
  * con backoff exponencial si no recibe 2xx a tiempo (ver src/lib/zernio/webhooks.ts),
  * así que el mismo evento puede llegarnos más de una vez — sin esto, un reintento
- * dispararía otra vez el opt-out o el forward a n8n de `handleMessageReceived()`.
+ * dispararía otra vez el opt-out o el registro del domicilio de `handleMessageReceived()`.
+ * Desde la Fase 2 de §25 esto pesa MÁS que antes: el registro ya no es un `fetch` a n8n
+ * sino la creación del cliente, la visita y los puntos — un duplicado sería una visita
+ * de más y unos puntos de más en la cuenta de un cliente real.
  * Se persiste con PK (provider, event_id) — el segundo INSERT choca con 23505.
  * Fail-open: si la tabla `webhook_events_seen` no existe todavía (migración
  * 00036 sin aplicar en ese entorno, error 42P01), se loguea y se sigue SIN dedup
@@ -128,7 +132,7 @@ async function handleMessageReceived(payload: ZernioWebhookPayloadMessage): Prom
   const upper = text.toUpperCase()
 
   // F5 (post-review): dedup por evento ANTES de cualquier efecto de negocio
-  // (opt-out, forward a n8n) — ver isDuplicateZernioEvent().
+  // (opt-out, registro del domicilio) — ver isDuplicateZernioEvent().
   const eventId = payload.id || message.id
   if (await isDuplicateZernioEvent(eventId)) {
     return NextResponse.json({ received: true, duplicate: true }, { status: 200 })
@@ -151,51 +155,85 @@ async function handleMessageReceived(payload: ZernioWebhookPayloadMessage): Prom
     return new NextResponse(null, { status: 200 })
   }
 
-  // Reenvío a n8n (mesero autorizado → flujo de domicilios), MISMO formato plano
-  // que manda twilio-incoming hoy: Body/From/To/tenant_slug. Se mantiene el mismo
-  // gate de "solo remitentes autorizados" que Twilio — reenviar CUALQUIER mensaje
-  // entrante desnaturalizaría el workflow de n8n (diseñado para pedidos de mesero,
-  // no para texto libre de clientes finales).
+  // Domicilios (mesero autorizado). Se mantiene el mismo gate de "solo remitentes
+  // autorizados" que Twilio — procesar CUALQUIER mensaje entrante como si fuera un
+  // pedido desnaturalizaría el flujo (está diseñado para el cuadro que manda el
+  // operador, no para texto libre de clientes finales).
+  //
+  // ⚠️ FASE 2 DE §25 (2026-09-03) — DOS CAMBIOS AQUÍ:
+  //
+  //   1. Ya NO se reenvía a `N8N_DOMICILIOS_WEBHOOK_URL`. El parseo con IA y el registro
+  //      corren en proceso (`processDeliveryMessage()`).
+  //   2. **Se arregla el fallo silencioso que denunciaba §24.** Antes, si el `fetch` a
+  //      n8n fallaba —o si la variable no estaba configurada— esta ruta devolvía un 200
+  //      vacío y el pedido se perdía sin que nadie se enterara. Ahora todo camino de
+  //      fallo pasa por el embudo `logDeliveryIntakeFailure()` del servicio, que deja el
+  //      motivo REAL en el log con el prefijo estable `[Delivery][FALLO]`.
+  //
+  // Se sigue devolviendo 200 SIEMPRE, y eso no es tragarse el error: Zernio desactiva el
+  // webhook entero tras 10 fallos consecutivos, así que un 5xx aquí costaría los pedidos
+  // de TODOS los tenants Zernio, no solo este. El registro va al log, no al status HTTP.
+  //
+  // ⏱️ Zernio pide 2xx en menos de 5 s y este camino ahora hace una llamada a OpenAI más
+  // el registro: es normal excederlo y que Zernio reintente. No duplica nada —
+  // `isDuplicateZernioEvent()` corrió ARRIBA, antes de cualquier efecto de negocio, así
+  // que el reintento sale por el atajo de duplicado.
   if (phone.length === 10) {
     try {
       const db = getServiceClient()
-      const { data: authorized } = await db
+      // `location_id` en el MISMO select que decide si el número está autorizado: la sede
+      // del pedido sale gratis, sin una segunda consulta (D9, multi-sede F3).
+      //
+      // ⚠️ `error` SE LEE, no se descarta. supabase-js NO lanza: un fallo vuelve como
+      // `{ data: null, error }`. Mirar solo `data` haría que un timeout del pooler diera
+      // `authorized = null`, indistinguible de «no es un operador» — y aquí eso es
+      // literalmente el fallo silencioso de §24 otra vez: 200 vacío y cero rastro.
+      const { data: authorized, error: authError } = await db
         .from('authorized_numbers')
-        .select('id')
+        .select('id, location_id')
         .eq('phone', phone)
         .eq('tenant_id', tenant.id)
         .eq('is_active', true)
         .maybeSingle()
 
+      if (authError) {
+        logDeliveryIntakeFailure({
+          tenant,
+          operatorPhone: phone,
+          reason: 'remitente_no_verificable',
+          detail: authError.message,
+          rawMessage: text,
+        })
+        // 200 igualmente (Zernio desactiva el webhook tras 10 fallos), pero el pedido ya
+        // NO desaparece callado: queda la línea [Delivery][FALLO] con el mensaje original.
+        return NextResponse.json({ received: true, delivery: false }, { status: 200 })
+      }
+
       if (authorized) {
-        const n8nUrl = process.env.N8N_DOMICILIOS_WEBHOOK_URL
-        if (!n8nUrl) {
-          console.error('[webhook/zernio] N8N_DOMICILIOS_WEBHOOK_URL no configurado')
-          return new NextResponse(null, { status: 200 })
-        }
+        console.log(`[webhook/zernio] mesero autorizado ${phone} → procesando domicilio (tenant=${tenant.slug})`)
 
-        console.log(`[webhook/zernio] mesero autorizado ${phone} → forwarding a n8n (tenant=${tenant.slug})`)
-
-        const forwardBody = new URLSearchParams({
-          Body: text,
-          From: rawPhone ?? '',
-          To: tenant.zernio_phone_number ?? '',
-          tenant_slug: tenant.slug,
+        const outcome = await processDeliveryMessage({
+          tenant,
+          rawMessage: text,
+          operatorPhone: phone,
+          operatorLocationId: (authorized.location_id as string | null) ?? null,
         })
 
-        await fetch(n8nUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: forwardBody.toString(),
-        })
-        // A diferencia de twilio-incoming, no hay TwiML que relayar de vuelta al
-        // cliente — Zernio no soporta una respuesta síncrona con contenido. n8n
-        // procesa el pedido igual; cualquier confirmación al mesero requeriría
-        // una llamada de salida aparte (pendiente, ver docs/features/zernio-messaging.md).
-        return new NextResponse(null, { status: 200 })
+        // A diferencia de twilio-incoming no hay TwiML que devolverle al operador: Zernio
+        // no soporta una respuesta síncrona con contenido y el envío de salida es solo de
+        // PLANTILLAS aprobadas, nunca texto libre (ver whatsapp.service.ts). Confirmarle
+        // el pedido al mesero por este canal exigiría una plantilla propia — queda
+        // pendiente en docs/features/zernio-messaging.md. Mientras tanto el registro del
+        // fallo es el log, que ya no está vacío.
+        return NextResponse.json({ received: true, delivery: outcome.ok }, { status: 200 })
       }
     } catch (err) {
-      console.error('[webhook/zernio] Error forwarding a n8n:', err)
+      // Camino estrecho: ni `processDeliveryMessage()` lanza (devuelve un resultado
+      // discriminado) ni la consulta de arriba lanza (su `error` ya se lee). Lo único que
+      // llega aquí es `getServiceClient()` reventándose por falta de variables de entorno.
+      console.error(
+        `[Delivery][FALLO] reason=cliente_supabase tenant=${tenant.slug} operador=${phone} detalle="${err instanceof Error ? err.message : String(err)}"`
+      )
       return new NextResponse(null, { status: 200 })
     }
   }

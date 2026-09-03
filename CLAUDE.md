@@ -53,7 +53,11 @@
 |------------------------|---------------------|
 | `src/app/(public)/check-in/*` | `docs/features/qr-checkin.md` |
 | `src/components/features/check-in/*` | `docs/features/qr-checkin.md` |
-| `src/app/api/webhook/delivery/*` | `docs/features/delivery-webhook.md` + `docs/03-security.md` |
+| `src/app/api/webhook/delivery/*` | `docs/features/delivery-webhook.md` + `docs/03-security.md` (⚠️ desde la Fase 2 de §25 es una CÁSCARA sobre `registerDeliveryOrder()`: la lógica NO vive aquí. Su contrato NO se cambia — lo sigue llamando n8n hasta que el dueño apague el VPS) |
+| `src/services/delivery.service.ts` | `docs/features/delivery-webhook.md` + `docs/features/delivery-ai-parsing.md` (⚠️ `processDeliveryMessage()` es el intake completo y `logDeliveryIntakeFailure()` es el ÚNICO embudo por el que se pierde un domicilio — cuando §24-B cree la tabla, el INSERT va AHÍ DENTRO y en ningún otro sitio) |
+| `src/services/delivery-ai.service.ts` | `docs/features/delivery-ai-parsing.md` (⚠️ `parseDeliveryAiJson()` es PURA y replica el nodo «Parsear Respuesta IA» de n8n, probado en producción: no se "mejora" sin medir. `"45.000"` → `45` es comportamiento CONOCIDO, la defensa está en el prompt) |
+| `src/constants/delivery-ai.ts` | `docs/features/delivery-ai-parsing.md` (⚠️ el prompt es el LITERAL de n8n salvo la ciudad, que sale de `tenants.config.delivery_default_city` — hornear una ciudad aquí se la escribe en `customers.city` a los 25 tenants) |
+| `src/lib/openai/client.ts` | `docs/features/delivery-ai-parsing.md` + `docs/03-security.md` (único sitio que instancia el SDK; `OPENAI_API_KEY` es server-only) |
 | `src/app/api/webhook/twilio-incoming/*` | `docs/features/campaigns.md` + `docs/03-security.md` |
 | `src/app/api/cron/*` | `docs/features/campaigns.md` |
 | `src/app/api/dashboard/campaigns/*` | `docs/features/campaigns.md` |

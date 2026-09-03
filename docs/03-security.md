@@ -101,6 +101,42 @@ verificacion, no un efecto colateral.
 
 > El rate-limit en memoria no se comparte entre instancias de Vercel (serverless). Para producción a escala real, migrar a Upstash Redis. Para el MVP (3 restaurantes, ~100 check-ins/día) es suficiente como barrera anti-abuse.
 
+## Aislamiento entre tenants — el DEFAULT puente de `tenant_id` (00028/00030)
+
+**Auditado 2026-09-03** (`docs/superpowers/specs/2026-09-03-default-puente-tenant.md`, doc
+completo con inventario línea por línea). Resumen para quien busque esto por seguridad:
+
+`customers.tenant_id` y otras 17 columnas (ver lista abajo) tienen hoy en producción un
+`DEFAULT` puesto por `supabase/migrations/00028_seed_sushi_service.sql:49` que apunta al UUID
+de Sushi Service (`a1b2c3d4-e5f6-7890-abcd-ef1234567890`). Es un puente deliberado de julio de
+2026 para que el código pre-multitenant siguiera insertando sin pasar `tenant_id`. La migración
+que lo retira, `supabase/migrations/00030_drop_tenant_defaults.sql`, **existe en el repo pero
+nunca se aplicó** — verificado por el dueño contra la base real.
+
+**Mientras el DEFAULT siga puesto:** cualquier `INSERT` a una de las 18 tablas
+(`customers`, `visits`, `rewards`, `authorized_numbers`, `campaigns`, `campaign_messages`,
+`admin_settings`, `restaurant_events`, `restaurant_locations`, `reward_tiers`,
+`point_transactions`, `mystery_box_results`, `mystery_box_global_caps`, `staff_users`,
+`staff_devices`, `message_logs`, `reward_redemptions`, `imported_contacts`) que por descuido no
+pase `tenant_id` **no falla — cae calladito en Sushi Service**, sin error, sin log, indistinguible
+de un dato legítimo de ese tenant hasta que alguien lo vea en el dashboard equivocado. Es una fuga
+silenciosa entre tenants, no un bug que se note solo.
+
+**Estado auditado del código (2026-09-03):** las 26 escrituras `.insert()`/`.upsert()` de `src/`
+a esas 18 tablas, las 4 funciones `SECURITY DEFINER` del AIOS (`aios_provision_tenant` y
+relacionadas, `supabase/migrations/00036_zernio_provider.sql`) y los 3 scripts de onboarding
+manual (`scripts/seed-new-tenant.sql`, `scripts/alta-frangal.sql`, `scripts/seed-demo-tenant.sql`)
+pasan `tenant_id` explícito en el 100% de los casos — ninguno depende del DEFAULT hoy. El riesgo
+no es que algo se rompa al quitarlo; es que **nada avisa** si un código futuro, un script ad-hoc o
+una edición manual en el Table Editor de Supabase se olvida de `tenant_id` mientras el puente siga
+ahí. Ver el doc de la auditoría para la secuencia segura de la ventana, el SQL de solo lectura
+para detectar datos ya mal atribuidos, y la reversión (una sola línea de `SET DEFAULT` por tabla,
+sin pérdida de datos).
+
+**Regla para quien toque estas 18 tablas de aquí en adelante:** todo `INSERT`/`UPSERT` nuevo
+DEBE pasar `tenant_id` explícito, exactamente como ya lo hace cada caso existente — el DEFAULT no
+es una red de seguridad a la que apoyarse, es una deuda pendiente de cerrar.
+
 ## Reglas INVIOLABLES
 - NUNCA hardcodear credenciales en el código
 - NUNCA exponer `SUPABASE_SERVICE_ROLE_KEY` en el cliente

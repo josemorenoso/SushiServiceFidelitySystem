@@ -5,6 +5,69 @@
 
 ---
 
+## [2026-09-04 02:00] - Cierre de los 19 shape-1 de `dashboard/**` (fallo de DB indistinguible de vacío)
+
+### Tipo de cambio
+- **FIXED**: los 19 sitios `const { data } = await supabase...` sin destructurar `error` que
+  `53555f0` dejó listados en `docs/ESTADO.md` §4 (territorio de F7 en ese momento, ya mergeada).
+  Mismo patrón que la sesión de origen: destructurar `error`, `.single()` → `.maybeSingle()`
+  donde cero filas es un caso legítimo, `isDbFailure(error)` antes de leer `data`, `logDbFailure()`
+  con contexto, y fallar visible en vez de degradar en silencio.
+  - **Dup-checks antes de un INSERT** (el caso que motivó la sesión: un fallo de base se leía
+    como "no hay duplicado" y el INSERT seguía adelante) — ahora responden **503**:
+    `src/app/api/dashboard/authorized-numbers/route.ts` (número repetido),
+    `src/app/api/dashboard/settings/route.ts` (decide UPDATE vs INSERT),
+    `src/app/api/dashboard/reward-tiers/route.ts` (umbral y BLACK en POST y PATCH; `reward_tiers`
+    no tiene UNIQUE que respalde estas reglas, así que un fallo aquí sí dejaba crear un duplicado
+    real, no solo un 500 genérico),
+    `src/app/api/dashboard/rewards/route.ts` (milestone y BLACK, mismo motivo).
+  - **Lecturas que decidían una rama de negocio disfrazadas de "no encontrado"** — 503:
+    `src/app/api/dashboard/reward-tiers/route.ts` (el tier antes de decidir soft/hard-delete, y
+    el cálculo de `sort_order` para el tier nuevo), `src/app/api/dashboard/staff/device/route.ts`
+    (el dispositivo antes de la eliminación), `src/app/api/dashboard/customers/[id]/next-reward/route.ts`
+    (cliente y siguiente tier — antes un fallo se devolvía como `{ next_tier: null }`).
+  - **La audiencia de una campaña masiva ya creada como `running`** —
+    `src/app/api/dashboard/campaigns/manual/route.ts`: un fallo aquí hacía que la campaña
+    terminara `completed` con `total_sent=0`, mintiendo que corrió a 0 clientes elegibles. Ahora
+    deshace la campaña fantasma (mismo camino que el bloqueo por saldo insuficiente) y responde 503.
+  - **Reportes del panel** (criticidad baja — "el dueño ve un dato vacío en vez de un error", no
+    bloquean check-in ni plata) — `src/app/api/dashboard/campaigns/efficiency/route.ts` (mensajes,
+    visitas y ticket promedio de la métrica de conversión, 500 para ser consistente con el
+    `campErr` ya existente en el mismo archivo), `src/app/api/dashboard/staff/route.ts` (lista de
+    dispositivos), `src/app/api/dashboard/imported-contacts/route.ts` (listado paginado de un lote).
+  - **Enriquecimiento opcional, degradación intencional** —
+    `src/app/api/dashboard/twilio-metrics/route.ts`: el nombre del cliente en la lista de
+    opt-outs es un adorno (el teléfono ya identifica la fila); se registra con `logDbFailure()`
+    pero NO tumba el reporte completo — mismo criterio que los backfills de
+    `customer.service.ts` en `53555f0`.
+- **NOT FIXED**: ninguno de los 19 — los 19 se cerraron.
+
+### Archivos afectados
+`src/app/api/dashboard/authorized-numbers/route.ts`, `src/app/api/dashboard/settings/route.ts`,
+`src/app/api/dashboard/reward-tiers/route.ts`, `src/app/api/dashboard/rewards/route.ts`,
+`src/app/api/dashboard/customers/[id]/next-reward/route.ts`, `src/app/api/dashboard/staff/route.ts`,
+`src/app/api/dashboard/staff/device/route.ts`, `src/app/api/dashboard/campaigns/efficiency/route.ts`,
+`src/app/api/dashboard/campaigns/manual/route.ts`, `src/app/api/dashboard/twilio-metrics/route.ts`,
+`src/app/api/dashboard/imported-contacts/route.ts`. Ninguna migración, ningún archivo fuera de
+`dashboard/**`.
+
+### Verificación
+`npx tsc --noEmit` limpio · `npx eslint src` → 7 errores (mismo baseline preexistente, 0 nuevos,
+verificado con `git stash` contra el mismo `HEAD`) · `npm run build` OK · `npx vitest run` →
+**14 archivos / 261 tests**, igual que el baseline (esta sesión no tocó tests: los 19 sitios son
+de panel, sin cobertura dedicada).
+
+### No se hizo push
+Commit local en `main`. No se tocó `vercel.json`, `.env*`, ni `supabase/migrations/`.
+
+### Request original
+> Cerrar los 19 sitios "shape-1" listados en `docs/ESTADO.md` §4, dentro de
+> `src/app/api/dashboard/**` únicamente, con el mismo patrón que `53555f0`: destructurar `error`,
+> usar `src/lib/db-failure.ts`, fallar visible en vez de degradar en silencio. Sin migraciones,
+> sin tocar el contrato de respuesta que ya consume el frontend, sin push.
+
+---
+
 ## [2026-09-04 01:00] - Multi-sede F7: permisos de sede (D10) y el selector del panel
 
 ### Tipo de cambio

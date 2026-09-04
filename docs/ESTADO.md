@@ -47,23 +47,23 @@ Multi-sede (detalle en `docs/features/multi-sede.md`):
 
 **Rutas que F7 dejó SIN cablear a propósito** (razón en el código y en `docs/features/multi-sede.md` §3.quater): `send-queue` GET, `check-in-override`, `campaigns/manual`, `imported-contacts/confirm`, `campaigns/run-auto` — o pisaban terreno de F5/F6, o el patrón de degradación existente no tenía equivalente limpio en `requireLocationScope()`. Hasta que F6 llene `reward_grants`/`reward_redemptions`/`campaigns`, el filtro de sede en esas tablas es un **no-op seguro (fail-closed, no fail-open)**.
 
-**Sitios shape-1 en `dashboard/**` — 19, reportados por la sesión de db-errors, SIN arreglar.**
-Son `const { data } = await supabase...` sin destructurar `error`: mismo patrón del bug ya cerrado en el resto del código. F7 mergeó sin tocarlos, así que **siguen abiertos**:
-- `src/app/api/dashboard/authorized-numbers/route.ts:56` — dup-check antes del INSERT.
-- `src/app/api/dashboard/settings/route.ts:54` — dup-check antes del UPDATE/INSERT (patrón "try update, then insert").
-- `src/app/api/dashboard/reward-tiers/route.ts:70,105,118,186,272` — dup-checks de umbral/Black y lectura de tier.
-- `src/app/api/dashboard/rewards/route.ts:65,88` — dup-checks de recompensa/Black.
-- `src/app/api/dashboard/customers/[id]/next-reward/route.ts:25,34` — lectura de cliente y siguiente tier.
-- `src/app/api/dashboard/staff/route.ts:66` — lectura de `staff_devices` (lista del panel).
-- `src/app/api/dashboard/staff/device/route.ts:65` — lectura de un dispositivo puntual.
-- `src/app/api/dashboard/campaigns/efficiency/route.ts:66,79,86` — mensajes/visitas/settings para la métrica.
-- `src/app/api/dashboard/campaigns/manual/route.ts:129` — lectura de audiencia antes de enviar.
-- `src/app/api/dashboard/twilio-metrics/route.ts:217` — lectura de `customers` para el reporte.
-- `src/app/api/dashboard/imported-contacts/route.ts:38` — el `count` viene de la misma query; revisar si el `error` se mira antes en el archivo.
+**Sitios shape-1 en `dashboard/**` — 19, CERRADOS** (sesión 2026-09-04 02:00, ver CHANGELOG.md).
+Eran `const { data } = await supabase...` sin destructurar `error`: mismo patrón del bug ya
+cerrado en el resto del código en `53555f0`. Los 19 se arreglaron con el mismo helper
+(`src/lib/db-failure.ts`), sin excepciones — ninguno resultó falso positivo:
+- ~~`src/app/api/dashboard/authorized-numbers/route.ts:56`~~ — dup-check antes del INSERT.
+- ~~`src/app/api/dashboard/settings/route.ts:54`~~ — dup-check antes del UPDATE/INSERT.
+- ~~`src/app/api/dashboard/reward-tiers/route.ts:70,105,118,186,272`~~ — dup-checks de umbral/Black y lectura de tier.
+- ~~`src/app/api/dashboard/rewards/route.ts:65,88`~~ — dup-checks de recompensa/Black.
+- ~~`src/app/api/dashboard/customers/[id]/next-reward/route.ts:25,34`~~ — lectura de cliente y siguiente tier.
+- ~~`src/app/api/dashboard/staff/route.ts:66`~~ — lectura de `staff_devices` (lista del panel).
+- ~~`src/app/api/dashboard/staff/device/route.ts:65`~~ — lectura de un dispositivo puntual.
+- ~~`src/app/api/dashboard/campaigns/efficiency/route.ts:66,79,86`~~ — mensajes/visitas/settings para la métrica.
+- ~~`src/app/api/dashboard/campaigns/manual/route.ts:129`~~ — lectura de audiencia antes de enviar (además deshace la campaña fantasma si falla).
+- ~~`src/app/api/dashboard/twilio-metrics/route.ts:217`~~ — lectura de `customers` para el reporte (enriquecimiento opcional: se registra pero no tumba el reporte).
+- ~~`src/app/api/dashboard/imported-contacts/route.ts:38`~~ — no era falso positivo: el `error` de esa query no se miraba en ningún otro sitio del archivo.
 
-No incluido: `src/app/api/dashboard/location/route.ts` — ya tiene comentario de cabecera documentando que este bug exacto se arregló ahí en F4.
-
-> **Criticidad:** son de panel (el dueño ve un dato vacío en vez de un error), no de check-in ni de plata. **No bloquean el lanzamiento.** Se pueden cerrar en un bloque chico y barato después del deploy, con el helper `src/lib/db-failure.ts` que ya existe.
+No incluido (ya arreglado antes, sin relación con esta lista): `src/app/api/dashboard/location/route.ts` — comentario de cabecera documentando que este bug exacto se arregló ahí en F4.
 
 Fuera de multi-sede:
 - **00030 sin aplicar**: DEFAULT puente → un INSERT sin `tenant_id` se va calladito a Sushi Service. Decidir ventana (la auditoría ya confirmó que hoy es seguro aplicarla).
@@ -85,7 +85,7 @@ Fuera de multi-sede:
 9. **Aplicar 00030** en ventana tranquila (cierra el riesgo del DEFAULT puente).
 10. **Onboarding de los 25** (wildcard DNS ya decidido; provisioning por tenant).
 
-Después del deploy, en bloques chicos: los 19 shape-1 del panel, 17.b, y las deudas D1–D5.
+Después del deploy, en bloques chicos: 17.b y las deudas D1–D5. (Los 19 shape-1 del panel se cerraron el 2026-09-04, ver §4.)
 
 ## 6. Reglas de trabajo (ahorro de tokens y de sustos)
 

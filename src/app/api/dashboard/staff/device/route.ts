@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { requireTenantId } from '@/lib/tenant'
+import { isDbFailure, logDbFailure } from '@/lib/db-failure'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -62,12 +63,24 @@ export async function DELETE(request: NextRequest) {
 
     const tenantId = await requireTenantId()
     const db = getServiceClient()
-    const { data: device } = await db
+    // Sin destructurar `error`, un fallo de base aquí se confundía con "Dispositivo no
+    // encontrado" (404) en vez del fallo real.
+    const { data: device, error: deviceError } = await db
       .from('staff_devices')
       .select('id, is_trusted')
       .eq('id', id)
       .eq('tenant_id', tenantId)
-      .single()
+      .maybeSingle()
+
+    if (isDbFailure(deviceError)) {
+      logDbFailure({
+        scope: 'DashboardStaffDevice',
+        reason: 'device_lookup_error',
+        error: deviceError,
+        context: { tenant_id: tenantId, device_id: id },
+      })
+      return NextResponse.json({ error: 'Error del servidor' }, { status: 503 })
+    }
 
     if (!device) {
       return NextResponse.json({ error: 'Dispositivo no encontrado' }, { status: 404 })

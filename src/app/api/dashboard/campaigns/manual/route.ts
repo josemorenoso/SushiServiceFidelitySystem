@@ -13,6 +13,7 @@ import {
 import { canSendBulk } from '@/services/wallet.service'
 import { getLineBudget } from '@/services/line-budget.service'
 import { enqueueSendBatch, type EnqueueItem } from '@/services/send-queue.service'
+import { isDbFailure, logDbFailure } from '@/lib/db-failure'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -126,7 +127,29 @@ export async function POST(request: NextRequest) {
       query = query.gt('last_visit_at', cutoff)
     }
 
-    const { data: customers } = await query
+    const { data: customers, error: customersError } = await query
+
+    // Esta lectura ES la audiencia de la campaña, que ya se creó arriba como 'running'.
+    // Ante un fallo de base `customers` llegaba `null` → 0 elegibles → la campaña se
+    // marcaba 'completed' con total_sent=0, mintiendo que corrió a una audiencia vacía en
+    // vez de avisar que no se pudo ni leer la audiencia. Se deshace la campaña fantasma,
+    // igual que en el bloqueo por saldo insuficiente de más abajo.
+    if (isDbFailure(customersError)) {
+      logDbFailure({
+        scope: 'ManualCampaign',
+        reason: 'audience_lookup_error',
+        error: customersError,
+        context: { tenant_id: tenantId, campaign_id: campaign.id },
+      })
+      await db.from('campaigns').delete().eq('id', campaign.id)
+      return NextResponse.json(
+        {
+          error: 'Problema técnico',
+          message: 'No pudimos leer la audiencia para esta campaña. Intenta de nuevo en un momento.',
+        },
+        { status: 503 }
+      )
+    }
 
     // Frequency cap: excluir clientes contactados en los últimos FREQUENCY_CAP_DAYS días.
     // La regla vive en campaign.service.ts para que el drenador de la cola use

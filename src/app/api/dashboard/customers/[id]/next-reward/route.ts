@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { requireTenantId } from '@/lib/tenant'
+import { isDbFailure, logDbFailure } from '@/lib/db-failure'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -22,16 +23,32 @@ export async function GET(
   const tenantId = await requireTenantId()
   const db = getServiceClient()
 
-  const { data: customer } = await db
+  // Sin destructurar `error`, un fallo de base aquí llegaba `null` igual que "cliente no
+  // encontrado" y el endpoint respondía `{ next_tier: null }` — el widget del dashboard
+  // se queda en blanco sin que nadie sepa que la base falló.
+  const { data: customer, error: customerError } = await db
     .from('customers')
     .select('total_points')
     .eq('id', id)
     .eq('tenant_id', tenantId)
-    .single()
+    .maybeSingle()
+
+  if (isDbFailure(customerError)) {
+    logDbFailure({
+      scope: 'NextReward',
+      reason: 'customer_lookup_error',
+      error: customerError,
+      context: { tenant_id: tenantId, customer_id: id },
+    })
+    return NextResponse.json(
+      { error: 'Problema técnico', message: 'No pudimos calcular la próxima recompensa ahora mismo.' },
+      { status: 503 }
+    )
+  }
 
   if (!customer) return NextResponse.json({ next_tier: null })
 
-  const { data: nextTier } = await db
+  const { data: nextTier, error: nextTierError } = await db
     .from('reward_tiers')
     .select('tier_name, point_threshold, safe_reward_title')
     .eq('is_active', true)
@@ -39,7 +56,20 @@ export async function GET(
     .gt('point_threshold', customer.total_points ?? 0)
     .order('point_threshold', { ascending: true })
     .limit(1)
-    .single()
+    .maybeSingle()
+
+  if (isDbFailure(nextTierError)) {
+    logDbFailure({
+      scope: 'NextReward',
+      reason: 'next_tier_lookup_error',
+      error: nextTierError,
+      context: { tenant_id: tenantId, customer_id: id },
+    })
+    return NextResponse.json(
+      { error: 'Problema técnico', message: 'No pudimos calcular la próxima recompensa ahora mismo.' },
+      { status: 503 }
+    )
+  }
 
   return NextResponse.json({
     next_tier: nextTier

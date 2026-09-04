@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { requireTenantId } from '@/lib/tenant'
 import { getRewards } from '@/services/dashboard.service'
+import { isDbFailure, logDbFailure } from '@/lib/db-failure'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -60,14 +61,29 @@ export async function POST(request: NextRequest) {
     const tenantId = await requireTenantId()
     const db = getServiceClient()
 
-    // Check for duplicate milestone s\u00f3lo cuando milestone NO es null
+    // Check for duplicate milestone s\u00f3lo cuando milestone NO es null. Sin backing
+    // UNIQUE en `visit_milestone`: un fallo de base aqu\u00ed dejaba crear una recompensa
+    // duplicada para el mismo milestone en silencio.
     if (milestone !== null) {
-      const { data: existing } = await db
+      const { data: existing, error: existingError } = await db
         .from('rewards')
         .select('id')
         .eq('visit_milestone', milestone)
         .eq('tenant_id', tenantId)
-        .single()
+        .maybeSingle()
+
+      if (isDbFailure(existingError)) {
+        logDbFailure({
+          scope: 'Rewards',
+          reason: 'milestone_dup_check_error',
+          error: existingError,
+          context: { tenant_id: tenantId, milestone },
+        })
+        return NextResponse.json(
+          { error: 'Problema t\u00e9cnico', message: 'No pudimos verificar la recompensa ahora mismo. Intenta de nuevo en un momento.' },
+          { status: 503 }
+        )
+      }
 
       if (existing) {
         return NextResponse.json(
@@ -83,17 +99,32 @@ export async function POST(request: NextRequest) {
 
     const blackFlag = is_black === true
 
-    // Si se marca como BLACK, verificar que no exista ya una recompensa black activa
+    // Si se marca como BLACK, verificar que no exista ya una recompensa black activa.
+    // Sin backing UNIQUE: un fallo de base aquí dejaba crear una segunda recompensa BLACK
+    // activa en silencio.
     if (blackFlag) {
-      const { data: existingBlack } = await db
+      const { data: existingBlackRows, error: existingBlackError } = await db
         .from('rewards')
         .select('id, visit_milestone')
         .eq('is_black', true)
         .eq('is_active', true)
         .eq('tenant_id', tenantId)
         .limit(1)
-        .single()
 
+      if (isDbFailure(existingBlackError)) {
+        logDbFailure({
+          scope: 'Rewards',
+          reason: 'black_dup_check_error',
+          error: existingBlackError,
+          context: { tenant_id: tenantId },
+        })
+        return NextResponse.json(
+          { error: 'Problema técnico', message: 'No pudimos verificar la recompensa BLACK ahora mismo. Intenta de nuevo en un momento.' },
+          { status: 503 }
+        )
+      }
+
+      const existingBlack = existingBlackRows?.[0]
       if (existingBlack) {
         return NextResponse.json(
           { error: `Ya existe una recompensa BLACK (visita #${existingBlack.visit_milestone ?? '—'}). Desactívala primero.` },

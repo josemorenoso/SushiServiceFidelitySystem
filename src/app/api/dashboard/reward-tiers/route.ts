@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { requireTenantId } from '@/lib/tenant'
+import { isDbFailure, logDbFailure } from '@/lib/db-failure'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -66,13 +67,29 @@ export async function POST(request: NextRequest) {
     const tenantId = await requireTenantId()
     const db = getServiceClient()
 
-    // Verificar que no exista un tier con el mismo umbral
-    const { data: existingThreshold } = await db
+    // Verificar que no exista un tier con el mismo umbral. No hay UNIQUE en `point_threshold`
+    // que sostenga esta regla: ante un fallo de base `existingThreshold` llegaba `null`, el
+    // código concluía "no hay duplicado" y el INSERT de abajo creaba un tier duplicado real,
+    // sin ningún constraint que lo impidiera.
+    const { data: existingThreshold, error: existingThresholdError } = await db
       .from('reward_tiers')
       .select('id')
       .eq('point_threshold', threshold)
       .eq('tenant_id', tenantId)
-      .single()
+      .maybeSingle()
+
+    if (isDbFailure(existingThresholdError)) {
+      logDbFailure({
+        scope: 'RewardTiers',
+        reason: 'threshold_dup_check_error',
+        error: existingThresholdError,
+        context: { tenant_id: tenantId, threshold },
+      })
+      return NextResponse.json(
+        { error: 'Problema técnico', message: 'No pudimos verificar el umbral ahora mismo. Intenta de nuevo en un momento.' },
+        { status: 503 }
+      )
+    }
 
     if (existingThreshold) {
       return NextResponse.json(
@@ -101,27 +118,56 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Calcular sort_order: siguiente disponible
-    const { data: allTiers } = await db
+    // Calcular sort_order: siguiente disponible. Ante un fallo de base esto no debe
+    // fundirse con "no hay tiers todavía" (que da nextOrder=1 legítimamente): un fallo
+    // aquí puede colisionar el sort_order del tier nuevo con uno existente.
+    const { data: allTiers, error: allTiersError } = await db
       .from('reward_tiers')
       .select('sort_order')
       .eq('tenant_id', tenantId)
       .order('sort_order', { ascending: false })
       .limit(1)
 
+    if (isDbFailure(allTiersError)) {
+      logDbFailure({
+        scope: 'RewardTiers',
+        reason: 'sort_order_lookup_error',
+        error: allTiersError,
+        context: { tenant_id: tenantId },
+      })
+      return NextResponse.json(
+        { error: 'Problema técnico', message: 'No pudimos calcular el orden del tier ahora mismo. Intenta de nuevo en un momento.' },
+        { status: 503 }
+      )
+    }
+
     const nextOrder = (allTiers?.[0]?.sort_order ?? 0) + 1
 
     const blackFlag = is_black === true
 
-    // Si es BLACK, verificar que no exista ya uno activo
+    // Si es BLACK, verificar que no exista ya uno activo. Sin backing UNIQUE: un fallo de
+    // base en esta lectura dejaría crear un segundo tier BLACK activo en silencio.
     if (blackFlag) {
-      const { data: existingBlack } = await db
+      const { data: existingBlack, error: existingBlackError } = await db
         .from('reward_tiers')
         .select('id')
         .eq('is_black', true)
         .eq('is_active', true)
         .eq('tenant_id', tenantId)
-        .single()
+        .maybeSingle()
+
+      if (isDbFailure(existingBlackError)) {
+        logDbFailure({
+          scope: 'RewardTiers',
+          reason: 'black_dup_check_error',
+          error: existingBlackError,
+          context: { tenant_id: tenantId },
+        })
+        return NextResponse.json(
+          { error: 'Problema técnico', message: 'No pudimos verificar el tier BLACK ahora mismo. Intenta de nuevo en un momento.' },
+          { status: 503 }
+        )
+      }
 
       if (existingBlack) {
         return NextResponse.json(
@@ -183,13 +229,26 @@ export async function PATCH(request: NextRequest) {
       }
 
       // Verificar que no exista otro tier con el mismo umbral
-      const { data: existingThreshold } = await db
+      const { data: existingThreshold, error: existingThresholdError } = await db
         .from('reward_tiers')
         .select('id')
         .eq('point_threshold', threshold)
         .eq('tenant_id', tenantId)
         .neq('id', id)
-        .single()
+        .maybeSingle()
+
+      if (isDbFailure(existingThresholdError)) {
+        logDbFailure({
+          scope: 'RewardTiers',
+          reason: 'threshold_dup_check_error',
+          error: existingThresholdError,
+          context: { tenant_id: tenantId, threshold, id },
+        })
+        return NextResponse.json(
+          { error: 'Problema técnico', message: 'No pudimos verificar el umbral ahora mismo. Intenta de nuevo en un momento.' },
+          { status: 503 }
+        )
+      }
 
       if (existingThreshold) {
         return NextResponse.json(
@@ -268,13 +327,27 @@ export async function DELETE(request: NextRequest) {
     const tenantId = await requireTenantId()
     const db = getServiceClient()
 
-    // Verificar si hay clientes con este tier
-    const { data: tier } = await db
+    // Verificar si hay clientes con este tier. Sin esto, un fallo de base aquí se
+    // confundía con "Tier no encontrado" (404) en vez del fallo real.
+    const { data: tier, error: tierError } = await db
       .from('reward_tiers')
       .select('tier_name')
       .eq('id', id)
       .eq('tenant_id', tenantId)
-      .single()
+      .maybeSingle()
+
+    if (isDbFailure(tierError)) {
+      logDbFailure({
+        scope: 'RewardTiers',
+        reason: 'tier_lookup_error',
+        error: tierError,
+        context: { tenant_id: tenantId, id },
+      })
+      return NextResponse.json(
+        { error: 'Problema técnico', message: 'No pudimos verificar el tier ahora mismo. Intenta de nuevo en un momento.' },
+        { status: 503 }
+      )
+    }
 
     if (!tier) {
       return NextResponse.json({ error: 'Tier no encontrado' }, { status: 404 })

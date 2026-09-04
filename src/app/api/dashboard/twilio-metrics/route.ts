@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireTenantId } from '@/lib/tenant'
 import { getTenantTwilioCredentials } from '@/lib/twilio/tenant-credentials'
+import { logDbFailure } from '@/lib/db-failure'
 
 export const dynamic = 'force-dynamic'
 
@@ -212,9 +213,23 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Mapear nombres de clientes por teléfono
+    // Mapear nombres de clientes por teléfono. Enriquecimiento opcional: el reporte de
+    // opt-outs sigue siendo válido sin el nombre (queda `null`, como ya contempla el tipo),
+    // así que un fallo aquí no debe tumbar el reporte completo — pero hasta ahora quedaba
+    // mudo, indistinguible de "no hay clientes".
     if (optOutMap.size > 0) {
-      const { data: customers } = await supabase.from('customers').select('name, phone').eq('tenant_id', tenantId)
+      const { data: customers, error: customersError } = await supabase
+        .from('customers')
+        .select('name, phone')
+        .eq('tenant_id', tenantId)
+      if (customersError) {
+        logDbFailure({
+          scope: 'TwilioMetrics',
+          reason: 'customer_name_lookup_error',
+          error: customersError,
+          context: { tenant_id: tenantId },
+        })
+      }
       const byKey = new Map<string, string>()
       for (const c of customers ?? []) {
         byKey.set(phoneKey(c.phone), c.name)

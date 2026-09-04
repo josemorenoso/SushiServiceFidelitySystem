@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { requireLocationScope, applyLocationFilter } from '@/lib/location-scope'
+import { isDbFailure, logDbFailure } from '@/lib/db-failure'
 
 /**
  * Devuelve la eficiencia de cada campaña ejecutada en los últimos N días
@@ -69,7 +70,7 @@ export async function GET(request: Request) {
 
   // 2) Mensajes "sent" de esas campañas
   const campaignIds = campaigns.map((c) => c.id)
-  const { data: messages } = await db
+  const { data: messages, error: messagesErr } = await db
     .from('campaign_messages')
     .select('campaign_id, customer_id, sent_at, status')
     .in('campaign_id', campaignIds)
@@ -77,24 +78,57 @@ export async function GET(request: Request) {
     .eq('status', 'sent')
     .not('sent_at', 'is', null)
 
+  if (messagesErr) {
+    logDbFailure({
+      scope: 'CampaignEfficiency',
+      reason: 'messages_lookup_error',
+      error: messagesErr,
+      context: { tenant_id: scope.tenantId },
+    })
+    return NextResponse.json({ error: 'Error obteniendo mensajes de campaña' }, { status: 500 })
+  }
+
   // 3) Todas las visitas del rango + ventana de atribución
   const visitsSince = new Date(
     new Date(since).getTime() - ATTRIBUTION_WINDOW_DAYS * 24 * 60 * 60 * 1000
   ).toISOString()
 
-  const { data: visits } = await db
+  const { data: visits, error: visitsErr } = await db
     .from('visits')
     .select('customer_id, created_at, amount')
     .eq('tenant_id', scope.tenantId)
     .gte('created_at', visitsSince)
 
-  // 4) Ticket promedio para estimación de revenue
-  const { data: settingsRow } = await db
+  if (visitsErr) {
+    logDbFailure({
+      scope: 'CampaignEfficiency',
+      reason: 'visits_lookup_error',
+      error: visitsErr,
+      context: { tenant_id: scope.tenantId },
+    })
+    return NextResponse.json({ error: 'Error obteniendo visitas' }, { status: 500 })
+  }
+
+  // 4) Ticket promedio para estimación de revenue. `.maybeSingle()`: la ausencia de
+  // configuración es normal (usa el default 35000); lo que no puede confundirse con eso
+  // es un fallo real de base, que dejaría calcular un revenue estimado con la tarifa
+  // equivocada sin que nadie lo note.
+  const { data: settingsRow, error: settingsErr } = await db
     .from('admin_settings')
     .select('value')
     .eq('key', 'avg_ticket')
     .eq('tenant_id', scope.tenantId)
-    .single()
+    .maybeSingle()
+
+  if (isDbFailure(settingsErr)) {
+    logDbFailure({
+      scope: 'CampaignEfficiency',
+      reason: 'avg_ticket_lookup_error',
+      error: settingsErr,
+      context: { tenant_id: scope.tenantId },
+    })
+    return NextResponse.json({ error: 'Error obteniendo configuración de ticket promedio' }, { status: 500 })
+  }
   const avgTicket = parseFloat(settingsRow?.value || '35000') || 35000
 
   // 5) Indexar visitas por customer_id para lookup rápido

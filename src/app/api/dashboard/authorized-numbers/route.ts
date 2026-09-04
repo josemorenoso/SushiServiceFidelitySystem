@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { requireTenantId } from '@/lib/tenant'
 import { requireLocationScope, applyLocationFilter } from '@/lib/location-scope'
+import { isDbFailure, logDbFailure } from '@/lib/db-failure'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -52,12 +53,31 @@ export async function POST(request: NextRequest) {
     const tenantId = await requireTenantId()
     const db = getServiceClient()
 
-    const { data: existing } = await db
+    // Esta lectura ES el dup-check: ante un fallo de base `existing` llegaba `null`, el
+    // código concluía "no hay duplicado" y el INSERT seguía adelante. `.maybeSingle()`
+    // separa el vacío legítimo (número nuevo) del fallo real.
+    const { data: existing, error: existingError } = await db
       .from('authorized_numbers')
       .select('id')
       .eq('phone', cleaned)
       .eq('tenant_id', tenantId)
-      .single()
+      .maybeSingle()
+
+    if (isDbFailure(existingError)) {
+      logDbFailure({
+        scope: 'AuthorizedNumbers',
+        reason: 'dup_check_error',
+        error: existingError,
+        context: { tenant_id: tenantId },
+      })
+      return NextResponse.json(
+        {
+          error: 'Problema técnico',
+          message: 'No pudimos verificar el número ahora mismo. Intenta de nuevo en un momento.',
+        },
+        { status: 503 }
+      )
+    }
 
     if (existing) {
       return NextResponse.json({ error: 'Este número ya está registrado' }, { status: 409 })

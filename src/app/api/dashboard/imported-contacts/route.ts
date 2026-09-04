@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireTenantId } from '@/lib/tenant'
 import { listBatches } from '@/services/imported-contacts.service'
+import { isDbFailure, logDbFailure } from '@/lib/db-failure'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,7 +36,16 @@ export async function GET(request: NextRequest) {
         .order('created_at', { ascending: false })
       if (status) query = query.eq('status', status)
 
-      const { data, count } = await query.range((page - 1) * limit, page * limit - 1)
+      const { data, count, error } = await query.range((page - 1) * limit, page * limit - 1)
+      if (isDbFailure(error)) {
+        logDbFailure({
+          scope: 'GoldenBullet',
+          reason: 'contacts_lookup_error',
+          error,
+          context: { tenant_id: tenantId, batch_id: batchId },
+        })
+        return NextResponse.json({ error: 'Error obteniendo contactos importados' }, { status: 503 })
+      }
       return NextResponse.json({ contacts: data ?? [], total: count ?? 0, page, limit })
     }
 

@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { requireTenantId } from '@/lib/tenant'
 import bcrypt from 'bcryptjs'
+import { isDbFailure, logDbFailure } from '@/lib/db-failure'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -63,11 +64,21 @@ export async function GET() {
       return NextResponse.json({ error: 'Error del servidor' }, { status: 500 })
     }
 
-    const { data: devices } = await db
+    const { data: devices, error: devicesError } = await db
       .from('staff_devices')
       .select('id, staff_user_id, device_name, is_trusted, trusted_at, expires_at, last_used_at, location_id')
       .eq('tenant_id', tenantId)
       .order('trusted_at', { ascending: false })
+
+    if (isDbFailure(devicesError)) {
+      logDbFailure({
+        scope: 'DashboardStaff',
+        reason: 'devices_lookup_error',
+        error: devicesError,
+        context: { tenant_id: tenantId },
+      })
+      return NextResponse.json({ error: 'Error del servidor' }, { status: 503 })
+    }
 
     return NextResponse.json({ staff: staffList ?? [], devices: devices ?? [] })
   } catch (error) {

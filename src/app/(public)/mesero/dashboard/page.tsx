@@ -88,7 +88,7 @@ export default function MeseroDashboardPage() {
           </div>
           <button
             onClick={logout}
-            className="rounded-xl p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+            className="flex h-11 w-11 items-center justify-center rounded-xl text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
             title="Cerrar sesión"
           >
             <LogOut className="h-5 w-5" />
@@ -142,7 +142,7 @@ export default function MeseroDashboardPage() {
       <div className="mx-auto mt-6 w-full max-w-md px-4 pb-8">
         <button
           onClick={() => router.push('/mesero/scan')}
-          className="flex h-[64px] w-full items-center justify-center gap-3 rounded-2xl bg-red-500 text-lg font-semibold text-white shadow-sm transition-colors hover:bg-red-600 active:bg-red-700"
+          className="btn-premium flex h-[64px] w-full items-center justify-center gap-3 rounded-2xl text-lg font-semibold"
         >
           <ScanLine className="h-6 w-6" />
           Escanear QR de Cliente

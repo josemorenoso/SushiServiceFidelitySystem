@@ -176,7 +176,7 @@ export default function MeseroLoginPage() {
           <button
             type="submit"
             disabled={loading || phone.length < 10 || pin.length < 4}
-            className="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-red-500 text-sm font-semibold text-white transition-colors hover:bg-red-600 disabled:opacity-50"
+            className="btn-premium flex h-[52px] w-full items-center justify-center gap-2 rounded-xl text-sm font-semibold"
           >
             {loading ? (
               <>

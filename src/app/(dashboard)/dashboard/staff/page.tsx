@@ -43,6 +43,7 @@ import {
 } from 'lucide-react'
 import { Toaster, toast } from 'sonner'
 import type { StaffUser, StaffDevice } from '@/types/database.types'
+import { useLocationScope } from '@/contexts/LocationScopeContext'
 
 interface StaffResponse {
   staff: StaffUser[]
@@ -93,6 +94,10 @@ export default function StaffPage() {
   const [newPhone, setNewPhone] = useState('')
   const [newPin, setNewPin] = useState('')
   const [newRole, setNewRole] = useState<'waiter' | 'supervisor' | 'admin'>('waiter')
+  // '' = sin sede. Multi-sede F7 (D10, deuda #16): el formulario ya tenía el
+  // resto de campos; a esto es a lo único que le faltaba dibujo — la API
+  // (`POST`/`PATCH /api/dashboard/staff`) acepta `location_id` desde F4 (00044).
+  const [newLocationId, setNewLocationId] = useState('')
   const [creating, setCreating] = useState(false)
   const [phoneError, setPhoneError] = useState<string | null>(null)
 
@@ -101,7 +106,16 @@ export default function StaffPage() {
   const [editName, setEditName] = useState('')
   const [editRole, setEditRole] = useState<'waiter' | 'supervisor' | 'admin'>('waiter')
   const [editPin, setEditPin] = useState('')
+  const [editLocationId, setEditLocationId] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
+
+  // Las sedes activas de la marca — el mismo `LocationScopeProvider` que ya
+  // alimenta el selector del header (§8.4), reutilizado aquí para no inventar
+  // un segundo fetch de `restaurant_locations`.
+  const { view: locationScopeView } = useLocationScope()
+  const assignableLocations = locationScopeView?.locations ?? []
+  const locationName = (id: string | null) =>
+    id ? (assignableLocations.find((l) => l.id === id)?.name ?? 'Sede desconocida') : 'Sin sede'
 
   // Delete dialog
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
@@ -138,6 +152,7 @@ export default function StaffPage() {
     setNewPhone('')
     setNewPin('')
     setNewRole('waiter')
+    setNewLocationId('')
     setPhoneError(null)
   }
 
@@ -164,7 +179,13 @@ export default function StaffPage() {
       const res = await fetch('/api/dashboard/staff', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newName.trim(), phone: newPhone, pin: newPin, role: newRole }),
+        body: JSON.stringify({
+          name: newName.trim(),
+          phone: newPhone,
+          pin: newPin,
+          role: newRole,
+          location_id: newLocationId || null,
+        }),
       })
       const json = await res.json()
       if (!res.ok) {
@@ -187,6 +208,7 @@ export default function StaffPage() {
     setEditName(staff.name)
     setEditRole(staff.role as 'waiter' | 'supervisor' | 'admin')
     setEditPin('')
+    setEditLocationId(staff.location_id ?? '')
   }
 
   const handleEditSave = async () => {
@@ -197,6 +219,7 @@ export default function StaffPage() {
         id: editingStaff.id,
         name: editName.trim(),
         role: editRole,
+        location_id: editLocationId || null,
       }
       if (editPin.trim()) payload.pin = editPin.trim()
 
@@ -389,6 +412,7 @@ export default function StaffPage() {
                   <TableHead>Nombre</TableHead>
                   <TableHead>Celular</TableHead>
                   <TableHead>Rol</TableHead>
+                  {assignableLocations.length > 0 && <TableHead>Sede</TableHead>}
                   <TableHead>Estado</TableHead>
                   <TableHead className="hidden sm:table-cell">Último login</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
@@ -404,6 +428,14 @@ export default function StaffPage() {
                         {roleLabel(s.role)}
                       </Badge>
                     </TableCell>
+                    {assignableLocations.length > 0 && (
+                      <TableCell>
+                        {/* NULL se muestra como "Sin sede", nunca se adivina (D11). */}
+                        <Badge variant={s.location_id ? 'secondary' : 'outline'} className="text-[10px]">
+                          {locationName(s.location_id)}
+                        </Badge>
+                      </TableCell>
+                    )}
                     <TableCell>
                       <Badge variant={s.is_active ? 'default' : 'secondary'} className="text-[10px]">
                         {s.is_active ? 'Activo' : 'Inactivo'}
@@ -668,6 +700,24 @@ export default function StaffPage() {
                 <option value="admin">Admin</option>
               </select>
             </div>
+            {assignableLocations.length > 0 && (
+              <div className="space-y-1.5">
+                <Label className="text-xs">Sede</Label>
+                <select
+                  value={newLocationId}
+                  onChange={(e) => setNewLocationId(e.target.value)}
+                  className="w-full h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  <option value="">Sin sede</option>
+                  {assignableLocations.map((loc) => (
+                    <option key={loc.id} value={loc.id}>{loc.name}</option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-muted-foreground">
+                  Un mesero es de UNA sede (D11). &quot;Sin sede&quot; sigue funcionando igual que hoy.
+                </p>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreate(false)}>
@@ -721,6 +771,26 @@ export default function StaffPage() {
                 <option value="admin">Admin</option>
               </select>
             </div>
+            {assignableLocations.length > 0 && (
+              <div className="space-y-1.5">
+                <Label className="text-xs">Sede</Label>
+                <select
+                  value={editLocationId}
+                  onChange={(e) => setEditLocationId(e.target.value)}
+                  className="w-full h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  <option value="">Sin sede</option>
+                  {assignableLocations.map((loc) => (
+                    <option key={loc.id} value={loc.id}>{loc.name}</option>
+                  ))}
+                </select>
+                {devicesForStaff(editingStaff?.id ?? '').length > 0 && (
+                  <p className="text-[10px] text-amber-600">
+                    Este mesero tiene dispositivos. Moverlo de sede se rechaza si alguno quedó en otra (D11).
+                  </p>
+                )}
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label className="text-xs flex items-center gap-1.5">
                 <KeyRound className="h-3.5 w-3.5" />

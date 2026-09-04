@@ -65,24 +65,29 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <MetricsCards summary={data?.summary ?? null} loading={loading} />
+      {/* Multi-sede F7 (§8.4): `summary` mergea brand+location — es el único punto
+          de presentación donde numerador de sede y denominador de marca se tocan. */}
+      <MetricsCards
+        summary={data ? { ...data.brand.summary, ...data.location.summary } : null}
+        loading={loading}
+      />
 
       <div className="grid gap-8 lg:grid-cols-2">
-        <CustomerTiers tiers={data?.customerTiers ?? []} loading={loading} />
+        <CustomerTiers tiers={data?.brand.customerTiers ?? []} loading={loading} />
         <ROICard />
       </div>
 
-      <VisitsChart data={data?.visitsPerDay ?? []} loading={loading} />
+      <VisitsChart data={data?.location.visitsPerDay ?? []} loading={loading} />
 
-      <PowerRanking customers={data?.topCustomers ?? []} loading={loading} onCustomerClick={handleCustomerClick} />
+      <PowerRanking customers={data?.brand.topCustomers ?? []} loading={loading} onCustomerClick={handleCustomerClick} />
 
-      <GrowthChart data={data?.newCustomersPerDay ?? []} loading={loading} />
+      <GrowthChart data={data?.brand.newCustomersPerDay ?? []} loading={loading} />
 
-      <VisitHeatmap data={data?.heatmap ?? []} loading={loading} />
+      <VisitHeatmap data={data?.location.heatmap ?? []} loading={loading} />
 
-      <AcquisitionChannelChart data={data?.acquisitionByMonth ?? []} loading={loading} />
+      <AcquisitionChannelChart data={data?.brand.acquisitionByMonth ?? []} loading={loading} />
 
-      <ReactivationRateChart data={data?.reactivationRate ?? []} loading={loading} />
+      <ReactivationRateChart data={data?.brand.reactivationRate ?? []} loading={loading} />
 
       <CampaignEfficiencyChart />
 

@@ -16,6 +16,7 @@ import {
   Cell,
 } from 'recharts'
 import { TrendingUp, DollarSign, Target } from 'lucide-react'
+import { useLocationScope, LOCATION_ALL } from '@/contexts/LocationScopeContext'
 
 interface CampaignEfficiency {
   id: string
@@ -71,11 +72,14 @@ export function CampaignEfficiencyChart() {
   const [data, setData] = useState<EfficiencyResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [lookback, setLookback] = useState(90)
+  const { selection: locationSelection } = useLocationScope()
 
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    fetch(`/api/dashboard/campaigns/efficiency?days=${lookback}`)
+    const params = new URLSearchParams({ days: String(lookback) })
+    if (locationSelection !== LOCATION_ALL) params.set('location_id', locationSelection)
+    fetch(`/api/dashboard/campaigns/efficiency?${params}`)
       .then((r) => r.json())
       .then((json) => {
         if (!cancelled) setData(json)
@@ -89,7 +93,7 @@ export function CampaignEfficiencyChart() {
     return () => {
       cancelled = true
     }
-  }, [lookback])
+  }, [lookback, locationSelection])
 
   // Prepara data para chart: las más recientes primero, máx 12
   const chartData = (data?.campaigns ?? [])

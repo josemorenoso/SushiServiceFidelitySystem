@@ -98,14 +98,17 @@ function DemoDashboardContent() {
             >
               Métricas
             </h1>
-            <MetricsCards summary={data?.summary ?? null} loading={loading} />
-            <VisitsChart data={data?.visitsPerDay ?? []} loading={loading} />
+            <MetricsCards
+              summary={data ? { ...data.brand.summary, ...data.location.summary } : null}
+              loading={loading}
+            />
+            <VisitsChart data={data?.location.visitsPerDay ?? []} loading={loading} />
             <div className="grid gap-8 lg:grid-cols-2">
-              <GrowthChart data={data?.newCustomersPerDay ?? []} loading={loading} />
-              <CustomerTiers tiers={data?.customerTiers ?? []} loading={loading} />
+              <GrowthChart data={data?.brand.newCustomersPerDay ?? []} loading={loading} />
+              <CustomerTiers tiers={data?.brand.customerTiers ?? []} loading={loading} />
             </div>
-            <AtRiskBubbles groups={data?.atRiskGroups ?? []} loading={loading} isDemo />
-            <PowerRanking customers={data?.topCustomers ?? []} loading={loading} />
+            <AtRiskBubbles groups={data?.brand.atRiskGroups ?? []} loading={loading} isDemo />
+            <PowerRanking customers={data?.brand.topCustomers ?? []} loading={loading} />
           </div>
         </main>
       </div>

@@ -1,19 +1,15 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { requireTenantId } from '@/lib/tenant'
+import { requireLocationScope } from '@/lib/location-scope'
 import { getFullAnalytics } from '@/services/dashboard.service'
 
-export async function GET() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
-  if (!user) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+export async function GET(request: Request) {
+  const scopeResult = await requireLocationScope(request)
+  if (!scopeResult.ok) {
+    return NextResponse.json({ error: scopeResult.error }, { status: scopeResult.status })
   }
 
   try {
-    const tenantId = await requireTenantId()
-    const analytics = await getFullAnalytics(tenantId)
+    const analytics = await getFullAnalytics(scopeResult.scope)
     return NextResponse.json(analytics)
   } catch (error) {
     console.error('[Dashboard] Error analytics:', error)

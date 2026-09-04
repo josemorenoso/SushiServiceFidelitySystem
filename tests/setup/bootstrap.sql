@@ -95,6 +95,21 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 
 GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
 
+-- Todo proyecto Supabase real concede USAGE sobre `auth` a `anon` y
+-- `authenticated` de fábrica — es lo que permite que una policy de RLS llame
+-- `auth.jwt()`/`auth.uid()` evaluándose COMO esos roles. Sin este GRANT, un
+-- `SET ROLE authenticated` seguido de una lectura real (no a través de un
+-- helper SECURITY DEFINER) revienta con "permission denied for schema auth" —
+-- el mismo 42501 que `docs/03-security.md` documenta para `aios_constelarys`,
+-- pero aquí sería un falso positivo del arnés, no del esquema: en producción
+-- `authenticated` SÍ puede.
+--
+-- `docs/features/testing.md` § "Lo que estas pruebas NO cubren" ya avisaba de
+-- este hueco: "el stub de auth.jwt() del bootstrap está escrito para
+-- permitirlo, pero todavía no hay pruebas que lo usen" (multi-sede F7,
+-- `tests/db/multisede-permisos.test.ts`, es la primera).
+GRANT USAGE ON SCHEMA auth TO anon, authenticated;
+
 CREATE SCHEMA IF NOT EXISTS storage;
 CREATE TABLE IF NOT EXISTS storage.buckets (
   id     text PRIMARY KEY,

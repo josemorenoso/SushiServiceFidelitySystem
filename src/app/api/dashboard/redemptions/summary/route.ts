@@ -1,20 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { requireTenantId } from '@/lib/tenant'
+import { requireLocationScope } from '@/lib/location-scope'
 import { getRedemptionSummary } from '@/services/redemption.service'
 import { getGrantMetrics } from '@/services/reward-grant.service'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  const scopeResult = await requireLocationScope(request)
+  if (!scopeResult.ok) {
+    return NextResponse.json({ error: scopeResult.error }, { status: scopeResult.status })
   }
 
   try {
-    const tenantId = await requireTenantId()
     const { searchParams } = new URL(request.url)
     const range = {
       from: searchParams.get('from') ?? undefined,
@@ -25,8 +22,8 @@ export async function GET(request: NextRequest) {
     // que REPARTIMOS, ¿cuántos se reclamaron? La tasa de `source='reactivation'` es el
     // porcentaje de clientes dormidos que la campaña despertó.
     const [summary, grants] = await Promise.all([
-      getRedemptionSummary(range, tenantId),
-      getGrantMetrics(range, tenantId),
+      getRedemptionSummary(range, scopeResult.scope),
+      getGrantMetrics(range, scopeResult.scope),
     ])
 
     return NextResponse.json({ ...summary, grants })

@@ -233,7 +233,7 @@ export default function CustomersPage() {
       </div>
 
       <BlackTierSection
-        customers={analytics?.topCustomers ?? []}
+        customers={analytics?.brand.topCustomers ?? []}
         loading={analyticsLoading}
         benefits={blackBenefits}
         onCustomerClick={handleBlackCustomerClick}

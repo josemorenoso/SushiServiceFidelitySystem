@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { requireTenantId } from '@/lib/tenant'
+import { requireLocationScope, applyLocationFilter } from '@/lib/location-scope'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -10,19 +11,17 @@ function getServiceClient() {
   return createServiceClient(url, key)
 }
 
-export async function GET() {
-  try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+export async function GET(request: NextRequest) {
+  const scopeResult = await requireLocationScope(request)
+  if (!scopeResult.ok) {
+    return NextResponse.json({ error: scopeResult.error }, { status: scopeResult.status })
+  }
 
-    const tenantId = await requireTenantId()
+  try {
     const db = getServiceClient()
-    const { data, error } = await db
-      .from('authorized_numbers')
-      .select('*')
-      .eq('tenant_id', tenantId)
-      .order('created_at', { ascending: false })
+    const base = db.from('authorized_numbers').select('*').eq('tenant_id', scopeResult.scope.tenantId)
+    const query = applyLocationFilter(base, scopeResult.scope, 'location_id')
+    const { data, error } = await query.order('created_at', { ascending: false })
 
     if (error) throw error
     return NextResponse.json({ numbers: data ?? [] })

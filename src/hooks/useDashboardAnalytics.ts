@@ -2,10 +2,12 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useDemo } from '@/contexts/DemoContext'
+import { useLocationScope } from '@/contexts/LocationScopeContext'
 import type { DashboardAnalytics } from '@/types/analytics.types'
 
 export function useDashboardAnalytics() {
   const { isDemo, demoData, demoLoading, demoError } = useDemo()
+  const { queryParam } = useLocationScope()
   const [realData, setRealData] = useState<DashboardAnalytics | null>(null)
   const [realLoading, setRealLoading] = useState(false)
   const [realError, setRealError] = useState<string | null>(null)
@@ -18,8 +20,14 @@ export function useDashboardAnalytics() {
   useEffect(() => {
     if (isDemo) return
 
+    // Multi-sede F7 (§8.4): `queryParam` trae `location_id=…` cuando el
+    // selector del header eligió algo distinto de "Todas las sedes". Ausente
+    // por defecto — el servidor colapsa eso a "todo lo que este usuario puede
+    // ver" (`requireLocationScope`), nunca a "toda la marca sin filtrar".
+    const url = queryParam ? `/api/dashboard/analytics?${queryParam}` : '/api/dashboard/analytics'
+
     const load = () => {
-      fetch('/api/dashboard/analytics', { cache: 'no-store' })
+      fetch(url, { cache: 'no-store' })
         .then((res) => {
           if (!res.ok) throw new Error('Error cargando analytics')
           return res.json()
@@ -35,7 +43,7 @@ export function useDashboardAnalytics() {
 
     const interval = setInterval(load, 60_000)
     return () => clearInterval(interval)
-  }, [isDemo, refreshKey])
+  }, [isDemo, refreshKey, queryParam])
 
   if (isDemo) {
     return {

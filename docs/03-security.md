@@ -8,7 +8,10 @@
 - **Rutas protegidas:** `/dashboard/*` (requieren login de administrador)
 
 ## Autorización
-- **Roles:** Solo un rol: `admin` (administradores del restaurante)
+- **Roles:** Un rol de Supabase Auth: `admin` (administradores del restaurante). Desde F7
+  (multi-sede, D10) hay además un alcance de sede por encima de ese rol — ver
+  § "Permisos de sede del dashboard" más abajo. No es un rol nuevo de Auth: es una tabla de
+  aplicación que decide QUÉ FILAS ve un admin ya autenticado, no SI puede autenticarse.
 - **Clientes:** No tienen cuenta de usuario — se identifican solo por número de celular. El número de celular actúa como identificador público (no como credencial secreta); los datos expuestos (nombre, puntos, visitas) son equivalentes a los que ya retorna `/api/check-in/status`
 - **RLS:** Activado en todas las tablas. Las políticas limitan acceso según `auth.uid()` para admins
 - **API Routes:** Los webhooks validan origen (números autorizados). Los cron jobs validan `CRON_SECRET`
@@ -62,6 +65,68 @@ agregue a una de esas tablas una policy `aios_constelarys_select_*` para que el 
 lea, la lectura muere con el mismo 42501 silencioso.** Cambiarlo altera como se evalua el
 RLS de cada tabla multitenant, asi que es una decision del dueno con su propia
 verificacion, no un efecto colateral.
+
+## Permisos de sede del dashboard (F7, D10)
+
+Migración `supabase/migrations/00045_permisos_por_sede.sql`. Doc completo:
+`docs/features/multi-sede.md` §3.quater. Resumen de lo que importa para seguridad:
+
+**El aislamiento real NO está en el RLS.** Verificado que en toda la app hay **una sola** lectura
+de datos por el camino autenticado (`src/app/api/dashboard/twilio-metrics/route.ts:217`); las
+otras ~55 corren con `service_role`, que se salta el RLS por definición. El aislamiento lo hace el
+tipo opaco `LocationScope` (`src/lib/location-scope.ts`): las firmas de los servicios pasan de
+`(tenantId: string)` a `(scope: LocationScope)`, y ese tipo **solo** lo puede fabricar
+`requireLocationScope()`, que resuelve el alcance en el servidor. Ningún otro código puede
+construir uno con un literal o un `as` — lleva una marca de un `Symbol()` real, creado y no
+exportado en ese módulo.
+
+**Las tres redes, en orden de fuerza real:**
+
+1. El compilador — una ruta que se olvida del filtro no compila.
+2. `getUnscopedServiceClient()` (`src/lib/supabase/unscoped.ts`) — el nombre feo hace visible,
+   en el `import`, cuándo una lectura decide ser de la marca a propósito.
+3. `tests/unit/location-scope-allowlist.test.ts` — falla si aparece un import nuevo de (2) que
+   nadie revisó. Es la red más débil: detecta el olvido después de escribirlo.
+
+**El RLS sí se actualizó, como red barata.** La 00045 crea `dashboard_user_locations` (el
+alcance de cada usuario) y, sobre cada tabla de `public` con `tenant_id` **y** `location_id` a la
+vez (autodescubierta por catálogo, `restaurant_events` excluida a propósito — ahí NULL significa
+"toda la marca", no "sede desconocida"), una policy `AS RESTRICTIVE`:
+
+```sql
+CREATE POLICY sede_visible_<tabla> ON <tabla> AS RESTRICTIVE FOR ALL TO authenticated
+  USING      (is_super_admin() OR can_see_location(location_id))
+  WITH CHECK (is_super_admin() OR can_see_location(location_id));
+```
+
+`RESTRICTIVE`, no una permisiva nueva, a propósito: Postgres combina las permisivas con OR y les
+aplica AND con las restrictivas. Sobre la `tenant_all_*` de la 00026 (`T ∨ S`), esto da
+`(T ∨ S) ∧ (S ∨ C) ≡ S ∨ (T ∧ C)` sin **DROPear ni reescribir** una sola policy existente — y una
+policy `RESTRICTIVE` es matemáticamente incapaz de conceder, solo de quitar filas: "no puede
+conceder más de lo que concedía antes" pasa de promesa a propiedad del motor.
+
+**Los tres helpers nuevos** (`current_dashboard_user_id()`, `tenant_active_location_count()`,
+`can_see_location()`) nacen `SECURITY DEFINER` con `search_path` fijo — la Regla nº1 de esta
+sección — y **conservan** el `EXECUTE` a PUBLIC — la Regla nº2: las policies los invocan como
+`anon`/`authenticated`, y revocárselo las dejaría sin leer. `can_see_location()` llama
+`current_tenant_id()` (00024, la que tiene el defecto documentado arriba) **desde dentro de su
+propio contexto `SECURITY DEFINER`**, donde sí resuelve sin 42501 — eso NO arregla la deuda de
+`current_tenant_id()` para el resto del esquema, solo la rodea en este único camino.
+
+**El fail-safe (§5.1) está implementado DOS VECES a propósito**, en dos motores distintos:
+`can_see_location()` en SQL (para el RLS) y `decideLocationScope()` en TypeScript puro (para el
+camino real, `service_role`). Sin fila y ≤1 sede activa de la marca → ve la marca; sin fila y ≥2
+→ 403; `role='brand'` → todo, incluido el cubo *"Sin sede"*; `role='location'` → solo sus sedes,
+**nunca** `location_id IS NULL`. Un fail-safe absoluto ("sin fila, nada") habría dejado fuera a
+los admins de los 4 tenants vivos el día del despliegue; el trigger
+`trg_restaurant_locations_estampa_marca` estampa `role='brand'` a los usuarios existentes en el
+instante en que nace la 2ª sede, para que el 403 sea la red y no el camino normal.
+
+**Un hueco que esta fase encontró en el arnés de tests, no en producción:**
+`tests/setup/bootstrap.sql` creaba el rol `authenticated` pero nunca le daba `USAGE ON SCHEMA
+auth` (Supabase real sí se lo da). Sin ese GRANT, `tests/db/multisede-permisos.test.ts` —la
+primera prueba de este repo en correr RLS completo con `SET ROLE authenticated`— habría fallado
+con un `42501` que era del arnés, no del esquema. Se agregó el GRANT al bootstrap.
 
 ## Variables de Entorno
 | Variable | Exposición | Protección |

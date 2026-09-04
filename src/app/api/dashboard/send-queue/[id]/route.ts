@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { requireTenantId } from '@/lib/tenant'
+import { requireLocationScope } from '@/lib/location-scope'
 import { cancelQueueItemForTenant } from '@/services/send-queue.service'
 
 /**
@@ -21,25 +20,22 @@ import { cancelQueueItemForTenant } from '@/services/send-queue.service'
 export const dynamic = 'force-dynamic'
 
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const scopeResult = await requireLocationScope(request)
+  if (!scopeResult.ok) {
+    return NextResponse.json({ error: scopeResult.error }, { status: scopeResult.status })
+  }
+
   try {
-    const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-    }
-
     const { id } = await params
-    const tenantId = await requireTenantId()
 
-    // El filtro por tenant va DENTRO del update, no antes: el service role se
-    // salta RLS, así que sin ese `.eq('tenant_id', ...)` un admin podría
-    // cancelar la cola de otro restaurante conociendo un id.
-    const { cancelled, reason } = await cancelQueueItemForTenant(tenantId, id)
+    // El filtro por tenant Y por sede va DENTRO del update, no antes: el
+    // service role se salta RLS, así que sin esos filtros un admin podría
+    // cancelar la cola de otro restaurante (o, ahora, de otra sede) conociendo
+    // un id.
+    const { cancelled, reason } = await cancelQueueItemForTenant(scopeResult.scope, id)
 
     if (!cancelled) {
       if (reason === 'sending') {

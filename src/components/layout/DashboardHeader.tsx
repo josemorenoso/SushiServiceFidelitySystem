@@ -10,6 +10,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { useBranding } from '@/lib/branding-context'
+import { LocationSelector } from '@/components/layout/LocationSelector'
 
 export function DashboardHeader() {
   const router = useRouter()
@@ -84,10 +85,13 @@ export function DashboardHeader() {
         <h2 className="text-sm font-medium text-muted-foreground">Panel de Administración — {branding.name}</h2>
       </div>
 
-      <Button variant="ghost" size="sm" onClick={handleLogout} className="gap-2">
-        <LogOut className="h-4 w-4" />
-        <span className="hidden sm:inline">Cerrar sesión</span>
-      </Button>
+      <div className="flex items-center gap-2">
+        {!isDemo && <LocationSelector />}
+        <Button variant="ghost" size="sm" onClick={handleLogout} className="gap-2">
+          <LogOut className="h-4 w-4" />
+          <span className="hidden sm:inline">Cerrar sesión</span>
+        </Button>
+      </div>
     </header>
   )
 }

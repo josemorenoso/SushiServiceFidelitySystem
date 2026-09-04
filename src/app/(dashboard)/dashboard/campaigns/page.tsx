@@ -29,6 +29,7 @@ import { WalletCard } from '@/components/dashboard/WalletCard'
 import { SegmentRadar } from '@/components/dashboard/SegmentRadar'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { useDemo } from '@/contexts/DemoContext'
+import { useLocationScope } from '@/contexts/LocationScopeContext'
 import { useDashboardAnalytics } from '@/hooks/useDashboardAnalytics'
 import { FREQUENCY_CAP_DAYS, RECOVERY_ZONE_START_DAYS, RECOVERY_ZONE_END_DAYS } from '@/constants/rewards'
 
@@ -107,6 +108,7 @@ const statusLabels: Record<string, string> = {
 export default function CampaignsPage() {
   const { isDemo } = useDemo()
   const { data: analytics, loading: analyticsLoading } = useDashboardAnalytics()
+  const { queryParam: locationQueryParam } = useLocationScope()
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [settings, setSettings] = useState<Record<string, string>>({})
   const [templates, setTemplates] = useState<TwilioTemplate[]>([])
@@ -117,9 +119,16 @@ export default function CampaignsPage() {
   const [runSummary, setRunSummary] = useState<string | null>(null)
   const [runError, setRunError] = useState<string | null>(null)
 
+  // Multi-sede F7 (§8.4): `campaigns.location_id` la deja NULL cualquier
+  // escritor hoy (F6 la llena), así que este filtro es un no-op para el
+  // `role='brand'` de los 4 tenants vivos y queda listo para cuando F6 exista.
+  const campaignsUrl = locationQueryParam
+    ? `/api/dashboard/campaigns?${locationQueryParam}`
+    : '/api/dashboard/campaigns'
+
   useEffect(() => {
     Promise.all([
-      fetch('/api/dashboard/campaigns').then((res) => res.json()).catch(() => []),
+      fetch(campaignsUrl).then((res) => res.json()).catch(() => []),
       fetch('/api/dashboard/settings').then((res) => res.json()).catch(() => ({})),
       fetch('/api/dashboard/templates').then((res) => res.json()).catch(() => ({ templates: [] })),
     ])
@@ -129,7 +138,7 @@ export default function CampaignsPage() {
         setTemplates(Array.isArray(templatesData?.templates) ? templatesData.templates : [])
       })
       .finally(() => setLoading(false))
-  }, [])
+  }, [campaignsUrl])
 
   const softDays = settings.reactivation_soft_days ?? '21'
   const aggressiveDays = settings.reactivation_aggressive_days ?? '25'
@@ -181,7 +190,7 @@ export default function CampaignsPage() {
       )
       setSent(type)
       setTimeout(() => {
-        fetch('/api/dashboard/campaigns')
+        fetch(campaignsUrl)
           .then((res) => res.json())
           .then((data) => setCampaigns(Array.isArray(data) ? data : []))
       }, 1000)
@@ -420,7 +429,7 @@ export default function CampaignsPage() {
 
         <TabsContent value="manuales" className="space-y-4 pt-4">
           <AtRiskBubbles
-            groups={analytics?.atRiskGroups ?? []}
+            groups={analytics?.brand.atRiskGroups ?? []}
             loading={analyticsLoading}
             isDemo={isDemo}
           />

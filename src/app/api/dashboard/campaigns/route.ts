@@ -1,28 +1,23 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
-import { requireTenantId } from '@/lib/tenant'
+import { getUnscopedServiceClient } from '@/lib/supabase/unscoped'
+import { requireLocationScope, applyLocationFilter } from '@/lib/location-scope'
 
-export async function GET() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
-  if (!user) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+export async function GET(request: Request) {
+  const scopeResult = await requireLocationScope(request)
+  if (!scopeResult.ok) {
+    return NextResponse.json({ error: scopeResult.error }, { status: scopeResult.status })
   }
 
   try {
-    const tenantId = await requireTenantId()
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY!
-    const service = createServiceClient(url, key)
+    const service = getUnscopedServiceClient()
 
-    const { data, error } = await service
-      .from('campaigns')
-      .select('*')
-      .eq('tenant_id', tenantId)
-      .order('created_at', { ascending: false })
-      .limit(50)
+    // Multi-sede F7 (§8.4): `campaigns.location_id` la deja SIEMPRE NULL
+    // birthday/reactivation/manual hoy (deuda #12 de multi-sede.md, es F6).
+    // `role='brand'` no cambia nada; un futuro `role='location'` vería la
+    // lista vacía hasta que F6 la llene — fail CLOSED, no fail OPEN.
+    const base = service.from('campaigns').select('*').eq('tenant_id', scopeResult.scope.tenantId)
+    const query = applyLocationFilter(base, scopeResult.scope, 'location_id')
+    const { data, error } = await query.order('created_at', { ascending: false }).limit(50)
 
     if (error) throw error
 

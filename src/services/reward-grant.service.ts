@@ -13,6 +13,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { percentInt } from '@/lib/format/percent'
+import { applyLocationFilter, type LocationScope } from '@/lib/location-scope'
 import type { GrantSource, GrantStatus, GrantType, RewardGrant } from '@/types/database.types'
 
 function getServiceClient() {
@@ -351,16 +352,17 @@ export interface GrantMetrics {
  * Segmentada por origen, la tasa de `reactivation` es literalmente el porcentaje de
  * clientes dormidos que la campaña despertó.
  */
+/** Multi-sede F7 (§8.4): mismo aviso que `getRedemptions()` sobre
+ *  `granted_location_id` — siempre NULL hoy (deuda #13); `role='brand'` no
+ *  cambia nada, un futuro `role='location'` vería la lista vacía hasta F6. */
 export async function getGrantMetrics(
   params: { from?: string; to?: string },
-  tenantId: string
+  scope: LocationScope
 ): Promise<GrantMetrics> {
   const supabase = getServiceClient()
 
-  let query = supabase
-    .from('reward_grants')
-    .select('source, status')
-    .eq('tenant_id', tenantId)
+  const baseQuery = supabase.from('reward_grants').select('source, status').eq('tenant_id', scope.tenantId)
+  let query = applyLocationFilter(baseQuery, scope, 'granted_location_id')
 
   if (params.from) query = query.gte('granted_at', params.from)
   if (params.to) query = query.lte('granted_at', params.to)

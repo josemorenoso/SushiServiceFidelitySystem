@@ -1,3 +1,10 @@
+/**
+ * El resumen MERGEADO — forma plana que consume `MetricsCards`. Se arma en el
+ * componente de página juntando `DashboardAnalyticsBrand['summary']` +
+ * `DashboardAnalyticsLocation['summary']` (multi-sede F7, §8.4): es el ÚNICO
+ * punto donde numerador de sede y denominador de marca se tocan, y es a propósito
+ * — una tarjeta de resumen es presentación, no una consulta.
+ */
 export interface AnalyticsSummary {
   totalCustomers: number
   visitsToday: number
@@ -7,6 +14,25 @@ export interface AnalyticsSummary {
   newCustomersWeek: number
   frequentCustomers: number
   birthdaysToday: number
+}
+
+/** Las métricas que salen de `customers`: de la MARCA para siempre (§8.4 del
+ *  spec de multi-sede). No por limitación — porque el dueño pidió que el cliente
+ *  conserve su recorrido entre las dos sedes: un cliente que come en las dos no
+ *  pertenece a ninguna. */
+export interface AnalyticsSummaryBrand {
+  totalCustomers: number
+  newCustomersToday: number
+  newCustomersWeek: number
+  frequentCustomers: number
+  birthdaysToday: number
+}
+
+/** Las métricas que salen de `visits`: sí se pueden partir por sede. */
+export interface AnalyticsSummaryLocation {
+  visitsToday: number
+  deliveriesToday: number
+  qrToday: number
 }
 
 export interface DailyVisits {
@@ -89,17 +115,38 @@ export interface ROIEstimate {
   retentionROI?: number
 }
 
-export interface DashboardAnalytics {
-  summary: AnalyticsSummary
-  visitsPerDay: DailyVisits[]
+/**
+ * Multi-sede F7, §8.4: el tipo de retorno de `getFullAnalytics()` se parte en
+ * `{ brand, location }` para que mezclar numerador de sede con denominador de
+ * marca deje de poder hacerse por descuido — no compila.
+ *
+ * `brand`: sale de `customers` (o de tablas sin `location_id`, como
+ * `campaigns`/`campaign_messages` para `reactivationRate` — el reloj de
+ * reactivación es de la marca, §8.2). Estable pase lo que pase con el selector.
+ *
+ * `location`: sale de `visits`, que sí tiene `location_id`. Cambia con el
+ * `?location_id=` de la petición.
+ */
+export interface DashboardAnalyticsBrand {
+  summary: AnalyticsSummaryBrand
   newCustomersPerDay: DailyNewCustomers[]
   customerTiers: TierCount[]
   atRiskGroups: RiskGroup[]
   topCustomers: RankedCustomer[]
-  heatmap: HeatmapCell[]
   acquisitionByMonth: AcquisitionChannel[]
   reactivationRate: ReactivationData[]
   roiEstimate: ROIEstimate
+}
+
+export interface DashboardAnalyticsLocation {
+  summary: AnalyticsSummaryLocation
+  visitsPerDay: DailyVisits[]
+  heatmap: HeatmapCell[]
+}
+
+export interface DashboardAnalytics {
+  brand: DashboardAnalyticsBrand
+  location: DashboardAnalyticsLocation
 }
 
 export interface DemoCustomer {

@@ -1,6 +1,8 @@
 import { createClient } from '@supabase/supabase-js'
 import type { Customer, Reward } from '@/types/database.types'
 import { POWER_RANKS, RISK_LEVELS, TOP_CUSTOMERS_LIMIT, getCustomerRank } from '@/constants/rankings'
+import { getUnscopedServiceClient } from '@/lib/supabase/unscoped'
+import { applyLocationFilter, locationMatches, type LocationScope } from '@/lib/location-scope'
 import type {
   DashboardAnalytics,
   DailyVisits,
@@ -23,23 +25,45 @@ function getServiceClient() {
   return createClient(url, key)
 }
 
-export interface DashboardMetrics {
+/**
+ * Multi-sede F7, §8.4: partido en `{ brand, location }` — mezclar numerador de
+ * sede con denominador de marca deja de compilar. `brand` sale de `customers`
+ * (de la marca para siempre); `location` sale de `visits` (tiene `location_id`).
+ */
+export interface DashboardMetricsBrand {
   totalCustomers: number
-  visitsToday: number
-  visitsThisWeek: number
   birthdaysToday: number
   inactiveCustomers: number
   recentCustomers: Customer[]
 }
 
-export async function getDashboardMetrics(tenantId: string): Promise<DashboardMetrics> {
-  const supabase = getServiceClient()
+export interface DashboardMetricsLocation {
+  visitsToday: number
+  visitsThisWeek: number
+}
+
+export interface DashboardMetrics {
+  brand: DashboardMetricsBrand
+  location: DashboardMetricsLocation
+}
+
+export async function getDashboardMetrics(scope: LocationScope): Promise<DashboardMetrics> {
+  const supabase = getUnscopedServiceClient()
+  const tenantId = scope.tenantId
   const now = new Date()
   const todayStr = now.toISOString().split('T')[0]
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
   const inactiveCutoff = new Date(now.getTime() - 21 * 24 * 60 * 60 * 1000).toISOString()
   const month = String(now.getMonth() + 1).padStart(2, '0')
   const day = String(now.getDate()).padStart(2, '0')
+
+  // La base se asigna a un `const` antes de `applyLocationFilter()` — evita el
+  // TS2589 "Type instantiation is excessively deep" que sale de encadenar todo
+  // en una sola expresión (ver el mismo comentario en review.service.ts).
+  const visitsTodayBase = supabase.from('visits').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId).gte('created_at', todayStr)
+  const visitsTodayQuery = applyLocationFilter(visitsTodayBase, scope, 'location_id')
+  const visitsWeekBase = supabase.from('visits').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId).gte('created_at', weekAgo)
+  const visitsWeekQuery = applyLocationFilter(visitsWeekBase, scope, 'location_id')
 
   const [
     { count: totalCustomers },
@@ -50,20 +74,24 @@ export async function getDashboardMetrics(tenantId: string): Promise<DashboardMe
     { data: recentCustomers },
   ] = await Promise.all([
     supabase.from('customers').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId),
-    supabase.from('visits').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId).gte('created_at', todayStr),
-    supabase.from('visits').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId).gte('created_at', weekAgo),
+    visitsTodayQuery,
+    visitsWeekQuery,
     supabase.from('customers').select('id').eq('tenant_id', tenantId).not('birthday', 'is', null).like('birthday', `%-${month}-${day}`),
     supabase.from('customers').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId).lt('last_visit_at', inactiveCutoff).not('last_visit_at', 'is', null),
     supabase.from('customers').select('*').eq('tenant_id', tenantId).order('created_at', { ascending: false }).limit(5),
   ])
 
   return {
-    totalCustomers: totalCustomers ?? 0,
-    visitsToday: visitsToday ?? 0,
-    visitsThisWeek: visitsThisWeek ?? 0,
-    birthdaysToday: birthdayData?.length ?? 0,
-    inactiveCustomers: inactiveCustomers ?? 0,
-    recentCustomers: recentCustomers ?? [],
+    brand: {
+      totalCustomers: totalCustomers ?? 0,
+      birthdaysToday: birthdayData?.length ?? 0,
+      inactiveCustomers: inactiveCustomers ?? 0,
+      recentCustomers: recentCustomers ?? [],
+    },
+    location: {
+      visitsToday: visitsToday ?? 0,
+      visitsThisWeek: visitsThisWeek ?? 0,
+    },
   }
 }
 
@@ -153,8 +181,9 @@ function daysBetween(d1: Date, d2: Date): number {
   return Math.floor((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24))
 }
 
-export async function getFullAnalytics(tenantId: string): Promise<DashboardAnalytics> {
-  const supabase = getServiceClient()
+export async function getFullAnalytics(scope: LocationScope): Promise<DashboardAnalytics> {
+  const supabase = getUnscopedServiceClient()
+  const tenantId = scope.tenantId
   const now = new Date()
   const todayStr = formatDate(now)
   const thirtyDaysAgo = new Date(now)
@@ -179,16 +208,20 @@ export async function getFullAnalytics(tenantId: string): Promise<DashboardAnaly
     { data: settingsData },
   ] = await Promise.all([
     supabase.from('customers').select('*').eq('tenant_id', tenantId).order('total_visits', { ascending: false }),
-    supabase.from('visits').select('id, customer_id, source, created_at').eq('tenant_id', tenantId).gte('created_at', thirtyDaysAgoStr),
+    supabase.from('visits').select('id, customer_id, source, created_at, location_id').eq('tenant_id', tenantId).gte('created_at', thirtyDaysAgoStr),
     supabase.from('customers').select('id').eq('tenant_id', tenantId).not('birthday', 'is', null).like('birthday', `%-${month}-${day}`),
-    supabase.from('visits').select('id, customer_id, source, created_at').eq('tenant_id', tenantId).gte('created_at', sixMonthsAgoStr),
+    supabase.from('visits').select('id, customer_id, source, created_at, location_id').eq('tenant_id', tenantId).gte('created_at', sixMonthsAgoStr),
     supabase.from('campaigns').select('id, type, executed_at').eq('tenant_id', tenantId).eq('type', 'reactivation').not('executed_at', 'is', null),
     supabase.from('campaign_messages').select('id, campaign_id, customer_id, sent_at, status').eq('tenant_id', tenantId),
     supabase.from('admin_settings').select('key, value').eq('tenant_id', tenantId).eq('key', 'avg_ticket'),
   ])
 
   const customers: Customer[] = allCustomers ?? []
-  const visits = recentVisits ?? []
+  // `visits` (30 días) es de LA SEDE: se recorta al alcance de la petición antes
+  // de construir el mapa diario. `reactivationRate` más abajo usa su propio
+  // `visits6m` SIN recortar — el reloj de reactivación es de la marca (§8.2) — así
+  // que las dos vistas de la misma tabla conviven sin pisarse.
+  const visits = (recentVisits ?? []).filter((v) => locationMatches(scope, v.location_id))
 
   const visitsMap: Record<string, { qr: number; delivery: number }> = {}
   const newCustMap: Record<string, number> = {}
@@ -295,7 +328,9 @@ export async function getFullAnalytics(tenantId: string): Promise<DashboardAnaly
       heatmapGrid[`${d}-${h}`] = 0
     }
   }
-  for (const v of (allVisits6m ?? [])) {
+  // El heatmap es de LA SEDE (igual que `visitsPerDay`); `reactivationRate` más
+  // abajo relee `allVisits6m` SIN este recorte porque esa métrica es de la marca.
+  for (const v of (allVisits6m ?? []).filter((vv) => locationMatches(scope, vv.location_id))) {
     const vDate = new Date(v.created_at)
     const colombiaStr = vDate.toLocaleString('en-US', { timeZone: 'America/Bogota' })
     const colombiaDate = new Date(colombiaStr)
@@ -407,24 +442,30 @@ export async function getFullAnalytics(tenantId: string): Promise<DashboardAnaly
   }
 
   return {
-    summary: {
-      totalCustomers: customers.length,
-      visitsToday: todayVisits.qr + todayVisits.delivery,
-      deliveriesToday: todayVisits.delivery,
-      qrToday: todayVisits.qr,
-      newCustomersToday: newToday,
-      newCustomersWeek: newWeek,
-      frequentCustomers: customers.filter((c) => c.total_visits >= 3).length,
-      birthdaysToday: birthdayData?.length ?? 0,
+    brand: {
+      summary: {
+        totalCustomers: customers.length,
+        newCustomersToday: newToday,
+        newCustomersWeek: newWeek,
+        frequentCustomers: customers.filter((c) => c.total_visits >= 3).length,
+        birthdaysToday: birthdayData?.length ?? 0,
+      },
+      newCustomersPerDay,
+      customerTiers,
+      atRiskGroups,
+      topCustomers,
+      acquisitionByMonth,
+      reactivationRate,
+      roiEstimate,
     },
-    visitsPerDay,
-    newCustomersPerDay,
-    customerTiers,
-    atRiskGroups,
-    topCustomers,
-    heatmap,
-    acquisitionByMonth,
-    reactivationRate,
-    roiEstimate,
+    location: {
+      summary: {
+        visitsToday: todayVisits.qr + todayVisits.delivery,
+        deliveriesToday: todayVisits.delivery,
+        qrToday: todayVisits.qr,
+      },
+      visitsPerDay,
+      heatmap,
+    },
   }
 }

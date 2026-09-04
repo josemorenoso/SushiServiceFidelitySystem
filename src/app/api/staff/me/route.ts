@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { jwtVerify } from 'jose'
 import { createClient } from '@supabase/supabase-js'
 import { resolveHostContext } from '@/lib/tenant'
+import { isDbFailure, logDbFailure } from '@/lib/db-failure'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -40,12 +41,30 @@ export async function GET(request: NextRequest) {
       })
 
       const staffId = payload.sub as string
-      const { data: staff } = await supabase
+      const { data: staff, error: staffError } = await supabase
         .from('staff_users')
         .select('id, name, phone, role, is_active, location_id')
         .eq('id', staffId)
         .eq('tenant_id', tenant.id)
-        .single()
+        .maybeSingle()
+
+      // Un 401 aquí hace que la app del mesero borre el token y lo saque a la pantalla de
+      // login. Si lo que falló fue la base, acaba de perder una sesión perfectamente válida.
+      if (isDbFailure(staffError)) {
+        logDbFailure({
+          scope: 'StaffMe',
+          reason: 'staff_lookup_error',
+          error: staffError,
+          context: { tenant: tenant.slug, staff_id: staffId },
+        })
+        return NextResponse.json(
+          {
+            error: 'Problema técnico',
+            message: 'No pudimos verificar tu sesión ahora mismo. Intenta de nuevo en un momento.',
+          },
+          { status: 503 }
+        )
+      }
 
       if (!staff || !staff.is_active) {
         return NextResponse.json(
@@ -71,13 +90,29 @@ export async function GET(request: NextRequest) {
 
     // ─── Escenario B: autenticación por device_token ───
     if (deviceToken) {
-      const { data: device } = await supabase
+      const { data: device, error: deviceError } = await supabase
         .from('staff_devices')
         .select('id, device_name, is_trusted, expires_at, staff_user_id')
         .eq('device_fingerprint', deviceToken)
         .eq('tenant_id', tenant.id)
         .eq('is_trusted', true)
-        .single()
+        .maybeSingle()
+
+      if (isDbFailure(deviceError)) {
+        logDbFailure({
+          scope: 'StaffMe',
+          reason: 'device_lookup_error',
+          error: deviceError,
+          context: { tenant: tenant.slug },
+        })
+        return NextResponse.json(
+          {
+            error: 'Problema técnico',
+            message: 'No pudimos verificar este dispositivo ahora mismo. Intenta de nuevo en un momento.',
+          },
+          { status: 503 }
+        )
+      }
 
       if (!device) {
         return NextResponse.json(
@@ -93,11 +128,19 @@ export async function GET(request: NextRequest) {
         )
       }
 
-      // Actualizar last_used_at
-      await supabase
+      // Actualizar last_used_at (telemetría: no invalida la sesión, pero se registra).
+      const { error: touchError } = await supabase
         .from('staff_devices')
         .update({ last_used_at: new Date().toISOString() })
         .eq('id', device.id)
+      if (touchError) {
+        logDbFailure({
+          scope: 'StaffMe',
+          reason: 'device_touch_error',
+          error: touchError,
+          context: { tenant: tenant.slug, device_id: device.id },
+        })
+      }
 
       return NextResponse.json({
         authenticated: true,

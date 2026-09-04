@@ -36,6 +36,17 @@ export async function GET(request: NextRequest) {
     }
 
     const auth = await resolveStaffAuth(request, tenant)
+    // El fallo de base NO es un 401: decirle "no válido" al mesero cuando la base está
+    // caída le hace reintentar con la misma credencial buena y deja el incidente invisible.
+    if (auth.dbFailure) {
+      return NextResponse.json(
+        {
+          error: 'Problema técnico',
+          message: 'No pudimos verificar tu sesión ahora mismo. Intenta de nuevo en un momento.',
+        },
+        { status: 503 }
+      )
+    }
     if (!auth.valid) {
       return NextResponse.json(
         { error: 'No autorizado', message: 'Mesero o dispositivo no válido.' },

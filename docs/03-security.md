@@ -148,6 +148,78 @@ sin pérdida de datos).
 DEBE pasar `tenant_id` explícito, exactamente como ya lo hace cada caso existente — el DEFAULT no
 es una red de seguridad a la que apoyarse, es una deuda pendiente de cerrar.
 
+## Fallos silenciosos de base de datos — error indistinguible de vacío
+
+**Auditado y cerrado 2026-09-03** (sesión de corrección dedicada, fuera de `dashboard/**` y
+`supabase/migrations/`). Resumen del patrón para que no vuelva a colarse.
+
+`supabase-js` **no lanza excepciones**: devuelve `{ data, error }`. Todo el código que escribía
+
+```ts
+const { data: x } = await supabase.from('staff_users')…
+if (!x) return no_autorizado()
+```
+
+hacía que un timeout del pooler, una policy de RLS o una columna que no existe (`42703` — el
+caso real si una migración se despliega en el orden equivocado, ver `00044` en
+`docs/features/multi-sede.md`) produjeran **exactamente el mismo `null`** que "no lo encontré".
+El código seguía por la rama del caso feliz-vacío: sin log, sin alerta y sin fallar. Un fallo de
+base quedaba indistinguible de un resultado vacío legítimo.
+
+Tres formas del mismo bug, de más a menos común:
+- **Sin destructurar `error`** — `const { data: x } = await supabase...`.
+- **`error` destructurado pero nunca comprobado**, o fundido con el caso vacío en el mismo `if`.
+- **El resultado de un `.insert()`/`.update()` descartado entero** — una ESCRITURA que puede
+  fallar sin que nadie se entere; peor que en una lectura, porque no hay reintento posible.
+
+**Lo que NO es este bug:** en muchísimos sitios `null` significa legítimamente "no existe" y esa
+rama es correcta. El arreglo nunca fue "todo `null` es un fallo" — fue que el error deje de
+compartir esa rama con el vacío.
+
+### El helper — `src/lib/db-failure.ts`
+
+```ts
+import { isDbFailure, isNoRows, logDbFailure } from '@/lib/db-failure'
+
+const { data, error } = await supabase.from('staff_users').select(...).maybeSingle()
+if (isDbFailure(error)) {
+  logDbFailure({ scope: 'StaffAuth', reason: 'staff_lookup_error', error, context: { tenant: tenant.slug } })
+  return NextResponse.json({ error: 'Problema técnico', message: '…' }, { status: 503 })
+}
+if (!data) { /* la rama de "no existe" de siempre, sigue siendo correcta */ }
+```
+
+- `isDbFailure(error)` es `true` para un fallo real y `false` para `PGRST116` (el "cero filas"
+  de `.single()`) — por eso el patrón recomendado es `.maybeSingle()` en vez de `.single()`: un
+  vacío legítimo llega como `{ data: null, error: null }` y todo `error` que quede es de verdad.
+- `logDbFailure()` escribe en el formato que ya usaba el repo: `[Scope][FALLO] reason=… code=…
+  detalle="…"` (el mismo que `[Delivery][FALLO]` de `delivery.service.ts`, que es el precedente
+  de este arreglo — Fase 2 de §25, sobre `authorized_numbers`).
+
+### La regla
+
+Si hay `error`, se registra con contexto y **se falla de forma visible** (se propaga con
+`throw`, o la ruta responde con un status distinto al del caso vacío — típicamente **503**, no
+el 401/403/404 que usaría el vacío). Perder algo en silencio es peor que fallar ruidosamente —
+es la promesa de §24 del doc de requerimientos. El 503 importa tanto como el log: si un fallo de
+auth responde el mismo 401/403 que una credencial mala, el usuario concluye que se equivocó y
+reintenta con la misma credencial buena — el incidente queda invisible aunque esté en el log.
+
+**Dónde ya está aplicado** (ver `CHANGELOG.md`, entrada de esta sesión, para la lista completa):
+autenticación de mesero y dispositivo (`staff-auth.ts`, `check-in/route.ts`, `staff/login`,
+`staff/me`, `staff/stats`, `staff/device/register`, `staff/device/verify`), resolución de
+tenant/sede (`lib/tenant.ts`), `settings.service.ts` (ahora **lanza** en error real — antes un
+fallo de base podía apagar `checkin_mode='staff_verified'` en silencio), y los servicios de
+escritura de puntos, premios, campañas, billetera y cola de envío.
+
+**Dónde queda pendiente:** el resto de `src/app/api/dashboard/**` (fuera del alcance de esta
+sesión — ver `docs/ESTADO.md` §4 para la lista concreta archivo:línea que le toca a la sesión
+de multi-sede F7).
+
+**Tests:** `tests/unit/db-failure.test.ts` — compara explícitamente "vacío" vs "fallo" sobre los
+mismos call sites (`settings.service.ts`, `staff-auth.ts`), para que una regresión futura que
+vuelva a fundir los dos casos ponga la suite en rojo.
+
 ## Reglas INVIOLABLES
 - NUNCA hardcodear credenciales en el código
 - NUNCA exponer `SUPABASE_SERVICE_ROLE_KEY` en el cliente

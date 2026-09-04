@@ -12,6 +12,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js'
+import { isDbFailure, logDbFailure } from '@/lib/db-failure'
 import { percentInt } from '@/lib/format/percent'
 import type { GrantSource, GrantStatus, GrantType, RewardGrant } from '@/types/database.types'
 
@@ -208,7 +209,15 @@ export async function getGrantById(grantId: string, tenantId: string): Promise<R
     .eq('tenant_id', tenantId)
     .maybeSingle()
 
-  if (error || !data) return null
+  if (isDbFailure(error)) {
+    logDbFailure({
+      scope: 'RewardGrant',
+      reason: 'grant_by_id_lookup_error',
+      error,
+      context: { tenant_id: tenantId, grant_id: grantId },
+    })
+  }
+  if (!data) return null
   return data as RewardGrant
 }
 

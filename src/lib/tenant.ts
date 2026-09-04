@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { createClient as createSSRClient } from '@/lib/supabase/server'
 import type { Tenant } from '@/types/tenant.types'
+import { isDbFailure, logDbFailure } from '@/lib/db-failure'
 import {
   pickLocationForHost,
   type ActiveLocation,
@@ -106,12 +107,27 @@ export async function resolveHostContext(host: string | null | undefined): Promi
   // Camino 2: el host es el subdominio de una sede, no el de la marca.
   if (!tenant) {
     const supabase = getServiceClient()
-    const { data: sede } = await supabase
+    const { data: sede, error: sedeError } = await supabase
       .from('restaurant_locations')
       .select('tenant_id')
       .eq('domain', domain)
       .eq('is_active', true)
       .maybeSingle()
+
+    // OJO: el "falla blando en la sede" del comentario de arriba se refiere a
+    // `getActiveLocations()`, que decide QUÉ SEDE. Esta consulta es otra cosa: decide la
+    // MARCA. Si falla y se devuelve `EMPTY_HOST_CONTEXT`, el llamador responde 404 y
+    // `laureles.marca.com` deja de existir para todo el mundo — un fallo de base
+    // disfrazado de "ese host no es de nadie". Se registra para que se vea.
+    if (isDbFailure(sedeError)) {
+      logDbFailure({
+        scope: 'Tenant',
+        reason: 'location_domain_lookup_error',
+        error: sedeError,
+        context: { domain },
+      })
+      return EMPTY_HOST_CONTEXT
+    }
 
     if (!sede?.tenant_id) return EMPTY_HOST_CONTEXT
 

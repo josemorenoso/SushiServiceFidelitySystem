@@ -7,6 +7,7 @@ import { getActiveGrants } from '@/services/reward-grant.service'
 import { rateLimit } from '@/lib/rate-limit'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { getTenantByDomain } from '@/lib/tenant'
+import { isDbFailure, logDbFailure } from '@/lib/db-failure'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -69,7 +70,7 @@ export async function GET(request: NextRequest) {
     // Buscar la visita más reciente registrada por un mesero (últimos 30 minutos)
     // Solo source='staff_scan' — las visitas de bienvenida (source='qr') no deben activar el polling
     const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString()
-    const { data: visits } = await supabase
+    const { data: visits, error: visitsError } = await supabase
       .from('visits')
       .select('id, created_at, source, table_number')
       .eq('customer_id', customer.id)
@@ -77,6 +78,24 @@ export async function GET(request: NextRequest) {
       .gte('created_at', thirtyMinutesAgo)
       .order('created_at', { ascending: false })
       .limit(1)
+
+    // Este endpoint es el que mira el celular del cliente cada 5 s mientras espera al
+    // mesero. Un fallo de base daba `visits = null` → "todavía no te han escaneado", que es
+    // indistinguible de la espera normal: el cliente se queda mirando el QR para siempre y
+    // el mesero jura que ya escaneó. Devolver 503 hace que el polling reintente igual (el
+    // cliente no ve un error duro) pero el incidente deja rastro.
+    if (visitsError) {
+      logDbFailure({
+        scope: 'CheckInStatus',
+        reason: 'visits_lookup_error',
+        error: visitsError,
+        context: { tenant: tenant.slug, customer_id: customer.id },
+      })
+      return NextResponse.json(
+        { error: 'Problema técnico', message: 'No pudimos consultar tu visita ahora mismo.' },
+        { status: 503 }
+      )
+    }
 
     const recentVisit = visits && visits.length > 0 ? visits[0] : null
 
@@ -93,13 +112,24 @@ export async function GET(request: NextRequest) {
     let pointsAwarded = 0
     let pointsReady = false
     if (recentVisit) {
-      const { data: tx } = await supabase
+      const { data: tx, error: txError } = await supabase
         .from('point_transactions')
         .select('points')
         .eq('reference_id', recentVisit.id)
         .in('source', ['visit_staff', 'visit_qr', 'visit_delivery'])
         .order('created_at', { ascending: false })
         .limit(1)
+      // Aquí NO se corta: el fallback por antigüedad (>8 s) de más abajo ya existe justo
+      // para que el cliente no quede atrapado si los puntos no aparecen. Pero antes esto
+      // se confundía con "los puntos aún no están escritos" y no lo contaba nadie.
+      if (txError) {
+        logDbFailure({
+          scope: 'CheckInStatus',
+          reason: 'points_lookup_error',
+          error: txError,
+          context: { tenant: tenant.slug, visit_id: recentVisit.id },
+        })
+      }
       if (tx && tx.length > 0) {
         pointsAwarded = tx[0].points
         pointsReady = true
@@ -140,14 +170,32 @@ export async function GET(request: NextRequest) {
 
     const qualifiedTiers = allTiers.filter((t) => totalPoints >= t.point_threshold)
     if (qualifiedTiers.length > 0) {
-      const { data: claimed } = await supabase
+      const { data: claimed, error: claimedError } = await supabase
         .from('mystery_box_results')
         .select('tier_id')
         .eq('customer_id', customer.id)
+
+      // El peor de este archivo. `claimed` se usa para EXCLUIR los tiers ya reclamados; un
+      // fallo de base lo dejaba en `null`, el Set salía vacío y entonces TODO tier superado
+      // contaba como "no reclamado". El cliente ve otra vez una Mystery Box que ya abrió y
+      // se le vuelve a ofrecer un premio ya entregado. Ante la duda no se ofrece nada:
+      // equivocarse hacia "no hay premio" es recuperable (vuelve a consultar); equivocarse
+      // hacia "toma otro premio" le cuesta plata al restaurante y no se deshace.
+      if (claimedError) {
+        logDbFailure({
+          scope: 'CheckInStatus',
+          reason: 'claimed_tiers_lookup_error',
+          error: claimedError,
+          context: { tenant: tenant.slug, customer_id: customer.id },
+        })
+      }
       const claimedTierIds = new Set((claimed ?? []).map((r) => r.tier_id))
 
-      // De mayor a menor umbral, el primero no reclamado
-      const unclaimed = [...qualifiedTiers].reverse().find((t) => !claimedTierIds.has(t.id))
+      // De mayor a menor umbral, el primero no reclamado. Con `claimedError` no se ofrece
+      // NINGUNO: la lista de reclamados no es de fiar y ofrecer de más regala premios.
+      const unclaimed = claimedError
+        ? undefined
+        : [...qualifiedTiers].reverse().find((t) => !claimedTierIds.has(t.id))
       if (unclaimed) {
         tierUnlocked = {
           id: unclaimed.id,

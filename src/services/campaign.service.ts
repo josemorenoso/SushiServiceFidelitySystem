@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import type { Customer, Campaign, CampaignMessage, RestaurantEvent } from '@/types/database.types'
+import { isDbFailure, logDbFailure } from '@/lib/db-failure'
 import {
   REACTIVATION_DAYS,
   FREQUENCY_CAP_DAYS,
@@ -142,12 +143,27 @@ export async function getOrCreateTodayCampaign(
   // equivocado.
   const name = `${effectiveSource}_${todayStr}`
 
-  const { data: existing } = await supabase
+  // Esta lectura ES el dedupe: si ya existe la campaña de HOY se reutiliza en vez de
+  // crear otra. Ante un fallo de base `existing` llegaba `null`, el cron concluía "hoy
+  // todavía no se ha corrido" y creaba una campaña nueva — con lo que el mismo cliente
+  // recibe el mensaje de cumpleaños o de reactivación DOS VECES el mismo día. Eso no es
+  // solo molesto: se come el frequency cap y le cuesta calidad a la línea con Meta.
+  const { data: existing, error: existingError } = await supabase
     .from('campaigns')
     .select('*')
     .eq('name', name)
     .eq('tenant_id', tenantId)
-    .single()
+    .maybeSingle()
+
+  if (isDbFailure(existingError)) {
+    logDbFailure({
+      scope: 'Campaign',
+      reason: 'dedupe_lookup_error',
+      error: existingError,
+      context: { tenant_id: tenantId, name },
+    })
+    throw new Error(`No se pudo comprobar si la campaña "${name}" ya existía: ${existingError.message}`)
+  }
 
   if (existing) return existing
 

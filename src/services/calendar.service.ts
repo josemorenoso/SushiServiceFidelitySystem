@@ -12,6 +12,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js'
+import { logDbFailure } from '@/lib/db-failure'
 import type {
   RestaurantEvent,
   EventType,
@@ -588,16 +589,39 @@ export async function executeAutoEvent(eventId: string): Promise<ExecuteAutoEven
     await finalizeCampaign(campaign.id, sent)
     await updateCustomerLastCampaignAt(sentCustomerIds)
 
-    // Link campaign to event
-    await supabase
+    // Link campaign to event. Best-effort: los mensajes YA salieron, así que esto no
+    // puede tumbar la respuesta — pero hasta hoy un fallo aquí dejaba el evento sin su
+    // campaign_id sin que quedara una sola línea de log para repararlo a mano.
+    const { error: linkError } = await supabase
       .from('restaurant_events')
       .update({ campaign_id: campaign.id })
       .eq('id', eventId)
+    if (linkError) {
+      logDbFailure({
+        scope: 'Calendar',
+        reason: 'link_campaign_error',
+        error: linkError,
+        context: { event_id: eventId, campaign_id: campaign.id },
+      })
+    }
 
     return { sent, failed, excluded_monthly_cap: excluded.length, campaign_id: campaign.id }
   } catch (err) {
-    // Roll back to 'failed' so admin can inspect and retry
-    await supabase.from('restaurant_events').update({ status: 'failed' }).eq('id', eventId)
+    // Roll back to 'failed' so admin can inspect and retry. Si ESTE update también
+    // falla, el evento queda 'sent' sin haber enviado nada y sin forma de reintentarlo
+    // desde el dashboard — de ahí el log: es la única pista que quedaría.
+    const { error: rollbackError } = await supabase
+      .from('restaurant_events')
+      .update({ status: 'failed' })
+      .eq('id', eventId)
+    if (rollbackError) {
+      logDbFailure({
+        scope: 'Calendar',
+        reason: 'rollback_to_failed_error',
+        error: rollbackError,
+        context: { event_id: eventId },
+      })
+    }
     throw err
   }
 }

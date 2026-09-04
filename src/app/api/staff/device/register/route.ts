@@ -3,6 +3,7 @@ import { jwtVerify } from 'jose'
 import bcrypt from 'bcryptjs'
 import { createClient } from '@supabase/supabase-js'
 import { resolveHostContext } from '@/lib/tenant'
+import { isDbFailure, logDbFailure } from '@/lib/db-failure'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -44,12 +45,28 @@ export async function POST(request: NextRequest) {
     const supabase = getServiceClient()
 
     // Validar supervisor/admin
-    const { data: staff } = await supabase
+    const { data: staff, error: staffError } = await supabase
       .from('staff_users')
       .select('id, name, pin, role, is_active, location_id')
       .eq('phone', phone)
       .eq('tenant_id', tenant.id)
-      .single()
+      .maybeSingle()
+
+    if (isDbFailure(staffError)) {
+      logDbFailure({
+        scope: 'DeviceRegister',
+        reason: 'supervisor_lookup_error',
+        error: staffError,
+        context: { tenant: tenant.slug },
+      })
+      return NextResponse.json(
+        {
+          error: 'Problema técnico',
+          message: 'No pudimos validar tus credenciales ahora mismo. Intenta de nuevo en un momento.',
+        },
+        { status: 503 }
+      )
+    }
 
     if (!staff || !staff.is_active) {
       return NextResponse.json(
@@ -88,12 +105,31 @@ export async function POST(request: NextRequest) {
       location_id: staff.location_id ?? null,
     }
     if (assign_staff_phone && assign_staff_phone !== phone) {
-      const { data: assignee } = await supabase
+      const { data: assignee, error: assigneeError } = await supabase
         .from('staff_users')
         .select('id, name, is_active, location_id')
         .eq('phone', assign_staff_phone)
         .eq('tenant_id', tenant.id)
-        .single()
+        .maybeSingle()
+
+      // Sin esto, un fallo de base manda al supervisor a "créalo primero en Dashboard →
+      // Meseros" para un mesero que YA existe. Si le hace caso, choca contra el UNIQUE
+      // (phone, tenant_id) y se queda sin entender nada.
+      if (isDbFailure(assigneeError)) {
+        logDbFailure({
+          scope: 'DeviceRegister',
+          reason: 'assignee_lookup_error',
+          error: assigneeError,
+          context: { tenant: tenant.slug },
+        })
+        return NextResponse.json(
+          {
+            error: 'Problema técnico',
+            message: 'No pudimos buscar al mesero ahora mismo. Intenta de nuevo en un momento.',
+          },
+          { status: 503 }
+        )
+      }
 
       if (!assignee || !assignee.is_active) {
         return NextResponse.json(
@@ -120,13 +156,35 @@ export async function POST(request: NextRequest) {
     // de la precedencia no aporta nada y todo cae al host — el comportamiento de siempre.
     const deviceLocationId = ownerStaff.location_id
 
-    // Verificar si ya existe dispositivo con ese fingerprint
-    const { data: existing } = await supabase
+    // Verificar si ya existe dispositivo con ese fingerprint.
+    //
+    // Este es el patrón "leer-antes-de-escribir", y es el que peor se lleva con el vacío
+    // indistinguible: ante un fallo de base `existing` llega `null`, el código concluye "no
+    // existe" y se va por la rama del INSERT — que choca contra el UNIQUE de
+    // `device_fingerprint` que trajo la 00044. La comprobación de duplicados no se
+    // "salta": queda ANULADA por completo, y solo el motor la sostiene.
+    const { data: existing, error: existingError } = await supabase
       .from('staff_devices')
       .select('id')
       .eq('device_fingerprint', device_fingerprint)
       .eq('tenant_id', tenant.id)
-      .single()
+      .maybeSingle()
+
+    if (isDbFailure(existingError)) {
+      logDbFailure({
+        scope: 'DeviceRegister',
+        reason: 'device_dup_check_error',
+        error: existingError,
+        context: { tenant: tenant.slug },
+      })
+      return NextResponse.json(
+        {
+          error: 'Problema técnico',
+          message: 'No pudimos activar el dispositivo ahora mismo. Intenta de nuevo en un momento.',
+        },
+        { status: 503 }
+      )
+    }
 
     let writeError
     if (existing) {

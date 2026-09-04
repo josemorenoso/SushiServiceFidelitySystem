@@ -3,6 +3,7 @@ import { SignJWT } from 'jose'
 import bcrypt from 'bcryptjs'
 import { createClient } from '@supabase/supabase-js'
 import { resolveHostContext } from '@/lib/tenant'
+import { isDbFailure, logDbFailure } from '@/lib/db-failure'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -42,12 +43,33 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = getServiceClient()
-    const { data: staff } = await supabase
+    const { data: staff, error: staffError } = await supabase
       .from('staff_users')
       .select('id, name, phone, pin, role, is_active, location_id')
       .eq('phone', phone)
       .eq('tenant_id', tenant.id)
-      .single()
+      .maybeSingle()
+
+    // El fallo de base NO es un 401. Contestar "mesero no encontrado" cuando la base está
+    // caída manda al mesero a probar PINs que ya eran correctos, y el incidente no deja
+    // rastro en ningún sitio. Ojo al escenario concreto: si la 00044 se despliega DESPUÉS
+    // del código de F4, esta consulta pide `location_id`, PostgREST responde 42703 y —sin
+    // esto— TODOS los meseros del tenant reciben "PIN incorrecto" a la vez.
+    if (isDbFailure(staffError)) {
+      logDbFailure({
+        scope: 'StaffLogin',
+        reason: 'staff_lookup_error',
+        error: staffError,
+        context: { tenant: tenant.slug },
+      })
+      return NextResponse.json(
+        {
+          error: 'Problema técnico',
+          message: 'No pudimos validar tu ingreso ahora mismo. Intenta de nuevo en un momento.',
+        },
+        { status: 503 }
+      )
+    }
 
     if (!staff || !staff.is_active) {
       return NextResponse.json(
@@ -95,11 +117,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Actualizar last_login_at
-    await supabase
+    // Actualizar last_login_at. Telemetría: que falle no impide entrar, pero se registra.
+    const { error: touchError } = await supabase
       .from('staff_users')
       .update({ last_login_at: new Date().toISOString() })
       .eq('id', staff.id)
+    if (touchError) {
+      logDbFailure({
+        scope: 'StaffLogin',
+        reason: 'last_login_touch_error',
+        error: touchError,
+        context: { tenant: tenant.slug, staff_id: staff.id },
+      })
+    }
 
     // Generar JWT (8 horas)
     // ⚠️ La sede NO va dentro del JWT (§5.3): dura 8 horas, así que reasignar de sede a un

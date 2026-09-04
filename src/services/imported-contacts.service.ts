@@ -14,6 +14,7 @@
 
 import { randomUUID } from 'crypto'
 import { createClient } from '@supabase/supabase-js'
+import { logDbFailure } from '@/lib/db-failure'
 import { sendTemplateMessage } from '@/services/whatsapp.service'
 import { getSettingValue } from '@/services/settings.service'
 import { canSendBulk } from '@/services/wallet.service'
@@ -180,7 +181,17 @@ export async function validateCSV(fileText: string, fileName: string, tenantId: 
   return result
 }
 
-/** Devuelve el subconjunto de teléfonos que ya existen en imported_contacts. */
+/**
+ * Devuelve el subconjunto de teléfonos que ya existen en imported_contacts.
+ *
+ * Esta es LA regla anti-reenvío del archivo (ver el comentario de cabecera): un
+ * teléfono que ya está aquí NUNCA se vuelve a contactar. `confirmImport()` la usa
+ * ANTES de mandar el Golden Bullet — un fallo de base en un chunk devolvía menos
+ * teléfonos de los que en realidad existen, y los que se "perdían" del Set volvían
+ * a recibir el mensaje. Eso no es solo spam: reenviar a quien ya se le envió es
+ * justo el patrón que Twilio/Meta penaliza en la calidad de la línea. Se LANZA en
+ * vez de devolver un Set incompleto en silencio.
+ */
 export async function getExistingPhones(phones: string[], tenantId: string): Promise<Set<string>> {
   if (phones.length === 0) return new Set()
   const supabase = getServiceClient()
@@ -188,7 +199,16 @@ export async function getExistingPhones(phones: string[], tenantId: string): Pro
   // Consultar en chunks para no exceder límites de la query .in()
   for (let i = 0; i < phones.length; i += 500) {
     const chunk = phones.slice(i, i + 500)
-    const { data } = await supabase.from('imported_contacts').select('phone').eq('tenant_id', tenantId).in('phone', chunk)
+    const { data, error } = await supabase.from('imported_contacts').select('phone').eq('tenant_id', tenantId).in('phone', chunk)
+    if (error) {
+      logDbFailure({
+        scope: 'GoldenBullet',
+        reason: 'existing_phones_lookup_error',
+        error,
+        context: { tenant_id: tenantId, chunk_start: i, chunk_size: chunk.length },
+      })
+      throw new Error(`No se pudo verificar teléfonos ya contactados: ${error.message}`)
+    }
     for (const row of data ?? []) found.add(row.phone)
   }
   return found
@@ -509,12 +529,25 @@ export async function markConverted(phone: string, customerId: string, tenantId:
     const supabase = getServiceClient()
     const normalized = normalizePhone(phone) ?? phone.replace(/\D/g, '').slice(-10)
 
-    const { data: contact } = await supabase
+    const { data: contact, error } = await supabase
       .from('imported_contacts')
       .select('id, status')
       .eq('phone', normalized)
       .eq('tenant_id', tenantId)
       .maybeSingle()
+
+    // Best-effort a propósito (ver doc de la función): un fallo aquí no debe tumbar el
+    // check-in del cliente. Pero se registra — antes se confundía con "este teléfono
+    // nunca fue un contacto importado" y el ROI del lote perdía la conversión sin rastro.
+    if (error) {
+      logDbFailure({
+        scope: 'GoldenBullet',
+        reason: 'mark_converted_lookup_error',
+        error,
+        context: { tenant_id: tenantId, customer_id: customerId },
+      })
+      return null
+    }
 
     if (!contact) return null
     // Solo convertir si ya se le había enviado el mensaje (ROI real).

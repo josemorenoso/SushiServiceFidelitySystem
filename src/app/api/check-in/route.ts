@@ -14,6 +14,7 @@ import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { jwtVerify } from 'jose'
 import { resolveHostContext } from '@/lib/tenant'
 import { resolveVisitLocation, type LocationResolution } from '@/lib/location-resolver'
+import { isDbFailure, logDbFailure } from '@/lib/db-failure'
 import type { Tenant } from '@/types/tenant.types'
 
 function getServiceClient() {
@@ -340,26 +341,43 @@ export async function POST(request: NextRequest) {
       if (checkinMode === 'staff_verified' && !firstVisitFree) {
         const supabase = getServiceClient()
         if (registered_by_staff_id) {
-          const { data: staff } = await supabase
+          const { data: staff, error: staffError } = await supabase
             .from('staff_users')
             .select('id, is_active, location_id')
             .eq('id', registered_by_staff_id)
             .eq('tenant_id', tenant.id)
-            .single()
-          if (staff && staff.is_active) {
+            .maybeSingle()
+          // El `error` va ANTES que el `data`: sin esto un timeout del pooler deja
+          // `regStaffAuthValid` en false igual que un mesero inexistente, y el registro se
+          // degrada a "pendiente de escaneo" sin dejar UNA sola línea de log.
+          if (isDbFailure(staffError)) {
+            logDbFailure({
+              scope: 'CheckIn',
+              reason: 'register_staff_lookup_error',
+              error: staffError,
+              context: { tenant: tenant.slug, staff_id: registered_by_staff_id },
+            })
+          } else if (staff && staff.is_active) {
             regStaffAuthValid = true
             regResolvedStaffId = staff.id
             regStaffLocationId = staff.location_id ?? null
           }
         } else if (device_token) {
-          const { data: device } = await supabase
+          const { data: device, error: deviceError } = await supabase
             .from('staff_devices')
             .select('id, staff_user_id, is_trusted, expires_at, location_id')
             .eq('device_fingerprint', device_token)
             .eq('is_trusted', true)
             .eq('tenant_id', tenant.id)
-            .single()
-          if (device) {
+            .maybeSingle()
+          if (isDbFailure(deviceError)) {
+            logDbFailure({
+              scope: 'CheckIn',
+              reason: 'register_device_lookup_error',
+              error: deviceError,
+              context: { tenant: tenant.slug },
+            })
+          } else if (device) {
             if (!device.expires_at || new Date(device.expires_at) >= new Date()) {
               regStaffAuthValid = true
               // Atribuir la visita al mesero dueño del dispositivo (si lo tiene).
@@ -369,6 +387,11 @@ export async function POST(request: NextRequest) {
           }
         }
 
+        // AQUÍ SÍ se degrada a propósito, y por eso no se responde 503: el cliente se
+        // registra igual unas líneas más abajo. Dejar la visita pendiente del escaneo del
+        // mesero es la dirección SEGURA (no regala visita ni puntos) y se auto-repara en
+        // cuanto el mesero escanea, que es justo lo que está a punto de hacer. Lo que no
+        // era aceptable es que ocurriera EN SILENCIO: el log de arriba es la diferencia.
         if (!regStaffAuthValid) {
           pendingStaffScan = true
         }
@@ -595,26 +618,51 @@ export async function POST(request: NextRequest) {
       }
 
       // Validar auth del mesero: staff_id O device_token
+      //
+      // `staffAuthDbFailure` es el tercer estado que faltaba. Sin él, un timeout del
+      // pooler, una policy de RLS o una columna que no existe (42703 — el escenario real si
+      // la 00044 se despliega en el orden equivocado) dejan `staffAuthValid` en false y el
+      // mesero recibe un 403 IDÉNTICO al de una credencial mala. El mesero concluye que su
+      // sesión caducó, vuelve a entrar, y la visita del cliente no se registra nunca — sin
+      // una sola línea de log en ningún sitio.
+      let staffAuthDbFailure = false
       if (registered_by_staff_id) {
-        const { data: staff } = await supabase
+        const { data: staff, error: staffError } = await supabase
           .from('staff_users')
           .select('id, is_active, location_id')
           .eq('id', registered_by_staff_id)
           .eq('tenant_id', tenant.id)
-          .single()
-        if (staff && staff.is_active) {
+          .maybeSingle()
+        if (isDbFailure(staffError)) {
+          logDbFailure({
+            scope: 'CheckIn',
+            reason: 'staff_lookup_error',
+            error: staffError,
+            context: { tenant: tenant.slug, staff_id: registered_by_staff_id },
+          })
+          staffAuthDbFailure = true
+        } else if (staff && staff.is_active) {
           staffAuthValid = true
           resolvedStaffId = staff.id
           staffLocationId = staff.location_id ?? null
         }
       } else if (device_token) {
-        const { data: device } = await supabase
+        const { data: device, error: deviceError } = await supabase
           .from('staff_devices')
           .select('id, staff_user_id, is_trusted, expires_at, location_id')
           .eq('device_fingerprint', device_token)
           .eq('is_trusted', true)
           .eq('tenant_id', tenant.id)
-          .single()
+          .maybeSingle()
+        if (isDbFailure(deviceError)) {
+          logDbFailure({
+            scope: 'CheckIn',
+            reason: 'device_lookup_error',
+            error: deviceError,
+            context: { tenant: tenant.slug },
+          })
+          staffAuthDbFailure = true
+        }
         if (device) {
           if (!device.expires_at || new Date(device.expires_at) >= new Date()) {
             staffAuthValid = true
@@ -626,13 +674,36 @@ export async function POST(request: NextRequest) {
             // `trg_staff_devices_sede_coherente` (00044) garantiza que, cuando las dos se
             // conocen, son la misma — así que la distinción solo importa cuando una es NULL.
             deviceLocationId = device.location_id ?? null
-            // Actualizar last_used_at del dispositivo
-            await supabase
+            // Actualizar last_used_at del dispositivo. Es telemetría —que falle no
+            // invalida el escaneo— pero hasta hoy descartaba su resultado entero.
+            const { error: touchError } = await supabase
               .from('staff_devices')
               .update({ last_used_at: new Date().toISOString() })
               .eq('id', device.id)
+            if (touchError) {
+              logDbFailure({
+                scope: 'CheckIn',
+                reason: 'device_touch_error',
+                error: touchError,
+                context: { tenant: tenant.slug, device_id: device.id },
+              })
+            }
           }
         }
+      }
+
+      // 503 y NO 403: la credencial del mesero puede ser perfecta. Decirle "no autorizado"
+      // cuando lo que falló fue la base es la mentira que hace que la visita se pierda en
+      // silencio — el mesero da por hecho que su sesión murió y no vuelve a escanear.
+      if (staffAuthDbFailure) {
+        return NextResponse.json(
+          {
+            error: 'Problema técnico',
+            message:
+              'No pudimos verificar tu sesión ahora mismo. La visita NO quedó registrada: vuelve a escanear en un momento.',
+          },
+          { status: 503 }
+        )
       }
 
       if (!staffAuthValid) {

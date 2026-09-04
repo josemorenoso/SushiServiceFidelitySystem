@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { isDbFailure, logDbFailure } from '@/lib/db-failure'
 import { REACTIVATION_DAYS, REACTIVATION_AGGRESSIVE_DAYS } from '@/constants/rewards'
 
 function getServiceClient() {
@@ -8,24 +9,75 @@ function getServiceClient() {
   return createClient(url, key)
 }
 
+/**
+ * ESTAS DOS FUNCIONES LANZAN. No es un descuido: es el arreglo.
+ * ────────────────────────────────────────────────────────────
+ * Hasta el 2026-09-03 las dos descartaban el `error` de supabase-js y devolvían
+ * `null` / `{}`. Como `supabase-js` no lanza, un timeout del pooler o una policy de RLS
+ * producían exactamente el mismo vacío que "esa clave no está configurada" — y **todos**
+ * los llamadores caen a sus valores por defecto ante el vacío. Consecuencias reales:
+ *
+ *   · `checkin_mode` → el default es `'auto'`. Un error de base APAGABA la verificación
+ *     por mesero del check-in: el cliente se registraba solo, con visita y con bono de
+ *     bienvenida, sin que ningún mesero escaneara nada. Es justo el fraude que el modo
+ *     `staff_verified` existe para impedir, desactivándose sin una línea de log.
+ *   · `points_system_enabled` → `isPointsSystemEnabled()` devuelve `value !== 'false'`, o
+ *     sea que ante el vacío otorga puntos AUNQUE el admin los haya apagado.
+ *   · los `*_template_sid` → sin plantilla no sale el WhatsApp, y el motivo real
+ *     ("la base falló") quedaba indistinguible de "no la has configurado".
+ *
+ * Lanzar es lo que pide §24: si hay error, se registra con contexto y se falla de forma
+ * visible o se PROPAGA. Los 18 sitios que las llaman están dentro de un `catch` que
+ * convierte la excepción en un 500, en un resultado `ok:false` del cron o en un
+ * `[Delivery][FALLO] reason=registro_fallido` — auditado uno por uno el 2026-09-03.
+ *
+ * Lo que NO cambia: una clave que sencillamente no está configurada sigue devolviendo
+ * `null` / faltando en el mapa, sin lanzar. El vacío legítimo se respeta; lo que se
+ * dejó de tratar como vacío es el FALLO.
+ */
 export async function getSettingValue(key: string, tenantId: string): Promise<string | null> {
   const supabase = getServiceClient()
-  const { data } = await supabase
+  // `.maybeSingle()` y no `.single()`: una clave sin configurar es el caso NORMAL, y
+  // `.single()` lo reporta como error PGRST116. Con `.maybeSingle()` el vacío llega como
+  // `{ data: null, error: null }` y todo `error` que quede es un fallo de verdad.
+  const { data, error } = await supabase
     .from('admin_settings')
     .select('value')
     .eq('key', key)
     .eq('tenant_id', tenantId)
-    .single()
+    .maybeSingle()
+
+  if (isDbFailure(error)) {
+    logDbFailure({
+      scope: 'Settings',
+      reason: 'setting_read_error',
+      error,
+      context: { tenant_id: tenantId, key },
+    })
+    throw new Error(`No se pudo leer la configuración "${key}": ${error.message}`)
+  }
+
   return data?.value ?? null
 }
 
 export async function getMultipleSettings(keys: string[], tenantId: string): Promise<Record<string, string>> {
   const supabase = getServiceClient()
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('admin_settings')
     .select('key, value')
     .in('key', keys)
     .eq('tenant_id', tenantId)
+
+  if (error) {
+    logDbFailure({
+      scope: 'Settings',
+      reason: 'settings_read_error',
+      error,
+      context: { tenant_id: tenantId, keys: keys.join(',') },
+    })
+    throw new Error(`No se pudo leer la configuración (${keys.join(', ')}): ${error.message}`)
+  }
+
   const result: Record<string, string> = {}
   for (const row of data ?? []) {
     result[row.key] = row.value

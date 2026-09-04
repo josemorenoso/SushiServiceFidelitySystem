@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { recordRedemption } from '@/services/redemption.service'
 import { resolveHostContext } from '@/lib/tenant'
 import { resolveStaffAuth } from '@/lib/staff-auth'
+import { isDbFailure, logDbFailure } from '@/lib/db-failure'
 import type { RedemptionSource } from '@/types/database.types'
 
 function getServiceClient() {
@@ -42,6 +43,18 @@ export async function POST(request: NextRequest) {
     }
 
     const auth = await resolveStaffAuth(request, tenant)
+    // Fallo de base ≠ credencial mala. Entregar un premio es una acción de una sola vía:
+    // si el mesero cree que su sesión caducó, lo entrega igual "a mano" y la entrega no
+    // queda registrada — el premio se puede volver a reclamar.
+    if (auth.dbFailure) {
+      return NextResponse.json(
+        {
+          error: 'Problema técnico',
+          message: 'No pudimos verificar tu sesión ahora mismo. NO marques el premio como entregado: intenta de nuevo en un momento.',
+        },
+        { status: 503 }
+      )
+    }
     if (!auth.valid) {
       return NextResponse.json(
         { error: 'No autorizado', message: 'Mesero o dispositivo no válido.' },
@@ -75,12 +88,29 @@ export async function POST(request: NextRequest) {
     // Validar que el cliente existe (defensa en profundidad: customer_id viene del body,
     // así que también verificamos que pertenezca a este tenant — evita IDOR entre restaurantes)
     const supabase = getServiceClient()
-    const { data: customer } = await supabase
+    const { data: customer, error: customerError } = await supabase
       .from('customers')
       .select('id')
       .eq('id', customer_id)
       .eq('tenant_id', tenant.id)
       .maybeSingle()
+    // Sin esto, un timeout del pooler le dice al mesero "Cliente no encontrado" — que es
+    // justo la respuesta que le hace cerrar la pantalla y entregar el premio sin registrarlo.
+    if (isDbFailure(customerError)) {
+      logDbFailure({
+        scope: 'RewardRedeem',
+        reason: 'customer_lookup_error',
+        error: customerError,
+        context: { tenant: tenant.slug, customer_id },
+      })
+      return NextResponse.json(
+        {
+          error: 'Problema técnico',
+          message: 'No pudimos verificar al cliente ahora mismo. NO marques el premio como entregado: intenta de nuevo en un momento.',
+        },
+        { status: 503 }
+      )
+    }
     if (!customer) {
       return NextResponse.json(
         { error: 'No encontrado', message: 'Cliente no encontrado' },

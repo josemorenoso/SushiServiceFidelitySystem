@@ -17,6 +17,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { DEFAULT_PRICE_PER_MESSAGE_COP } from '@/constants/wallet'
+import { isDbFailure, logDbFailure } from '@/lib/db-failure'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -76,14 +77,31 @@ async function isZernioTenant(tenantId: string): Promise<boolean> {
   return data?.messaging_provider === 'zernio'
 }
 
-/** Tarifa del tenant (COP/mensaje). Fallback al default si la fila no existe. */
+/**
+ * Tarifa del tenant (COP/mensaje). Fallback al default si la fila no existe.
+ *
+ * El fallback ante una fila SIN tarifa es correcto y se conserva. Lo que no se puede
+ * conservar es que un FALLO de base tomara ese mismo camino sin decir nada: la tarifa
+ * divide el saldo en `getMessagesAvailable()`, así que caer al default cuando el tenant
+ * paga más caro le concede al restaurante más mensajes de los que tiene comprados. Es
+ * plata, y se descubriría con el saldo ya en negativo.
+ */
 export async function getPricePerMessage(tenantId: string): Promise<number> {
   const db = getServiceClient()
-  const { data } = await db
+  const { data, error } = await db
     .from('tenants')
     .select('price_per_message_cop')
     .eq('id', tenantId)
-    .single()
+    .maybeSingle()
+  if (isDbFailure(error)) {
+    logDbFailure({
+      scope: 'Wallet',
+      reason: 'price_lookup_error',
+      error,
+      context: { tenant_id: tenantId },
+    })
+    throw new Error(`No se pudo leer la tarifa del tenant: ${error.message}`)
+  }
   const n = Number(data?.price_per_message_cop)
   return Number.isFinite(n) && n > 0 ? n : DEFAULT_PRICE_PER_MESSAGE_COP
 }
@@ -210,11 +228,20 @@ export async function recordTopup(params: RecordTopupParams): Promise<RecordTopu
     return { ok: false, error: 'db_error', message: error.message }
   }
 
-  // Recargó → resetear el anti-spam del aviso (best-effort).
-  await db
+  // Recargó → resetear el anti-spam del aviso (best-effort, pero ya no mudo: si no se
+  // resetea, el dueño deja de recibir el aviso de saldo bajo la próxima vez que se agote).
+  const { error: resetError } = await db
     .from('tenants')
     .update({ low_balance_notified_at: null })
     .eq('id', tenantId)
+  if (resetError) {
+    logDbFailure({
+      scope: 'Wallet',
+      reason: 'low_balance_flag_reset_error',
+      error: resetError,
+      context: { tenant_id: tenantId },
+    })
+  }
 
   return { ok: true, transaction: data as WalletTransaction }
 }

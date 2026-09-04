@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import type { Customer } from '@/types/database.types'
+import { isDbFailure, logDbFailure } from '@/lib/db-failure'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -102,12 +103,26 @@ export async function incrementVisit(
   }
 
   if (source) {
-    // Fetch current source_channels to determine if we need to upgrade to 'both'
-    const { data: current } = await supabase
+    // Fetch current source_channels to determine if we need to upgrade to 'both'.
+    //
+    // Con un fallo de base `current` llegaba `null` y el valor actual se asumía `'qr'`. A
+    // un cliente que ya era `'both'` se le reescribía el canal y se pierde para siempre la
+    // señal de que también pide a domicilio — un dato que la segmentación de campañas usa.
+    const { data: current, error: currentError } = await supabase
       .from('customers')
       .select('source_channels')
       .eq('id', customerId)
-      .single()
+      .maybeSingle()
+
+    if (isDbFailure(currentError)) {
+      logDbFailure({
+        scope: 'Customer',
+        reason: 'source_channels_lookup_error',
+        error: currentError,
+        context: { customer_id: customerId },
+      })
+      throw new Error(`No se pudo leer el canal de origen del cliente: ${currentError.message}`)
+    }
 
     const currentSource = current?.source_channels ?? 'qr'
     if (currentSource !== 'both' && currentSource !== source) {
@@ -206,20 +221,41 @@ export async function isPhoneOptedOut(phone: string, tenantId: string): Promise<
   }
 }
 
+/**
+ * Las dos de abajo son enriquecimiento oportunista (el pedido de domicilio trae ciudad o
+ * cumpleaños y se rellena si faltaba). Que fallen no debe tumbar el pedido, así que NO
+ * lanzan — pero hasta hoy descartaban el resultado entero y un fallo era invisible.
+ */
 export async function updateCustomerCityIfNull(customerId: string, city: string): Promise<void> {
   const supabase = getServiceClient()
-  await supabase
+  const { error } = await supabase
     .from('customers')
     .update({ city })
     .eq('id', customerId)
     .is('city', null)
+  if (error) {
+    logDbFailure({
+      scope: 'Customer',
+      reason: 'city_backfill_error',
+      error,
+      context: { customer_id: customerId },
+    })
+  }
 }
 
 export async function updateCustomerBirthdayIfNull(customerId: string, birthday: string): Promise<void> {
   const supabase = getServiceClient()
-  await supabase
+  const { error } = await supabase
     .from('customers')
     .update({ birthday })
     .eq('id', customerId)
     .is('birthday', null)
+  if (error) {
+    logDbFailure({
+      scope: 'Customer',
+      reason: 'birthday_backfill_error',
+      error,
+      context: { customer_id: customerId },
+    })
+  }
 }

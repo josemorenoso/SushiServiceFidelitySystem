@@ -9,6 +9,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js'
+import { logDbFailure } from '@/lib/db-failure'
 import type { RewardRedemption, RedemptionSource } from '@/types/database.types'
 
 function getServiceClient() {
@@ -160,7 +161,20 @@ export async function getPendingReward(customerId: string, tenantId: string): Pr
     .order('created_at', { ascending: false })
     .limit(1)
 
-  if (error || !data || data.length === 0) return null
+  // Best-effort: alimenta la alerta "CLIENTE TIENE PREMIO PENDIENTE" del mesero en el
+  // polling de /api/check-in/status. Un fallo de base no debe tumbar ese endpoint (el
+  // cliente sigue viendo su progreso), pero hasta hoy quedaba fundido con "no tiene
+  // premio pendiente" sin una línea de log — la alerta se apagaba en silencio.
+  if (error) {
+    logDbFailure({
+      scope: 'Redemption',
+      reason: 'pending_reward_lookup_error',
+      error,
+      context: { tenant_id: tenantId, customer_id: customerId },
+    })
+    return null
+  }
+  if (!data || data.length === 0) return null
 
   const r = data[0]
   return {

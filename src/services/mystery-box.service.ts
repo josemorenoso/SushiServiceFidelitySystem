@@ -8,6 +8,7 @@ import type {
 } from '@/types/database.types'
 import { DEFAULT_PITY_TIMER_THRESHOLD } from '@/constants/rewards'
 import { getMultipleSettings } from '@/services/settings.service'
+import { isDbFailure, logDbFailure } from '@/lib/db-failure'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -27,11 +28,25 @@ function getServiceClient() {
 export async function isPityTimerActive(customerId: string, tenantId: string): Promise<boolean> {
   const supabase = getServiceClient()
 
-  const { data: customer } = await supabase
+  const { data: customer, error } = await supabase
     .from('customers')
     .select('mystery_box_low_streak')
     .eq('id', customerId)
-    .single()
+    .eq('tenant_id', tenantId)
+    .maybeSingle()
+
+  // Devolver `false` ante un fallo le quita al cliente la Golden Box que ya se había
+  // ganado por acumular premios bajos, sin dejar rastro. Se registra; la dirección del
+  // fallback se mantiene (no regalar una Golden Box que quizá no corresponde).
+  if (isDbFailure(error)) {
+    logDbFailure({
+      scope: 'MysteryBox',
+      reason: 'pity_streak_lookup_error',
+      error,
+      context: { tenant_id: tenantId, customer_id: customerId },
+    })
+    return false
+  }
 
   if (!customer) return false
 
@@ -53,23 +68,54 @@ async function updateLowStreak(customerId: string, prizeIndex: number): Promise<
   const supabase = getServiceClient()
 
   if (prizeIndex === 0) {
-    // Incrementar streak
-    const { data } = await supabase
+    // Incrementar streak.
+    //
+    // Leer-modificar-escribir sobre un valor que puede venir de un fallo: con `data = null`
+    // el `?? 0` escribía 1 y BORRABA el streak real. Un cliente que llevaba 4 premios bajos
+    // seguidos volvía a empezar de cero y su Golden Box se alejaba, en silencio. Ante un
+    // fallo no se escribe nada: dejar el contador como está es siempre mejor que pisarlo.
+    const { data, error } = await supabase
       .from('customers')
       .select('mystery_box_low_streak')
       .eq('id', customerId)
-      .single()
+      .maybeSingle()
 
-    await supabase
+    if (isDbFailure(error)) {
+      logDbFailure({
+        scope: 'MysteryBox',
+        reason: 'low_streak_lookup_error',
+        error,
+        context: { customer_id: customerId },
+      })
+      return
+    }
+
+    const { error: upError } = await supabase
       .from('customers')
       .update({ mystery_box_low_streak: (data?.mystery_box_low_streak ?? 0) + 1 })
       .eq('id', customerId)
+    if (upError) {
+      logDbFailure({
+        scope: 'MysteryBox',
+        reason: 'low_streak_increment_error',
+        error: upError,
+        context: { customer_id: customerId },
+      })
+    }
   } else {
     // Resetear streak (ganó algo mejor)
-    await supabase
+    const { error: upError } = await supabase
       .from('customers')
       .update({ mystery_box_low_streak: 0 })
       .eq('id', customerId)
+    if (upError) {
+      logDbFailure({
+        scope: 'MysteryBox',
+        reason: 'low_streak_reset_error',
+        error: upError,
+        context: { customer_id: customerId },
+      })
+    }
   }
 }
 
@@ -106,10 +152,23 @@ async function refreshGlobalCaps(tierId: string): Promise<MysteryBoxGlobalCap[]>
     // 'total' never resets
 
     if (shouldReset) {
-      await supabase
+      const { error: resetError } = await supabase
         .from('mystery_box_global_caps')
         .update({ current_count: 0, period_start: now.toISOString() })
         .eq('id', cap.id)
+
+      // Si el reinicio no se persiste, el objeto en memoria dice 0 y la base sigue en el
+      // tope: este cliente recibe el premio limitado y el siguiente vuelve a encontrarlo
+      // agotado. Se registra en vez de mutar como si hubiera funcionado.
+      if (resetError) {
+        logDbFailure({
+          scope: 'MysteryBox',
+          reason: 'global_cap_reset_error',
+          error: resetError,
+          context: { cap_id: cap.id, tier_id: tierId },
+        })
+        continue
+      }
 
       cap.current_count = 0
       cap.period_start = now.toISOString()
@@ -157,18 +216,39 @@ export function adjustProbabilitiesForCaps(
 async function incrementGlobalCap(tierId: string, prizeTitle: string): Promise<void> {
   const supabase = getServiceClient()
 
-  const { data: cap } = await supabase
+  const { data: cap, error } = await supabase
     .from('mystery_box_global_caps')
     .select('id, current_count')
     .eq('tier_id', tierId)
     .eq('prize_title', prizeTitle)
-    .single()
+    .maybeSingle()
+
+  // Este contador es el que impide regalar más unidades de un premio de las que el
+  // restaurante puso. Si la lectura o el incremento fallan en silencio, el tope no se
+  // mueve y el premio se puede entregar indefinidamente.
+  if (isDbFailure(error)) {
+    logDbFailure({
+      scope: 'MysteryBox',
+      reason: 'global_cap_lookup_error',
+      error,
+      context: { tier_id: tierId, prize: prizeTitle },
+    })
+    return
+  }
 
   if (cap) {
-    await supabase
+    const { error: upError } = await supabase
       .from('mystery_box_global_caps')
       .update({ current_count: cap.current_count + 1 })
       .eq('id', cap.id)
+    if (upError) {
+      logDbFailure({
+        scope: 'MysteryBox',
+        reason: 'global_cap_increment_error',
+        error: upError,
+        context: { cap_id: cap.id, tier_id: tierId, prize: prizeTitle },
+      })
+    }
   }
 }
 
@@ -240,7 +320,11 @@ export async function resolveMysteryBox(params: {
   // Si eligió safe
   if (choice === 'safe') {
     // Registrar en mystery_box_results
-    const { data: inserted } = await supabase
+    // ⚠️ Esta fila ES el registro de que el cliente reclamó su premio. `/api/check-in/status`
+    // la usa para decidir qué tier sigue "sin reclamar": si el INSERT falla en silencio, el
+    // cliente ve su premio en pantalla, nadie lo anota, y en el siguiente sondeo el mismo
+    // tier vuelve a aparecer como disponible. Doble premio, sin una línea de log.
+    const { data: inserted, error: insertError } = await supabase
       .from('mystery_box_results')
       .insert({
         customer_id: customerId,
@@ -253,6 +337,16 @@ export async function resolveMysteryBox(params: {
       })
       .select('id')
       .single()
+
+    if (insertError) {
+      logDbFailure({
+        scope: 'MysteryBox',
+        reason: 'result_insert_error_safe',
+        error: insertError,
+        context: { tenant_id: tenantId, customer_id: customerId, tier_id: tier.id },
+      })
+      throw new Error(`No se pudo registrar el premio elegido: ${insertError.message}`)
+    }
 
     return {
       resultId: inserted?.id ?? null,
@@ -288,7 +382,10 @@ export async function resolveMysteryBox(params: {
   const originalIndex = tier.mystery_prizes.findIndex((p) => p.title === prize.title)
 
   // Registrar resultado
-  const { data: insertedMystery } = await supabase
+  // Mismo caso que el INSERT de "safe": sin esta fila el premio no existe para el sistema
+  // y el tier se vuelve a ofrecer. Se lanza ANTES de tocar el streak y los caps, para no
+  // dejar los contadores movidos por un premio que no quedó registrado.
+  const { data: insertedMystery, error: insertMysteryError } = await supabase
     .from('mystery_box_results')
     .insert({
       customer_id: customerId,
@@ -302,15 +399,33 @@ export async function resolveMysteryBox(params: {
     .select('id')
     .single()
 
+  if (insertMysteryError) {
+    logDbFailure({
+      scope: 'MysteryBox',
+      reason: 'result_insert_error_mystery',
+      error: insertMysteryError,
+      context: { tenant_id: tenantId, customer_id: customerId, tier_id: tier.id, prize: prize.title },
+    })
+    throw new Error(`No se pudo registrar el premio de la Mystery Box: ${insertMysteryError.message}`)
+  }
+
   // Actualizar pity timer streak
   await updateLowStreak(customerId, originalIndex)
 
   // Si fue golden box, resetear streak (ya se usó el pity timer)
   if (isGolden) {
-    await supabase
+    const { error: goldenResetError } = await supabase
       .from('customers')
       .update({ mystery_box_low_streak: 0 })
       .eq('id', customerId)
+    if (goldenResetError) {
+      logDbFailure({
+        scope: 'MysteryBox',
+        reason: 'golden_streak_reset_error',
+        error: goldenResetError,
+        context: { customer_id: customerId },
+      })
+    }
   }
 
   // Incrementar global cap si aplica

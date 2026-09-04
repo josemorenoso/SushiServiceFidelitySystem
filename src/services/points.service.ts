@@ -17,6 +17,7 @@ import {
 } from '@/lib/points-engine'
 import { getAllTiers } from '@/services/reward-tiers.service'
 import { getMultipleSettings, isPointsSystemEnabled } from '@/services/settings.service'
+import { isDbFailure, logDbFailure } from '@/lib/db-failure'
 
 // El algoritmo vive en @/lib/points-engine (puro, sin I/O) para que el calibrador del
 // dashboard pueda simularlo en el navegador con el MISMO código que corre aquí.
@@ -154,12 +155,29 @@ export async function awardVisitPoints(
   const supabase = getServiceClient()
   const config = await getPointsConfig(tenantId)
 
-  // Obtener puntos actuales del cliente
-  const { data: customer } = await supabase
+  // Obtener puntos actuales del cliente.
+  //
+  // Este saldo es la ENTRADA del algoritmo: `generateSmartVisitPoints()` reparte según lo
+  // cerca que esté el cliente del siguiente umbral. Con un fallo de base `customer` llegaba
+  // `null`, el saldo se leía como 0 y a un cliente con 140 puntos se le calculaban los
+  // puntos de uno recién llegado. No es un dato de adorno: los puntos son plata para el
+  // cliente y aquí se otorgan mal en silencio.
+  const { data: customer, error: customerError } = await supabase
     .from('customers')
     .select('total_points')
     .eq('id', customerId)
-    .single()
+    .eq('tenant_id', tenantId)
+    .maybeSingle()
+
+  if (isDbFailure(customerError)) {
+    logDbFailure({
+      scope: 'Points',
+      reason: 'balance_lookup_error',
+      error: customerError,
+      context: { tenant_id: tenantId, customer_id: customerId, visit_id: visitId },
+    })
+    throw new Error(`No se pudo leer el saldo de puntos del cliente: ${customerError.message}`)
+  }
 
   const currentPoints = customer?.total_points ?? 0
 

@@ -141,6 +141,94 @@ la ventana de 12h, cuenta **una vez**, atribuido a la **primera**.
 
 ---
 
+## [2026-09-04 00:12] - Fallo de DB indistinguible de vacío: auditoría y cierre
+
+### Tipo de cambio
+- **ADDED**: `src/lib/db-failure.ts` — `isDbFailure()`/`isNoRows()`/`logDbFailure()`. `supabase-js`
+  no lanza excepciones: `const { data: x } = await supabase.from(...)` con `if (!x)` hace que un
+  timeout del pooler, una policy de RLS o una columna que no existe (`42703`) produzcan
+  EXACTAMENTE el mismo `null` que "no lo encontré", y el código sigue por la rama del caso
+  feliz-vacío sin log, sin alerta y sin fallar. El precedente que fija el criterio es
+  `authorized_numbers` en `webhook/twilio-incoming` (Fase 2 de §25).
+- **FIXED** (autenticación de mesero/dispositivo — Tier 1): `src/lib/staff-auth.ts` (nuevo estado
+  `dbFailure` en `StaffAuthResult`, antes un fallo de base devolvía exactamente lo mismo que una
+  credencial mala), `src/app/api/check-in/route.ts` (4 instancias confirmadas: ramas de registro
+  y de check-in, tanto `staff_id` como `device_token`), `src/app/api/staff/login/route.ts`,
+  `src/app/api/staff/me/route.ts`, `src/app/api/staff/stats/route.ts`,
+  `src/app/api/staff/device/register/route.ts` (incluye el dup-check de `device_fingerprint` que
+  quedaba completamente anulado ante un fallo), `src/app/api/staff/device/verify/route.ts`,
+  `src/app/api/staff/pending-rewards/route.ts`, `src/app/api/reward-redeem/route.ts`. Todas estas
+  rutas ahora responden **503** (no el 401/403 del caso vacío) cuando la base falla.
+- **FIXED** (resolución de tenant/sede — Tier 1): `src/lib/tenant.ts` — `resolveHostContext()` ya
+  no confundía un fallo leyendo `restaurant_locations` con "ese subdominio no es de nadie" (404).
+- **FIXED** (escrituras y dinero — Tier 2): `src/services/settings.service.ts` (`getSettingValue`/
+  `getMultipleSettings` ahora LANZAN en error real — antes un fallo de base podía apagar
+  `checkin_mode='staff_verified'` en silencio y dejar pasar check-ins sin verificación de
+  mesero), `src/app/api/check-in/status/route.ts` (el polling del cliente + el bug de doble-premio:
+  un fallo leyendo `mystery_box_results` volvía a ofrecer un tier YA reclamado),
+  `src/services/points.service.ts` (el saldo de entrada del algoritmo de puntos),
+  `src/services/mystery-box.service.ts` (6 sitios: pity timer, streak, global caps y el INSERT del
+  premio elegido — sin esto el cliente veía su premio en pantalla sin que quedara registrado),
+  `src/services/campaign.service.ts` (dedupe diario de campañas de cron — sin esto el mismo
+  cliente podía recibir el cumpleaños/reactivación dos veces el mismo día),
+  `src/services/wallet.service.ts` (tarifa por mensaje y reseteo del aviso de saldo bajo),
+  `src/services/customer.service.ts` (`source_channels` y el backfill de ciudad/cumpleaños),
+  `src/services/redemption.service.ts` (`getPendingReward`, alerta del mesero),
+  `src/services/reward-grant.service.ts` (`getGrantById`), `src/services/send-queue.service.ts`
+  (la segunda consulta de `cancelQueueItemForTenant`, que confundía "se está enviando" con "no
+  existe" ante un fallo), `src/services/template.service.ts` (el UPDATE de rechazo que dejaba una
+  plantilla en `pending` para siempre si fallaba), `src/services/calendar.service.ts` (el link de
+  campaña al evento y el rollback a `failed`), `src/services/imported-contacts.service.ts`
+  (`getExistingPhones()` — LA regla anti-reenvío del Golden Bullet: un fallo en un chunk hacía
+  que se le reenviara a alguien que ya había recibido el mensaje, justo lo que Twilio/Meta
+  penaliza; y `markConverted()`, que perdía la conversión del ROI en silencio).
+- **NOT FIXED a propósito**: `src/services/reward-grant.service.ts` (`getActiveGrants`,
+  `getPendingGrantsForPresentCustomers`, `expireGrants`, `findGrantsDueForReminder`,
+  `markReminderSent`) y `src/services/review.service.ts` — ya registraban el error con
+  `console.error` y un scope reconocible antes de degradar; no comparten el defecto (el error no
+  se confundía con el vacío, solo no usaban el helper nuevo). `src/services/template.service.ts`
+  (`getTenantTemplateStyle`, `fetchPointers`) — documentadas como "SUGERENCIA, no candado", sin
+  consecuencia de negocio. Todo `dashboard/**` y `supabase/migrations/**` — territorio de la
+  sesión F7 en curso (worktree `wt-f7-permisos`); los sitios shape-1 vistos ahí quedan listados,
+  sin tocar, en `docs/ESTADO.md` §4.
+- **ADDED**: `tests/unit/db-failure.test.ts` (22 casos) — compara explícitamente "vacío" contra
+  "fallo" sobre los mismos call sites reales (`settings.service.ts`, `staff-auth.ts`) con un doble
+  de `@supabase/supabase-js`, no un mock genérico. Baseline subió de 10 archivos/200 tests a 11/222.
+- **CHANGED**: `docs/03-security.md` (nueva sección "Fallos silenciosos de base de datos").
+
+### Archivos afectados
+- Nuevo: `src/lib/db-failure.ts`, `tests/unit/db-failure.test.ts`.
+- Modificados: `src/lib/staff-auth.ts`, `src/lib/tenant.ts`, `src/app/api/check-in/route.ts`,
+  `src/app/api/check-in/status/route.ts`, `src/app/api/reward-redeem/route.ts`,
+  `src/app/api/staff/device/register/route.ts`, `src/app/api/staff/device/verify/route.ts`,
+  `src/app/api/staff/login/route.ts`, `src/app/api/staff/me/route.ts`,
+  `src/app/api/staff/pending-rewards/route.ts`, `src/app/api/staff/stats/route.ts`,
+  `src/services/campaign.service.ts`, `src/services/customer.service.ts`,
+  `src/services/mystery-box.service.ts`, `src/services/points.service.ts`,
+  `src/services/settings.service.ts`, `src/services/wallet.service.ts`,
+  `src/services/redemption.service.ts`, `src/services/reward-grant.service.ts`,
+  `src/services/send-queue.service.ts`, `src/services/template.service.ts`,
+  `src/services/calendar.service.ts`, `src/services/imported-contacts.service.ts`,
+  `docs/03-security.md`.
+
+### Verificación
+`npx tsc --noEmit` limpio · `npx eslint src` → 7 errores (baseline preexistente, 0 nuevos) ·
+`npm run build` OK · `npx vitest run` → **11 archivos / 222 tests** (baseline 10/200 + 1
+archivo/22 tests nuevos, todo verde).
+
+### No se hizo push
+Los commits siguen locales. Trabajo en `main`, sin tocar `dashboard/**`, `supabase/migrations/`
+ni el worktree de F7.
+
+### Request original
+> Sesión de corrección (no desarrollo de features) para cerrar la clase de bug "error de
+> `supabase-js` indistinguible de un resultado vacío" en el checkout principal, dejando
+> `dashboard/**` y las migraciones a la sesión F7 en paralelo. Ordenar el trabajo por daño
+> (autenticación → escrituras y plata → el resto de lecturas), no arreglar cada `null` como si
+> fuera un fallo, y verificar con `tsc`/`eslint`/`build`/`vitest` antes de cerrar.
+
+---
+
 ## [2026-09-03 02:35] - Multi-sede F1: `restaurant_locations` pasa a SER la sede
 
 ### Tipo de cambio

@@ -22,6 +22,7 @@
  */
 
 import { createClient as createServiceClient, type SupabaseClient } from '@supabase/supabase-js'
+import { isDbFailure, logDbFailure } from '@/lib/db-failure'
 import { classifyMessageType, type MessagePriority } from '@/constants/messaging'
 
 function getServiceClient(): SupabaseClient {
@@ -318,12 +319,26 @@ export async function cancelQueueItemForTenant(
 
   // No se canceló: distinguir "se está enviando ahora" de "no existe", para
   // poder decírselo al operador.
-  const { data: existente } = await db
+  //
+  // Sin mirar el `error` de ESTA segunda consulta, un fallo de base caía en la misma
+  // rama que "el item no existe" — el operador ve "not_found" para un item que sigue
+  // perfectamente en cola, y reintentar cancelar le da el mismo resultado equivocado.
+  const { data: existente, error: existenteError } = await db
     .from('send_queue')
     .select('id, status, claimed_at')
     .eq('id', id)
     .eq('tenant_id', tenantId)
     .maybeSingle()
+
+  if (isDbFailure(existenteError)) {
+    logDbFailure({
+      scope: 'SendQueue',
+      reason: 'cancel_existente_lookup_error',
+      error: existenteError,
+      context: { tenant_id: tenantId, item_id: id },
+    })
+    throw new Error(existenteError.message)
+  }
 
   if (
     existente &&

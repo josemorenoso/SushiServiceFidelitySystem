@@ -1,3 +1,4 @@
+import { isDbFailure, logDbFailure } from '@/lib/db-failure'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { resolveHostContext } from '@/lib/tenant'
@@ -37,9 +38,26 @@ export async function POST(request: NextRequest) {
       .eq('device_fingerprint', device_fingerprint)
       .eq('tenant_id', tenant.id)
       .eq('is_trusted', true)
-      .single()
+      .maybeSingle()
 
-    if (error || !device) {
+    // Esta ruta SÍ miraba el `error` — pero lo fundía con el vacío en un mismo
+    // `{ valid: false }`. Es la misma pérdida de información: la tablet del local concluye
+    // que ya no es de confianza y manda al mesero a pedirle el PIN a un supervisor, cuando
+    // lo único que pasó fue que la base tosió un segundo.
+    if (isDbFailure(error)) {
+      logDbFailure({
+        scope: 'DeviceVerify',
+        reason: 'device_lookup_error',
+        error,
+        context: { tenant: tenant.slug },
+      })
+      return NextResponse.json(
+        { valid: false, unavailable: true, message: 'No pudimos verificar el dispositivo ahora mismo.' },
+        { status: 503 }
+      )
+    }
+
+    if (!device) {
       return NextResponse.json({ valid: false })
     }
 
@@ -47,11 +65,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ valid: false, expired: true })
     }
 
-    // Actualizar last_used_at
-    await supabase
+    // Actualizar last_used_at (telemetría: no invalida nada, pero se registra).
+    const { error: touchError } = await supabase
       .from('staff_devices')
       .update({ last_used_at: new Date().toISOString() })
       .eq('id', device.id)
+    if (touchError) {
+      logDbFailure({
+        scope: 'DeviceVerify',
+        reason: 'device_touch_error',
+        error: touchError,
+        context: { tenant: tenant.slug, device_id: device.id },
+      })
+    }
 
     return NextResponse.json({
       valid: true,

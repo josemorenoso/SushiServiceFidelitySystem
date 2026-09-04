@@ -28,6 +28,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js'
+import { logDbFailure } from '@/lib/db-failure'
 import {
   CATALOG_SIZE,
   DEFAULT_TEMPLATE_STYLE,
@@ -732,11 +733,23 @@ export async function applyProviderTemplateStatus(
 
   if (input.status === 'REJECTED') {
     // La vigente NO se toca: sigue enviándose. Paso 4 del flujo del §12.
-    await supabase
+    const { error: rejectError } = await supabase
       .from('template_versions')
       .update({ status: 'rejected', rejection_reason: input.reason ?? null, resolved_at: now })
       .eq('id', version.id)
       .eq('status', 'pending')
+
+    // El envío sigue a salvo (la vigente no se tocó), pero sin esto el webhook devolvía
+    // `handled: true, action: 'rejected'` aunque el UPDATE hubiera fallado: la versión se
+    // quedaba en `pending` para siempre y el dueño nunca ve el motivo del rechazo de Meta.
+    if (rejectError) {
+      logDbFailure({
+        scope: 'Templates',
+        reason: 'reject_version_update_error',
+        error: rejectError,
+        context: { tenant_id: input.tenantId, provider_ref: input.providerRef, version_id: version.id },
+      })
+    }
 
     console.warn(
       `[Templates] Meta rechazó ${input.providerRef} (tenant ${input.tenantId}): ${input.reason ?? 'sin motivo'}`

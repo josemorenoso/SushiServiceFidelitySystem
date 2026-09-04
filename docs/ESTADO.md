@@ -25,10 +25,20 @@
 
 ## 2. En vuelo AHORA MISMO
 
-**Nada.** Las dos sesiones paralelas (db-errors y F7) cerraron y están mergeadas en `main`. El árbol está limpio.
+**Nada corriendo.** `main` está limpio y con la suite en verde.
+
+⏳ **ESPERANDO DECISIÓN DEL DUEÑO — rama `feat/pulido-visual` (worktree `../wt-pulido-visual`)**
+Pulido visual de las pantallas de cara al cliente, commit `206f067`. **Verificado**: solo presentación
+(cero cambios en services, API o migraciones), `tsc` limpio, build OK, 14 archivos / 261 tests, y
+**ensayo de merge sin conflictos** contra `main`. Qué hace: unifica los 5 CTA rojos del mesero con
+`.btn-premium` del design system, agranda a 44px 6 objetivos táctiles que estaban en ~36px, hace que
+toda la tarjeta del check-in sea el área táctil (antes solo la línea de texto), y agranda la "×" de
+ciudad. **NO se mergea hasta que el dueño lo mire** — el detalle por pantalla está en
+`docs/PULIDO-VISUAL.md` de esa rama. Para mergear: `git merge --no-ff feat/pulido-visual`.
 
 Limpieza pendiente (trivial, cuando se quiera):
 - `git worktree remove ../wt-f7-permisos` — ya mergeado, no hace falta.
+- `git worktree remove ../wt-pulido-visual` — solo DESPUÉS de decidir sobre la rama.
 - Worktree `port/sushi-fun-2.8` en el scratchpad — verificar si sigue vivo o se descarta.
 - `git branch -d backup/pre-f7-merge` — solo después del deploy exitoso, no antes.
 

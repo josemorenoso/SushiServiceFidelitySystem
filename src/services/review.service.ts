@@ -18,6 +18,7 @@ import { percentInt } from '@/lib/format/percent'
 import { getCampaignRewardById } from '@/services/campaign-reward.service'
 import { getMultipleSettings } from '@/services/settings.service'
 import { grantReward, getActiveGrants, type ActiveGrant } from '@/services/reward-grant.service'
+import { applyLocationFilter, type LocationScope } from '@/lib/location-scope'
 import {
   DEFAULT_REVIEW_REWARD_WINDOW_DAYS,
   REVIEW_SHOWN_DEDUPE_HOURS,
@@ -339,25 +340,33 @@ export async function registerReviewPostpone(
  * Los premios se cuentan por `granted_at` (no por `redeemed_at`) para que numerador y
  * denominador miren la misma cohorte: de las reseñas de julio, ¿cuántas se cobraron?
  */
+/**
+ * Multi-sede F7 (§8.4): `review_events.location_id` la llena F4 desde el evento
+ * `shown` (deuda #11 cerrada); `reward_grants.granted_location_id` sigue SIEMPRE
+ * NULL (deuda #13, es F6). El denominador del embudo por sede queda incompleto
+ * hasta F6 — hay que decirlo en pantalla cuando F6 lo dibuje (multi-sede.md #12).
+ */
 export async function getReviewFunnel(
   params: { from?: string; to?: string },
-  tenantId: string
+  scope: LocationScope
 ): Promise<ReviewFunnel> {
   const supabase = getServiceClient()
 
-  let eventsQuery = supabase
-    .from('review_events')
-    .select('action')
-    .eq('tenant_id', tenantId)
+  // La consulta base se asigna a un `const` ANTES de pasar por
+  // `applyLocationFilter()`: encadenarlo todo en una sola expresión hace que
+  // TypeScript intente resolver el genérico del filtro contra el tipo (ya de por
+  // sí muy profundo) que `.select()` de supabase-js infiere del string de
+  // columnas, y en algunos servicios eso revienta con TS2589 "Type instantiation
+  // is excessively deep". Partirlo en dos statements no cambia el SQL, solo le da
+  // a TypeScript un punto donde fijar el tipo antes de envolverlo.
+  const eventsBase = supabase.from('review_events').select('action').eq('tenant_id', scope.tenantId)
+  let eventsQuery = applyLocationFilter(eventsBase, scope, 'location_id')
 
   if (params.from) eventsQuery = eventsQuery.gte('created_at', params.from)
   if (params.to) eventsQuery = eventsQuery.lte('created_at', params.to)
 
-  let grantsQuery = supabase
-    .from('reward_grants')
-    .select('status')
-    .eq('tenant_id', tenantId)
-    .eq('source', 'review')
+  const grantsBase = supabase.from('reward_grants').select('status').eq('tenant_id', scope.tenantId).eq('source', 'review')
+  let grantsQuery = applyLocationFilter(grantsBase, scope, 'granted_location_id')
 
   if (params.from) grantsQuery = grantsQuery.gte('granted_at', params.from)
   if (params.to) grantsQuery = grantsQuery.lte('granted_at', params.to)

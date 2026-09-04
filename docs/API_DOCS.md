@@ -15,6 +15,17 @@
 > ignoran.
 > **Nota (multi-sede):** desde F3 el `Host` de la petición resuelve **marca + sede**
 > (`resolveHostContext()`). Ver `docs/features/multi-sede.md`.
+> **Nota (multi-sede F7, D10):** varias rutas de `/api/dashboard/*` aceptan además
+> `?location_id=` (ausente / `all` / uuid / `unknown`) — el alcance de sede de la
+> petición, resuelto **siempre en el servidor** con `requireLocationScope()`, nunca
+> confiando en lo que mande el cliente. Ausente equivale a `all`, que significa
+> *"todas las sedes que este usuario puede ver"* — no "toda la marca sin filtrar": un
+> `role='location'` con el parámetro ausente sigue viendo solo sus sedes. `unknown`
+> selecciona el cubo *"Sin sede"* (`location_id IS NULL`, el histórico) y solo lo
+> puede pedir un usuario `role='brand'`. Las rutas marcadas **(sede)** abajo lo
+> aceptan; el resto son configuración de marca o dependen de F5/F6 y lo ignoran.
+> `GET /api/dashboard/location-scope` es lo que alimenta el selector del panel.
+> Ver `docs/features/multi-sede.md` §3.quater.
 
 ---
 
@@ -76,7 +87,7 @@ Webhooks validan origen por número autorizado o `x-webhook-secret`. Cron jobs v
 > línea de código de negocio.
 | GET | /api/dashboard/metrics | Métricas generales | Admin Cookie |
 | GET | /api/dashboard/send-queue | Cola de goteo del tenant, filtrable por `campaign_id`/`status`, paginada | Admin Cookie |
-| DELETE | /api/dashboard/send-queue/:id | Cancela un item de la cola (`status='cancelled'`, no lo borra) | Admin Cookie |
+| DELETE | /api/dashboard/send-queue/:id | Cancela un item de la cola (`status='cancelled'`, no lo borra) **(sede — `send_queue.location_id` está viva desde F4)** | Admin Cookie |
 | GET | /api/dashboard/customers | Lista de clientes | Admin Cookie |
 | POST | /api/dashboard/campaigns | Crear campaña manual | Admin Cookie |
 | POST | /api/dashboard/campaigns/:id/send | Ejecutar campaña | Admin Cookie |
@@ -88,13 +99,13 @@ Webhooks validan origen por número autorizado o `x-webhook-secret`. Cron jobs v
 | GET | /api/dashboard/line-budget | Cupo de envío de la línea hoy: límite de Meta, consumo de las últimas 24h, reserva transaccional, cupo de campaña disponible, calidad y estado de la línea | Admin Cookie |
 | POST | /api/admin/wallet/topup | Registrar recarga manual de un tenant (asignar saldo) | **Super-admin** |
 | GET | /api/admin/wallets | Estado de la billetera de todos los tenants (saldo, consumo, última recarga) | **Super-admin** |
-| GET | /api/dashboard/redemptions | Listar redenciones con filtros | Admin Cookie |
-| GET | /api/dashboard/redemptions/summary | Resumen de redenciones (premio/hora/mesero) | Admin Cookie |
+| GET | /api/dashboard/redemptions | Listar redenciones con filtros **(sede — no-op hoy, deuda #13)** | Admin Cookie |
+| GET | /api/dashboard/redemptions/summary | Resumen de redenciones (premio/hora/mesero) **(sede — no-op hoy, deuda #13)** | Admin Cookie |
 | GET | /api/dashboard/campaign-rewards | Listar catálogo de premios de campaña (`?active=true` opcional) | Admin Cookie |
 | POST | /api/dashboard/campaign-rewards | Crear premio de campaña | Admin Cookie |
 | PATCH | /api/dashboard/campaign-rewards | Actualizar premio (título, descripción, `is_active`) | Admin Cookie |
 | DELETE | /api/dashboard/campaign-rewards?id=X | Baja lógica del premio (`is_active=false`, no borra) | Admin Cookie |
-| GET | /api/dashboard/review-metrics | Funnel de reseñas: mostrado → click → premio redimido | Admin Cookie |
+| GET | /api/dashboard/review-metrics | Funnel de reseñas: mostrado → click → premio redimido **(sede — `shown` sí filtra, grants no-op por deuda #13)** | Admin Cookie |
 | GET | /api/dashboard/tenant-config | Claves editables de `tenants.config` (hoy: `google_maps_url`) | Admin Cookie |
 | PUT | /api/dashboard/tenant-config | Escribe `tenants.config` con **whitelist** de claves (merge, no reemplazo) | Admin Cookie |
 | POST | /api/dashboard/imported-contacts/validate | Validar CSV de contactos (sin insertar) | Admin Cookie + flag |
@@ -103,7 +114,15 @@ Webhooks validan origen por número autorizado o `x-webhook-secret`. Cron jobs v
 | GET | /api/dashboard/imported-contacts/stats | Estadísticas por lote | Admin Cookie |
 | GET | /api/dashboard/imported-contacts/roi | ROI por lote | Admin Cookie |
 | GET | /api/dashboard/twilio-metrics | Métricas de entrega/lectura/opt-outs WhatsApp | Admin Cookie |
-| GET | /api/dashboard/analytics | Analytics completos del dashboard | Admin Cookie |
+| GET | /api/dashboard/analytics | Analytics completos del dashboard — retorno partido en `{ brand, location }` **(sede)** | Admin Cookie |
+| GET | /api/dashboard/metrics | Métricas resumidas — retorno partido en `{ brand, location }` **(sede)**. ⚠️ Ningún componente del panel la consume hoy | Admin Cookie |
+| GET | /api/dashboard/location-scope | Rol, selección y sedes visibles del usuario — alimenta el selector del panel (F7) | Admin Cookie |
+| GET | /api/dashboard/authorized-numbers | Listar números autorizados de domicilio **(sede — no-op hoy, D9/deuda pendiente)** | Admin Cookie |
+| POST | /api/dashboard/authorized-numbers | Autorizar un número de domicilio | Admin Cookie |
+| PATCH | /api/dashboard/authorized-numbers/:id | Activar/desactivar un número autorizado **(sede)** | Admin Cookie |
+| DELETE | /api/dashboard/authorized-numbers/:id | Eliminar un número autorizado **(sede)** | Admin Cookie |
+| GET | /api/dashboard/campaigns | Listar campañas del tenant (últimas 50) **(sede — no-op hoy, deuda #12)** | Admin Cookie |
+| GET | /api/dashboard/campaigns/efficiency | Eficiencia y revenue atribuido por campaña **(sede en el lado `campaigns`, no-op hoy, deuda #12)** | Admin Cookie |
 | GET | /api/dashboard/templates | Listar plantillas Twilio Content API | Admin Cookie |
 | POST | /api/dashboard/templates | Crear plantilla + submit aprobación WhatsApp | Admin Cookie |
 | GET | /api/dashboard/templates/catalog | Estado del catálogo estándar (13 plantillas) — **solo Zernio** | Admin Cookie |
@@ -547,6 +566,34 @@ horas** (recargar la pantalla no cuenta como una segunda impresión: inflaría e
 Las dos tasas miden cosas distintas: `click_rate` es el **gancho** (¿convence el premio?),
 `redemption_rate` es la **operación** (¿el mesero cierra el ciclo?). Un solo número agregado escondería
 cuál de los dos está roto.
+
+---
+
+### Dashboard: Alcance de sede del panel (F7, D10)
+
+**`GET /api/dashboard/location-scope`** — Admin Cookie. Lo que `LocationSelector` necesita para
+dibujarse; también acepta `?location_id=` (mismo contrato que el resto), útil para que "recargar
+con la sede X ya puesta" muestre el selector consistente.
+
+```json
+{
+  "role": "brand",
+  "selection": "all",
+  "selectedLocationId": null,
+  "canSeeAll": true,
+  "canSeeUnassigned": true,
+  "locations": [
+    { "id": "uuid", "name": "Envigado", "slug": "envigado", "is_primary": true }
+  ]
+}
+```
+
+`canSeeAll` solo es `true` para `role='brand'` — es lo que decide si el selector dibuja la opción
+*"Todas las sedes"*. `locations` ya viene recortada al alcance del usuario: un `role='location'`
+nunca ve, ni aquí, las sedes que no le asignaron.
+
+**403** — el mismo caso que cualquier otra ruta con `requireLocationScope()`: sin fila en
+`dashboard_user_locations` y ≥2 sedes activas, o un `?location_id=` fuera de lo permitido.
 
 ---
 

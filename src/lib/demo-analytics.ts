@@ -206,25 +206,35 @@ export function computeDemoAnalytics(customers: DemoCustomer[]): DashboardAnalyt
     campaignROI,
   }
 
+  // El modo demo no tiene sedes: todo lo que en producción sale de `visits`
+  // (multi-sede F7, §8.4) va igual bajo `location` porque en un tenant demo hay
+  // como mucho una sede — el mismo caso que el fail-safe del §5.1 colapsa a "ve
+  // la marca". Ver `docs/features/dashboard.md`.
   return {
-    summary: {
-      totalCustomers: customers.length,
-      visitsToday,
-      deliveriesToday,
-      qrToday,
-      newCustomersToday,
-      newCustomersWeek,
-      frequentCustomers,
-      birthdaysToday,
+    brand: {
+      summary: {
+        totalCustomers: customers.length,
+        newCustomersToday,
+        newCustomersWeek,
+        frequentCustomers,
+        birthdaysToday,
+      },
+      newCustomersPerDay,
+      customerTiers,
+      atRiskGroups,
+      topCustomers,
+      acquisitionByMonth,
+      reactivationRate,
+      roiEstimate,
     },
-    visitsPerDay,
-    newCustomersPerDay,
-    customerTiers,
-    atRiskGroups,
-    topCustomers,
-    heatmap,
-    acquisitionByMonth,
-    reactivationRate,
-    roiEstimate,
+    location: {
+      summary: {
+        visitsToday,
+        deliveriesToday,
+        qrToday,
+      },
+      visitsPerDay,
+      heatmap,
+    },
   }
 }

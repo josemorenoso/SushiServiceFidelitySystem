@@ -110,6 +110,8 @@ export interface StaffUser {
   last_login_at: string | null
   created_at: string
   updated_at: string
+  /** Multi-sede F4/D11. NULL = sin sede asignada — se muestra, no se adivina. */
+  location_id: string | null
 }
 
 export interface StaffDevice {

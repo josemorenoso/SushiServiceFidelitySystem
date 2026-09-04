@@ -7,17 +7,16 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { requireTenantId } from '@/lib/tenant'
+import { requireLocationScope } from '@/lib/location-scope'
 import { getReviewFunnel } from '@/services/review.service'
 
 export async function GET(request: NextRequest) {
-  try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  const scopeResult = await requireLocationScope(request)
+  if (!scopeResult.ok) {
+    return NextResponse.json({ error: scopeResult.error }, { status: scopeResult.status })
+  }
 
-    const tenantId = await requireTenantId()
+  try {
     const { searchParams } = new URL(request.url)
 
     const funnel = await getReviewFunnel(
@@ -25,7 +24,7 @@ export async function GET(request: NextRequest) {
         from: searchParams.get('from') ?? undefined,
         to: searchParams.get('to') ?? undefined,
       },
-      tenantId
+      scopeResult.scope
     )
 
     return NextResponse.json(funnel)

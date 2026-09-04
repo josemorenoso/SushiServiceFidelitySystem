@@ -5,6 +5,108 @@
 
 ---
 
+## [2026-09-04 01:00] - Multi-sede F7: permisos de sede (D10) y el selector del panel
+
+### Tipo de cambio
+- **ADDED**: `supabase/migrations/00045_permisos_por_sede.sql` — `dashboard_user_locations
+  (user_id, tenant_id, location_id, role)` con FK compuesta `(location_id, tenant_id) →
+  restaurant_locations (id, tenant_id) ON DELETE RESTRICT`; los helpers `SECURITY DEFINER`
+  `current_dashboard_user_id()`, `tenant_active_location_count()` y `can_see_location()` (el
+  fail-safe del §5.1 en SQL); el trigger `trg_restaurant_locations_estampa_marca` que estampa
+  `role='brand'` a los usuarios existentes al nacer la 2ª sede activa; y las policies
+  `RESTRICTIVE sede_visible_*` autodescubiertas por catálogo (toda tabla con `tenant_id` +
+  `location_id`, `restaurant_events` excluida a propósito).
+- **ADDED**: `src/lib/location-scope.ts` — el tipo opaco `LocationScope` (marca de un `Symbol()`
+  real, no un `declare const : unique symbol`, que no tiene valor en runtime), `decideLocationScope()`
+  (el mismo fail-safe del §5.1 en TypeScript puro), `requireLocationScope()` (única fábrica,
+  siempre en el servidor), `applyLocationFilter()`, `locationMatches()`, `toScopeView()`.
+- **ADDED**: `src/lib/location-scope-shared.ts` — los tipos/constantes seguros para el navegador,
+  separados porque `location-scope.ts` importa `next/headers` (vía `@/lib/supabase/server`) y
+  Next.js empaqueta por archivo: un import desde un Client Component arrastraba el módulo entero
+  y `next build` lo rechazaba.
+- **ADDED**: `src/lib/supabase/unscoped.ts` — `getUnscopedServiceClient()`, el nombre feo del
+  escape (red nº2 del §5.2, para lecturas que mezclan una tabla de marca con una de sede en la
+  misma función, como `getFullAnalytics()`).
+- **ADDED**: `src/contexts/LocationScopeContext.tsx` + `src/components/layout/LocationSelector.tsx`
+  — el selector del panel (§8.4), montado en `DashboardHeader`. Selección persistida en
+  `localStorage` (mismo patrón que `DemoContext`), **no en la URL**: `(dashboard)` no tiene
+  `loading.tsx`/Suspense en ninguna de sus 14 páginas, y `useSearchParams()` ahí habría forzado
+  un CSR bailout del segmento entero.
+- **ADDED**: `GET /api/dashboard/location-scope` — alimenta el selector.
+- **CHANGED**: `getDashboardMetrics()`/`getFullAnalytics()` (`src/services/dashboard.service.ts`)
+  parten su retorno en `{ brand, location }`. `brand` sale de `customers` (total, en riesgo,
+  tiers, Black, ROI, y también nuevos-hoy/adquisición-por-mes) y de tablas sin sede
+  (`reactivationRate`, de `campaigns`/`campaign_messages` — el reloj de reactivación es de la
+  marca, §8.2); `location` sale de `visits` (hoy, QR, domicilios, heatmap). `MetricsCards` sigue
+  recibiendo un `summary` plano — cada página lo arma con `{ ...data.brand.summary,
+  ...data.location.summary }`, el único punto donde se tocan.
+- **CHANGED**: `requireLocationScope()` + `applyLocationFilter()` cableados en `metrics`,
+  `analytics`, `authorized-numbers` (GET/PATCH/DELETE), `redemptions`, `redemptions/summary`,
+  `review-metrics`, `send-queue/[id]` (DELETE), `campaigns` (GET) y `campaigns/efficiency`. Las
+  firmas de sus servicios pasan de `(tenantId: string)` a `(scope: LocationScope)` — **y solo
+  esas**: `getQueueDepth()` sigue en `tenantId` porque también la usa `line-budget` (D6, per
+  línea, no per sede).
+- **CHANGED (deuda #16 CERRADA)**: `src/app/(dashboard)/dashboard/staff/page.tsx` dibuja el
+  `<select>` de sede en Crear/Editar mesero y un badge de sede en la tabla (`location_id` NULL →
+  "Sin sede"). La API ya lo aceptaba desde F4; solo faltaba la pantalla. `StaffUser` gana
+  `location_id: string | null` (`src/types/database.types.ts`).
+- **ADDED**: `tests/db/multisede-permisos.test.ts` (13 casos, Postgres real: las 4 filas del
+  fail-safe, el trigger con su idempotencia, la FK compuesta con `23503`, el CHECK de pareja con
+  `23514`, y una lectura real de `visits` como `authenticated` que prueba que `role='location'`
+  nunca ve `location_id IS NULL`), `tests/unit/location-scope.test.ts` (23 casos, sin base de
+  datos), `tests/unit/location-scope-allowlist.test.ts` (la tercera red del §5.2).
+- **FIXED (arnés de tests)**: `tests/setup/bootstrap.sql` — `GRANT USAGE ON SCHEMA auth TO anon,
+  authenticated`. El bootstrap creaba el rol `authenticated` pero nunca le daba acceso al schema
+  `auth` (Supabase real sí se lo da); sin el GRANT, la primera prueba de este repo en correr RLS
+  completo con `SET ROLE authenticated` fallaba con un `42501` que era del arnés, no del esquema.
+  `docs/features/testing.md` ya avisaba del hueco.
+- **CHANGED**: `docs/features/multi-sede.md` (F7 marcada hecha, §3.quater nuevo, deuda #16
+  cerrada), `docs/features/dashboard.md` (el selector + el split de analytics), `docs/DB_SCHEMA.md`
+  (`dashboard_user_locations`), `docs/API_DOCS.md` (`?location_id=` en las rutas cableadas +
+  `location-scope` + las rutas de `authorized-numbers`/`campaigns` que no tenían entrada),
+  `docs/03-security.md` (§ "Permisos de sede del dashboard").
+
+### Archivos afectados
+- `supabase/migrations/00045_permisos_por_sede.sql` — nuevo
+- `src/lib/location-scope.ts`, `src/lib/location-scope-shared.ts`, `src/lib/supabase/unscoped.ts` — nuevos
+- `src/contexts/LocationScopeContext.tsx`, `src/components/layout/LocationSelector.tsx` — nuevos
+- `src/app/api/dashboard/location-scope/route.ts` — nuevo
+- `src/app/(dashboard)/layout.tsx`, `src/components/layout/DashboardHeader.tsx`
+- `src/services/dashboard.service.ts`, `redemption.service.ts`, `reward-grant.service.ts`,
+  `review.service.ts`, `send-queue.service.ts`
+- `src/app/api/dashboard/{metrics,analytics,authorized-numbers,authorized-numbers/[id],
+  redemptions,redemptions/summary,review-metrics,send-queue/[id],campaigns,campaigns/efficiency}/route.ts`
+- `src/types/analytics.types.ts`, `database.types.ts`
+- `src/lib/demo-analytics.ts`, `src/app/demo/page.tsx`
+- `src/hooks/useDashboardAnalytics.ts`
+- `src/app/(dashboard)/dashboard/{page,customers/page,campaigns/page,authorized-numbers/page,
+  redemptions/page,staff/page}.tsx`
+- `src/components/dashboard/{ROICard,CampaignEfficiencyChart}.tsx`
+- `tests/db/multisede-permisos.test.ts`, `tests/unit/location-scope.test.ts`,
+  `tests/unit/location-scope-allowlist.test.ts` — nuevos
+- `tests/setup/bootstrap.sql`
+- `docs/features/multi-sede.md`, `dashboard.md`, `docs/DB_SCHEMA.md`, `docs/API_DOCS.md`, `docs/03-security.md`
+
+### Deliberadamente fuera de esta fase
+- `reward_grants.granted_location_id` / `reward_redemptions.redeemed_location_id` /
+  `campaigns.location_id` siguen SIEMPRE NULL (deudas #12/#13, es F6) — el filtro sobre esas
+  columnas es hoy un no-op para `role='brand'` y, para un futuro `role='location'`, deja la lista
+  vacía en vez de mostrar todo (fail *closed*).
+- Quedaron sin cablear, con la razón en el código: `send-queue` GET (degrada `available:false`
+  para un super-admin sin tenant, sin equivalente limpio en `requireLocationScope()`),
+  `check-in-override` (su atribución ya la resuelve F3/F4), `campaigns/manual` e
+  `imported-contacts/confirm` (escrituras que crean campañas, es F6), `campaigns/run-auto`
+  (proxya a `/api/cron/*`), y `calendar/events` (`audience_scope` es F5).
+- `getDashboardMetrics`/`/api/dashboard/metrics` se partió igual por completitud, pero sigue sin
+  ningún consumidor en el panel.
+
+### Verificación
+`npx tsc --noEmit` limpio · `npx eslint src` (7 preexistentes, ninguno nuevo) · `npm run build`
+✅ · `TEST_PG_PORT=55441 npx vitest run` — 13 archivos, 239 tests, todos en verde (baseline previo:
+10 archivos / 200 tests).
+
+---
+
 ## [2026-09-03 13:10] - Multi-sede F3: la sede se AVERIGUA y se ESCRIBE (sin migración)
 
 ### Tipo de cambio

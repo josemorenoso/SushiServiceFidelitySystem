@@ -1,19 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { requireTenantId } from '@/lib/tenant'
+import { requireLocationScope } from '@/lib/location-scope'
 import { getRedemptions } from '@/services/redemption.service'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  const scopeResult = await requireLocationScope(request)
+  if (!scopeResult.ok) {
+    return NextResponse.json({ error: scopeResult.error }, { status: scopeResult.status })
   }
 
   try {
-    const tenantId = await requireTenantId()
     const { searchParams } = new URL(request.url)
     const result = await getRedemptions({
       from: searchParams.get('from') ?? undefined,
@@ -23,7 +20,7 @@ export async function GET(request: NextRequest) {
       prizeTitle: searchParams.get('prize_title') ?? undefined,
       page: parseInt(searchParams.get('page') ?? '1'),
       limit: parseInt(searchParams.get('limit') ?? '25'),
-    }, tenantId)
+    }, scopeResult.scope)
     return NextResponse.json(result)
   } catch (error) {
     console.error('[Dashboard] Error redenciones:', error)

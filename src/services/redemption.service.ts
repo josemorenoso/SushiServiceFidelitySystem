@@ -11,6 +11,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { logDbFailure } from '@/lib/db-failure'
 import type { RewardRedemption, RedemptionSource } from '@/types/database.types'
+import { applyLocationFilter, type LocationScope } from '@/lib/location-scope'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -217,21 +218,32 @@ export interface RedemptionListResult {
   limit: number
 }
 
-export async function getRedemptions(filters: RedemptionFilters, tenantId: string): Promise<RedemptionListResult> {
+/**
+ * Multi-sede F7 (§8.4): filtra por `redeemed_location_id` con el mismo
+ * `LocationScope` de siempre. ⚠️ Esa columna hoy la deja SIEMPRE NULL cualquier
+ * escritor (deuda #13 de `docs/features/multi-sede.md` — llenarla es F6). Con
+ * `role='brand'` no cambia nada (sin filtro, igual que hoy); un futuro
+ * `role='location'` vería la lista vacía hasta que F6 la llene — fail CLOSED
+ * (nada) y no fail OPEN (todo), que es la opción segura mientras la columna no
+ * tenga dato real.
+ */
+export async function getRedemptions(filters: RedemptionFilters, scope: LocationScope): Promise<RedemptionListResult> {
   const supabase = getServiceClient()
   const page = filters.page && filters.page > 0 ? filters.page : 1
   const limit = filters.limit && filters.limit > 0 ? Math.min(filters.limit, 200) : 25
   const fromIdx = (page - 1) * limit
   const toIdx = fromIdx + limit - 1
 
-  let query = supabase
+  // La base se asigna a un `const` antes de `applyLocationFilter()`: ver el
+  // comentario de `getReviewFunnel()` en review.service.ts sobre TS2589.
+  const baseQuery = supabase
     .from('reward_redemptions')
     .select(
       'id, customer_id, grant_id, mystery_box_result_id, tier_id, prize_title, source, redeemed_at, redeemed_by_staff_id, table_number, notes, pos_reference, created_at, customers(name, phone), staff_users(name)',
       { count: 'exact' }
     )
-    .eq('tenant_id', tenantId)
-    .order('redeemed_at', { ascending: false })
+    .eq('tenant_id', scope.tenantId)
+  let query = applyLocationFilter(baseQuery, scope, 'redeemed_location_id').order('redeemed_at', { ascending: false })
 
   if (filters.from) query = query.gte('redeemed_at', filters.from)
   if (filters.to) query = query.lte('redeemed_at', filters.to)
@@ -302,16 +314,18 @@ export interface RedemptionSummary {
   by_staff: { staff_id: string | null; staff_name: string | null; count: number }[]
 }
 
+/** Mismo aviso que `getRedemptions()` sobre `redeemed_location_id` (deuda #13). */
 export async function getRedemptionSummary(params: {
   from?: string
   to?: string
-}, tenantId: string): Promise<RedemptionSummary> {
+}, scope: LocationScope): Promise<RedemptionSummary> {
   const supabase = getServiceClient()
 
-  let query = supabase
+  const baseQuery = supabase
     .from('reward_redemptions')
     .select('prize_title, redeemed_at, redeemed_by_staff_id, staff_users(name)')
-    .eq('tenant_id', tenantId)
+    .eq('tenant_id', scope.tenantId)
+  let query = applyLocationFilter(baseQuery, scope, 'redeemed_location_id')
 
   if (params.from) query = query.gte('redeemed_at', params.from)
   if (params.to) query = query.lte('redeemed_at', params.to)

@@ -552,6 +552,79 @@ crear una segunda.
 
 ---
 
+### dashboard_user_locations
+
+> **F7, D10.** El alcance de sede de cada usuario del dashboard. NO es un claim del JWT: el
+> `tenant_id` del JWT se escribe a mano con un `UPDATE` sobre `auth.users` (00028) y exige
+> re-login; una tabla se corrige en caliente y el RLS la puede leer.
+> Ver `docs/features/multi-sede.md` §3.quater.
+
+| Columna | Tipo | Nullable | Default | Descripción |
+|---------|------|----------|---------|-------------|
+| `id` | `uuid` | NO | `gen_random_uuid()` | PK |
+| `user_id` | `uuid` | NO | - | FK → `auth.users(id)` ON DELETE CASCADE |
+| `tenant_id` | `uuid` | NO | - | FK → `tenants(id)` ON DELETE CASCADE. **Sin DEFAULT puente** — a diferencia de las 18 tablas de la 00028, un INSERT que olvide `tenant_id` falla con `23502`, no se va a Sushi Service |
+| `location_id` | `uuid` | SI | `NULL` | FK COMPUESTA `(location_id, tenant_id)` |
+| `role` | `text` | NO | - | `'brand'` (toda la marca) o `'location'` (una sede) |
+| `created_at` | `timestamptz` | NO | `now()` | |
+| `updated_at` | `timestamptz` | NO | `now()` | |
+
+**Constraints e índices (00045):**
+
+| Nombre | Qué es | Por qué |
+|---|---|---|
+| `dashboard_user_locations_role_check` | `CHECK (role IN ('brand','location'))` | |
+| `dashboard_user_locations_pareja_check` | `CHECK ((role='brand' AND location_id IS NULL) OR (role='location' AND location_id IS NOT NULL))` | El alcance es EXPLÍCITO, nunca deducido de un NULL — mismo patrón que `restaurant_events_audience_pareja_check` (00043) |
+| `dashboard_user_locations_location_id_tenant_fkey` | `FOREIGN KEY (location_id, tenant_id) REFERENCES restaurant_locations (id, tenant_id) ON DELETE RESTRICT` | La regla transversal de multi-sede: una FK simple dejaría un permiso de la marca A sobre una sede de la marca B |
+| `idx_dashboard_user_locations_brand` | `UNIQUE (user_id, tenant_id) WHERE location_id IS NULL` | Una sola fila `role='brand'` por usuario y marca |
+| `idx_dashboard_user_locations_sede` | `UNIQUE (user_id, tenant_id, location_id) WHERE location_id IS NOT NULL` | Una sola fila por usuario, marca y sede |
+
+**El fail-safe (§5.1), implementado en `can_see_location(location_id uuid) RETURNS boolean`:**
+
+| Situación | Resultado |
+|---|---|
+| Sin fila y el tenant tiene ≤1 sede activa | Ve la marca (= su única sede) |
+| Sin fila y el tenant tiene ≥2 sedes activas | 403 |
+| `role='brand'` | Todas las sedes + el cubo *"Sin sede"* |
+| `role='location'` | Solo esas sedes, **nunca** `location_id IS NULL` |
+
+**Helpers `SECURITY DEFINER` (00045, `search_path` fijo):** `current_dashboard_user_id()` (el
+`sub` del JWT — se lee de `auth.jwt()` y no de `auth.uid()` porque es el único objeto de `auth`
+que el bootstrap de tests stubbea), `tenant_active_location_count(tenant_id)`, y
+`can_see_location(location_id)` de arriba. Los tres **conservan** el `EXECUTE` a PUBLIC — las
+policies los invocan como `anon`/`authenticated`.
+
+**Trigger `trg_restaurant_locations_estampa_marca`** (AFTER INSERT/UPDATE OF `is_active`,
+`tenant_id` en `restaurant_locations`): estampa `role='brand'` a los usuarios existentes del
+tenant en el instante en que su 2ª sede activa nace. Idempotente; no pisa una fila `role='location'`
+ya asignada a mano.
+
+**Políticas RLS de la propia tabla (más estrictas que el patrón `tenant_all_*`):**
+
+```sql
+CREATE POLICY "tenant_own_dashboard_user_locations" ON dashboard_user_locations FOR ALL
+  USING      (is_super_admin() OR (tenant_id = current_tenant_id() AND user_id = current_dashboard_user_id()))
+  WITH CHECK (is_super_admin() OR (tenant_id = current_tenant_id() AND user_id = current_dashboard_user_id()));
+```
+
+Quién manda a quién no es dato de todos los admins de la marca — cada quien ve SU alcance.
+
+**Las policies `RESTRICTIVE sede_visible_*` sobre las OTRAS tablas** (autodescubiertas por
+catálogo: toda tabla de `public` con `tenant_id` + `location_id`, EXCEPTO `restaurant_events`):
+
+```sql
+CREATE POLICY sede_visible_<tabla> ON <tabla> AS RESTRICTIVE FOR ALL TO authenticated
+  USING      (is_super_admin() OR can_see_location(location_id))
+  WITH CHECK (is_super_admin() OR can_see_location(location_id));
+```
+
+Es la red **barata**: el aislamiento real vive en el tipo `LocationScope` de TypeScript
+(`src/lib/location-scope.ts`), porque en toda la app hay **una sola** lectura por el camino
+autenticado — las otras ~55 corren con `service_role`, que se salta el RLS. `AS RESTRICTIVE` (no
+una permisiva nueva) es lo que permite añadir el predicado sin tocar ni una policy `tenant_all_*`
+existente: Postgres calcula `(T ∨ S) ∧ (S ∨ C) ≡ S ∨ (T ∧ C)`, que es el predicado del spec.
+
+---
 
 ### staff_users
 

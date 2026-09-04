@@ -37,7 +37,7 @@ re-litigan.** Si algo de este doc contradice al spec, manda el spec.
 | **F4** | 00044 + login del mesero por sede (D11) + las dos funciones SQL que perdian la sede | ✅ **hecha** — ver §3.ter |
 | **F5** | 00046 + calendario, crons y domicilios con el interruptor de ≥2 sedes (D8, D9) | ⏳ |
 | **F6** | Desglose por sede en el dashboard (D4, D12) | ⏳ |
-| **F7** | 00045 + `LocationScope` + selector en el panel (D10) | ⏳ |
+| **F7** | 00045 + `LocationScope` + selector en el panel (D10) | ✅ **hecha** — ver §3.quater |
 | **F8** | 00047 + AIOS: `product_location_id`, wizard de sede 2..N | ⏳ |
 | **F9** | 00048: `location_messaging`, cupo por línea, plantillas por línea | ⏳ solo si D6 = número por sede |
 | **F10** | 00049: `customer_review_state` | ⏳ confirmar la suposición §7.2 |
@@ -460,6 +460,185 @@ viva).
 
 ---
 
+## 3.quater — F7: permisos de sede y el selector del panel (D10)
+
+Spec: `docs/superpowers/specs/2026-09-02-multisede-design.md` §5.1, §5.2 y §8.4. Migración:
+`supabase/migrations/00045_permisos_por_sede.sql`. El dueño marcó esta fase **OBLIGATORIA**.
+
+### La tabla, no un claim del JWT
+
+`dashboard_user_locations (user_id, tenant_id, location_id, role)`. El `tenant_id` del JWT hoy se
+escribe a mano con un `UPDATE` sobre `auth.users` (00028) y exige re-login; un claim de sede
+heredaría los mismos tres problemas. Una tabla se corrige en caliente y el RLS la puede leer.
+
+`role='brand'` exige `location_id IS NULL`; `role='location'` exige `location_id NOT NULL` — CHECK
+de pareja, igual que `restaurant_events.audience_scope`. `location_id` lleva la FK COMPUESTA
+`(location_id, tenant_id) → restaurant_locations (id, tenant_id) ON DELETE RESTRICT`, la regla
+transversal de siempre: una FK simple dejaría darle a un admin de la marca A permiso sobre una
+sede de la marca B.
+
+### El fail-safe recalibrado — §5.1, la tabla literal
+
+| Situación | Resultado |
+|---|---|
+| Sin fila y el tenant tiene **≤1 sede activa** | **Ve la marca** (= su única sede) |
+| Sin fila y el tenant tiene **≥2 sedes activas** | **403** |
+| Fila con `role='brand'` | Ve todas las sedes + el cubo *"Sin sede"* |
+| Fila(s) con `role='location'` | Ve **solo** esas sedes, **nunca** `location_id IS NULL` |
+
+Implementado DOS VECES a propósito, en dos motores distintos: `can_see_location()` en SQL (helper
+`SECURITY DEFINER`, para el RLS) y `decideLocationScope()` en TypeScript puro (para el camino
+`service_role`, que es el que realmente aísla — ver más abajo). `tests/db/multisede-permisos.test.ts`
+prueba el primero contra Postgres real; `tests/unit/location-scope.test.ts` prueba el segundo sin
+base de datos. Las cuatro filas están escritas en ambos sitios porque un fail-safe absoluto
+("sin fila, nada") dejaría fuera a los admins de los 4 tenants vivos el día del despliegue, y un
+fail-open absoluto es el agujero — la ausencia de fila solo es ambigua con ≥2 sedes.
+
+`trg_restaurant_locations_estampa_marca` (AFTER INSERT/UPDATE OF `is_active`, `tenant_id` en
+`restaurant_locations`) estampa `role='brand'` a los usuarios existentes del tenant **en el
+instante** en que su sede activa nº2 nace (`tenant_active_location_count() >= 2`), para que el 403
+sea la red y no el camino normal. Es idempotente (no pisa a un usuario al que ya se le asignó
+`role='location'` a mano) y cubre también reactivar una sede apagada o dar de alta la 3ª, 4ª, N.
+
+### `LocationScope` — el tipo opaco, y por qué importa más que el RLS aquí
+
+`src/lib/location-scope.ts`. `LocationScope` lleva una marca de un `Symbol()` real (no un
+`declare const : unique symbol`, que no tiene valor en runtime y revienta al usarlo como clave
+computada) creado y **no exportado** en ese módulo: ningún otro código puede fabricar un
+`LocationScope` con un literal ni con un `as`. La única fábrica es `requireLocationScope(request)`,
+que resuelve marca + usuario + sede **siempre en el servidor** contra `dashboard_user_locations` —
+nunca contra lo que mande el navegador.
+
+Las firmas de los servicios pasan de `(tenantId: string)` a `(scope: LocationScope)`. Tres redes,
+en orden de fuerza:
+
+1. **El compilador.** Una ruta que se olvide del filtro no compila — no hay forma de conseguir un
+   `LocationScope` sin pasar por `requireLocationScope()`.
+2. **El nombre feo del escape.** `getUnscopedServiceClient()` (`src/lib/supabase/unscoped.ts`) es
+   el `service_role` sin alcance, para las lecturas que son de la marca a propósito (customers,
+   tiers, ROI). El nombre existe para que el costo se vea en el `import`.
+3. **Un test de allowlist.** `tests/unit/location-scope-allowlist.test.ts` falla si aparece un
+   import nuevo de `getUnscopedServiceClient()` fuera de la lista revisada. Detecta el olvido
+   DESPUÉS de escribirlo, y solo si alguien mantiene el test — por eso es la red más débil, no la
+   principal.
+
+**Esto importa más que el RLS aquí:** verificado que en toda la app hay **una sola** lectura de
+datos por el camino autenticado (`src/app/api/dashboard/twilio-metrics/route.ts:217`, sobre
+`customers`, que ni tiene `location_id`); las otras ~55 corren con `service_role`. Poner el permiso
+solo en RLS daría una sensación de seguridad que la app entera desmiente.
+
+### El RLS, como red barata — policies RESTRICTIVE autodescubiertas
+
+La 00045 recorre por catálogo toda tabla de `public` con `tenant_id` **y** `location_id` a la vez
+(EXCLUYE `restaurant_events`: ahí NULL significa "toda la marca", no "sede desconocida") y le crea
+una policy `AS RESTRICTIVE`, no una permisiva nueva:
+
+```sql
+CREATE POLICY sede_visible_<tabla> ON <tabla> AS RESTRICTIVE FOR ALL TO authenticated
+  USING      (is_super_admin() OR can_see_location(location_id))
+  WITH CHECK (is_super_admin() OR can_see_location(location_id));
+```
+
+Postgres combina las permisivas con OR y les aplica AND con las restrictivas, así que sobre la
+`tenant_all_*` de la 00026 (`T ∨ S`) esto da `(T ∨ S) ∧ (S ∨ C) ≡ S ∨ (T ∧ C)` — exactamente el
+predicado del spec, sin **DROPear ni reescribir** una sola policy existente. Importa por dos
+motivos: el loop de la 00026 (que autodescubre **policies**, no tablas — la lista de 18 tablas está
+escrita a mano) se llevaría por delante `aios_constelarys_select_wallet_txn` si se copiara ese
+gesto; y una RESTRICTIVE es matemáticamente incapaz de conceder, solo de quitar filas — el "no
+puede conceder más de lo que concede hoy" pasa de promesa a propiedad del motor.
+
+`current_dashboard_user_id()`, `tenant_active_location_count()` y `can_see_location()` nacen
+`SECURITY DEFINER` con `search_path` fijo — exactamente lo que le falta a `current_tenant_id()`
+(00024) y por lo que el rol del AIOS revienta con `42501` (`docs/03-security.md`). A los tres se
+les **conserva** el `EXECUTE` a PUBLIC (regla nº2 de esa misma sección): las policies los invocan
+como `anon`/`authenticated`, y un `REVOKE` los dejaría sin leer.
+
+### El selector — §8.4
+
+El alcance viaja como `?location_id=` (ausente / `all` / uuid / `unknown`) sobre las rutas que ya
+existen, resuelto siempre en el servidor. **"Todas" significa "todas las que este usuario puede
+ver"** — si la ausencia significara "toda la marca", cada ruta que olvidara el scope filtraría de
+más. La opción *"Todas las sedes"* solo se dibuja si el usuario es de marca; el cubo *"Sin sede"*
+solo si `canSeeUnassigned`.
+
+El transporte NO usa `useSearchParams()` de Next.js: la encuesta de esta fase encontró que
+`(dashboard)` no tiene `loading.tsx`/Suspense en ninguna de sus 14 páginas, y meter la sede ahí
+forzaría un CSR bailout de todo el segmento (el mismo bug que `/mesero` ya pelea dos veces). En
+vez de eso, la selección vive en `LocationScopeContext` (`src/contexts/LocationScopeContext.tsx`),
+persistida en `localStorage` — mismo patrón que `DemoContext` — y cada `fetch()` a una ruta ya
+escrita la anexa como query string. La URL del navegador no cambia.
+
+`GET /api/dashboard/location-scope` expone `toScopeView()` (rol, selección, sedes visibles) para
+que `LocationSelector` (`src/components/layout/LocationSelector.tsx`, montado en
+`DashboardHeader`) se dibuje. Con una sola opción posible no se dibuja: un `role='location'` de
+UNA sede sin "Todas" ni "Sin sede" no tiene nada entre qué elegir.
+
+### `getDashboardMetrics` / `getFullAnalytics` — partidos en `{ brand, location }`
+
+Las métricas que salen de `customers` (total de clientes, en riesgo, tiers, Black, ROI del Golden
+Bullet, y también nuevos-hoy/nuevos-semana/adquisición-por-mes: **todas** derivan de `customers`,
+no solo las cuatro nombradas por el dueño) viven bajo `.brand` — de la marca para siempre, no por
+limitación sino porque el dueño pidió que el cliente conserve su recorrido entre sedes. Las que
+salen de `visits` (visitas hoy, QR, domicilios, el heatmap) viven bajo `.location`. Con el tipo
+partido, mezclar numerador de sede con denominador de marca deja de poder hacerse por descuido — no
+compila. `reactivationRate` queda en `.brand` a propósito (§8.2: el reloj de reactivación es de la
+marca), leyendo la misma consulta de `visits` de 6 meses SIN el recorte de sede que sí usa el
+heatmap — `locationMatches()` existe justo para sostener las dos vistas de una sola lectura sin
+duplicar la consulta.
+
+`getDashboardMetrics`/`/api/dashboard/metrics` se partió igual por completitud, pero es la ruta
+**muerta**: ningún componente del panel la consume (`getFullAnalytics`/`/api/dashboard/analytics`,
+vía `useDashboardAnalytics()`, es la que alimenta las 3 páginas reales). Se deja dicho por si algún
+día se reactiva.
+
+### Qué rutas quedaron con filtro, y cuáles no
+
+De las rutas que leen tablas con `location_id`, quedaron cableadas a `requireLocationScope()` +
+`applyLocationFilter()`: `metrics`, `analytics`, `authorized-numbers` (GET/PATCH/DELETE),
+`redemptions`, `redemptions/summary`, `review-metrics`, `send-queue/[id]` (DELETE), `campaigns`
+(GET) y `campaigns/efficiency`. Sus servicios (`dashboard.service.ts`, `redemption.service.ts`,
+`reward-grant.service.ts`, `review.service.ts`, `send-queue.service.ts`) cambiaron la firma de
+`tenantId: string` a `scope: LocationScope` en las funciones que llaman esas rutas — **y solo
+esas**: `getQueueDepth()` sigue en `tenantId` porque también la usa `line-budget` (D6, per-línea,
+no per-sede) y cambiarla ahí habría sido inventar un comportamiento nuevo fuera de F7.
+
+⚠️ **`reward_grants.granted_location_id` y `reward_redemptions.redeemed_location_id` siguen
+SIEMPRE NULL** (deuda #13: llenarlas es F6). El filtro sobre esas dos columnas es hoy un no-op
+para `role='brand'` (los 4 tenants vivos) y, para un futuro `role='location'`, deja la lista
+**vacía** en vez de mostrar TODO — fail *closed*, no fail *open*, mientras F6 no exista. Lo mismo
+aplica a `campaigns.location_id` (deuda #12).
+
+Quedaron **deliberadamente sin cablear**, con la razón anotada en el código: `send-queue` GET
+(el `available:false` de degradación para un super-admin sin tenant en el JWT no tiene un
+equivalente limpio en `requireLocationScope()`, que siempre exige tenant); `check-in-override`
+(su atribución de sede ya la resuelve F3/F4, y tocarla es terreno del 409 de la deuda #9, no de
+F7); `campaigns/manual` y `imported-contacts/confirm` (rutas de escritura que crean campañas —
+atribuir esa escritura a una sede es F6); `campaigns/run-auto` (proxya a `/api/cron/*`, no lee
+nada directamente); las dos rutas de `calendar/events` (`audience_scope` es F5).
+
+### La red del bootstrap de tests — un hueco que esta fase encontró
+
+`tests/setup/bootstrap.sql` creaba el rol `authenticated` pero nunca le daba `USAGE ON SCHEMA
+auth` — en Supabase real SÍ lo tiene (es lo que permite que una policy de RLS llame `auth.jwt()`
+evaluándose como ese rol). El propio `docs/features/testing.md` avisaba del hueco ("el stub... está
+escrito para permitirlo, pero todavía no hay pruebas que lo usen"): `tests/db/multisede-permisos.test.ts`
+es la primera, y el `GRANT` se agregó al bootstrap para que la prueba mida RLS de verdad y no un
+falso negativo del arnés.
+
+### Cómo se verifica
+
+`tests/db/multisede-permisos.test.ts` — 13 comprobaciones contra Postgres real: las 4 filas del
+fail-safe (incluida la variante de "varias filas `role='location'`" y la de "0 sedes activas"), el
+trigger de estampado (con la variante de idempotencia y la de "no pisa una fila explícita"), la FK
+compuesta rechazando con `23503` el permiso de la marca A sobre la sede de la marca B, el CHECK de
+pareja rechazando con `23514` las dos combinaciones inválidas, y una lectura REAL de `visits` como
+`authenticated` que confirma que `role='location'` nunca ve `location_id IS NULL` mientras
+`role='brand'` sí. `tests/unit/location-scope.test.ts` — 23 comprobaciones de `decideLocationScope()`,
+`applyLocationFilter()`, `locationMatches()` y `toScopeView()`, sin base de datos.
+`tests/unit/location-scope-allowlist.test.ts` — la tercera red, comprobándose a sí misma.
+
+---
+
 ## 4. Reglas que valen para todas las fases
 
 - **`location_id` es SIEMPRE nullable**, con **FK compuesta** `(location_id, tenant_id)
@@ -505,7 +684,7 @@ Ninguna de éstas se cierra por cuenta propia: son decisiones del dueño o de un
 | 13 | **`message_logs.line_location_id`, `tenant_wallet_transactions.location_id`, `campaigns.location_id`, `reward_grants.granted_location_id`, `reward_redemptions.redeemed_location_id` y `consent_events.location_id` siguen vacías.** | Fuera del alcance de F3. `line_location_id` depende de **D6**, que el dueño no decidió (F9). Las de premios son F6 (la matriz origen→destino de D12). `consent_events` **no tiene un solo escritor en TypeScript** — la tabla existe desde la 00037 y nadie inserta en ella. |
 | ~~14~~ | ~~**`src/app/api/dashboard/location/route.ts` sigue con su `.single()`.**~~ **CERRADA en F4.** Y con una correccion al diagnostico: el bug NO era el `.single()`, era que el `PUT` **descartaba el error** de su sonda — por eso cambiarlo a `.maybeSingle()` no habria arreglado nada. Ver §3.ter. Texto original: Filtra solo por tenant: con 2 sedes activas devuelve 500, y su `PUT` inserta una tercera fila en vez de actualizar. Este doc decía «se arregla en F3». | **NO se arregló en F3**: el alcance de la sesión de F3 excluyó explícitamente tocar lecturas y pantallas de dashboard (eso es F6/F7). Contradicción real entre este doc y el alcance ejecutado, dejada por escrito a propósito. Ningún tenant vivo tiene 2 sedes, así que hoy no es explotable. |
 | 15 | **`staff_devices.staff_user_id` es una FK SIMPLE** a `staff_users(id)` (00018:31, `ON DELETE CASCADE`): nada en la BASE impide atribuir un dispositivo de la marca A a un mesero de la marca B. | **Mitigado, no cerrado.** El trigger `trg_staff_devices_sede_coherente` de la 00044 lo rechaza (23514) buscando al mesero DENTRO de la marca del dispositivo, pero un trigger es mas facil de saltar que una FK. Convertirla en compuesta `(staff_user_id, tenant_id)` exige un `UNIQUE (id, tenant_id)` en `staff_users` que hoy no existe, y eso no esta en el spec. |
-| 16 | **No hay control en el panel para asignarle sede a un mesero.** La API ya lo acepta (`POST`/`PATCH /api/dashboard/staff` con `location_id`) y el `GET` ya lo devuelve, pero el formulario de `/dashboard/staff` no dibuja el selector. | F4 entrego el MECANISMO, no la pantalla. Un selector de sedes en el panel es **F7** (`LocationScope`, 00045), que es donde se decide de una vez como se eligen sedes en toda la interfaz. Mientras tanto la asignacion se hace por API. |
+| ~~16~~ | ~~**No hay control en el panel para asignarle sede a un mesero.**~~ **CERRADA en F7.** `/dashboard/staff` ya dibuja el `<select>` de sede en Crear y Editar (`assignableLocations`, tomado del mismo `LocationScopeProvider` del header — cero fetch nuevo), la tabla muestra la sede de cada mesero como badge (`location_id` NULL → "Sin sede", nunca se adivina), y el aviso de D11 (mover de sede con dispositivos en otra se rechaza, 23514) queda escrito en la propia pantalla. Texto original: La API ya lo acepta (`POST`/`PATCH /api/dashboard/staff` con `location_id`) y el `GET` ya lo devuelve, pero el formulario de `/dashboard/staff` no dibuja el selector. | F4 entregó el MECANISMO, F7 la pantalla — ver §3.quater. El `<select>` solo se dibuja si la marca tiene al menos una sede activa (`assignableLocations.length > 0`); con `role='location'` el admin solo ve SUS sedes, que es la restricción correcta: no debería poder asignar meseros a una sede que no administra. |
 | 17 | **Las sedes NO se pueden crear ni editar desde el producto**, solo la principal y solo sus coordenadas (`PUT /api/dashboard/location`). | Dar de alta la sede 2..N es el wizard del AIOS, **F8** (00047). No se adelanta: `restaurant_locations` es la 00041 y su superficie de escritura la define esa fase. |
 
 ---
@@ -548,8 +727,20 @@ sede de la marca B**.
 | `src/app/api/staff/login/route.ts` | **F4.** Login del mesero **por sede**: `resolveHostContext()` + el 403 «Estás en el enlace de otra sede» del §5.3. La sede **no** entra al JWT. |
 | `src/app/api/staff/*` · `src/app/api/reward-redeem/route.ts` | **F4.** Toda la superficie del mesero resuelve la marca con `resolveHostContext()`, para que `laureles.marca.com/mesero` no sea un 404. Cambio **aditivo**. |
 | `src/app/api/staff/device/register/route.ts` | **F4.** El dispositivo **hereda la sede de su mesero dueño**. Es la única fuente que no hay que inventar. |
-| `src/app/api/dashboard/staff/route.ts` | **F4.** `location_id` en el `GET`, el `POST` y el `PATCH`, con validación de que la sede sea **activa y de esta marca**. El 23514 del trigger sale como **409**. ⚠️ El **selector** en la pantalla es F7 (deuda #16). |
+| `src/app/api/dashboard/staff/route.ts` | **F4.** `location_id` en el `GET`, el `POST` y el `PATCH`, con validación de que la sede sea **activa y de esta marca**. El 23514 del trigger sale como **409**. El selector en la pantalla es F7 — deuda #16 CERRADA. |
 | `src/app/api/check-in/review-prompt/route.ts` | **F4.** Pasa la sede a `logReviewShown()` → `review_events.location_id` del evento `'shown'` (deuda #11). |
 | `src/services/send-queue.service.ts` · `src/services/review.service.ts` | **F4.** `EnqueueItem.locationId` y el 4º argumento de `log_review_shown_deduped` (deudas #10 y #11). |
 | `src/app/api/dashboard/location/*` | **F4 — deuda #14 CERRADA.** Elige la sede principal con el mismo orden que `getActiveLocations()` y **comprueba el error** de la sonda: el PUT ya no puede insertar una tercera fila. El contrato (objeto plano) **no cambia**. |
 | `tests/db/multisede-meseros.test.ts` | **F4.** 28 comprobaciones contra Postgres real: FK compuesta, RESTRICT, los 2 triggers, el UNIQUE del fingerprint y las 2 funciones SQL. |
+| `supabase/migrations/00045_permisos_por_sede.sql` | **F7.** `dashboard_user_locations`, los 3 helpers `SECURITY DEFINER`, el trigger de estampado, y las policies `RESTRICTIVE sede_visible_*` autodescubiertas por catálogo. |
+| `src/lib/location-scope.ts` | **F7.** El tipo opaco `LocationScope`, `requireLocationScope()` (única fábrica), `decideLocationScope()` (el fail-safe en TS puro), `applyLocationFilter()`, `locationMatches()`, `toScopeView()`. |
+| `src/lib/location-scope-shared.ts` | **F7.** Los tipos/constantes seguros para el navegador (`LocationScopeView`, `LOCATION_QUERY_PARAM`, `LOCATION_ALL`, `LOCATION_UNKNOWN`) — separados porque `location-scope.ts` importa `next/headers` vía `@/lib/supabase/server`, y Next.js empaqueta por archivo: cualquier import desde un Client Component arrastraba el módulo entero y `next build` lo rechazaba. |
+| `src/lib/supabase/unscoped.ts` | **F7.** `getUnscopedServiceClient()` — el nombre feo del escape (red nº2 del §5.2). |
+| `src/contexts/LocationScopeContext.tsx` · `src/components/layout/LocationSelector.tsx` | **F7.** El selector (§8.4): estado de sesión de navegador (`localStorage`, mismo patrón que `DemoContext`), NUNCA en la URL — evita el CSR bailout que `useSearchParams()` habría forzado en `(dashboard)`, que no tiene `loading.tsx` en ninguna página. |
+| `src/app/api/dashboard/location-scope/route.ts` | **F7.** Lo que el selector necesita para dibujarse (`toScopeView()`). |
+| `src/services/dashboard.service.ts` | **F7.** `getFullAnalytics()`/`getDashboardMetrics()` parten su retorno en `{ brand, location }` (§8.4). |
+| `tests/db/multisede-permisos.test.ts` | **F7.** 13 comprobaciones contra Postgres real: las 4 filas del fail-safe, el trigger de estampado (con idempotencia), la FK compuesta (`23503`), el CHECK de pareja (`23514`), y una lectura real de `visits` como `authenticated` que prueba que `role='location'` nunca ve `location_id IS NULL`. |
+| `tests/unit/location-scope.test.ts` | **F7.** 23 comprobaciones de `decideLocationScope()`/`applyLocationFilter()`/`locationMatches()`/`toScopeView()`, sin base de datos. |
+| `tests/unit/location-scope-allowlist.test.ts` | **F7.** La tercera red del §5.2: falla si aparece un import nuevo de `getUnscopedServiceClient()` fuera de la lista revisada. |
+| `tests/setup/bootstrap.sql` | **F7.** `GRANT USAGE ON SCHEMA auth TO anon, authenticated` — el hueco que `docs/features/testing.md` ya avisaba (ningún test corría RLS completo como `authenticated`; éste es el primero). |
+| `src/app/(dashboard)/dashboard/staff/page.tsx` | **F7 — deuda #16 CERRADA.** El `<select>` de sede en Crear/Editar mesero, y el badge de sede en la tabla (`location_id` NULL → "Sin sede"). Reutiliza `LocationScopeProvider`, cero fetch nuevo. |

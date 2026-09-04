@@ -37,6 +37,12 @@ Los dispositivos del local (celulares/tablets) se activan desde `/mesero` para e
 - **Eliminar** (hard) — `DELETE /api/dashboard/staff/device?id={device_id}`. Borra la fila. Solo permitido si el dispositivo ya está revocado (devuelve 409 si sigue activo).
 - Ambos endpoints requieren sesión de dashboard (Supabase Auth); la UI pide confirmación antes de ejecutar.
 
+**Sede del mesero (F7, D11, deuda #16 cerrada):** los diálogos de Crear/Editar dibujan un
+`<select>` de sede (solo si la marca tiene al menos una sede activa) y la tabla muestra la sede
+de cada mesero como badge — `location_id` NULL se ve como *"Sin sede"*, nunca se adivina. El
+`PATCH` ya rechazaba con 409 mover a un mesero con dispositivos en otra sede (trigger D11); el
+formulario ahora lo avisa antes de que el admin lo intente.
+
 ## Componentes
 | Componente | Responsabilidad |
 |-----------|----------------|
@@ -134,6 +140,37 @@ apartado de Campañas"*.
 La predicción vive en `isPresetSendable()` (`src/components/dashboard/ManualCampaigns.tsx`), función
 pura y fuera del JSX. Si ningún preset es enviable, la pantalla lo dice y deja los filtros manuales
 disponibles: no se queda en blanco.
+
+## El selector de sede — multi-sede F7 (D10)
+
+Doc completo: `docs/features/multi-sede.md` §3.quater. Resumen para quien trabaje en el panel:
+
+- **`DashboardHeader`** dibuja `LocationSelector` (`src/components/layout/LocationSelector.tsx`),
+  alimentado por `LocationScopeContext` (`src/contexts/LocationScopeContext.tsx`). La selección
+  vive en `localStorage` — mismo patrón que `DemoContext` — **no en la URL**: `(dashboard)` no
+  tiene `loading.tsx`/Suspense en ninguna de sus 14 páginas, y `useSearchParams()` ahí forzaría un
+  CSR bailout del segmento entero.
+- El selector se calla solo si no hay entre qué elegir (`role='location'` de una sola sede, sin
+  acceso a "Todas" ni a "Sin sede"). *"Todas las sedes"* solo se dibuja a un usuario de marca.
+- Cualquier página nueva que necesite el filtro llama `useLocationScope()` y anexa
+  `queryParam`/`selection` a su propio `fetch()` — no hay un wrapper central de fetch en este
+  repo (ver `docs/02-architecture.md`), así que cada consumidor lo hace a mano, como ya hacían
+  `customers/page.tsx` o `redemptions/page.tsx` con sus otros filtros.
+- **No todas las rutas del panel están cableadas.** El servidor SIEMPRE resuelve el alcance con
+  `requireLocationScope()` (nunca confía en lo que mande el navegador), pero solo las rutas que
+  leen tablas con `location_id` aplican `applyLocationFilter()` — la lista exacta, y por qué
+  algunas quedaron fuera a propósito, está en `docs/features/multi-sede.md` § "Qué rutas quedaron
+  con filtro, y cuáles no".
+
+### `getDashboardMetrics` / `getFullAnalytics` — `{ brand, location }`
+
+Desde F7 el JSON de `/api/dashboard/analytics` (y el de `/api/dashboard/metrics`, sin consumidores
+hoy) viene partido en dos objetos. `MetricsCards` sigue recibiendo un `summary` PLANO — cada página
+lo arma con `{ ...data.brand.summary, ...data.location.summary }` justo antes de pasarlo, que es el
+único punto donde números de marca y de sede se tocan. El resto de componentes (`CustomerTiers`,
+`VisitsChart`, `PowerRanking`, `GrowthChart`, `VisitHeatmap`, `AcquisitionChannelChart`,
+`ReactivationRateChart`) no cambiaron: siguen recibiendo el mismo array/objeto de siempre, solo que
+ahora sale de `.brand.X` o de `.location.X` según de qué tabla venga.
 
 ## Notas de implementación
 

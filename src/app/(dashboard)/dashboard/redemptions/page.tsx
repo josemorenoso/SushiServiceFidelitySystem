@@ -11,6 +11,7 @@ import { RedemptionSummaryCards, type RedemptionSummaryData } from '@/components
 import { GrantMetricsCards, type GrantMetricsData } from '@/components/dashboard/GrantMetricsCards'
 import { ReviewFunnelCard, type ReviewFunnelData } from '@/components/dashboard/ReviewFunnelCard'
 import { RedemptionsTable, type RedemptionRow } from '@/components/dashboard/RedemptionsTable'
+import { useLocationScope, LOCATION_ALL } from '@/contexts/LocationScopeContext'
 
 function todayISO() {
   // Fecha LOCAL del navegador (en-CA da formato YYYY-MM-DD), no UTC: con
@@ -30,14 +31,19 @@ export default function RedemptionsPage() {
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const limit = 25
+  const { selection: locationSelection } = useLocationScope()
 
   // El rango cubre el día completo: [from 00:00, to 23:59:59].
+  // Multi-sede F7 (§8.4): `location_id` viaja SIEMPRE que el selector eligió
+  // algo distinto de "Todas las sedes" — ausente por defecto, el servidor
+  // colapsa eso a "todo lo que este usuario puede ver".
   const rangeParams = useCallback(() => {
     const params = new URLSearchParams()
     if (from) params.set('from', new Date(`${from}T00:00:00`).toISOString())
     if (to) params.set('to', new Date(`${to}T23:59:59`).toISOString())
+    if (locationSelection !== LOCATION_ALL) params.set('location_id', locationSelection)
     return params
-  }, [from, to])
+  }, [from, to, locationSelection])
 
   const fetchData = useCallback(async () => {
     setLoading(true)

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { DollarSign, TrendingUp, Settings } from 'lucide-react'
 import Link from 'next/link'
+import { useLocationScope, LOCATION_ALL } from '@/contexts/LocationScopeContext'
 
 interface EfficiencySummary {
   campaigns_count: number
@@ -27,17 +28,21 @@ export function ROICard() {
   const [filter, setFilter] = useState<FilterMode>('all')
   const [summary, setSummary] = useState<EfficiencySummary | null>(null)
   const [loading, setLoading] = useState(true)
+  const { selection: locationSelection } = useLocationScope()
 
   useEffect(() => {
     let cancelled = false
     setLoading(true)
 
-    const params =
-      filter === 'all'
-        ? '?all=true'
-        : `?days=${new Date().getDate()}`
+    const params = new URLSearchParams()
+    if (filter === 'all') params.set('all', 'true')
+    else params.set('days', String(new Date().getDate()))
+    // Multi-sede F7 (§8.4): `campaigns.location_id` la deja NULL cualquier
+    // escritor hoy (deuda #12, es F6) — no-op para `role='brand'`, listo para
+    // cuando F6 la llene.
+    if (locationSelection !== LOCATION_ALL) params.set('location_id', locationSelection)
 
-    fetch(`/api/dashboard/campaigns/efficiency${params}`)
+    fetch(`/api/dashboard/campaigns/efficiency?${params}`)
       .then((r) => r.json())
       .then((json) => {
         if (!cancelled) setSummary(json.summary ?? null)
@@ -52,7 +57,7 @@ export function ROICard() {
     return () => {
       cancelled = true
     }
-  }, [filter])
+  }, [filter, locationSelection])
 
   return (
     <div className="metric-card rounded-2xl p-6 relative overflow-hidden">

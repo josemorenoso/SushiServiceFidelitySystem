@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
-import { requireTenantId } from '@/lib/tenant'
+import { requireLocationScope, applyLocationFilter } from '@/lib/location-scope'
 
 /**
  * Devuelve la eficiencia de cada campaña ejecutada en los últimos N días
@@ -26,9 +25,11 @@ function getServiceClient() {
 }
 
 export async function GET(request: Request) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  const scopeResult = await requireLocationScope(request)
+  if (!scopeResult.ok) {
+    return NextResponse.json({ error: scopeResult.error }, { status: scopeResult.status })
+  }
+  const { scope } = scopeResult
 
   const url = new URL(request.url)
   const allTime = url.searchParams.get('all') === 'true'
@@ -37,20 +38,25 @@ export async function GET(request: Request) {
     3650
   )
 
-  const tenantId = await requireTenantId()
   const db = getServiceClient()
   const since = allTime
     ? '2000-01-01T00:00:00.000Z'
     : new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000).toISOString()
 
-  // 1) Campañas ejecutadas en el rango
-  const { data: campaigns, error: campErr } = await db
+  // 1) Campañas ejecutadas en el rango. Multi-sede F7 (§8.4): `campaigns.location_id`
+  // la deja SIEMPRE NULL birthday/reactivation/manual hoy (deuda #12, es F6) — con
+  // `role='brand'` esto no cambia nada; un futuro `role='location'` vería la lista
+  // vacía hasta que F6 la llene.
+  const campaignsBase = db
     .from('campaigns')
     .select('id, name, type, executed_at, total_sent, status')
-    .eq('tenant_id', tenantId)
+    .eq('tenant_id', scope.tenantId)
     .not('executed_at', 'is', null)
     .gte('executed_at', since)
-    .order('executed_at', { ascending: false })
+  const { data: campaigns, error: campErr } = await applyLocationFilter(campaignsBase, scope, 'location_id').order(
+    'executed_at',
+    { ascending: false }
+  )
 
   if (campErr) {
     console.error('[Efficiency] Error fetching campaigns:', campErr)
@@ -67,7 +73,7 @@ export async function GET(request: Request) {
     .from('campaign_messages')
     .select('campaign_id, customer_id, sent_at, status')
     .in('campaign_id', campaignIds)
-    .eq('tenant_id', tenantId)
+    .eq('tenant_id', scope.tenantId)
     .eq('status', 'sent')
     .not('sent_at', 'is', null)
 
@@ -79,7 +85,7 @@ export async function GET(request: Request) {
   const { data: visits } = await db
     .from('visits')
     .select('customer_id, created_at, amount')
-    .eq('tenant_id', tenantId)
+    .eq('tenant_id', scope.tenantId)
     .gte('created_at', visitsSince)
 
   // 4) Ticket promedio para estimación de revenue
@@ -87,7 +93,7 @@ export async function GET(request: Request) {
     .from('admin_settings')
     .select('value')
     .eq('key', 'avg_ticket')
-    .eq('tenant_id', tenantId)
+    .eq('tenant_id', scope.tenantId)
     .single()
   const avgTicket = parseFloat(settingsRow?.value || '35000') || 35000
 

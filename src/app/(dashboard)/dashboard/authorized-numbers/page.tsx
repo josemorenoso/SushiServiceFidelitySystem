@@ -34,6 +34,7 @@ import {
   User,
 } from 'lucide-react'
 import { Toaster, toast } from 'sonner'
+import { useLocationScope } from '@/contexts/LocationScopeContext'
 
 interface AuthorizedNumber {
   id: string
@@ -69,10 +70,12 @@ export default function AuthorizedNumbersPage() {
   const [creating, setCreating] = useState(false)
   const [toggling, setToggling] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
+  const { queryParam } = useLocationScope()
 
   const fetchNumbers = useCallback(async () => {
     try {
-      const res = await fetch('/api/dashboard/authorized-numbers')
+      const url = queryParam ? `/api/dashboard/authorized-numbers?${queryParam}` : '/api/dashboard/authorized-numbers'
+      const res = await fetch(url)
       const data = await res.json()
       setNumbers(data.numbers ?? [])
     } catch {
@@ -80,7 +83,7 @@ export default function AuthorizedNumbersPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [queryParam])
 
   useEffect(() => { fetchNumbers() }, [fetchNumbers])
 

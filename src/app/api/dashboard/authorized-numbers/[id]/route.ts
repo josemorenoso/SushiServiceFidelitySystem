@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
-import { requireTenantId } from '@/lib/tenant'
+import { requireLocationScope, applyLocationFilter } from '@/lib/location-scope'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -14,11 +13,12 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  const scopeResult = await requireLocationScope(request)
+  if (!scopeResult.ok) {
+    return NextResponse.json({ error: scopeResult.error }, { status: scopeResult.status })
+  }
 
+  try {
     const { id } = await params
     const body = await request.json()
     const { is_active } = body
@@ -27,15 +27,13 @@ export async function PATCH(
       return NextResponse.json({ error: 'is_active debe ser boolean' }, { status: 400 })
     }
 
-    const tenantId = await requireTenantId()
     const db = getServiceClient()
-    const { data, error } = await db
-      .from('authorized_numbers')
-      .update({ is_active })
-      .eq('id', id)
-      .eq('tenant_id', tenantId)
-      .select()
-      .single()
+    // El filtro de sede aquí también es el candado: un número FUERA del alcance
+    // del que llama no matchea ninguna fila, igual que hoy pasa si el `id` es de
+    // otro tenant.
+    const base = db.from('authorized_numbers').update({ is_active }).eq('id', id).eq('tenant_id', scopeResult.scope.tenantId)
+    const query = applyLocationFilter(base, scopeResult.scope, 'location_id')
+    const { data, error } = await query.select().single()
 
     if (error) throw error
     return NextResponse.json(data)
@@ -46,22 +44,20 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  const scopeResult = await requireLocationScope(request)
+  if (!scopeResult.ok) {
+    return NextResponse.json({ error: scopeResult.error }, { status: scopeResult.status })
+  }
 
+  try {
     const { id } = await params
-    const tenantId = await requireTenantId()
     const db = getServiceClient()
-    const { error } = await db
-      .from('authorized_numbers')
-      .delete()
-      .eq('id', id)
-      .eq('tenant_id', tenantId)
+    const base = db.from('authorized_numbers').delete().eq('id', id).eq('tenant_id', scopeResult.scope.tenantId)
+    const query = applyLocationFilter(base, scopeResult.scope, 'location_id')
+    const { error } = await query
 
     if (error) throw error
     return NextResponse.json({ success: true })

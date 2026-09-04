@@ -24,6 +24,7 @@
 import { createClient as createServiceClient, type SupabaseClient } from '@supabase/supabase-js'
 import { isDbFailure, logDbFailure } from '@/lib/db-failure'
 import { classifyMessageType, type MessagePriority } from '@/constants/messaging'
+import { applyLocationFilter, type LocationScope } from '@/lib/location-scope'
 
 function getServiceClient(): SupabaseClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -292,8 +293,15 @@ export async function cancelQueueItem(id: string, motivo: string): Promise<void>
  * se salta RLS, así que el aislamiento es responsabilidad del código.
  * Solo cancela lo que sigue `queued` — un item ya enviado no se puede deshacer.
  */
+/**
+ * Multi-sede F7 (§8.4): `send_queue.location_id` SÍ está viva — la escribe
+ * `enqueue_send_queue()` desde F4 (deuda #10, cerrada). Un `role='location'` no
+ * puede cancelar un item de otra sede: el filtro deja la actualización en 0
+ * filas y el resultado es indistinguible de "no existe", igual que hoy pasa con
+ * un `id` de otro tenant.
+ */
 export async function cancelQueueItemForTenant(
-  tenantId: string,
+  scope: LocationScope,
   id: string
 ): Promise<{ cancelled: boolean; reason?: 'sending' | 'not_found' }> {
   const db = getServiceClient()
@@ -305,14 +313,14 @@ export async function cancelQueueItemForTenant(
   // pisando el `cancelled`.
   const corteArriendo = new Date(Date.now() - LEASE_SECONDS * 1000).toISOString()
 
-  const { data, error } = await db
+  const updateBase = db
     .from('send_queue')
     .update({ status: 'cancelled', last_error: 'Cancelado desde el dashboard' })
     .eq('id', id)
-    .eq('tenant_id', tenantId)
+    .eq('tenant_id', scope.tenantId)
     .eq('status', 'queued')
     .or(`claimed_at.is.null,claimed_at.lt.${corteArriendo}`)
-    .select('id')
+  const { data, error } = await applyLocationFilter(updateBase, scope, 'location_id').select('id')
 
   if (error) throw new Error(error.message)
   if ((data?.length ?? 0) > 0) return { cancelled: true }
@@ -323,19 +331,19 @@ export async function cancelQueueItemForTenant(
   // Sin mirar el `error` de ESTA segunda consulta, un fallo de base caía en la misma
   // rama que "el item no existe" — el operador ve "not_found" para un item que sigue
   // perfectamente en cola, y reintentar cancelar le da el mismo resultado equivocado.
-  const { data: existente, error: existenteError } = await db
+  const existsBase = db
     .from('send_queue')
     .select('id, status, claimed_at')
     .eq('id', id)
-    .eq('tenant_id', tenantId)
-    .maybeSingle()
+    .eq('tenant_id', scope.tenantId)
+  const { data: existente, error: existenteError } = await applyLocationFilter(existsBase, scope, 'location_id').maybeSingle()
 
   if (isDbFailure(existenteError)) {
     logDbFailure({
       scope: 'SendQueue',
       reason: 'cancel_existente_lookup_error',
       error: existenteError,
-      context: { tenant_id: tenantId, item_id: id },
+      context: { tenant_id: scope.tenantId, item_id: id },
     })
     throw new Error(existenteError.message)
   }

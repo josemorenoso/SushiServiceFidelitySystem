@@ -5,6 +5,7 @@
 > Documento completo del método: `METODO_AINNOVATE.md` (raíz del proyecto)
 
 ## Protocolo Obligatorio (antes de cada cambio)
+0. **LEER `docs/ESTADO.md` PRIMERO — antes que nada.** Es la foto viva del proyecto: qué está hecho, qué hay en vuelo (para no pisar a otra sesión), qué deudas siguen abiertas y cuál es el siguiente paso. Sus dos hermanos: `docs/RUNBOOK-DEPLOY.md` (los pasos del despliegue, en orden) y `docs/ESTADO-REQUERIMIENTOS.md` (estado real de §1–§25 auditado contra el código). **Toda sesión que cierre un bloque ACTUALIZA `docs/ESTADO.md` al terminar.** Saltarse este paso es lo que hace que se pierdan detalles entre conversaciones y que cada sesión vuelva a leer medio repo.
 1. LEER `docs/01-project-overview.md`
 2. LEER `docs/02-architecture.md`
 3. IDENTIFICAR qué feature se modifica

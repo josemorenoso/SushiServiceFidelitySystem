@@ -4,6 +4,10 @@
 > **Cómo usar este doc:** toda sesión nueva lo lee PRIMERO (antes de releer el repo entero).
 > Toda sesión que cierre un bloque lo ACTUALIZA al final (foto, en-vuelo, deudas, checklist).
 > Es el mecanismo anti-pérdida-de-detalles entre conversaciones — y el ahorro de tokens más barato que existe.
+>
+> **Sus dos documentos hermanos:**
+> - [RUNBOOK-DEPLOY.md](RUNBOOK-DEPLOY.md) — los pasos exactos del despliegue, en orden, verificados contra el código. **Léelo el día del deploy y no improvises fuera de él.**
+> - [ESTADO-REQUERIMIENTOS.md](ESTADO-REQUERIMIENTOS.md) — el estado real de §1–§25 del encargo de producto (auditado contra el código, no contra el requerimiento). Ahí vive §19 (escáner de meseros) y §18 (domicilios bajo coexistencia).
 
 ---
 

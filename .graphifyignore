@@ -27,3 +27,9 @@ public/
 .claude/
 .windsurf/
 Changes/
+
+# Lo archivado NO entra al grafo: son docs que DEJARON de ser verdad y el grafo
+# no los distingue de los vivos — una consulta los devuelve mezclados con el codigo
+# de hoy. El historial sigue en git y en docs/archive/ para leerlo a proposito.
+docs/archive/
+docs/AUDIT-12-Julio/

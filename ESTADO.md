@@ -14,7 +14,7 @@
 
 | Qué | Estado |
 |-----|--------|
-| Código en `main` local | F7 mergeado + migración al método — **23 commits adelante de `origin/main`, SIN pushear** |
+| Código en `main` local | F7 mergeado + migración al método — **24 commits adelante de `origin/main`, SIN pushear** (`git rev-list --count origin/main..main` para el número de hoy) |
 | Verificación | ✅ `tsc` limpio · eslint 7 errores (los mismos preexistentes, React hooks) · **vitest 14 archivos / 261 tests en verde** |
 | Código en producción | Anterior a TODO: multi-sede F3/F4/F7, §25 F2 y el fix de db-errors |
 | Base de datos de producción | Aplicadas hasta la **00043**. ⚠️ **00044 (F4) y 00045 (F7) PENDIENTES** — van antes del deploy. La 00030 NUNCA aplicada (a propósito). La 00015 NO se aplica (reabre fuga) |

@@ -21,7 +21,7 @@
 | Remoto correcto | `origin` = `SushiServiceFidelitySystem` ✅ (los remotos `fun` y `donalirio` NO son el destino) |
 | Red de seguridad | rama `backup/pre-f7-merge` = `53555f0` (estado de `main` justo antes del merge de F7) |
 | Método | **Maestro LuisRAI v3** (`METODO_MAESTRO_LUISRAI.md`). El AInnovate v2 está en `docs/archive/` |
-| Grafo | reconstruido el 2026-09-05 sobre el commit de la migración. `graphify update .` después de cada commit |
+| Grafo | 2.252 nodos · 5.198 aristas · 289 comunidades, sobre `4124ea3` (2026-09-05). **49,8x menos tokens por consulta** (~3 k vs ~150 k). `docs/archive/` queda FUERA a propósito. `graphify update .` después de cada commit (AST, sin costo); `graphify extract` solo después de una ola |
 | Deadline | ~2026-09-10 — onboarding de los 25 clientes de Zernio |
 
 ## 2. En vuelo ahora mismo
@@ -66,7 +66,7 @@ después del deploy exitoso**.
 
 ## 5. Hecho reciente
 
-- **Migración al Método Maestro v3** (2026-09-05): `ESTADO.md` a la raíz, `CLAUDE.md` de 161 a ~100 líneas sin perder una sola trampa, borradas las 5 copias de reglas por IDE, `AGENTS.md` y README reales, grafo completado. Nada se borró: lo viejo está en `docs/archive/`.
+- **Migración al Método Maestro v3** (2026-09-05): `ESTADO.md` a la raíz, `CLAUDE.md` de 161 a **78 líneas** sin perder una sola trampa, borradas las 5 copias de reglas por IDE, `AGENTS.md` y README reales. Grafo completado (le faltaban 145 archivos de la corrida que se cortó) y `docs/archive/` sacado de su alcance: devolvía docs obsoletos mezclados con el código vivo. Nada se borró: lo viejo está en `docs/archive/`.
 - **`ec46d47` / F7**: permisos por sede (D10) y selector del panel. Migración `00045` (tabla `dashboard_user_locations`, 3 helpers SECURITY DEFINER, trigger que estampa `role='brand'` al nacer la 2ª sede, policies RESTRICTIVE autodescubiertas por catálogo). Tipo opaco `LocationScope` con `requireLocationScope()` como única fábrica; ~9 rutas pasan de `(tenantId)` a `(scope)`. Selector en `DashboardHeader` vía `LocationScopeContext` (localStorage, NO la URL). **D16 cerrada.** De paso arregló un hueco del arnés de tests (`bootstrap.sql` no daba `USAGE ON SCHEMA auth` a `authenticated`).
 - **`53555f0` + los 19 de `dashboard/**`**: cerrado el patrón "error de Supabase indistinguible de vacío" en todo el código. Nuevo helper `src/lib/db-failure.ts`.
 - **v2.12.1 / §25 Fase 2**: los domicilios salen de n8n y entran al producto (OpenAI dentro de Vercel). El webhook n8n queda de cáscara; `domicilios_whatsapp_v4.json` sigue ACTIVO en el VPS hasta el cutover.

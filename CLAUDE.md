@@ -33,6 +33,7 @@ un dato de la marca A jamás se ve ni se atribuye a la marca B.**
 - **`src/constants/messaging.ts` es espejo de `message_class_map`**: se cambian los dos lados o ninguno. Igual con el contrato de variables `{{n}}` de `template-catalog.ts`, que es fijo.
 - **Prohibido hornear emojis de rubro en `template-texts.ts`** (usar `${emoji}`; hay un test que lo vigila). Los textos `calido` no se tocan sin decisión del dueño.
 - **`OPENAI_API_KEY` es server-only** y `src/lib/openai/client.ts` es el único sitio que instancia el SDK.
+- **`getTenantByDomain()` conserva su firma**: la sede viaja por `resolveHostContext()`. Cambiarla toca 16 archivos de golpe. Y las rutas de Zernio **no se inventan**: salen de `Level 2.0/aios-constelarys/docs/zernio-api-contract.md` §4.
 - Premios: `reward_grants.granted_location_id` y `reward_redemptions.redeemed_location_id` son DOS sedes distintas (dónde se ganó / dónde se entregó). Ningún premio tiene precio: solo conteos y tasas, **nunca pesos**.
 - "Quién es Black" difiere hoy entre la tarjeta (`src/lib/black-tier.ts`) y el panel (`POWER_RANKS`, 10+ visitas). Es la deuda 17.b: no se unifica por cuenta propia.
 

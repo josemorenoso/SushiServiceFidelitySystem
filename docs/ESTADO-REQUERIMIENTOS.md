@@ -2,7 +2,7 @@
 
 > **Auditado:** 2026-09-04. Fuente: `docs/requerimientos/REQUERIMIENTOS_AGOSTO_2026.md`,
 > verificado **contra el código**, no contra lo que dice el requerimiento.
-> **Complementa** a [ESTADO.md](ESTADO.md) — ese lleva multi-sede, §25 y el camino a producción; este
+> **Complementa** a [ESTADO.md](../ESTADO.md) — ese lleva multi-sede, §25 y el camino a producción; este
 > lleva el resto del encargo de producto.
 > **Por qué existe:** ESTADO.md se armó sobre multi-sede y §25, y se le pasó todo lo demás — entre
 > ellos §19, que el dueño recordaba y no estaba anotado en ninguna lista viva.
@@ -33,7 +33,7 @@
 | 21 | Panel del AIOS | ✅ **HECHO** | AIOS v1.3.0: `client_locations.platform/.messaging`, `clients.billing_mode` | NO |
 | 22 | Franquicias | ⏸️ **DIFERIDO A PROPÓSITO** | El doc dice explícitamente "NO es v1"; se dejó la puerta abierta sin construir | NO |
 
-§1, §2, §11 son contexto/arquitectura ya resueltos. §23/§24/§25 están en [ESTADO.md](ESTADO.md).
+§1, §2, §11 son contexto/arquitectura ya resueltos. §23/§24/§25 están en [ESTADO.md](../ESTADO.md).
 
 ---
 

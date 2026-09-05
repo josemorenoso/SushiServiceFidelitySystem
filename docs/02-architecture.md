@@ -20,14 +20,16 @@
 ## Estructura de Carpetas
 ```
 restaurant-qr/
-├── docs/                           # Documentación (Método AInnovate)
+├── docs/                           # Documentación (Método Maestro LuisRAI v3)
 │   ├── 01-project-overview.md
 │   ├── 02-architecture.md
 │   ├── 03-security.md
 │   ├── 04-deployment.md
 │   ├── DB_SCHEMA.md
 │   ├── API_DOCS.md
-│   ├── SKILLS.md
+│   ├── ESTADO-REQUERIMIENTOS.md    # §1–§25 del encargo, auditados contra el código
+│   ├── RUNBOOK-DEPLOY.md           # Los pasos del despliegue, en orden
+│   ├── (SKILLS.md archivado en docs/archive/ — las skills se auditan con las 3R)
 │   └── features/                   # Un .md por funcionalidad
 ├── src/
 │   ├── app/                        # App Router — rutas y páginas
@@ -52,15 +54,13 @@ restaurant-qr/
 ├── supabase/                       # Supabase config + migrations
 │   ├── migrations/
 │   └── config.toml
-├── .windsurfrules                  # Reglas IA (Windsurf)
-├── CLAUDE.md                       # Reglas IA (Claude)
-├── .cursorrules                    # Reglas IA (Cursor)
-├── .clinerules                     # Reglas IA (Cline)
-├── .github/
-│   └── copilot-instructions.md     # Reglas IA (Copilot)
-├── .aider.conf.yml                 # Reglas IA (Aider)
+├── ESTADO.md                       # Panel de control — lectura obligatoria de toda sesión
+├── CLAUDE.md                       # Reglas del proyecto (único archivo de reglas para IA)
+├── AGENTS.md                       # Puntero para las IAs que no leen CLAUDE.md
+├── .graphifyignore                 # Qué NO entra al grafo
+├── graphify-out/                   # Grafo de conocimiento (generado; no se commitea)
 ├── CHANGELOG.md                    # Historial de cambios
-├── METODO_AINNOVATE.md             # Método completo
+├── METODO_MAESTRO_LUISRAI.md       # Método completo (v3; el AInnovate está en docs/archive/)
 ├── vercel.json                     # Vercel cron jobs config
 ├── .env.local                      # Variables de entorno (NO COMMIT)
 ├── .env.example                    # Template de variables

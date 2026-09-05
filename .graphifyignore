@@ -1,0 +1,29 @@
+# Graphify — qué NO entra al grafo (misma sintaxis que .gitignore; se suma a él).
+node_modules/
+.next/
+graphify-out/
+*.tsbuildinfo
+package-lock.json
+.pgdata-test/
+
+# AIOS Constelarys vive acá solo como carpeta de trabajo; tiene su propio grafo
+Level 2.0/
+
+# binarios
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.pdf
+*.mp4
+*.zip
+Images for the web/
+public/
+
+# copias de skills de terceros (las MISMAS skills triplicadas por IDE): ruido puro,
+# ~100 archivos que no son conocimiento de este proyecto
+.agents/
+.claude/
+.windsurf/
+Changes/

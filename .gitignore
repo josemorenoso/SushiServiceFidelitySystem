@@ -59,3 +59,6 @@ Level 2.0/
 
 # Postgres efímero de las pruebas (tests/setup/global-postgres.ts)
 .pgdata-test/
+
+# Grafo de conocimiento (generado por graphify; se reconstruye con `graphify extract`)
+graphify-out/

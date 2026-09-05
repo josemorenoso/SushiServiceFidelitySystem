@@ -168,5 +168,5 @@ duplicados a clientes reales).
 
 1. Aplicar la **00030** en ventana tranquila (cierra el DEFAULT puente que manda a Sushi Service todo
    INSERT sin `tenant_id`).
-2. Los pendientes de producto que siguen abiertos están en [docs/ESTADO.md](ESTADO.md) §4 — el más
+2. Los pendientes de producto que siguen abiertos están en [ESTADO.md](../ESTADO.md) §4 — el más
    grande es **§19 (escáner de meseros)**, que además choca con D11 y necesita decisión tuya.

@@ -2,7 +2,7 @@
 
 **Agregado:** v2.13.0 — 2026-08-30
 **Comandos:** `npm test` · `npm run test:unit` · `npm run test:db` · `npm run test:watch`
-**Ver también:** `docs/features/send-governance.md`, `METODO_AINNOVATE.md` (Mandamiento X)
+**Ver también:** `docs/features/send-governance.md`, `METODO_MAESTRO_LUISRAI.md` § "Criterio de término universal"
 
 ---
 

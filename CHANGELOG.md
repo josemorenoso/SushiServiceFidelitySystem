@@ -5,6 +5,25 @@
 
 ---
 
+> **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
+> El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
+
+## [2026-09-05] - Migración al Método Maestro LuisRAI v3
+
+**Qué:** el repo pasa del Método AInnovate v2 al Maestro v3. `ESTADO.md` sube a la raíz y es la única
+lectura obligatoria. `CLAUDE.md` se reescribe de 161 a ~100 líneas: se van los 12 mandamientos y el
+protocolo de 8 lecturas (el modelo ya los sabe), se quedan —comprimidas y sin perder ninguna— las
+reglas del dominio y las trampas verificadas, y la tabla de lookup pasa de ~60 filas por archivo a 17
+por área. Se borran las 5 copias de reglas por IDE (`.cursorrules`, `.windsurfrules`, `.clinerules`,
+`.aider.conf.yml`, `.github/copilot-instructions.md`): eran copias desincronizadas del CLAUDE.md viejo,
+sin una sola regla propia. `AGENTS.md` pasa a apuntar a los tres archivos. README real en vez del de
+create-next-app.
+**Por qué:** la lectura obligatoria antes de tocar nada costaba ~40-60 k tokens por sesión.
+**Archivado (nada se borró):** `METODO_AINNOVATE.md`, `docs/SKILLS.md` y el `CLAUDE.md` viejo → `docs/archive/`.
+**Verificado:** `tsc` · `lint` · 261 tests en verde (solo cambió documentación). Grafo re-extraído.
+**Migración de base:** ninguna.
+**Decisión:** `graphify-out/` NO se commitea (5 MB generados); se reconstruye con `graphify extract`.
+
 ## [2026-09-04 02:00] - Cierre de los 19 shape-1 de `dashboard/**` (fallo de DB indistinguible de vacío)
 
 ### Tipo de cambio

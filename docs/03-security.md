@@ -278,7 +278,7 @@ fallo de base podía apagar `checkin_mode='staff_verified'` en silencio), y los 
 escritura de puntos, premios, campañas, billetera y cola de envío.
 
 **Dónde queda pendiente:** el resto de `src/app/api/dashboard/**` (fuera del alcance de esta
-sesión — ver `docs/ESTADO.md` §4 para la lista concreta archivo:línea que le toca a la sesión
+sesión — ver `ESTADO.md` §4 para la lista concreta archivo:línea que le toca a la sesión
 de multi-sede F7).
 
 **Tests:** `tests/unit/db-failure.test.ts` — compara explícitamente "vacío" vs "fallo" sobre los

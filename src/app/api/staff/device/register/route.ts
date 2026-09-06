@@ -1,9 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { jwtVerify } from 'jose'
 import bcrypt from 'bcryptjs'
 import { createClient } from '@supabase/supabase-js'
 import { resolveHostContext } from '@/lib/tenant'
 import { isDbFailure, logDbFailure } from '@/lib/db-failure'
+
+/**
+ * POST /api/staff/device/register — activar el celular DEL LOCAL.
+ *
+ * §19 invirtió el modelo (dueño, 2026-09-05): el aparato deja de ser de un mesero y pasa a
+ * ser del restaurante. Textual: *"si lo hacemos por mesero hay que estar pendiente de que
+ * cierren y abran sesión no tiene sentido alguno"*. Esta ruta es el ÚNICO login que queda
+ * en todo el sistema, y se usa una vez en la vida de cada aparato.
+ *
+ * DOS CAMBIOS RESPECTO DE v2.8.1
+ * ──────────────────────────────
+ * 1. `staff_user_id` se escribe NULL. El aparato no tiene dueño, y por eso nada de lo que
+ *    se haga desde él se atribuye solo: el mesero se elige en cada operación. Se retiró
+ *    `assign_staff_phone`, que era justo la feature contraria.
+ *
+ * 2. `location_id` deja de heredarse del dueño (que ya no existe) y SE ELIGE. Es lo único
+ *    que hace posible la lista de meseros filtrada por sede, o sea la razón de ser de §19.
+ *    Precedencia: lo que eligió el supervisor → la sede del propio supervisor → la del host.
+ *
+ * 19.a la resolvió el dueño el 2026-09-05: la credencial sigue siendo TELÉFONO + PIN DE UN
+ * SUPERVISOR, que es lo que ya existía. Cada marca es autosuficiente — crea su supervisor
+ * desde su propio panel y activa sus aparatos sin depender de nadie.
+ *
+ * ⚠️ D18 (deuda conocida y ACEPTADA por el dueño): el token que se lleva el aparato es su
+ * `device_fingerprint`, derivable del user agent. Con §19 pasa a ser la única credencial que
+ * hay en el local. Se deja así a propósito; el arreglo sería emitir un token opaco aleatorio.
+ *
+ * Ref: docs/features/staff-qr-scan.md · spec 2026-09-05-staff-scanner-19-design.md
+ */
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -12,10 +40,36 @@ function getServiceClient() {
   return createClient(url, key)
 }
 
-function getStaffSecret() {
-  const s = process.env.STAFF_JWT_SECRET
-  if (!s) throw new Error('STAFF_JWT_SECRET no está configurado')
-  return new TextEncoder().encode(s)
+type Db = ReturnType<typeof getServiceClient>
+
+/**
+ * Valida que `location_id` sea una sede ACTIVA DE ESTA MARCA. Multi-sede F4 (D11).
+ * Devuelve el mensaje del problema, o `null` si la sede sirve.
+ *
+ * La FK compuesta `(location_id, tenant_id)` de la 00044 ya impediría atribuir el aparato a
+ * una sede de otra marca, pero el motor contesta con un 23503 críptico. Esto lo convierte en
+ * una frase que el supervisor entiende, sin dejar de ser el motor quien manda.
+ */
+async function sedeInvalida(db: Db, tenantId: string, locationId: string): Promise<string | null> {
+  const { data, error } = await db
+    .from('restaurant_locations')
+    .select('id, is_active')
+    .eq('id', locationId)
+    .eq('tenant_id', tenantId)
+    .maybeSingle()
+
+  if (isDbFailure(error)) {
+    logDbFailure({
+      scope: 'DeviceRegister',
+      reason: 'location_lookup_error',
+      error,
+      context: { tenant_id: tenantId, location_id: locationId },
+    })
+    return 'No pudimos verificar la sede ahora mismo. Intenta de nuevo en un momento.'
+  }
+  if (!data) return 'La sede indicada no existe en este restaurante.'
+  if (!data.is_active) return 'Esa sede está desactivada.'
+  return null
 }
 
 export async function POST(request: NextRequest) {
@@ -24,16 +78,21 @@ export async function POST(request: NextRequest) {
     // `restaurant_locations.domain`. Sin eso, el mesero de la sede 2 abre
     // `laureles.marca.com/mesero` y toda esta superficie responde 404. `getTenantByDomain`
     // solo mira `tenants.domain` y CONSERVA su firma: la sede viaja por aqui.
-    const tenant = (await resolveHostContext(request.headers.get('host'))).tenant
+    const hostContext = await resolveHostContext(request.headers.get('host'))
+    const tenant = hostContext.tenant
     if (!tenant) {
       return NextResponse.json({ error: 'Restaurante no reconocido' }, { status: 404 })
     }
 
     const body = await request.json()
-    // `assign_staff_phone` (opcional): celular del mesero al que se atribuye este
-    // dispositivo. El supervisor sigue siendo quien autoriza con su PIN; la
-    // atribución determina a nombre de quién quedan las visitas del dispositivo.
-    const { phone, pin, device_fingerprint, device_name, assign_staff_phone } = body
+    const { phone, pin, device_fingerprint, device_name, location_id } = body as {
+      phone?: string
+      pin?: string
+      device_fingerprint?: string
+      device_name?: string
+      /** Sede donde queda FÍSICAMENTE el aparato. La elige el supervisor al activarlo. */
+      location_id?: string | null
+    }
 
     if (!phone || !pin || !device_fingerprint) {
       return NextResponse.json(
@@ -44,7 +103,7 @@ export async function POST(request: NextRequest) {
 
     const supabase = getServiceClient()
 
-    // Validar supervisor/admin
+    // ─── Validar supervisor/admin ───
     const { data: staff, error: staffError } = await supabase
       .from('staff_users')
       .select('id, name, pin, role, is_active, location_id')
@@ -97,64 +156,64 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Resolver a quién queda atribuido el dispositivo: al mesero indicado
-    // (si se pasó assign_staff_phone) o al supervisor que lo activa.
-    let ownerStaff: { id: string; name: string; location_id: string | null } = {
-      id: staff.id,
-      name: staff.name,
-      location_id: staff.location_id ?? null,
-    }
-    if (assign_staff_phone && assign_staff_phone !== phone) {
-      const { data: assignee, error: assigneeError } = await supabase
-        .from('staff_users')
-        .select('id, name, is_active, location_id')
-        .eq('phone', assign_staff_phone)
-        .eq('tenant_id', tenant.id)
-        .maybeSingle()
+    // ─── §19: la sede del APARATO ───
+    // Ya no se hereda de un dueño: el aparato no tiene dueño. Se elige, y si no se eligió se
+    // deduce de lo que sí se sabe con certeza — dónde trabaja el supervisor que lo está
+    // activando, o qué sede resolvió el dominio por el que entró.
+    let deviceLocationId: string | null =
+      (location_id ?? null) || staff.location_id || hostContext.locationId || null
 
-      // Sin esto, un fallo de base manda al supervisor a "créalo primero en Dashboard →
-      // Meseros" para un mesero que YA existe. Si le hace caso, choca contra el UNIQUE
-      // (phone, tenant_id) y se queda sin entender nada.
-      if (isDbFailure(assigneeError)) {
+    if (location_id) {
+      const problema = await sedeInvalida(supabase, tenant.id, location_id)
+      if (problema) {
+        return NextResponse.json({ error: 'Sede inválida', message: problema }, { status: 400 })
+      }
+      deviceLocationId = location_id
+    }
+
+    // Sin sede no hay lista de meseros, así que un aparato sin sede no sirve para nada. Se
+    // exige AQUÍ —una vez, mientras el supervisor está mirando la pantalla— en vez de
+    // dejarlo pasar y que el mesero se estrelle con un 409 en plena hora pico.
+    // La excepción es la marca que todavía no tiene ninguna sede creada: no se puede exigir
+    // elegir entre cero opciones. Ahí el aparato queda sin sede y `/api/staff/waiters`
+    // responde 409 hasta que exista una.
+    if (!deviceLocationId) {
+      const { data: sedes, error: sedesError } = await supabase
+        .from('restaurant_locations')
+        .select('id')
+        .eq('tenant_id', tenant.id)
+        .eq('is_active', true)
+        .limit(1)
+
+      if (isDbFailure(sedesError)) {
         logDbFailure({
           scope: 'DeviceRegister',
-          reason: 'assignee_lookup_error',
-          error: assigneeError,
+          reason: 'locations_probe_error',
+          error: sedesError,
           context: { tenant: tenant.slug },
         })
         return NextResponse.json(
           {
             error: 'Problema técnico',
-            message: 'No pudimos buscar al mesero ahora mismo. Intenta de nuevo en un momento.',
+            message: 'No pudimos verificar las sedes ahora mismo. Intenta de nuevo en un momento.',
           },
           { status: 503 }
         )
       }
 
-      if (!assignee || !assignee.is_active) {
+      if ((sedes ?? []).length > 0) {
         return NextResponse.json(
           {
-            error: 'Mesero no encontrado',
-            message: `No hay un mesero activo con el celular ${assign_staff_phone}. Créalo primero en Dashboard → Meseros.`,
+            error: 'Falta la sede',
+            code: 'sede_requerida',
+            message: 'Elige en qué sede queda este celular. Se pregunta una sola vez.',
           },
-          { status: 404 }
+          { status: 400 }
         )
-      }
-      ownerStaff = {
-        id: assignee.id,
-        name: assignee.name,
-        location_id: assignee.location_id ?? null,
       }
     }
 
-    const finalDeviceName = device_name || `Dispositivo de ${ownerStaff.name}`
-
-    // ─── Multi-sede F4 (D11): la sede del dispositivo se HEREDA de su mesero ───
-    // Es la única fuente que no hay que inventar: el aparato está donde está su dueño, y el
-    // trigger `trg_staff_devices_sede_coherente` (00044) exige justamente que coincidan. Un
-    // mesero sin sede deja el dispositivo sin sede (NULL = desconocida), y entonces la vía 2
-    // de la precedencia no aporta nada y todo cae al host — el comportamiento de siempre.
-    const deviceLocationId = ownerStaff.location_id
+    const finalDeviceName = device_name?.trim() || 'Celular del local'
 
     // Verificar si ya existe dispositivo con ese fingerprint.
     //
@@ -188,12 +247,15 @@ export async function POST(request: NextRequest) {
 
     let writeError
     if (existing) {
-      // Actualizar existente (incluye re-atribuir al nuevo dueño, y con él la sede: si el
-      // aparato pasa a manos de un mesero de otra sede, la sede del aparato lo sigue).
+      // Reactivar. Es también el camino por el que un aparato ya activo se ASIGNA a una sede
+      // o se cambia de sede: pide el PIN del supervisor otra vez, que es lo correcto para una
+      // acción de autoridad, y es lo que hace el parque instalado (todo con sede NULL).
       const result = await supabase
         .from('staff_devices')
         .update({
-          staff_user_id: ownerStaff.id,
+          // §19: el aparato deja de tener dueño. También se limpia en los que ya lo tenían,
+          // para que no quede una atribución fantasma en una columna que nadie vuelve a leer.
+          staff_user_id: null,
           is_trusted: true,
           trusted_at: new Date().toISOString(),
           expires_at: null,
@@ -205,9 +267,8 @@ export async function POST(request: NextRequest) {
         .eq('tenant_id', tenant.id)
       writeError = result.error
     } else {
-      // Crear nuevo
       const result = await supabase.from('staff_devices').insert({
-        staff_user_id: ownerStaff.id,
+        staff_user_id: null,
         device_fingerprint,
         device_name: finalDeviceName,
         is_trusted: true,
@@ -221,18 +282,17 @@ export async function POST(request: NextRequest) {
     }
 
     if (writeError) {
-      // 23514 = el trigger de coherencia de sede/marca de la 00044.
+      // 23514 = el trigger de coherencia de sede/marca de la 00044. Con `staff_user_id` NULL
+      //         ese trigger devuelve NEW de inmediato, así que aquí ya no debería aparecer;
+      //         se conserva el manejo porque el trigger sigue vivo y vigila otras escrituras.
       // 23505 = `staff_devices_fingerprint_tenant_key`, la carrera de dos activaciones
-      //         simultáneas del mismo aparato — que antes de la 00044 creaba dos filas y
-      //         dejaba el dispositivo inutilizable para siempre por el `.single()`.
+      //         simultáneas del mismo aparato.
       console.error('[DeviceRegister] Error guardando dispositivo:', writeError)
       const conflicto = writeError.code === '23514' || writeError.code === '23505'
       return NextResponse.json(
         {
           error: conflicto ? 'Conflicto' : 'Error del servidor',
-          message: conflicto
-            ? writeError.message
-            : 'Ocurrió un error activando el dispositivo',
+          message: conflicto ? writeError.message : 'Ocurrió un error activando el dispositivo',
         },
         { status: conflicto ? 409 : 500 }
       )
@@ -240,8 +300,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `Dispositivo activado a nombre de ${ownerStaff.name}`,
-      assigned_to: ownerStaff.name,
+      message: 'Celular activado',
+      device_name: finalDeviceName,
       location_id: deviceLocationId,
     })
   } catch (error) {

@@ -2,14 +2,20 @@
  * Autenticación del mesero para rutas públicas de staff.
  *
  * Dos escenarios, mismo esquema que ya usaban /api/check-in y /api/reward-redeem:
- *   A) Bearer <staff JWT>   — el mesero inició sesión con su PIN
- *   B) X-Device-Token       — dispositivo de confianza registrado
+ *   A) Bearer <staff JWT>   — LEGADO. §19 eliminó el login por mesero, así que ya no se
+ *      emiten tokens nuevos; esta rama solo sostiene los que sigan vivos (caducan a las 8 h).
+ *   B) X-Device-Token       — el aparato DEL LOCAL. Es la sesión del escáner.
  *
- * Devuelve el `staffId` cuando la sesión es válida, para poder ATRIBUIR la acción
- * (quién entregó el premio). Un dispositivo de confianza sin mesero asociado es válido
- * pero no atribuible: `valid: true, staffId: null`.
+ * ⚠️ §19: LA SESIÓN YA NO ATRIBUYE. Antes, un aparato prestaba su dueño
+ * (`staff_devices.staff_user_id`) a toda visita y toda redención hecha desde él. Ahora el
+ * aparato es del restaurante y el mesero se elige EN CADA OPERACIÓN: quien atribuye es el
+ * `staff_user_id` que viaja en el cuerpo de la petición, validado por el llamador.
+ * Por eso la rama del dispositivo devuelve `staffId: null` aunque la fila tenga dueño —
+ * atribuir a NULL ("no sabemos quién") es correcto; atribuir al dueño del aparato sería
+ * inventar. `deviceLocationId` es lo que sí sale de aquí: la sede del aparato, que es la
+ * que filtra la lista de meseros.
  *
- * Ref: docs/features/staff-qr-scan.md
+ * Ref: docs/features/staff-qr-scan.md · spec 2026-09-05-staff-scanner-19-design.md
  */
 
 import { NextRequest } from 'next/server'
@@ -33,7 +39,22 @@ function getStaffSecret(): Uint8Array | null {
 
 export interface StaffAuthResult {
   valid: boolean
+  /**
+   * Mesero de la sesión. Solo lo puebla la rama del JWT legado. La rama del dispositivo
+   * devuelve `null` A PROPÓSITO (ver la cabecera): desde §19 la atribución no se hereda
+   * de la sesión, viaja en el cuerpo.
+   */
   staffId: string | null
+  /** Por dónde entró la sesión. `null` cuando no hay sesión válida. */
+  via: 'staff' | 'device' | null
+  /** Fila de `staff_devices`, cuando la sesión es de aparato. */
+  deviceId: string | null
+  /**
+   * Sede del APARATO (`staff_devices.location_id`). Es la primera vía de la precedencia que
+   * filtra la lista de meseros. NULL = aparato sin sede: la app pide asignarla antes de
+   * dejar escanear, y NUNCA cae a "todos los meseros de todas las sedes".
+   */
+  deviceLocationId: string | null
   /**
    * `true` cuando la sesión no se pudo VERIFICAR porque la base falló — no porque la
    * credencial fuera mala. Sin este tercer estado, un timeout del pooler le contesta al
@@ -80,10 +101,10 @@ export async function resolveStaffAuth(
               error,
               context: { tenant: tenant.slug, staff_id: sid },
             })
-            return { valid: false, staffId: null, dbFailure: true }
+            return { valid: false, staffId: null, via: null, deviceId: null, deviceLocationId: null, dbFailure: true }
           }
           if (staff && staff.is_active) {
-            return { valid: true, staffId: staff.id, dbFailure: false }
+            return { valid: true, staffId: staff.id, via: 'staff', deviceId: null, deviceLocationId: null, dbFailure: false }
           }
         }
       } catch (err) {
@@ -96,7 +117,7 @@ export async function resolveStaffAuth(
   if (deviceToken) {
     const { data: device, error } = await supabase
       .from('staff_devices')
-      .select('id, staff_user_id, is_trusted, expires_at')
+      .select('id, staff_user_id, is_trusted, expires_at, location_id')
       .eq('device_fingerprint', deviceToken)
       .eq('is_trusted', true)
       .eq('tenant_id', tenant.id)
@@ -108,7 +129,7 @@ export async function resolveStaffAuth(
         error,
         context: { tenant: tenant.slug },
       })
-      return { valid: false, staffId: null, dbFailure: true }
+      return { valid: false, staffId: null, via: null, deviceId: null, deviceLocationId: null, dbFailure: true }
     }
     if (device && (!device.expires_at || new Date(device.expires_at) >= new Date())) {
       // `last_used_at` es telemetría: que falle no invalida la sesión, pero tampoco se
@@ -125,9 +146,17 @@ export async function resolveStaffAuth(
           context: { tenant: tenant.slug, device_id: device.id },
         })
       }
-      return { valid: true, staffId: device.staff_user_id ?? null, dbFailure: false }
+      // `staffId: null` aunque `device.staff_user_id` tenga valor. Ver la cabecera: §19.
+      return {
+        valid: true,
+        staffId: null,
+        via: 'device',
+        deviceId: device.id,
+        deviceLocationId: device.location_id ?? null,
+        dbFailure: false,
+      }
     }
   }
 
-  return { valid: false, staffId: null, dbFailure: false }
+  return { valid: false, staffId: null, via: null, deviceId: null, deviceLocationId: null, dbFailure: false }
 }

@@ -61,15 +61,24 @@ async function crearSede(
  * un DEFAULT puente que manda a Sushi Service todo INSERT que lo omita; en el arnés la 00030
  * SÍ corre, así que aquí el mismo olvido revienta con 23502. Las dos razones piden lo mismo.
  */
+let nombreSeq = 0
 async function crearMesero(
   tenantId: string,
   opts: { phone: string; locationId?: string | null; name?: string }
 ): Promise<string> {
+  // El nombre por defecto es ÚNICO por llamada, no la constante que era antes.
+  // La 00046 añadió `staff_users_nombre_sede_key (tenant_id, location_id, lower(trim(name)))`
+  // para que dos "Ana" de la misma sede no sean indistinguibles en el selector del escáner
+  // (§19). Este archivo comparte `tenantA` y `sedeA1` entre TODAS sus pruebas, así que un
+  // nombre fijo hacía chocar la segunda inserción y 16 pruebas de la 00044 fallaban por un
+  // invariante que no es el que están midiendo. La unicidad de nombre se prueba donde
+  // corresponde: `tests/db/escaner-meseros.test.ts`.
+  nombreSeq += 1
   const { rows } = await getPool().query<{ id: string }>(
     `INSERT INTO staff_users (tenant_id, name, phone, role, location_id)
      VALUES ($1, $2, $3, 'waiter', $4)
      RETURNING id`,
-    [tenantId, opts.name ?? 'Mesero de prueba', opts.phone, opts.locationId ?? null]
+    [tenantId, opts.name ?? `Mesero de prueba ${nombreSeq}`, opts.phone, opts.locationId ?? null]
   )
   return rows[0].id
 }

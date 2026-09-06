@@ -107,21 +107,38 @@ export async function POST(request: NextRequest) {
       location_id?: string | null
     }
 
-    if (!name || !phone || !pin) {
+    // §19.2 (00046): un mesero se da de alta con NOMBRE y nada más. El teléfono y el PIN
+    // pasan a ser cosa de los SUPERVISORES —los únicos que todavía se autentican, para
+    // activar un aparato— y por eso siguen aceptándose.
+    if (!name || !name.trim()) {
       return NextResponse.json(
-        { error: 'Datos inválidos', message: 'Se requiere name, phone y pin' },
+        { error: 'Datos inválidos', message: 'Se requiere el nombre' },
         { status: 400 }
       )
     }
 
-    if (pin.length < 4 || pin.length > 6 || !/^\d+$/.test(pin)) {
+    // 19.f — el CHECK `staff_users_identidad_minima` de la 00046 dice exactamente esto. Se
+    // comprueba también aquí para dar una frase que se entienda en vez de un 23514, pero la
+    // garantía la sostiene el motor: sin teléfono NI sede, un mesero no tiene ninguna llave
+    // de identidad (los NULL no colisionan entre sí) y encima no aparecería en ninguna lista.
+    if (!phone && !location_id) {
+      return NextResponse.json(
+        {
+          error: 'Falta la sede',
+          message: 'Un mesero sin celular tiene que tener sede: es lo que lo hace aparecer en la lista de su escáner.',
+        },
+        { status: 400 }
+      )
+    }
+
+    if (pin !== undefined && pin !== null && pin !== '' && (pin.length < 4 || pin.length > 6 || !/^\d+$/.test(pin))) {
       return NextResponse.json(
         { error: 'PIN inválido', message: 'El PIN debe ser numérico de 4 a 6 dígitos' },
         { status: 400 }
       )
     }
 
-    const hashedPin = await bcrypt.hash(pin, 10)
+    const hashedPin = pin ? await bcrypt.hash(pin, 10) : null
     const tenantId = await requireTenantId()
     const db = getServiceClient()
 
@@ -136,7 +153,10 @@ export async function POST(request: NextRequest) {
       .from('staff_users')
       .insert({
         name: name.trim(),
-        phone,
+        // `null`, no cadena vacía: '' colisionaría consigo misma en
+        // `staff_users_phone_tenant_key` y el segundo mesero sin teléfono daría un 23505
+        // incomprensible. Los NULL no colisionan, que aquí es justo lo que queremos.
+        phone: phone?.trim() || null,
         pin: hashedPin,
         role,
         // `tenant_id` EXPLÍCITO siempre: la 00030 nunca se aplicó en producción y la columna
@@ -148,10 +168,26 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (error) {
+      // Desde la 00046 hay DOS llaves que pueden dar 23505, y decir siempre "ese celular ya
+      // existe" mandaría al dueño a buscar un teléfono que a lo mejor ni escribió.
       if (error.code === '23505') {
+        const porNombre = (error.message || '').includes('staff_users_nombre_sede_key')
         return NextResponse.json(
-          { error: 'Duplicado', message: 'Ya existe un mesero con ese número de celular' },
+          {
+            error: 'Duplicado',
+            message: porNombre
+              ? 'Ya hay un mesero con ese nombre en esa sede. Diferéncialos (por ejemplo "Ana L." y "Ana P."): en el escáner se eligen por el nombre.'
+              : 'Ya existe un mesero con ese número de celular',
+          },
           { status: 409 }
+        )
+      }
+      // 23514 = `staff_users_identidad_minima`. La validación de arriba lo cubre, pero el
+      // motor es el que manda y su mensaje crudo no le sirve a nadie.
+      if (error.code === '23514') {
+        return NextResponse.json(
+          { error: 'Datos inválidos', message: 'Un mesero sin celular tiene que tener sede.' },
+          { status: 400 }
         )
       }
       throw error
@@ -236,8 +272,29 @@ export async function PATCH(request: NextRequest) {
       // arrastrarlo reasignaría en silencio las visitas de una tablet que nadie movió del
       // mostrador. Se traduce a un 409 con el mensaje del motor, que ya dice qué hacer.
       if (error.code === '23514') {
+        // Puede ser el trigger de sede O `staff_users_identidad_minima` (00046): quitarle la
+        // sede a un mesero que no tiene teléfono lo dejaría sin ninguna llave de identidad.
+        const porIdentidad = (error.message || '').includes('staff_users_identidad_minima')
         return NextResponse.json(
-          { error: 'Conflicto de sede', message: error.message },
+          {
+            error: porIdentidad ? 'Datos inválidos' : 'Conflicto de sede',
+            message: porIdentidad
+              ? 'Este mesero no tiene celular, así que no puede quedarse sin sede: es lo único que lo identifica y lo que lo hace aparecer en su escáner.'
+              : error.message,
+          },
+          { status: porIdentidad ? 400 : 409 }
+        )
+      }
+      // `staff_users_nombre_sede_key` (00046) al renombrar o al mover de sede.
+      if (error.code === '23505') {
+        const porNombre = (error.message || '').includes('staff_users_nombre_sede_key')
+        return NextResponse.json(
+          {
+            error: 'Duplicado',
+            message: porNombre
+              ? 'Ya hay un mesero con ese nombre en esa sede. En el escáner se eligen por el nombre, así que tienen que ser distinguibles.'
+              : 'Ya existe un mesero con ese número de celular',
+          },
           { status: 409 }
         )
       }

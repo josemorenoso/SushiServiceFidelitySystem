@@ -50,7 +50,10 @@ interface StaffResponse {
   devices: StaffDevice[]
 }
 
-function formatPhone(phone: string): string {
+function formatPhone(phone: string | null): string {
+  // §19.2: los meseros nuevos no tienen celular. Se muestra el hueco, no una cadena vacía
+  // que parecería un dato perdido.
+  if (!phone) return '—'
   if (phone.length === 10) {
     return `${phone.slice(0, 3)} ${phone.slice(3, 6)} ${phone.slice(6)}`
   }
@@ -169,9 +172,17 @@ export default function StaffPage() {
 
   const handleCreate = async () => {
     setPhoneError(null)
-    if (!newName.trim() || !newPhone.trim() || !newPin.trim()) return
-    if (!/^\d{10}$/.test(newPhone)) {
+    if (!newName.trim()) return
+    // §19.2: el celular y el PIN son OPCIONALES y solo los llevan los supervisores. Si se
+    // escribe un celular, sigue teniendo que ser válido: medio número es peor que ninguno.
+    if (newPhone.trim() && !/^\d{10}$/.test(newPhone)) {
       setPhoneError('El número debe tener exactamente 10 dígitos')
+      return
+    }
+    // 19.f — el CHECK `staff_users_identidad_minima` de la 00046. Sin celular NI sede, el
+    // mesero no tiene ninguna llave de identidad y encima no saldría en ningún escáner.
+    if (!newPhone.trim() && !newLocationId) {
+      toast.error('Un mesero sin celular tiene que tener sede: es lo que lo hace aparecer en su escáner.')
       return
     }
     setCreating(true)
@@ -181,8 +192,8 @@ export default function StaffPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: newName.trim(),
-          phone: newPhone,
-          pin: newPin,
+          phone: newPhone.trim() || null,
+          pin: newPin.trim() || null,
           role: newRole,
           location_id: newLocationId || null,
         }),
@@ -325,7 +336,7 @@ export default function StaffPage() {
   const filteredStaff = data.staff.filter((s) => {
     if (search) {
       const q = search.toLowerCase()
-      if (!s.name.toLowerCase().includes(q) && !s.phone.includes(q)) return false
+      if (!s.name.toLowerCase().includes(q) && !(s.phone ?? '').includes(q)) return false
     }
     if (filterRole !== 'all' && s.role !== filterRole) return false
     if (filterActive === 'active' && !s.is_active) return false
@@ -654,7 +665,7 @@ export default function StaffPage() {
             <div className="space-y-1.5">
               <Label className="text-xs flex items-center gap-1.5">
                 <Phone className="h-3.5 w-3.5" />
-                Celular
+                Celular <span className="text-muted-foreground">(opcional)</span>
               </Label>
               <Input
                 value={newPhone}
@@ -670,13 +681,16 @@ export default function StaffPage() {
               {phoneError ? (
                 <p className="text-[10px] text-red-500">{phoneError}</p>
               ) : (
-                <p className="text-[10px] text-muted-foreground">Colombiano sin +57. Ej: 3024254326</p>
+                <p className="text-[10px] text-muted-foreground">
+                  Colombiano sin +57. Déjalo vacío para un mesero normal: solo lo necesitan los
+                  supervisores, que son quienes activan los celulares del local.
+                </p>
               )}
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs flex items-center gap-1.5">
                 <KeyRound className="h-3.5 w-3.5" />
-                PIN (4-6 dígitos)
+                PIN <span className="text-muted-foreground">(solo supervisores)</span>
               </Label>
               <Input
                 value={newPin}
@@ -687,6 +701,10 @@ export default function StaffPage() {
                 inputMode="numeric"
                 pattern="[0-9]*"
               />
+              <p className="text-[10px] text-muted-foreground">
+                4 a 6 dígitos. Un mesero no lo necesita: desde §19 no inicia sesión, se elige
+                de una lista.
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Rol</Label>
@@ -714,7 +732,8 @@ export default function StaffPage() {
                   ))}
                 </select>
                 <p className="text-[10px] text-muted-foreground">
-                  Un mesero es de UNA sede (D11). &quot;Sin sede&quot; sigue funcionando igual que hoy.
+                  Un mesero es de UNA sede (D11), y es la que decide en qué escáner aparece.
+                  Obligatoria si no tiene celular.
                 </p>
               </div>
             )}
@@ -725,7 +744,7 @@ export default function StaffPage() {
             </Button>
             <Button
               onClick={handleCreate}
-              disabled={creating || !newName.trim() || !newPhone.trim() || !newPin.trim()}
+              disabled={creating || !newName.trim()}
               className="gap-2"
             >
               {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}

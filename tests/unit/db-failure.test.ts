@@ -261,15 +261,50 @@ describe('resolveStaffAuth — el tercer estado que faltaba', () => {
     expect(auth.dbFailure).toBe(false) // ← credencial mala de verdad: el 401 es correcto
   })
 
-  it('dispositivo de confianza y vigente → válido', async () => {
+  it('dispositivo de confianza y vigente → válido, y trae la SEDE del aparato', async () => {
+    // La fila lleva `staff_user_id` a propósito: es un aparato del parque viejo, de los que
+    // todavía tienen dueño. Lo que se comprueba es que el dueño se IGNORA igualmente.
     const auth = await autenticarConDispositivo({
-      data: { id: 'dev-1', staff_user_id: 'mesero-9', is_trusted: true, expires_at: null },
+      data: {
+        id: 'dev-1',
+        staff_user_id: 'mesero-9',
+        is_trusted: true,
+        expires_at: null,
+        location_id: 'sede-laureles',
+      },
       error: null,
     })
 
     expect(auth.valid).toBe(true)
-    expect(auth.staffId).toBe('mesero-9')
+    expect(auth.via).toBe('device')
+    expect(auth.deviceId).toBe('dev-1')
+    // Vía 1 de §19: la sede del aparato es lo que filtra la lista de meseros.
+    expect(auth.deviceLocationId).toBe('sede-laureles')
     expect(auth.dbFailure).toBe(false)
+  })
+
+  it('§19: la sesión del aparato YA NO ATRIBUYE, aunque la fila tenga dueño', async () => {
+    // Esto ANTES devolvía 'mesero-9', y era correcto: el aparato era de un mesero y le
+    // prestaba su nombre a todo lo que se hiciera desde él. §19 invirtió el modelo — el
+    // aparato es DEL LOCAL y el mesero se elige en cada operación— así que heredar el dueño
+    // pasó de ser la atribución correcta a ser una atribución INVENTADA.
+    //
+    // `null` significa "no sabemos quién", que es la verdad hasta que alguien toque un nombre
+    // en la pantalla. Si esto volviera a devolver un id, las visitas de todo un turno se
+    // acreditarían en silencio al mesero que un día activó la tablet.
+    const auth = await autenticarConDispositivo({
+      data: {
+        id: 'dev-1',
+        staff_user_id: 'mesero-9',
+        is_trusted: true,
+        expires_at: null,
+        location_id: null,
+      },
+      error: null,
+    })
+
+    expect(auth.valid).toBe(true)
+    expect(auth.staffId).toBeNull()
   })
 
   it('LA PRUEBA: un fallo de base NO se ve igual que un dispositivo desconocido', async () => {
@@ -308,7 +343,14 @@ describe('resolveStaffAuth — el tercer estado que faltaba', () => {
 
     const auth = await resolveStaffAuth(request, tenant as Parameters<typeof resolveStaffAuth>[1])
 
-    expect(auth).toEqual({ valid: false, staffId: null, dbFailure: false })
+    expect(auth).toEqual({
+      valid: false,
+      staffId: null,
+      via: null,
+      deviceId: null,
+      deviceLocationId: null,
+      dbFailure: false,
+    })
     expect(tablasTocadas).toEqual([])
   })
 })

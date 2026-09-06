@@ -103,7 +103,8 @@ export interface AuthorizedNumber {
 export interface StaffUser {
   id: string
   name: string
-  phone: string
+  /** NULLABLE desde la 00046 (§19.2): un mesero se da de alta solo con nombre. */
+  phone: string | null
   pin: string | null
   role: 'waiter' | 'supervisor' | 'admin'
   is_active: boolean

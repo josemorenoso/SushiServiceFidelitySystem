@@ -2,10 +2,28 @@
 
 import { useState, useEffect, useCallback } from 'react'
 
+/**
+ * Sesión del escáner.
+ *
+ * §19 (dueño, 2026-09-05): el celular es DEL LOCAL. Hay un solo login, el del aparato, y se
+ * hace una vez en su vida — textual: *"si lo hacemos por mesero hay que estar pendiente de
+ * que cierren y abran sesión no tiene sentido alguno"*. Por eso este hook YA NO EXPONE
+ * `login()`: el login por mesero desapareció junto con `/api/staff/login`.
+ *
+ * El tipo `'staff'` sobrevive solo para los JWT que sigan vivos cuando esto se despliegue
+ * (duran 8 h). No se emiten más.
+ */
 export interface StaffSession {
   type: 'staff' | 'device'
   name: string
   token?: string
+  /**
+   * Sede del aparato. `null` = sin asignar, y la pantalla lo trata como un paso pendiente:
+   * sin sede no hay lista de meseros, y NUNCA se cae a "todos los de todas las sedes".
+   */
+  locationId: string | null
+  /** Nombre de la sede, para mostrar. `null` cuando no hay sede o no se pudo leer. */
+  locationName: string | null
 }
 
 const STORAGE_KEY = 'staff_session'
@@ -26,7 +44,14 @@ export function useStaffAuth() {
           headers: { Authorization: `Bearer ${parsed.token}` },
         })
         if (res.ok) {
-          setSession({ type: 'staff', name: parsed.name, token: parsed.token })
+          const data = await res.json()
+          setSession({
+            type: 'staff',
+            name: parsed.name,
+            token: parsed.token,
+            locationId: data.staff?.location_id ?? null,
+            locationName: null,
+          })
           setLoading(false)
           return
         }
@@ -42,7 +67,12 @@ export function useStaffAuth() {
         })
         if (res.ok) {
           const data = await res.json()
-          setSession({ type: 'device', name: data.device?.name || 'Dispositivo del local' })
+          setSession({
+            type: 'device',
+            name: data.device?.name || 'Celular del local',
+            locationId: data.device?.location_id ?? null,
+            locationName: data.device?.location_name ?? null,
+          })
           setLoading(false)
           return
         }
@@ -58,20 +88,6 @@ export function useStaffAuth() {
   useEffect(() => {
     verifySession()
   }, [verifySession])
-
-  const login = useCallback(async (phone: string, pin: string) => {
-    const res = await fetch('/api/staff/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone, pin }),
-    })
-    const data = await res.json()
-    if (!res.ok) throw new Error(data.message || 'Error de login')
-
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ token: data.token, name: data.staff.name }))
-    setSession({ type: 'staff', name: data.staff.name, token: data.token })
-    return data
-  }, [])
 
   const logout = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY)
@@ -90,5 +106,5 @@ export function useStaffAuth() {
     return {}
   }, [session])
 
-  return { session, loading, login, logout, verifySession, getAuthHeaders }
+  return { session, loading, logout, verifySession, getAuthHeaders }
 }

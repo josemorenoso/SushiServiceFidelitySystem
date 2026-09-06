@@ -182,7 +182,7 @@ export default function MeseroScanPage() {
       <div className="flex items-center justify-between px-4 py-3">
         <button
           onClick={() => router.push('/mesero/dashboard')}
-          className="rounded-xl p-2 text-white/70 transition-colors hover:bg-white/10"
+          className="flex h-11 w-11 items-center justify-center rounded-xl text-white/70 transition-colors hover:bg-white/10"
         >
           <ArrowLeft className="h-5 w-5" />
         </button>
@@ -190,7 +190,7 @@ export default function MeseroScanPage() {
         <div className="flex gap-2">
           <button
             onClick={toggleTorch}
-            className="rounded-xl p-2 text-white/70 transition-colors hover:bg-white/10"
+            className="flex h-11 w-11 items-center justify-center rounded-xl text-white/70 transition-colors hover:bg-white/10"
             title="Linterna"
           >
             {torchOn ? <FlashlightOff className="h-5 w-5" /> : <Flashlight className="h-5 w-5" />}
@@ -200,7 +200,7 @@ export default function MeseroScanPage() {
               void safeStopScanner()
               setShowManual(!showManual)
             }}
-            className="rounded-xl p-2 text-white/70 transition-colors hover:bg-white/10"
+            className="flex h-11 w-11 items-center justify-center rounded-xl text-white/70 transition-colors hover:bg-white/10"
             title="Manual"
           >
             <Keyboard className="h-5 w-5" />
@@ -256,7 +256,7 @@ export default function MeseroScanPage() {
             <button
               type="submit"
               disabled={manualPhone.length < 10}
-              className="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-red-500 text-sm font-semibold text-white transition-colors hover:bg-red-600 disabled:opacity-50"
+              className="btn-premium flex h-[52px] w-full items-center justify-center gap-2 rounded-xl text-sm font-semibold"
             >
               Buscar cliente
             </button>

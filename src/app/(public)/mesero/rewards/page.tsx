@@ -37,7 +37,7 @@ export default function MeseroRewardsPage() {
         <div className="mx-auto flex max-w-md items-center gap-3">
           <button
             onClick={() => router.push('/mesero/dashboard')}
-            className="rounded-xl p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+            className="flex h-11 w-11 items-center justify-center rounded-xl text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
             title="Volver"
           >
             <ArrowLeft className="h-5 w-5" />

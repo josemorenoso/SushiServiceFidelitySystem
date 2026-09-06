@@ -244,7 +244,7 @@ function MeseroConfirmContent() {
               setTableNumber('')
               router.push('/mesero/scan')
             }}
-            className="mt-6 flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-red-500 text-sm font-semibold text-white transition-colors hover:bg-red-600"
+            className="btn-premium mt-6 flex h-[52px] w-full items-center justify-center gap-2 rounded-xl text-sm font-semibold"
           >
             Escanear siguiente cliente
           </button>
@@ -260,7 +260,7 @@ function MeseroConfirmContent() {
         <div className="mx-auto flex max-w-md items-center gap-3">
           <button
             onClick={() => router.push('/mesero/scan')}
-            className="rounded-xl p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+            className="flex h-11 w-11 items-center justify-center rounded-xl text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
@@ -330,7 +330,7 @@ function MeseroConfirmContent() {
           <button
             onClick={handleRegister}
             disabled={loading || !customerPhone || !waiterId}
-            className="flex h-[56px] w-full items-center justify-center gap-2 rounded-2xl bg-red-500 text-lg font-semibold text-white transition-colors hover:bg-red-600 active:bg-red-700 disabled:opacity-50"
+            className="btn-premium flex h-[56px] w-full items-center justify-center gap-2 rounded-2xl text-lg font-semibold"
           >
             {loading ? (
               <>

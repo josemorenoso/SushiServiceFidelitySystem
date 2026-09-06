@@ -484,14 +484,15 @@ export function CheckInForm({
                   setCityOpen(true)
                 }}
                 onFocus={() => { if (!city) setCityOpen(true) }}
-                className="input-premium w-full rounded-xl py-3.5 pl-10 pr-4 text-base outline-none"
+                className={`input-premium w-full rounded-xl py-3.5 pl-10 text-base outline-none ${city ? 'pr-10' : 'pr-4'}`}
                 style={{ color: "var(--brand-ink)" }}
               />
               {city && (
                 <button
                   type="button"
                   onClick={() => { setCity(''); setCityInput(''); setCityOpen(false) }}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-lg leading-none"
+                  className="absolute right-0 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center text-lg leading-none text-gray-400 hover:text-gray-600"
+                  aria-label="Borrar ciudad"
                 >
                   ×
                 </button>

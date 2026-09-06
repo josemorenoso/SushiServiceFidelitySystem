@@ -217,7 +217,7 @@ export function CustomerCard({
 
           <button
             type="button"
-            className="mt-4 flex items-center gap-1.5 text-sm text-white/40 transition-colors hover:text-white/65"
+            className="mt-4 flex items-center gap-1.5 py-2 text-sm text-white/40 transition-colors hover:text-white/65"
             onClick={onBack}
           >
             <ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.5} />

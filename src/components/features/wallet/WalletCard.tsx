@@ -201,20 +201,17 @@ export function WalletCard({ name, totalPoints, totalVisits, tiers }: WalletCard
             </div>
           )}
 
-          {/* CTA al check-in */}
-          <div
-            className="mt-6 w-full rounded-2xl px-5 py-4 text-center"
+          {/* CTA al check-in — toda la tarjeta es el área táctil, no solo el link */}
+          <a
+            href="/check-in"
+            className="mt-6 block w-full rounded-2xl px-5 py-4 text-center transition-opacity hover:opacity-80"
             style={{ background: theme.ctaBg, border: theme.ctaBorder }}
           >
             <p className="text-sm" style={{ color: theme.ctaLabel }}>¿Estás en el restaurante?</p>
-            <a
-              href="/check-in"
-              className="mt-1 block text-sm font-bold transition-opacity hover:opacity-80"
-              style={{ color: theme.ctaLink }}
-            >
+            <p className="mt-1 text-sm font-bold" style={{ color: theme.ctaLink }}>
               Escanea el QR en mesa para ganar puntos →
-            </a>
-          </div>
+            </p>
+          </a>
 
           <p className="mt-6 text-[11px] text-center" style={{ color: theme.footer }}>
             {branding.name} · Programa de Fidelidad

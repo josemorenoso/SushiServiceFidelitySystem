@@ -86,13 +86,12 @@ credenciales de terceros).
   marcaba `failed` y se perdía. **(3)** el reclamo del despacho no miraba las filas afectadas, así que
   dos corridas creían ganar y despachaban dos veces; lo cierra `claimScheduledEvent()` y lo reproduce
   `tests/db/calendar-claim.test.ts` con 8 reclamos simultáneos. → `docs/features/calendar.md`.
-- **Sushi Fun absorbido como tenant** (2026-09-06): 1.421 filas desde su propio Supabase, cero cruces
-  de marca, las otras 4 marcas intactas. Conserva **su cuenta de Twilio** (3 columnas en `tenants`).
-  Pendientes: borrar su Supabase (§4) y el Vercel viejo tras 7 días. → `docs/PARTE-SUSHI-FUN-2026-09-06.md`.
-- **Enlace del evento + plantillas verificadas** (2026-09-06): `link_url` (00050, **sin aplicar**)
-  viaja dentro de `{{5}}` para no re-aprobar plantillas en las 25 marcas. Contra Twilio: la de imagen
+- **Sushi Fun absorbido como tenant** (2026-09-06): 1.421 filas, cero cruces de marca, las otras 4
+  intactas. Conserva **su cuenta de Twilio**. Pendientes: su Supabase y su Vercel (§4). → `docs/PARTE-SUSHI-FUN-2026-09-06.md`.
+- **Enlace del evento + plantillas verificadas** (2026-09-06, `315a265`): `link_url` (00050, **sin
+  aplicar**) viaja dentro de `{{5}}` para no re-aprobar en las 25 marcas. Contra Twilio: la de imagen
   de la master está **approved** y dinámica; **Sushi Fun, con cuenta propia, no tiene ninguna
-  `twilio/media` y ahí NO sale**. Video: **rejected**. → `docs/features/calendar.md`.
+  `twilio/media` y ahí NO sale**; video **rejected**. Verificalo con `scripts/verificar-plantillas-evento.mjs`.
 - **Firma de Twilio por tenant** (2026-09-06): se validaba siempre con el token master, pero Twilio
   firma con el de la cuenta dueña del número → **todo entrante de un tenant con cuenta propia daba
   403** y los `SALIR` se perdían. Ahora resuelve el tenant por `To`; fuera la puerta trasera de `dev`.

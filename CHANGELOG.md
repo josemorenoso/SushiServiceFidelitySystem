@@ -8,6 +8,23 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [2026-09-06] - fix: la firma de Twilio se valida con el token del TENANT, no siempre el master
+
+**Qué:** `validateTwilioSignature()` recibía el `authToken` de `process.env.TWILIO_AUTH_TOKEN` a
+ciegas. Twilio firma con el token de la cuenta DUEÑA DEL NÚMERO — para Sushi Fun y cualquier tenant
+con `twilio_subaccount_auth_token` propio, esa firma jamás coincidía con el master: 403 a todo mensaje
+entrante, `SALIR` incluido, perdido en silencio.
+**Arreglo:** la ruta resuelve el tenant por `To` ANTES de validar (solo para elegir el secreto — sigue
+siendo fail-closed) y valida con `tenant.twilio_subaccount_auth_token ?? TWILIO_AUTH_TOKEN`. Se quitó
+la puerta trasera `NODE_ENV === 'development'` que saltaba la validación sin token, y la comparación
+pasa a tiempo constante (`crypto.timingSafeEqual`, mismo criterio que `verifyZernioSignature`).
+**Fail-closed donde protege:** sin token → 403, firma que no cuadra → 403. **Tenant desconocido sigue
+en 200**, que es la decisión vieja y documentada: no hay acción que impedir, y un 403 solo lograría que
+Twilio reintentara la entrega. Rechazar la acción y avisarle un error a Twilio son cosas distintas.
+**Verificación:** `tsc` limpio · eslint 7 errores preexistentes (sin relación) · 16 archivos / **287
+tests** (+9): `tests/unit/twilio-signature.test.ts`.
+**Origen:** 403 real en producción hoy 17:57 UTC, con el primer `SALIR` de un cliente de Sushi Fun.
+
 ## [2026-09-05] - §19: el escáner es del local, el mesero se elige por operación
 
 **Qué:** el celular deja de ser de un mesero y pasa a ser del restaurante. Un solo login (PIN de

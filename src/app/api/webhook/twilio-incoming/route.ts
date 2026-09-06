@@ -119,15 +119,29 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const rawBody = await req.text()
   const params = Object.fromEntries(new URLSearchParams(rawBody))
 
-  if (!validateTwilioSignature(url, params, signature)) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
-  }
-
+  // El tenant se resuelve ANTES de validar la firma: Twilio firma con el token de la
+  // cuenta DUEÑA DEL NÚMERO, que puede ser una subcuenta propia (Sushi Fun y cualquier
+  // tenant con `twilio_subaccount_auth_token`), no siempre el master del entorno. Hace
+  // falta saber de qué tenant es el número para elegir contra qué secreto validar.
+  //
+  // Esto no debilita nada: `getTenantByWhatsappNumber()` es solo la llave para el
+  // secreto, no una decisión de confianza — ya filtra `is_active = true`, y si la firma
+  // no cuadra contra el token de ESE tenant se rechaza igual: sin token o con firma
+  // que no cuadra → 403, siempre.
   const to = params['To'] ?? ''
   const tenant = await getTenantByWhatsappNumber(to)
   if (!tenant) {
-    // Twilio necesita un 200 o reintenta la entrega — no usar 404 aquí.
+    // 200, NO 403: es la única salida que no es fail-closed, y es deliberada.
+    // Un número que no es de ninguna marca activa no dispara ninguna acción, así que
+    // el 403 no protegería nada — y sí haría que Twilio REINTENTE la entrega y llene
+    // su consola de errores. Rechazar la acción y avisarle un error a Twilio son dos
+    // cosas distintas. La decisión es vieja y estaba documentada; se conserva.
     return new NextResponse(null, { status: 200 })
+  }
+
+  const authToken = tenant.twilio_subaccount_auth_token ?? process.env.TWILIO_AUTH_TOKEN
+  if (!validateTwilioSignature(url, params, signature, authToken)) {
+    return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
   }
 
   const body = (params['Body'] ?? '').trim()

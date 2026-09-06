@@ -1,20 +1,25 @@
 import crypto from 'crypto'
 
 /**
- * Validates a Twilio webhook request signature.
- * In development mode, validation can be skipped.
+ * Valida la firma de un webhook entrante de Twilio.
  * See: https://www.twilio.com/docs/usage/security#validating-requests
+ *
+ * El `authToken` se recibe explícito porque cada tenant firma con SU PROPIO token
+ * (subcuenta real, ej. Sushi Fun) o con el master — nunca hay un único token válido
+ * para todos. Su único llamador (`src/app/api/webhook/twilio-incoming/route.ts`)
+ * resuelve primero qué token corresponde y lo pasa acá.
+ *
+ * Fail-closed sin excepciones: sin token o sin firma → false. Nada de "saltar en
+ * development" — esa puerta trasera es justo lo que dejaba pasar producción mal
+ * configurada.
  */
 export function validateTwilioSignature(
   url: string,
   params: Record<string, string>,
-  signature: string
+  signature: string,
+  authToken: string | null | undefined
 ): boolean {
-  const authToken = process.env.TWILIO_AUTH_TOKEN
-  if (!authToken) {
-    console.warn('[Twilio] AUTH_TOKEN no configurado — saltando validación de firma')
-    return process.env.NODE_ENV === 'development'
-  }
+  if (!authToken || !signature) return false
 
   const sortedKeys = Object.keys(params).sort()
   const dataString = sortedKeys.reduce((acc, key) => acc + key + params[key], url)
@@ -24,5 +29,10 @@ export function validateTwilioSignature(
     .update(Buffer.from(dataString, 'utf-8'))
     .digest('base64')
 
-  return signature === expectedSignature
+  // Comparación en tiempo constante (mismo criterio que verifyZernioSignature en
+  // src/lib/zernio/webhooks.ts).
+  const expectedBuf = Buffer.from(expectedSignature, 'utf-8')
+  const receivedBuf = Buffer.from(signature, 'utf-8')
+  if (expectedBuf.length !== receivedBuf.length) return false
+  return crypto.timingSafeEqual(expectedBuf, receivedBuf)
 }

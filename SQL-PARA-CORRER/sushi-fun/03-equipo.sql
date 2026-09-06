@@ -34,10 +34,15 @@ BEGIN
   END IF;
 END $guard$;
 
+-- ⚠️ El `pin` de Jairo va en NULL, no con su hash bcrypt del origen (decision 2026-09-06).
+--    Desde §19 el login por mesero NO EXISTE: `/api/staff/login` se borro y `staff_users.pin`
+--    ya no autentica nada (00046 lo documenta). Copiar el hash solo habria metido un credencial
+--    rompible —bcrypt de 4 digitos— en un archivo versionado, a cambio de nada.
+--    Si alguna vez vuelve a hacer falta, el hash sigue vivo en el Supabase de origen.
 INSERT INTO staff_users (
   id, name, phone, pin, role, is_active, last_login_at, created_at, updated_at, tenant_id, location_id
 ) VALUES
-  ('41d0eced-3c82-42d1-af2b-b2113d17842d'::uuid, 'Jairo', '3127161556', '$2b$10$9njr.LHmGgMA8dlazzqWAeNgFmgnTN/u/oiT5QNNBW/HY/H7JUIC6', 'supervisor', true, '2026-06-08T01:39:53.722+00:00'::timestamptz, '2026-06-02T16:53:07.381211+00:00'::timestamptz, '2026-09-02T23:33:45.613981+00:00'::timestamptz, 'b2c3d4e5-f6a7-8901-bcde-f23456789012'::uuid, 'd6798a6e-40f1-4d1a-91be-5d30770c1448'::uuid);
+  ('41d0eced-3c82-42d1-af2b-b2113d17842d'::uuid, 'Jairo', '3127161556', NULL, 'supervisor', true, '2026-06-08T01:39:53.722+00:00'::timestamptz, '2026-06-02T16:53:07.381211+00:00'::timestamptz, '2026-09-02T23:33:45.613981+00:00'::timestamptz, 'b2c3d4e5-f6a7-8901-bcde-f23456789012'::uuid, 'd6798a6e-40f1-4d1a-91be-5d30770c1448'::uuid);
 
 DO $ver$
 DECLARE v int;

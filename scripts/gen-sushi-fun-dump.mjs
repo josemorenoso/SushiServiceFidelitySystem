@@ -240,6 +240,20 @@ async function main() {
     `-- Ojo: trg_staff_users_sede_coherente es BEFORE UPDATE, no BEFORE INSERT — acá el\n` +
     `-- que verifica es la FK compuesta, no el trigger.\n` +
     `--\n` +
+    `--
+` +
+    `-- staff_users.pin se fuerza a NULL. Desde §19 el login por mesero NO EXISTE
+` +
+    `-- (/api/staff/login se borró; 00046 documenta que la columna ya no autentica),
+` +
+    `-- así que copiar el hash solo metería un credencial rompible —bcrypt de 4
+` +
+    `-- dígitos— en un archivo versionado, a cambio de nada. El original sigue vivo
+` +
+    `-- en el Supabase de origen si alguna vez hiciera falta.
+` +
+    `--
+` +
     `-- staff_devices.location_id se deja NULL a propósito: un dispositivo es un aparato\n` +
     `-- FÍSICO, y trg_staff_devices_sede_coherente (00044) solo compara sedes cuando las\n` +
     `-- DOS están puestas. Con NULL pasa el trigger y no se inventa nada.\n`
@@ -247,7 +261,7 @@ async function main() {
   const staffCols = C('staff_users').concat(C('staff_users').includes('location_id') ? [] : ['location_id'])
   s03 += bloque(
     'staff_users',
-    t.staff_users.map((r) => ({ ...r, location_id: SEDE })),
+    t.staff_users.map((r) => ({ ...r, location_id: SEDE, pin: null })),
     staffCols
   )
   const devCols = C('staff_devices').concat(C('staff_devices').includes('location_id') ? [] : ['location_id'])

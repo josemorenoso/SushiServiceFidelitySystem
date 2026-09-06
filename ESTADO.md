@@ -1,6 +1,6 @@
 # ESTADO — RestaurantQR / Cada1
 
-> **Última actualización:** 2026-09-06, 14:40 (sesión "crear mesero por rol", Opus 5)
+> **Última actualización:** 2026-09-06, 18:55 (sesión "mesero por rol + subdominio por sede", Opus 5)
 > Toda sesión lo lee PRIMERO. Toda sesión que cierra un bloque lo ACTUALIZA al final. Límite: 150 líneas.
 > Lo obsoleto se **saca**, no se tacha: un ítem tachado sigue costando tokens cada vez que alguien lee esto.
 >
@@ -25,18 +25,17 @@
 
 ## 2. En vuelo ahora mismo
 
-**DOS sesiones sobre el MISMO árbol de trabajo** (2026-09-06 14:40), territorios disjuntos:
-`fix/crear-mesero-por-rol` (commiteada) y `fix/opt-out-visible` (otra sesión, sin commitear:
-`calendar/campaign/settings.service.ts`, dos crons y un test nuevo). El árbol es uno solo y la rama
-activa la cambia quien haga `checkout`.
+**`main` local va ADELANTE de `origin/main`**: `fix/crear-mesero-por-rol` y
+`fix/d2-dominio-cruzado` (la 00051) están mergeadas y **sin pushear** — pushear despliega, es
+decisión del dueño. Queda viva `fix/opt-out-visible` (otra sesión, con trabajo sin commitear).
+**El árbol es uno solo** y la rama activa la cambia quien haga `checkout`.
 
-⚠️ **`git stash` en un árbol compartido se lleva el trabajo de la otra sesión** — hoy barrió 12
-archivos suyos y hubo que restaurarlos a mano. Con otra sesión viva: `git worktree`, y nunca stash.
+⚠️ **`git stash` en un árbol compartido se lleva el trabajo de la otra sesión** (hoy barrió 12
+archivos). Con otra sesión viva: `git worktree`, nunca stash.
 
-**Repo del AIOS** (`Level 2.0/aios-constelarys`): `fix/coexistencia` (v1.4.0) está subida pero **su
-`main` NO se pusheó** — tiene suelto `la sede se crea SIEMPRE, aunque no haya coordenadas`,
-respaldado dentro de esa rama. Pushearlo despliega el AIOS: es decisión del dueño. Parte en
-`Level 2.0/aios-constelarys/docs/PARTE-COEXISTENCIA-2026-09-06.md`.
+**Repo del AIOS**: `fix/coexistencia` (v1.4.0) subida, pero **su `main` NO se pusheó** — tiene
+suelto `la sede se crea SIEMPRE, aunque no haya coordenadas`, respaldado en esa rama. Pushearlo
+despliega el AIOS: decisión del dueño. Parte en `…/docs/PARTE-COEXISTENCIA-2026-09-06.md`.
 
 ## 3. Siguiente, en orden
 
@@ -75,32 +74,33 @@ credenciales de terceros).
 - **D6 CERRADA** (2026-09-05): la línea de WhatsApp es **N líneas por marca y la sede no obliga a
   ninguna** — se elige al enviar. El eje es el cupo, no la geografía. `docs/features/multi-sede.md` §5.
 - **Separación de una sede** (venta, franquicia, socio distinto) — aplazada por el dueño, 2026-09-02.
+- **D21 CERRADA — un subdominio por sede** (2026-09-06): la ciudad va en el subdominio **desde el
+  principio** y **todas las sedes son pares** (`laureles.marca.com`), sin principal ni subramas. No
+  es opcional: con 2+ sedes el dominio RAÍZ deja de registrar clientes nuevos (409 en
+  `check-in/route.ts:332`), así que una sede sin `domain` mata el registro. → `multi-sede.md` §3.5.
 
 ## 5. Hecho reciente
 
+- **D2 cerrada — el dominio cruzado va en las DOS direcciones** (2026-09-06, `00051`): faltaba el
+  trigger simétrico sobre `tenants`. Sin él una marca nueva podía tomar el subdominio de la sede de
+  OTRA marca, y `resolveHostContext()` quedaba con dos dueños del mismo host. Lo destapó D21.
 - **El alta de un mesero la gobierna el ROL** (2026-09-06): el modal decía que el PIN era "para que
   el mesero inicie sesión" —modelo que §19 borró— y pedía Celular y PIN aunque eligieras "Mesero".
-  Ahora el Rol manda: `waiter` = Nombre + Sede; `supervisor`/`admin` = además Celular y PIN. La sede
-  única viene preseleccionada y para un mesero "Sin sede" ya no es opción (CHECK de la 00046). El
-  panel MARCA a los que no tienen sede. → `docs/features/staff-qr-scan.md`.
-- **Sushi Fun absorbido como tenant** (2026-09-06): 1.421 filas movidas desde su propio Supabase,
-  el `08` cuadró con cero cruces de marca y las otras cuatro marcas no se movieron ni una fila.
-  Conserva **su propia cuenta de Twilio** (3 columnas en `tenants`) y su marca. Runbook y parte en
-  `docs/RUNBOOK-ABSORBER-SUSHI-FUN.md` y `docs/PARTE-SUSHI-FUN-2026-09-06.md`.
-  Pendientes suyos: borrar su Supabase (§4) y el Vercel viejo tras 7 días.
-- **Firma de Twilio por tenant** (2026-09-06): `validateTwilioSignature()` usaba siempre el token
-  master, pero Twilio firma con el token de la cuenta dueña del número, así que **todo entrante de un
-  tenant con cuenta propia daba 403** — los `SALIR` se perdían en silencio. Lo destapó el primer
-  `SALIR` de Sushi Fun. Ahora la ruta resuelve el tenant por `To` y valida con SU token; se quitó
-  la puerta trasera `NODE_ENV === 'development'` y la comparación pasa a tiempo constante.
+  Ahora: `waiter` = Nombre + Sede; `supervisor`/`admin` = además Celular y PIN. La sede única viene
+  preseleccionada, "Sin sede" ya no es opción para un mesero, y el panel MARCA a los que no tienen.
+- **Sushi Fun absorbido como tenant** (2026-09-06): 1.421 filas desde su propio Supabase, cero
+  cruces de marca y las otras cuatro intactas. Conserva **su cuenta de Twilio** y su marca. Runbook
+  y parte en `docs/RUNBOOK-ABSORBER-SUSHI-FUN.md` y `docs/PARTE-SUSHI-FUN-2026-09-06.md`. Pendiente:
+  borrar su Supabase (§4) y el Vercel viejo tras 7 días.
+- **Firma de Twilio por tenant** (2026-09-06): se validaba siempre con el token master, pero Twilio
+  firma con el de la cuenta dueña del número: **todo entrante de un tenant con cuenta propia daba
+  403** y los `SALIR` se perdían. Ahora resuelve el tenant por `To` y valida con SU token.
 - **Identidad visual por marca (§5/§6/§3)** (2026-09-06): logo y un color desde `/dashboard/marca`,
-  del que se derivan gradientes, ✓ del sello y color del QR. `tenants.config` gana whitelist **por
-  ruta** y reserva `integrations`. Migración **renumerada de 00048 a 00047**: el 48 estaba reservado
-  para F9 en el spec de multi-sede. → `docs/features/identidad-visual.md`.
+  del que salen gradientes, ✓ del sello y color del QR. `tenants.config` gana whitelist **por ruta**
+  y reserva `integrations`. Migración **renumerada de 00048 a 00047** (el 48 era de F9).
 - **§19 — el escáner es del local** (2026-09-05, desplegado): un login por aparato, el mesero se
   elige en cada operación y la lista va filtrada por sede. `staff_users.phone` pasa a NULLABLE y la
-  llave de identidad se **complementa** (CHECK de identidad mínima + UNIQUE parcial marca/sede/nombre)
-  en vez de reemplazarse. Eliminada `POST /api/staff/login`.
+  llave se **complementa** (CHECK + UNIQUE parcial marca/sede/nombre). Eliminada `POST /api/staff/login`.
 - **F7 / F4 / F3**: permisos por sede (D10, `00045`), el mesero es de UNA sede (D11, `00044`), y el
   check-in escribe la sede. Todo aplicado y desplegado.
 

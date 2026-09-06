@@ -117,6 +117,44 @@ coordenadas pasan a ser un dato opcional más, y van en pareja o no van.
 > Si el AIOS se despliega antes, `aios_provision_tenant` manda lat/lon NULL contra un `NOT NULL`
 > que todavía existe, revienta con **23502** y **el alta entera falla** (la función es atómica).
 
+### 3.5 El dominio cruzado, cerrado en las dos direcciones (`00051`)
+
+> **Regla del dueño, 2026-09-06:** *un restaurante con sedes le pone la ciudad al subdominio
+> **desde el principio**, y todas las sedes son pares* — `laureles.marca.com`,
+> `envigado.marca.com`. No hay una principal con subramas.
+
+Esa regla es la que obligó a cerrar la deuda 2. La 00041 la había dejado abierta con una
+condición escrita en su propio bloque 6: *«hoy no es explotable — ninguna sede tiene `domain`
+distinto del de su marca hasta que exista la sede 2»*. La regla nueva es exactamente eso.
+
+**Lo que se podía hacer sin el trigger simétrico.** Existe la sede `laureles.marca-a.com`. Se
+da de alta la marca B con `tenants.domain = 'laureles.marca-a.com'`:
+
+| Guardarraíl | Por qué no lo frena |
+|---|---|
+| `idx_tenants_domain` (00029) | Es único **dentro de** `tenants`. |
+| `idx_restaurant_locations_domain` (00041) | Es único **dentro de** `restaurant_locations`. |
+| `trg_restaurant_locations_domain_guard` (00041) | Vive sobre la **otra** tabla: un INSERT en `tenants` no lo despierta. |
+
+Y entonces `resolveHostContext()` tiene **dos dueños para el mismo host**: su camino 1
+(`getTenantByDomain`) contesta la marca B, su camino 2 habría contestado la marca A. Gana el
+camino 1, así que el subdominio de una sede de A pasa a servir la marca B entera — su tarjeta,
+su catálogo y su check-in.
+
+La `00051` pone `trg_tenants_domain_guard`, espejo exacto del de la 00041. Tres detalles:
+
+- **El solape dentro del mismo tenant se sigue permitiendo.** Es el caso de la 00042: la sede
+  principal repite el dominio de su marca, y eso es lo que evita reimprimir un solo QR.
+- **No filtra por `is_active`.** Una sede desactivada conserva su `domain` y ningún trigger
+  escucha `is_active`, así que permitir tomar el dominio de una sede dormida haría que el
+  choque naciera en silencio el día que alguien la reactive.
+- **Trae prevuelo.** Si en producción ya hubiera un dominio compartido entre marcas, la
+  migración **aborta** en vez de instalar un guardarraíl que lo dejaría congelado e invisible.
+
+Pruebas: `tests/db/multisede-resolucion.test.ts`, bloque *«D2 — un host resuelve a UNA sola
+marca»*. Cubre **las dos** direcciones a propósito: la garantía es de los dos triggers o de
+ninguno, así que quien borre uno tiene que ver fallar esto.
+
 ---
 
 ## Columnas de sede en las tablas de eventos
@@ -670,7 +708,7 @@ Ninguna de éstas se cierra por cuenta propia: son decisiones del dueño o de un
 | # | Qué falta | Por qué quedó abierto |
 |---|---|---|
 | 1 | **`config` sin whitelist.** El spec pide la columna en §4/00041, pero el CHECK de las 4 claves permitidas (`google_maps_url`, `delivery_phone`, `whatsapp_link`, `instagram_url`) y la función espejo `merge_location_config()` viven en **§7.1, que no lleva número de migración**. | Se agregó la columna y nada más. La whitelist y la función se deciden aparte. |
-| 2 | **El trigger cruzado es de UNA dirección** (sede → `tenants.domain`). Falta el simétrico sobre `tenants`: un tenant nuevo podría tomar un `domain` que ya usa la sede de otra marca. | El §3.3 del spec habla de **un** trigger. Hoy no es explotable: ninguna sede tiene `domain` distinto del de su marca hasta que exista la sede 2 (F8). |
+| 2 | ✅ **CERRADA el 2026-09-06 por la `00051`.** El trigger cruzado ya es de las **dos** direcciones. | Se cerró cuando dejó de valer la condición que la mantenía abierta — ver §3.5. |
 | 3 | **`is_primary` no tiene índice único por tenant.** Dos filas con `is_primary = true` son hoy legales. | No está en el spec. La 00042 deja exactamente una por tenant. |
 | 4 | **El `## Diagrama ER` de `docs/DB_SCHEMA.md` está obsoleto** por su cuenta (el bloque `customers` ni siquiera tiene `tenant_id`) y es un único bloque mermaid: dos sesiones no lo pueden tocar a la vez. | Se cierra aparte, en una sola sesión, después de F1+F2. |
 | 5 | **«Las 37 migraciones originales…»** en `docs/features/testing.md:61` y sus espejos en `tests/setup/`. Hoy son 43. | Ningún test compara ese número (son comentarios sin assert). Deuda aparte. |

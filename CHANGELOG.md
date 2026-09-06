@@ -8,6 +8,27 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [2026-09-06] - fix(D2): el dominio cruzado se cierra en las DOS direcciones (00051)
+
+**Qué:** la 00041 dejó el guardarraíl de dominio a medias — solo impedía que una SEDE tomara el
+`tenants.domain` de otra marca. Faltaba el simétrico: nada impedía que una MARCA tomara como
+`tenants.domain` el subdominio que ya usa la sede de otra. Ni `idx_tenants_domain` (único dentro
+de `tenants`) ni `idx_restaurant_locations_domain` (único dentro de su tabla) lo ven, y el trigger
+de la 00041 vive sobre la OTRA tabla, así que un INSERT en `tenants` no lo despierta.
+**El daño:** `resolveHostContext()` queda con DOS dueños para el mismo host. Gana su camino 1
+(`getTenantByDomain`), o sea que el subdominio de una sede de la marca A pasa a servir la marca B
+entera: su tarjeta, su catálogo y su check-in.
+**Por qué ahora:** la 00041 anotó la deuda con una condición — *"no es explotable hasta que exista
+la sede 2"*. El dueño fijó el 2026-09-06 la regla que la rompe: **un restaurante con sedes le pone
+la ciudad al subdominio desde el principio y todas las sedes son pares** (`laureles.marca.com`),
+sin una principal con subramas.
+**La 00051** pone `trg_tenants_domain_guard`, espejo exacto del de la 00041. Conserva el solape
+DENTRO del mismo tenant (00042: la sede principal repite el dominio de su marca, cero reimpresión
+de QR), **no filtra por `is_active`** —una sede dormida conserva su dominio y reactivarla no
+dispara ningún trigger— y trae **prevuelo**: si ya hubiera un choque en producción, aborta en vez
+de instalar un guardarraíl que lo dejaría congelado e invisible.
+**Verificación:** `tsc` limpio · eslint 7 errores preexistentes (sin relación) · 19 archivos /
+**347 tests** (+6). Se comprobó que las 3 pruebas nuevas de la 00051 FALLAN sin la migración.
 ## [2026-09-06] - fix: el modal de "Crear Mesero" deja de mentir y ahora lo gobierna el Rol
 
 **Qué:** el subtítulo del modal decía que el PIN era "para que el mesero inicie sesión en la app",

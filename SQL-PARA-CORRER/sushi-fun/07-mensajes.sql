@@ -10,8 +10,8 @@
 --
 -- 🔴 POR QUÉ ESTE ARCHIVO DESACTIVA UN TRIGGER
 -- trg_debit_wallet (00033) dispara AFTER INSERT sobre message_logs y COBRA cada
--- fila cuyo twilio_sid no sea NULL. De estas 193 filas, 91 traen twilio_sid.
--- Sin desactivarlo, cargar el HISTORIAL le debitaría a Sushi Fun 91 mensajes que
+-- fila cuyo twilio_sid no sea NULL. De estas 194 filas, 92 traen twilio_sid.
+-- Sin desactivarlo, cargar el HISTORIAL le debitaría a Sushi Fun 92 mensajes que
 -- ya pagó en SU propia cuenta Twilio. El guard "v_price IS NULL" del trigger no
 -- salva: la 00033 define price_per_message_cop NOT NULL DEFAULT 100 — nunca es NULL.
 --
@@ -25,7 +25,7 @@ BEGIN;
 ALTER TABLE message_logs DISABLE TRIGGER trg_debit_wallet;
 
 -- ─────────────────────────────────────────────────────────────
--- message_logs — 193 fila(s) en el origen
+-- message_logs — 194 fila(s) en el origen
 -- ─────────────────────────────────────────────────────────────
 DO $guard$
 DECLARE v int;
@@ -231,13 +231,14 @@ INSERT INTO message_logs (
   ('4235d299-cb94-45bb-bb62-64dd67416c1b'::uuid, 'c677b5c0-1221-4792-a327-536e1e22ae3a'::uuid, '3178587209', 'welcome', 'HX9cc12612474df0990494041862c0edf7', '{"1":"Juan David puentes castillo","2":"76","3":"🥉 Plata (150 pts) → Coctel a Eleccion — te faltan 74 pts 🔥 · 🥈 Oro (300 pts) → Entrada De La Casa · 🥇 Diamante (450 pts) → Ramen de la Casa · 🖤 BLACK (1000 pts) → 10% off permanente"}'::jsonb, 'sent', 'MM113f0403418f75ebdf6b323616b9f4a1', NULL, NULL, '2026-09-05T19:39:58.414+00:00'::timestamptz, NULL, '2026-09-05T19:39:58.479289+00:00'::timestamptz, 'b2c3d4e5-f6a7-8901-bcde-f23456789012'::uuid),
   ('38769801-7af9-4d07-9a45-9b80efccfa36'::uuid, '349d5b35-b425-4c4c-a726-a60d39cca233'::uuid, '3053371190', 'welcome', 'HX9cc12612474df0990494041862c0edf7', '{"1":"Vicky","2":"79","3":"🥉 Plata (150 pts) → Coctel a Eleccion — te faltan 71 pts 🔥 · 🥈 Oro (300 pts) → Entrada De La Casa · 🥇 Diamante (450 pts) → Ramen de la Casa · 🖤 BLACK (1000 pts) → 10% off permanente"}'::jsonb, 'sent', 'MM5cdaf9cdf2997c1161cc3acdb39ef5b2', NULL, NULL, '2026-09-05T21:44:24.721+00:00'::timestamptz, NULL, '2026-09-05T21:44:24.770063+00:00'::timestamptz, 'b2c3d4e5-f6a7-8901-bcde-f23456789012'::uuid),
   ('a0e32cba-655e-41c5-bd49-f7725b537195'::uuid, '96faa7c3-273a-4dc7-a462-6d4e92399066'::uuid, '3212683928', 'welcome', 'HX9cc12612474df0990494041862c0edf7', '{"1":"Valentina González","2":"86","3":"🥉 Plata (150 pts) → Coctel a Eleccion — te faltan 64 pts 🔥 · 🥈 Oro (300 pts) → Entrada De La Casa · 🥇 Diamante (450 pts) → Ramen de la Casa · 🖤 BLACK (1000 pts) → 10% off permanente"}'::jsonb, 'sent', 'MM14267bd0d33a5f6ea35288aa0841fd2d', NULL, NULL, '2026-09-06T01:17:27.903+00:00'::timestamptz, NULL, '2026-09-06T01:17:27.949727+00:00'::timestamptz, 'b2c3d4e5-f6a7-8901-bcde-f23456789012'::uuid),
-  ('0ce9b77a-e23a-4d00-a50d-348e5d284a82'::uuid, '7fb40adb-7575-40ec-8447-8856c11b6d96'::uuid, '3102611287', 'welcome', 'HX9cc12612474df0990494041862c0edf7', '{"1":"Julián Marin","2":"80","3":"🥉 Plata (150 pts) → Coctel a Eleccion — te faltan 70 pts 🔥 · 🥈 Oro (300 pts) → Entrada De La Casa · 🥇 Diamante (450 pts) → Ramen de la Casa · 🖤 BLACK (1000 pts) → 10% off permanente"}'::jsonb, 'sent', 'MM9e25be6b2f6df98206dd22d97b01fdcd', NULL, NULL, '2026-09-06T01:18:26.438+00:00'::timestamptz, NULL, '2026-09-06T01:18:26.504753+00:00'::timestamptz, 'b2c3d4e5-f6a7-8901-bcde-f23456789012'::uuid);
+  ('0ce9b77a-e23a-4d00-a50d-348e5d284a82'::uuid, '7fb40adb-7575-40ec-8447-8856c11b6d96'::uuid, '3102611287', 'welcome', 'HX9cc12612474df0990494041862c0edf7', '{"1":"Julián Marin","2":"80","3":"🥉 Plata (150 pts) → Coctel a Eleccion — te faltan 70 pts 🔥 · 🥈 Oro (300 pts) → Entrada De La Casa · 🥇 Diamante (450 pts) → Ramen de la Casa · 🖤 BLACK (1000 pts) → 10% off permanente"}'::jsonb, 'sent', 'MM9e25be6b2f6df98206dd22d97b01fdcd', NULL, NULL, '2026-09-06T01:18:26.438+00:00'::timestamptz, NULL, '2026-09-06T01:18:26.504753+00:00'::timestamptz, 'b2c3d4e5-f6a7-8901-bcde-f23456789012'::uuid),
+  ('3218dd2a-7785-443f-b7a3-440cbbc86839'::uuid, '07914d85-63b8-49f5-8a15-6e415b55ee5b'::uuid, '3044274686', 'reactivation', 'HXd243ed52d9efd228f26fd22bd4c0b72f', '{"1":"Yerly Cáceres","2":"80","3":"Coctel a Eleccion"}'::jsonb, 'sent', 'MMaee51f2d35219e1bb9f36582a89d53e5', NULL, NULL, '2026-09-06T10:22:52.069+00:00'::timestamptz, NULL, '2026-09-06T10:22:52.115645+00:00'::timestamptz, 'b2c3d4e5-f6a7-8901-bcde-f23456789012'::uuid);
 
 DO $ver$
 DECLARE v int;
 BEGIN
   SELECT count(*) INTO v FROM message_logs WHERE tenant_id = 'b2c3d4e5-f6a7-8901-bcde-f23456789012'::uuid;
-  IF v <> 193 THEN RAISE EXCEPTION 'message_logs FALLO: se esperaban 193 filas y hay %.', v; END IF;
+  IF v <> 194 THEN RAISE EXCEPTION 'message_logs FALLO: se esperaban 194 filas y hay %.', v; END IF;
   RAISE NOTICE 'OK message_logs: % filas de Sushi Fun.', v;
 END $ver$;
 

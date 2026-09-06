@@ -30,7 +30,7 @@ BEGIN
     ('staff_devices', 4),
     ('imported_contacts', 0),
     ('customers', 250),
-    ('campaigns', 93),
+    ('campaigns', 94),
     ('campaign_rewards', 0),
     ('visits', 268),
     ('point_transactions', 268),
@@ -38,8 +38,8 @@ BEGIN
     ('reward_grants', 0),
     ('reward_redemptions', 0),
     ('review_events', 68),
-    ('campaign_messages', 237),
-    ('message_logs', 193),
+    ('campaign_messages', 238),
+    ('message_logs', 194),
     ('restaurant_events', 0)
     ) AS e(tabla, esperado)
     ORDER BY tabla

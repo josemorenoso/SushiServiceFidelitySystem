@@ -759,7 +759,7 @@ BEGIN
 END $ver$;
 
 -- ─────────────────────────────────────────────────────────────
--- campaign_messages — 237 fila(s) en el origen
+-- campaign_messages — 238 fila(s) en el origen
 -- ─────────────────────────────────────────────────────────────
 DO $guard$
 DECLARE v int;
@@ -909,6 +909,7 @@ INSERT INTO campaign_messages (
   ('95718960-86d9-4bc3-91ce-22d6d9115309'::uuid, 'cf2a2461-9114-4e0c-ab96-8c4b8c982978'::uuid, 'a53738e8-becf-48b3-beef-79ccd75425ec'::uuid, 'sent', 'MM5c3cb736c86f0a25ee27b61522352227', '2026-08-08T10:32:41.882+00:00'::timestamptz, NULL, 'b2c3d4e5-f6a7-8901-bcde-f23456789012'::uuid),
   ('98490260-4eed-4350-9cce-943cbcba88d3'::uuid, '5bc599a7-863f-45cc-be8b-18955da83a5a'::uuid, '0c48812f-7c6c-4bcc-990f-288c37417a7e'::uuid, 'sent', 'MMd88bcf524487d949f365ac61950ffc83', '2026-08-23T10:22:53.894+00:00'::timestamptz, NULL, 'b2c3d4e5-f6a7-8901-bcde-f23456789012'::uuid),
   ('999ca6d5-4316-42ac-a6bd-d2cced9470f9'::uuid, '41dd29dd-27c2-4235-aaa0-6b64f09756f6'::uuid, '88a0b735-a261-4443-bf5a-95c9051b7e7f'::uuid, 'failed', NULL, '2026-06-28T10:55:07.195+00:00'::timestamptz, 'Twilio no configurado o error de envío', 'b2c3d4e5-f6a7-8901-bcde-f23456789012'::uuid),
+  ('9b4d48be-aeb8-4295-b384-2f7d6c84ad83'::uuid, 'beb418a6-9641-4135-8a91-3a7d79552720'::uuid, '07914d85-63b8-49f5-8a15-6e415b55ee5b'::uuid, 'sent', 'MMaee51f2d35219e1bb9f36582a89d53e5', '2026-09-06T10:22:52.201+00:00'::timestamptz, NULL, 'b2c3d4e5-f6a7-8901-bcde-f23456789012'::uuid),
   ('9dbbe425-c8d2-48a5-8846-8a043467021b'::uuid, '6583fe1e-c6a9-4adb-b65f-484d3359e3b0'::uuid, '1c45c246-123a-4bf3-9763-eb7104d75c33'::uuid, 'failed', NULL, '2026-07-03T10:54:58.78+00:00'::timestamptz, 'Twilio no configurado o error de envío', 'b2c3d4e5-f6a7-8901-bcde-f23456789012'::uuid),
   ('9e0d700e-914f-47ca-a267-686a3f5455c8'::uuid, 'c5d177ed-200c-42ce-b779-28afdb85e37b'::uuid, '48eb34d2-d47b-4285-b10e-779f6862134a'::uuid, 'failed', NULL, '2026-06-29T10:55:07.704+00:00'::timestamptz, 'Twilio no configurado o error de envío', 'b2c3d4e5-f6a7-8901-bcde-f23456789012'::uuid),
   ('9fc40b21-c8ac-43b4-87c8-97200d71629d'::uuid, 'a36727d5-5b39-4401-8179-6a190080fb52'::uuid, '63bc568f-0b3e-4be7-9b5f-3c783f012474'::uuid, 'failed', NULL, '2026-08-20T10:32:39.238+00:00'::timestamptz, 'Twilio no configurado o error de envío', 'b2c3d4e5-f6a7-8901-bcde-f23456789012'::uuid),
@@ -1015,7 +1016,7 @@ DO $ver$
 DECLARE v int;
 BEGIN
   SELECT count(*) INTO v FROM campaign_messages WHERE tenant_id = 'b2c3d4e5-f6a7-8901-bcde-f23456789012'::uuid;
-  IF v <> 237 THEN RAISE EXCEPTION 'campaign_messages FALLO: se esperaban 237 filas y hay %.', v; END IF;
+  IF v <> 238 THEN RAISE EXCEPTION 'campaign_messages FALLO: se esperaban 238 filas y hay %.', v; END IF;
   RAISE NOTICE 'OK campaign_messages: % filas de Sushi Fun.', v;
 END $ver$;
 

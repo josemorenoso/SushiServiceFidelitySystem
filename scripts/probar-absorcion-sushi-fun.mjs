@@ -215,7 +215,17 @@ async function main() {
       [TENANT_SF]
     )
     const c = cuenta[0]
-    const esperado = { clientes: '250', visitas: '268', puntos: '268', mensajes: '193', billetera: '0' }
+    // Los esperados salen de CONTEOS-ORIGEN.json, que el generador reescribe con
+    // cada foto. Estuvieron a mano y envejecieron: tras regenerar por el cumpleanos
+    // del 2026-09-06, message_logs paso de 193 a 194 y el ensayo marco un falso rojo.
+    const foto = JSON.parse(fs.readFileSync(path.join(SQLDIR, 'CONTEOS-ORIGEN.json'), 'utf8')).conteos
+    const esperado = {
+      clientes: String(foto.customers),
+      visitas: String(foto.visits),
+      puntos: String(foto.point_transactions),
+      mensajes: String(foto.message_logs),
+      billetera: '0', // no sale de la foto: es la invariante de que el 07 no cobro nada
+    }
     for (const [k, v] of Object.entries(esperado)) {
       if (String(c[k]) === v) ok(`${k}: ${c[k]}`)
       else mal(`${k}: ${c[k]} (se esperaba ${v})`)
@@ -272,6 +282,38 @@ async function main() {
     }
 
     // La segunda corrida tiene que ABORTAR, no duplicar.
+    // -- 10 - el credito de billetera -----------------------------------------
+    // Va DESPUES de las comprobaciones independientes a proposito: la de
+    // "billetera: 0" es la que prueba que el 07 no cobro los mensajes historicos,
+    // y este archivo es lo primero que la rompe legitimamente.
+    info('\n> Credito de absorcion (10) - va despues del 08, no antes')
+    const r10 = await correr(client, '10-CREDITO-ABSORCION.sql', null)
+    if (r10.ok) {
+      const { rows: w } = await client.query(
+        'SELECT tenant_wallet_balance_cop($1) AS saldo, (SELECT price_per_message_cop FROM tenants WHERE id=$1) AS tarifa',
+        [TENANT_SF]
+      )
+      const saldo = Number(w[0].saldo)
+      const disp = Math.floor(saldo / Number(w[0].tarifa))
+      if (saldo === 5000000) ok(`saldo ${saldo} COP = ${disp} mensajes disponibles`)
+      else mal(`saldo ${saldo} (se esperaba 5000000)`)
+
+      // canSendBulk() rechaza con saldo 0: el credito existe justo para eso.
+      if (disp > 0) ok('canSendBulk() ya no rechazaria una campana masiva')
+      else mal('siguen siendo 0 mensajes disponibles - el credito no sirvio')
+
+      // Con debeFallar(), no con correr(): el segundo intento DEBE reventar, y
+      // correr() pintaria ese fallo esperado como un rojo.
+      await debeFallar(
+        client,
+        '10-CREDITO-ABSORCION.sql por segunda vez',
+        fs.readFileSync(path.join(SQLDIR, '10-CREDITO-ABSORCION.sql'), 'utf8'),
+        'ya se corrió'
+      )
+    } else {
+      mal(`10-CREDITO-ABSORCION.sql: ${r10.err}`)
+    }
+
     info('\n▸ Idempotencia: correr el 04 dos veces')
     await debeFallar(
       client,

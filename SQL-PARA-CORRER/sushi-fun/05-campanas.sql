@@ -12,7 +12,7 @@
 BEGIN;
 
 -- ─────────────────────────────────────────────────────────────
--- campaigns — 93 fila(s) en el origen
+-- campaigns — 94 fila(s) en el origen
 -- ─────────────────────────────────────────────────────────────
 DO $guard$
 DECLARE v int;
@@ -118,13 +118,14 @@ INSERT INTO campaigns (
   ('c2851a03-4ce9-440b-b0a2-032012f007ef'::uuid, 'reactivation_2026-09-03', 'reactivation', 'completed', 'template:HXd243ed52d9efd228f26fd22bd4c0b72f|mode:no_reward', NULL, 0, NULL, '2026-09-03T20:00:05.729+00:00'::timestamptz, '2026-09-03T10:22:50.612237+00:00'::timestamptz, 'reactivation', NULL, NULL, 'b2c3d4e5-f6a7-8901-bcde-f23456789012'::uuid),
   ('544d165e-656e-4dbb-abb5-b3e4b96f0095'::uuid, 'reactivation_2026-09-04', 'reactivation', 'completed', 'template:HXd243ed52d9efd228f26fd22bd4c0b72f|mode:no_reward', NULL, 0, NULL, '2026-09-04T20:00:04.237+00:00'::timestamptz, '2026-09-04T10:22:50.23812+00:00'::timestamptz, 'reactivation', NULL, NULL, 'b2c3d4e5-f6a7-8901-bcde-f23456789012'::uuid),
   ('5ac4213d-c0a0-44b8-9ef3-2f8a693ec7a4'::uuid, 'birthday_2026-09-05', 'birthday', 'completed', 'template:HXe23b0314b39c3ff18c7bd14db93f5fb4', NULL, 0, NULL, '2026-09-05T18:00:05.058+00:00'::timestamptz, '2026-09-05T08:13:53.214366+00:00'::timestamptz, 'birthday', NULL, NULL, 'b2c3d4e5-f6a7-8901-bcde-f23456789012'::uuid),
-  ('1907313e-8422-485b-9603-3fdafae3a7f5'::uuid, 'reactivation_2026-09-05', 'reactivation', 'completed', 'template:HXd243ed52d9efd228f26fd22bd4c0b72f|mode:no_reward', NULL, 0, NULL, '2026-09-05T20:00:05.406+00:00'::timestamptz, '2026-09-05T10:22:50.047953+00:00'::timestamptz, 'reactivation', NULL, NULL, 'b2c3d4e5-f6a7-8901-bcde-f23456789012'::uuid);
+  ('1907313e-8422-485b-9603-3fdafae3a7f5'::uuid, 'reactivation_2026-09-05', 'reactivation', 'completed', 'template:HXd243ed52d9efd228f26fd22bd4c0b72f|mode:no_reward', NULL, 0, NULL, '2026-09-05T20:00:05.406+00:00'::timestamptz, '2026-09-05T10:22:50.047953+00:00'::timestamptz, 'reactivation', NULL, NULL, 'b2c3d4e5-f6a7-8901-bcde-f23456789012'::uuid),
+  ('beb418a6-9641-4135-8a91-3a7d79552720'::uuid, 'reactivation_2026-09-06', 'reactivation', 'completed', 'template:HXd243ed52d9efd228f26fd22bd4c0b72f|mode:no_reward', NULL, 1, NULL, '2026-09-06T10:22:52.593+00:00'::timestamptz, '2026-09-06T10:22:50.39117+00:00'::timestamptz, 'reactivation', NULL, NULL, 'b2c3d4e5-f6a7-8901-bcde-f23456789012'::uuid);
 
 DO $ver$
 DECLARE v int;
 BEGIN
   SELECT count(*) INTO v FROM campaigns WHERE tenant_id = 'b2c3d4e5-f6a7-8901-bcde-f23456789012'::uuid;
-  IF v <> 93 THEN RAISE EXCEPTION 'campaigns FALLO: se esperaban 93 filas y hay %.', v; END IF;
+  IF v <> 94 THEN RAISE EXCEPTION 'campaigns FALLO: se esperaban 94 filas y hay %.', v; END IF;
   RAISE NOTICE 'OK campaigns: % filas de Sushi Fun.', v;
 END $ver$;
 

@@ -15,6 +15,13 @@
 -- Ojo: trg_staff_users_sede_coherente es BEFORE UPDATE, no BEFORE INSERT — acá el
 -- que verifica es la FK compuesta, no el trigger.
 --
+--
+-- staff_users.pin se fuerza a NULL. Desde §19 el login por mesero NO EXISTE
+-- (/api/staff/login se borró; 00046 documenta que la columna ya no autentica),
+-- así que copiar el hash solo metería un credencial rompible —bcrypt de 4
+-- dígitos— en un archivo versionado, a cambio de nada. El original sigue vivo
+-- en el Supabase de origen si alguna vez hiciera falta.
+--
 -- staff_devices.location_id se deja NULL a propósito: un dispositivo es un aparato
 -- FÍSICO, y trg_staff_devices_sede_coherente (00044) solo compara sedes cuando las
 -- DOS están puestas. Con NULL pasa el trigger y no se inventa nada.
@@ -34,11 +41,6 @@ BEGIN
   END IF;
 END $guard$;
 
--- ⚠️ El `pin` de Jairo va en NULL, no con su hash bcrypt del origen (decision 2026-09-06).
---    Desde §19 el login por mesero NO EXISTE: `/api/staff/login` se borro y `staff_users.pin`
---    ya no autentica nada (00046 lo documenta). Copiar el hash solo habria metido un credencial
---    rompible —bcrypt de 4 digitos— en un archivo versionado, a cambio de nada.
---    Si alguna vez vuelve a hacer falta, el hash sigue vivo en el Supabase de origen.
 INSERT INTO staff_users (
   id, name, phone, pin, role, is_active, last_login_at, created_at, updated_at, tenant_id, location_id
 ) VALUES

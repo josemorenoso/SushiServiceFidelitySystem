@@ -310,3 +310,119 @@ describe('la FK COMPUESTA (location_id, tenant_id) — el motor, no el programad
     expect(code).toBe('23001')
   })
 })
+
+// ═══════════════════════════════════════════════════════════════
+// D2 — el dominio cruzado, en las DOS direcciones (00041 + 00051)
+// ═══════════════════════════════════════════════════════════════
+/**
+ * Postgres no tiene índices únicos ENTRE tablas, así que "un host resuelve a una sola
+ * marca" no lo puede sostener un UNIQUE: son dos triggers que solo valen juntos.
+ *
+ *   · 00041 → sobre `restaurant_locations`: una sede no toma el `tenants.domain` de otra marca.
+ *   · 00051 → sobre `tenants`: una marca no toma el `domain` de la sede de otra marca.
+ *
+ * Si falta cualquiera de los dos, `resolveHostContext()` (`src/lib/tenant.ts`) tiene DOS
+ * dueños para el mismo host: gana su camino 1 (`getTenantByDomain`) y el subdominio de la
+ * sede de A pasa a servir la marca B entera. Por eso se prueban en el mismo bloque — el que
+ * borre uno tiene que ver fallar esto.
+ */
+describe('D2 — un host resuelve a UNA sola marca (00041 + 00051)', () => {
+  /** El mensaje del error, no solo su código: los dos triggers usan el mismo. */
+  async function fallo(sql: string, params: unknown[]): Promise<{ code: string; message: string } | null> {
+    try {
+      await getPool().query(sql, params)
+      return null
+    } catch (err) {
+      const e = err as { code?: string; message?: string }
+      return { code: e.code ?? 'sin_codigo', message: e.message ?? '' }
+    }
+  }
+
+  const DOMINIO_SEDE_D2 = `envigado.${DOMINIO_MARCA}`
+  const DOMINIO_SEDE_DORMIDA = `dormida.${DOMINIO_MARCA}`
+
+  beforeAll(async () => {
+    // Una sede de A con dominio PROPIO, distinto del de su marca: es la forma que tiene
+    // toda sede bajo la regla del dueño de 2026-09-06 (la ciudad va en el subdominio).
+    await crearSede(tenantA.id, {
+      name: 'Envigado',
+      slug: 'envigado-d2',
+      domain: DOMINIO_SEDE_D2,
+      sortOrder: 5,
+    })
+    await crearSede(tenantA.id, {
+      name: 'Sede cerrada',
+      slug: 'dormida-d2',
+      domain: DOMINIO_SEDE_DORMIDA,
+      sortOrder: 6,
+      isActive: false,
+    })
+  })
+
+  afterAll(async () => {
+    // Que el bloque no le deje dominio puesto a la marca B a los que vengan después.
+    await getPool().query('UPDATE tenants SET domain = NULL WHERE id = $1', [tenantB.id])
+  })
+
+  it('00041 — una sede de la marca B no puede tomar el dominio de la marca A', async () => {
+    const err = await fallo(
+      `UPDATE restaurant_locations SET domain = $1 WHERE id = $2`,
+      [DOMINIO_MARCA, sedeB]
+    )
+    expect(err?.message).toContain('dominio_de_otra_marca')
+  })
+
+  it('00051 — la marca B no puede tomar el subdominio de una sede de la marca A', async () => {
+    // ESTE es el agujero que la 00041 dejó abierto: su trigger vive en la OTRA tabla, así
+    // que un UPDATE sobre `tenants` no lo despertaba.
+    const err = await fallo('UPDATE tenants SET domain = $1 WHERE id = $2', [
+      DOMINIO_SEDE_D2,
+      tenantB.id,
+    ])
+    expect(err?.message).toContain('dominio_de_otra_marca')
+  })
+
+  it('00051 — tampoco al dar de alta la marca, no solo al editarla', async () => {
+    const err = await fallo(
+      `INSERT INTO tenants (slug, name, business_type, domain, is_active)
+       VALUES ($1, 'Marca intrusa', 'restaurant', $2, true)`,
+      [`intrusa-${SUFIJO}`, DOMINIO_SEDE_D2]
+    )
+    expect(err?.message).toContain('dominio_de_otra_marca')
+  })
+
+  it('00051 — una sede DESACTIVADA sigue reservando su dominio', async () => {
+    // Decisión escrita en la 00051: ningún trigger escucha `is_active`, así que si se
+    // permitiera tomar el dominio de una sede dormida, el choque nacería en silencio el
+    // día que alguien la reactive.
+    const err = await fallo('UPDATE tenants SET domain = $1 WHERE id = $2', [
+      DOMINIO_SEDE_DORMIDA,
+      tenantB.id,
+    ])
+    expect(err?.message).toContain('dominio_de_otra_marca')
+  })
+
+  it('el solape DENTRO de la misma marca sigue permitido (00042: cero reimpresión)', async () => {
+    // La sede principal de A repite el dominio de A desde el `beforeAll` del archivo. Que
+    // eso siga siendo legal es la razón por la que los QR ya impresos no se tocaron.
+    const { rows } = await getPool().query(
+      `SELECT count(*)::int AS n FROM restaurant_locations
+        WHERE tenant_id = $1 AND domain = $2`,
+      [tenantA.id, DOMINIO_MARCA]
+    )
+    expect(rows[0].n).toBe(1)
+
+    // Y en la otra dirección: la marca A puede reafirmar como suyo el dominio de su propia sede.
+    const err = await fallo('UPDATE tenants SET domain = $1 WHERE id = $2', [
+      DOMINIO_SEDE_D2,
+      tenantA.id,
+    ])
+    expect(err).toBeNull()
+    await getPool().query('UPDATE tenants SET domain = $1 WHERE id = $2', [DOMINIO_MARCA, tenantA.id])
+  })
+
+  it('una marca sin dominio no la molesta ningún trigger', async () => {
+    const err = await fallo('UPDATE tenants SET domain = NULL WHERE id = $1', [tenantB.id])
+    expect(err).toBeNull()
+  })
+})

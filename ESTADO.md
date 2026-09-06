@@ -1,6 +1,6 @@
 # ESTADO — RestaurantQR / Cada1
 
-> **Última actualización:** 2026-09-06, 13:40 (sesión "absorción de Sushi Fun + deploy", Opus 5)
+> **Última actualización:** 2026-09-06, 18:45 (sesión "subdominio por sede — D2", Opus 5)
 > Toda sesión lo lee PRIMERO. Toda sesión que cierra un bloque lo ACTUALIZA al final. Límite: 150 líneas.
 > Lo obsoleto se **saca**, no se tacha: un ítem tachado sigue costando tokens cada vez que alguien lee esto.
 >
@@ -25,13 +25,17 @@
 
 ## 2. En vuelo ahora mismo
 
-**Nada corriendo.** `main` limpio, suite en verde, árbol de trabajo limpio.
+**TRES ramas sin mergear, territorios disjuntos** (2026-09-06 18:45):
+`fix/crear-mesero-por-rol` (el alta de meseros la gobierna el rol), `fix/d2-dominio-cruzado`
+(la 00051, esta entrada) y `fix/opt-out-visible` (otra sesión). **Comparten el mismo árbol de
+trabajo**, y la rama activa la cambia quien haga `checkout`.
 
-**Repo del AIOS** (`Level 2.0/aios-constelarys`, remoto propio): la rama `fix/coexistencia`
-(v1.4.0) está subida pero **su `main` NO se pusheó** — tiene un commit suelto
-(`la sede se crea SIEMPRE, aunque no haya coordenadas`) que está respaldado dentro de esa rama.
-Pushear ese `main` despliega el AIOS: es decisión del dueño. Parte completo en
-`Level 2.0/aios-constelarys/docs/PARTE-COEXISTENCIA-2026-09-06.md`.
+⚠️ **`git stash` en un árbol compartido se lleva el trabajo de la otra sesión** (hoy barrió 12
+archivos). Con otra sesión viva: `git worktree`, nunca stash.
+
+**Repo del AIOS**: `fix/coexistencia` (v1.4.0) subida, pero **su `main` NO se pusheó** — tiene
+suelto `la sede se crea SIEMPRE, aunque no haya coordenadas`, respaldado en esa rama. Pushearlo
+despliega el AIOS: decisión del dueño. Parte en `…/docs/PARTE-COEXISTENCIA-2026-09-06.md`.
 
 ## 3. Siguiente, en orden
 
@@ -41,11 +45,8 @@ Pushear ese `main` despliega el AIOS: es decisión del dueño. Parte completo en
    Archivo: `supabase/migrations/00047_identidad_visual.sql`.
 2. **Asignarle sede a los meseros que ya existen.** Todos tienen `location_id` NULL, así que **no
    aparecen en ningún escáner**. Es lo que más se nota en la operación diaria.
-3. **Arreglar el modal "Crear Mesero"** (`dashboard/staff/page.tsx`): su subtítulo todavía dice que
-   el PIN es "para que el mesero inicie sesión", que es del mundo pre-§19 y contradice sus propios
-   textos de ayuda. Y el formulario no reacciona al campo *Rol*: debería pedir Celular y PIN solo
-   para supervisor/admin, y para un mesero solo Nombre + Sede (obligatoria, con la única sede
-   preseleccionada si la marca tiene una). Lo pidió el dueño el 2026-09-06.
+3. **Mergear las tres ramas vivas** (§2). El modal "Crear Mesero" ya está arreglado en
+   `fix/crear-mesero-por-rol`; el SQL para asignarle sede a los meseros viejos también.
 4. **Zernio E2E** con la cuenta ya limpia → desbloquea al primer cliente nuevo bajo coexistencia.
 5. **Responder §18.a–d** (`docs/DECISION-18-DOMICILIOS-COEXISTENCIA.md`, con opciones y consecuencias).
    Son las últimas preguntas que bloquean el onboarding.
@@ -73,9 +74,17 @@ credenciales de terceros).
 - **D6 CERRADA** (2026-09-05): la línea de WhatsApp es **N líneas por marca y la sede no obliga a
   ninguna** — se elige al enviar. El eje es el cupo, no la geografía. `docs/features/multi-sede.md` §5.
 - **Separación de una sede** (venta, franquicia, socio distinto) — aplazada por el dueño, 2026-09-02.
+- **D21 CERRADA — un subdominio por sede** (2026-09-06): la ciudad va en el subdominio **desde el
+  principio** y **todas las sedes son pares** (`laureles.marca.com`), sin principal ni subramas. No
+  es opcional: con 2+ sedes el dominio RAÍZ deja de registrar clientes nuevos (409 en
+  `check-in/route.ts:332`), así que una sede sin `domain` mata el registro. → `multi-sede.md` §3.5.
 
 ## 5. Hecho reciente
 
+- **D2 cerrada — el dominio cruzado va en las DOS direcciones** (2026-09-06, `00051`): faltaba el
+  trigger simétrico sobre `tenants`. Sin él, una marca nueva podía tomar el subdominio de la sede
+  de OTRA marca y `resolveHostContext()` quedaba con dos dueños del mismo host — el subdominio de A
+  sirviendo la marca B entera. Lo destapó D21. Trae prevuelo y no filtra `is_active`.
 - **Sushi Fun absorbido como tenant** (2026-09-06): 1.421 filas movidas desde su propio Supabase,
   el `08` cuadró con cero cruces de marca y las otras cuatro marcas no se movieron ni una fila.
   Conserva **su propia cuenta de Twilio** (3 columnas en `tenants`) y su marca. Runbook y parte en
@@ -87,16 +96,11 @@ credenciales de terceros).
   `SALIR` de Sushi Fun. Ahora la ruta resuelve el tenant por `To` y valida con SU token; se quitó
   la puerta trasera `NODE_ENV === 'development'` y la comparación pasa a tiempo constante.
 - **Identidad visual por marca (§5/§6/§3)** (2026-09-06): logo y un color desde `/dashboard/marca`,
-  del que se derivan gradientes, ✓ del sello y color del QR. `tenants.config` gana whitelist **por
-  ruta** y reserva `integrations`. Migración **renumerada de 00048 a 00047**: el 48 estaba reservado
-  para F9 en el spec de multi-sede. → `docs/features/identidad-visual.md`.
+  del que salen gradientes, ✓ del sello y color del QR. `tenants.config` gana whitelist **por ruta**
+  y reserva `integrations`. Migración **renumerada de 00048 a 00047** (el 48 era de F9).
 - **§19 — el escáner es del local** (2026-09-05, desplegado): un login por aparato, el mesero se
   elige en cada operación y la lista va filtrada por sede. `staff_users.phone` pasa a NULLABLE y la
-  llave de identidad se **complementa** (CHECK de identidad mínima + UNIQUE parcial marca/sede/nombre)
-  en vez de reemplazarse. Eliminada `POST /api/staff/login`.
-- **Pulido visual** (2026-09-06): CTA del mesero unificados con `.btn-premium` y objetivos táctiles
-  a 44px. Al mergear se descartó su versión de `mesero/page.tsx`, que era anterior a §19 y habría
-  resucitado el login por mesero.
+  llave se **complementa** (CHECK + UNIQUE parcial marca/sede/nombre). Eliminada `POST /api/staff/login`.
 - **F7 / F4 / F3**: permisos por sede (D10, `00045`), el mesero es de UNA sede (D11, `00044`), y el
   check-in escribe la sede. Todo aplicado y desplegado.
 

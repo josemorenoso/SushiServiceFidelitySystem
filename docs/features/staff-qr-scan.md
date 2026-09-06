@@ -1,10 +1,12 @@
 # Feature: Verificación Cliente-Mesero con QR Dinámico
 
-> **Estado:** ✅ COMPLETADO (v1.1.7)
+> **Estado:** ✅ COMPLETADO · **§19 (el aparato es del local) implementado el 2026-09-05**,
+> con la migración `00046` escrita y **SIN APLICAR**.
 > **Prioridad:** URGENTE
-> **Última actualización:** 2026-05-31
-> **Archivos clave:** `src/components/features/check-in/CheckInForm.tsx`, `src/app/(public)/mesero/page.tsx`, `src/app/api/check-in/route.ts`, `src/app/(dashboard)/dashboard/staff/page.tsx`
-> **Dependencias nuevas:** `qrcode.react` (generación QR cliente), `html5-qrcode` (escaneo mesero), `jose` (JWT para auth de meseros)
+> **Última actualización:** 2026-09-05
+> **Spec de §19:** `docs/superpowers/specs/2026-09-05-staff-scanner-19-design.md`
+> **Archivos clave:** `src/app/(public)/mesero/*`, `src/app/api/staff/*`, `src/app/api/check-in/route.ts`, `src/app/api/reward-redeem/route.ts`, `src/lib/staff-auth.ts`, `src/hooks/useWaiters.ts`, `src/components/features/staff/WaiterPicker.tsx`, `src/app/(dashboard)/dashboard/staff/page.tsx`
+> **Dependencias:** `qrcode.react` (QR del cliente), `html5-qrcode` (escáner), `jose` (JWT — solo legado)
 
 ---
 
@@ -32,12 +34,15 @@ Sistema de verificación presencial de dos pasos entre cliente y mesero usando c
 
 **Paso 2 (Mesero):** El mesero abre `/mesero` en el celular del restaurante. Hay dos formas de operar:
 
+> ⚠️ **§19 (2026-09-05) dejó UN SOLO modo.** Lo de abajo describe el estado anterior, en el
+> que había dos. El login por mesero ya no existe.
+
 | Modo de uso | ¿Qué hace el mesero? | ¿Requiere PIN? | ¿Cuándo usarlo? |
 |-------------|---------------------|----------------|-----------------|
-| **Dispositivo de confianza** (recomendado) | Abre `/mesero` → ya está activado. Toca "Escanear QR de Cliente" directamente. | **NO** | Celular/tablet del restaurante que queda en caja. Configurado una vez por el supervisor. |
-| **Login con PIN individual** | Abre `/mesero` → ingresa su número + PIN de 4-6 dígitos → toca "Escanear QR de Cliente". | **SÍ** | Mesero que usa su propio celular, o cuando el dueño quiere trazabilidad individual de quién escaneó. |
+| **Celular del local** (el único desde §19) | Abre `/mesero` → ya está adentro. Toca "Escanear QR de Cliente" y **elige su nombre** de la lista de su sede. | **NO** | Siempre. El supervisor lo activa una vez con su PIN y nadie vuelve a iniciar sesión. |
+| ~~Login con PIN individual~~ | ~~Su número + PIN~~ | — | **Eliminado por §19.** `POST /api/staff/login` ya no existe. |
 
-En ambos casos, al escanear el QR del cliente y confirmar, el sistema registra la visita, suma puntos, evalúa tiers y dispara el WhatsApp.
+Al escanear el QR del cliente, elegir el mesero y confirmar, el sistema registra la visita, suma puntos, evalúa tiers y dispara el WhatsApp.
 
 Esta feature garantiza que **solo un mesero autenticado** puede registrar visitas, eliminando fraudes de auto-checkin.
 
@@ -53,20 +58,34 @@ Esta feature garantiza que **solo un mesero autenticado** puede registrar visita
 
 ## Modelo de Datos
 
-> **Cambio de enfoque post-auditoría:** El diseño original (secciones 1-6) planteaba sin cambios de schema. El **nuevo requerimiento de app del mesero con login** (sección 14) requiere las siguientes adiciones:
+> **§19 invirtió el modelo (dueño, 2026-09-05).** El celular era de un mesero; ahora es del LOCAL: un login
+> por aparato y el mesero se elige en CADA operación. Lo de antes queda abajo, en «Dispositivos a nombre de
+> un mesero (v2.8.1)», como historia.
 
-| Tabla | Uso en esta feature | ¿Cambio? |
-|-------|-------------------|----------|
-| **customers** | Fuente de datos del cliente (phone, name, total_visits, current_tier) | Reutiliza existente |
-| **visits** | Registro de la visita con `source = 'staff_scan'` + `registered_by_staff_id` | **Nueva columna** |
-| **staff_users** | Meseros con login (PIN hasheado, rol, activo) | **Nueva tabla** |
-| **staff_devices** | Dispositivos autorizados del restaurante (celular/tablet de caja) | **Nueva tabla** |
-| **restaurant_locations** | Geolocalización del restaurante (ya implementado en v1.0.5) | Reutiliza existente |
-| **point_transactions** | Transacción de puntos por la visita registrada | Reutiliza existente; source agrega `'visit_staff'` |
-| **mystery_box_results** | Resultado de la caja misteria si aplica | Reutiliza existente |
-| **admin_settings** | Feature flags: `checkin_mode`, `checkin_first_visit_free` | **Nuevas keys** |
+**1. El aparato es del local.** `staff_devices` ES la sesión: una fila por celular, activada una vez y con
+`staff_user_id = NULL` — ya no tiene dueño. Su `location_id` deja de heredarse y se **elige al activarlo**:
+es dónde está el aparato, y es lo único que hace posible la lista filtrada. `device_name` sigue siendo la
+nota de a quién pertenece.
 
-> **Nota:** El QR dinámico no se almacena en la base de datos. Se genera en el frontend como **token JWT efímero firmado** (`jose`) con expiración de 5 minutos.
+**2. El mesero se elige por operación.** `staff_users` deja de ser identidad de LOGIN y pasa a ser identidad
+de ATRIBUCIÓN: `phone` NULLABLE (alta con nombre + PIN) y el mesero no inicia sesión nunca.
+`visits.registered_by_staff_id` y `reward_redemptions.redeemed_by_staff_id` no cambian de forma, cambian de
+FUENTE: antes el dueño del aparato, ahora el selector, explícito en el cuerpo de cada petición. **El escaneo
+NO pide PIN; solo la redención** (decisión del dueño: regalarle tu premio a otro es una estupidez, no un bug).
+
+**3. La lista va filtrada por sede.** El selector solo trae meseros ACTIVOS cuya `staff_users.location_id` es
+la del aparato. 8 nombres se buscan; 40 no. **La sede vive en la FILA y se relee en cada petición, nunca en
+el JWT.**
+
+**Schema — migración `00046`, se escribe y se deja SIN aplicar:**
+
+| Cambio | Por qué |
+|---|---|
+| `staff_users.phone` → NULLABLE | §19.2: alta solo con nombre y PIN de 4 dígitos |
+| `staff_users_phone_tenant_key` **se conserva** | **19.f**: no se quita, se complementa. Sigue siendo D11 en el motor para todo el parque que sí tiene teléfono |
+| `+ CHECK (phone IS NOT NULL OR location_id IS NOT NULL)` | **19.f**: sin teléfono la sede es OBLIGATORIA — sin sede un mesero no sale en ninguna lista y no tiene llave |
+| `+ UNIQUE (tenant_id, location_id, lower(trim(name))) WHERE location_id IS NOT NULL` | **19.f**: dos «Ana» de la misma sede son indistinguibles al elegir. Parcial a propósito: **los NULL no colisionan** |
+| `+ staff_users.pin_failed_attempts` / `.pin_locked_until` · `+ admin_settings.staff_redeem_requires_pin` (por tenant) | **19.e** el contador debe ser durable (`rateLimit()` vive en memoria y Vercel tiene N instancias) · **§19.7** el PIN se activa/desactiva desde el apartado de escaneo |
 
 ---
 
@@ -830,7 +849,14 @@ Durante la revisión del documento previo al desarrollo se identificaron y corri
 
 ---
 
-## Dispositivos a nombre de un mesero (v2.8.1 — 2026-08-10)
+## Dispositivos a nombre de un mesero (v2.8.1 — 2026-08-10) — ❌ DEROGADO POR §19
+
+> **Esto ya no es verdad. Queda como historia, no como documentación.** §19 (2026-09-05)
+> invirtió exactamente esta feature: el aparato dejó de tener dueño (`staff_user_id = NULL`) y
+> `assign_staff_phone` se retiró de `POST /api/staff/device/register`. El comportamiento
+> vigente está en «Modelo de Datos», arriba, y en «§19 — el aparato es del local», abajo.
+> Se conserva porque explica por qué las filas viejas de `staff_devices` SÍ tienen dueño: la
+> 00046 no las tocó, y el código simplemente dejó de leer esa columna para atribuir.
 
 Antes un dispositivo de confianza solo podía activarse con PIN de supervisor/admin y quedaba
 atribuido al supervisor; las visitas registradas desde él quedaban además con
@@ -894,3 +920,67 @@ leían `staff_user_id`).
 ---
 
 *Última actualización: 2026-07-07 v5 (Bug 6: fix carrera del polling que mostraba "0 puntos" post-multitenant.)*
+
+---
+
+## §19 — El aparato es del local (2026-09-05)
+
+> Spec completo: `docs/superpowers/specs/2026-09-05-staff-scanner-19-design.md`.
+> Migración `00046`: **escrita y SIN aplicar.** Aplicarla en producción lo decide el dueño.
+
+### Los tres flujos
+
+**1. Instalar el celular — una vez por aparato, lo hace el dueño.**
+`/mesero` → celular y PIN de un **supervisor** + nombre del aparato → si la marca tiene 2 o más
+sedes, elige en cuál queda. Con una sola sede el paso **no se muestra**: `GET /api/staff/locations`
+la devuelve en `auto` y se asigna sola. El aparato queda con `staff_user_id = NULL` y su propia
+`location_id`. No se vuelve a iniciar sesión nunca.
+
+**2. Registrar una visita — cada mesa, lo hace el mesero.**
+Abre → escanea → **elige su nombre** de la lista de su sede → mesa → registra.
+`registered_by_staff_id` viaja en el CUERPO y es obligatorio para `source: 'staff_scan'`.
+**No pide PIN**, a propósito: *"nadie lo va a hacer porque es una estupidez regalar tu premio a
+otro"* (dueño).
+
+**3. Entregar un premio — "Entregar" o "Guardar".**
+Entregar despliega mesa + selector de mesero y manda `redeemed_by_staff_id`. **Guardar no
+escribe nada**: el premio sigue pendiente con la ventana que tuviera y le vuelve a salir al
+cliente en su próxima visita (19.d). **Tampoco pide PIN** — el dueño lo quitó el 2026-09-05
+revocando el punto 6 de su propio encargo. Lo que eso acepta: cualquiera con el celular puede
+marcar una entrega a nombre de otro mesero de esa sede.
+
+### Sin sede, la lista NO se abre
+
+`GET /api/staff/waiters` responde **409 `sede_no_asignada`** cuando no puede resolver la sede
+del aparato. **Nunca devuelve la marca entera.** Devolver "todos por si acaso" es justo lo que
+el dueño rechazó, y disfrazado de éxito: la pantalla no podría notar que el filtro no se
+aplicó. Los aparatos ya activos (todos con `location_id` NULL, porque la 00044 no backfilleó)
+pasan una vez por la pantalla de asignación y quedan resueltos.
+
+### Tres cosas que rompen si alguien las "arregla"
+
+- **`resolveStaffAuth` devuelve `staffId: null` en la rama del aparato**, aunque la fila tenga
+  dueño. No es un olvido: heredar el dueño acreditaría las visitas de todo un turno al mesero
+  que un día activó la tablet. Hay una prueba que lo fija (`tests/unit/db-failure.test.ts`).
+- **En `/api/check-in`, mesero y aparato NO son excluyentes.** Eran un `else if`; §19 manda los
+  dos a la vez (mesero en el cuerpo, aparato en la cabecera). Volver al `else if` deja
+  `device_token` sin validar y **todos los meseros reciben 403**.
+- **Si el mesero elegido es de otra sede, el check-in NO rechaza.** Gana el mesero (vía 1 del
+  §3.1) y la discrepancia se registra en `visits.location_conflict`. El 403 de sede era del
+  LOGIN, y §19 eliminó el login.
+
+### La llave de identidad (19.f) — lo que se conserva y lo que se pierde
+
+`staff_users.phone` pasó a NULLABLE y **`staff_users_phone_tenant_key` NO se quitó**: sigue
+dando D11 completo a todo el parque que tiene teléfono. Se le sumaron un CHECK
+(`staff_users_identidad_minima`: sin teléfono, la sede es obligatoria) y un UNIQUE PARCIAL
+(`staff_users_nombre_sede_key` sobre `(tenant_id, location_id, lower(trim(name)))`), que es la
+llave de los que no tienen teléfono y la que la pantalla necesita para que dos «Ana» de la
+misma sede no sean indistinguibles.
+
+**Lo que se pierde y el dueño aceptó:** sin teléfono, la base ya no puede saber que «Ana de
+Laureles» y «Ana del Poblado» son la misma persona. Ningún índice lo recupera. Lo que sí queda
+garantizado es que **ningún hecho se atribuye a dos sedes**.
+
+**Un mesero en DOS sedes sería caro:** choca con D11, que vive en la FK compuesta, en el
+trigger de la 00044 y en el índice nuevo.

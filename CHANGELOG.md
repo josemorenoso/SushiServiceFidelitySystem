@@ -8,6 +8,22 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [2026-09-05] - §19: el escáner es del local, el mesero se elige por operación
+
+**Qué:** el celular deja de ser de un mesero y pasa a ser del restaurante. Un solo login (PIN de
+supervisor, una vez por aparato) y el mesero se elige en CADA check-in y CADA redención, de una lista
+que solo trae los de la sede del aparato. Alta de mesero solo con nombre. Sin PIN del mesero: el dueño
+lo quitó, y con él 19.e y §19.7. **19.f (bloqueante):** `staff_users_phone_tenant_key` NO se quita, se
+COMPLEMENTA — `phone` pasa a NULLABLE y se le suman un CHECK de identidad mínima (sin teléfono, sede
+obligatoria) y un UNIQUE parcial `(marca, sede, nombre)`. Los NULL no colisionan, así que sin las tres
+piezas juntas la garantía se apagaba en silencio.
+**Migración `00046`: escrita y SIN APLICAR.** Nuevas `GET /api/staff/waiters` y `/locations`; eliminada
+`POST /api/staff/login`. `resolveStaffAuth` deja de atribuir desde la sesión.
+**Deudas nuevas:** D18 (el token del aparato sigue siendo el fingerprint, aceptado), D19 (dos "Ana" sin
+teléfono en dos sedes son dos meseros), D20.
+**Verificación:** `tsc` limpio · eslint 7 errores preexistentes · 15 archivos / **278 tests** (+17).
+**Request:** «Construir §19, el escáner de meseros» + decisiones del dueño del 2026-09-05.
+
 ## [2026-09-05] - Migración al Método Maestro LuisRAI v3
 
 **Qué:** el repo pasa del Método AInnovate v2 al Maestro v3. `ESTADO.md` sube a la raíz y es la única

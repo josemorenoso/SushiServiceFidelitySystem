@@ -1,8 +1,10 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Gift, Loader2, CheckCircle2, PartyPopper, RefreshCw } from 'lucide-react'
+import { Gift, Loader2, CheckCircle2, PartyPopper, RefreshCw, Bookmark } from 'lucide-react'
 import { expiryLabel } from '@/lib/format/grant-expiry'
+import { useWaiters } from '@/hooks/useWaiters'
+import { WaiterPicker } from './WaiterPicker'
 
 export interface PendingGrant {
   id: string
@@ -19,7 +21,12 @@ export interface PendingGrant {
 }
 
 interface Props {
-  authHeaders: Record<string, string>
+  /**
+   * Getter, NO el objeto ya resuelto. `useStaffAuth` lo devuelve memoizado, así que solo
+   * cambia cuando cambia la sesión: pasar el objeto obligaba a recrear el intervalo del poll
+   * en CADA render, porque un literal nuevo nunca es igual al anterior.
+   */
+  getAuthHeaders: () => Record<string, string>
   /** Se llama cuando cambia el número de pendientes, para el contador del dashboard. */
   onCountChange?: (count: number) => void
 }
@@ -57,7 +64,7 @@ function timeAgo(iso: string): string {
  *
  * Ref: docs/features/reward-grants.md
  */
-export function PendingRewardsList({ authHeaders, onCountChange }: Props) {
+export function PendingRewardsList({ getAuthHeaders, onCountChange }: Props) {
   const [grants, setGrants] = useState<PendingGrant[]>([])
   const [loading, setLoading] = useState(true)
   const [tables, setTables] = useState<Record<string, string>>({})
@@ -65,9 +72,26 @@ export function PendingRewardsList({ authHeaders, onCountChange }: Props) {
   const [justRedeemed, setJustRedeemed] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
+  // §19.5 — "Redimir ahora" o "Acumular". `expandedId` es la tarjeta abierta para entregar;
+  // `savedId` es la que acaba de decir "guardar", que NO ESCRIBE NADA (19.d): el premio sigue
+  // pendiente exactamente como estaba, con la ventana que tuviera, y vuelve a salir solo.
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [savedId, setSavedId] = useState<string | null>(null)
+
+  // §19.6 — quién entrega. Uno por tarjeta: dos premios distintos los pueden entregar dos
+  // meseros distintos, y compartir el estado haría que el segundo heredara el nombre del
+  // primero sin que nadie lo note.
+  const [redeemers, setRedeemers] = useState<Record<string, string>>({})
+  const {
+    waiters,
+    loading: waitersLoading,
+    error: waitersError,
+    sedeSinAsignar,
+  } = useWaiters(getAuthHeaders, true)
+
   const fetchGrants = useCallback(async () => {
     try {
-      const res = await fetch('/api/staff/pending-rewards', { headers: authHeaders })
+      const res = await fetch('/api/staff/pending-rewards', { headers: getAuthHeaders() })
       if (!res.ok) return
       const data = await res.json()
       setGrants(data.grants ?? [])
@@ -77,7 +101,7 @@ export function PendingRewardsList({ authHeaders, onCountChange }: Props) {
     } finally {
       setLoading(false)
     }
-  }, [authHeaders, onCountChange])
+  }, [getAuthHeaders, onCountChange])
 
   useEffect(() => {
     fetchGrants()
@@ -86,7 +110,21 @@ export function PendingRewardsList({ authHeaders, onCountChange }: Props) {
     return () => clearInterval(interval)
   }, [fetchGrants])
 
+  /**
+   * §19.5 "Acumular". No hay endpoint ni columna: guardar un premio es NO redimirlo. El
+   * grant ya está pendiente y conserva su `expires_at` tal cual (19.d). Lo único que pasa
+   * aquí es que se lo decimos al mesero, para que no se quede con la duda de si lo consumió.
+   */
+  const handleSave = (grantId: string) => {
+    setExpandedId(null)
+    setSavedId(grantId)
+    setTimeout(() => setSavedId((prev) => (prev === grantId ? null : prev)), 3500)
+  }
+
   const handleRedeem = async (grant: PendingGrant) => {
+    const redeemerId = redeemers[grant.id]
+    if (!redeemerId) return
+
     setRedeemingId(grant.id)
     setError(null)
 
@@ -96,7 +134,7 @@ export function PendingRewardsList({ authHeaders, onCountChange }: Props) {
     try {
       const res = await fetch('/api/reward-redeem', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           customer_id: grant.customer_id,
           grant_id: grant.id,
@@ -104,6 +142,8 @@ export function PendingRewardsList({ authHeaders, onCountChange }: Props) {
           tier_id: grant.tier_id,
           prize_title: grant.prize_title,
           source: redemptionSource(grant),
+          // §19.6: quién entrega. Del selector, nunca deducido del aparato.
+          redeemed_by_staff_id: redeemerId,
           table_number: Number.isFinite(tableNumber) ? tableNumber : null,
         }),
       })
@@ -207,29 +247,88 @@ export function PendingRewardsList({ authHeaders, onCountChange }: Props) {
               {expiry && <span className="font-medium text-amber-600"> · {expiry}</span>}
             </p>
 
-            <div className="mt-4 flex gap-2">
-              <input
-                type="number"
-                inputMode="numeric"
-                placeholder="Mesa"
-                value={tables[grant.id] ?? ''}
-                onChange={(e) => setTables((prev) => ({ ...prev, [grant.id]: e.target.value }))}
-                className="h-12 w-24 rounded-xl border border-gray-200 px-3 text-center text-base font-medium text-gray-900 focus:border-gray-400 focus:outline-none"
-              />
-              <button
-                onClick={() => handleRedeem(grant)}
-                disabled={redeemingId === grant.id}
-                className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-amber-500 text-sm font-semibold text-white transition-colors hover:bg-amber-600 active:bg-amber-700 disabled:opacity-50"
-              >
-                {redeemingId === grant.id ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" /> Registrando...
-                  </>
-                ) : (
-                  'Entregar'
-                )}
-              </button>
-            </div>
+            {savedId === grant.id && (
+              <p className="mt-3 flex items-start gap-2 rounded-xl bg-gray-50 px-3 py-2 text-xs text-gray-600">
+                <Bookmark className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gray-400" />
+                <span>
+                  Guardado para después. El premio sigue disponible tal cual y le vuelve a
+                  salir en su próxima visita.
+                </span>
+              </p>
+            )}
+
+            {expandedId !== grant.id ? (
+              // §19.5: las dos salidas de la conversación en la mesa. "Guardar" no escribe.
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setExpandedId(grant.id)}
+                  className="flex h-12 items-center justify-center gap-2 rounded-xl bg-amber-500 text-sm font-semibold text-white transition-colors hover:bg-amber-600 active:bg-amber-700"
+                >
+                  Entregar
+                </button>
+                <button
+                  onClick={() => handleSave(grant.id)}
+                  className="flex h-12 items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+                >
+                  Guardar
+                </button>
+              </div>
+            ) : (
+              <div className="mt-4 space-y-3 border-t border-gray-100 pt-4">
+                <div>
+                  <label
+                    htmlFor={`mesa-${grant.id}`}
+                    className="mb-1 block text-xs font-medium uppercase tracking-wider text-gray-500"
+                  >
+                    Mesa
+                  </label>
+                  <input
+                    id={`mesa-${grant.id}`}
+                    type="number"
+                    inputMode="numeric"
+                    placeholder="Ej: 7"
+                    value={tables[grant.id] ?? ''}
+                    onChange={(e) =>
+                      setTables((prev) => ({ ...prev, [grant.id]: e.target.value }))
+                    }
+                    className="h-12 w-full rounded-xl border border-gray-200 px-3 text-base font-medium text-gray-900 focus:border-gray-400 focus:outline-none"
+                  />
+                </div>
+
+                <WaiterPicker
+                  waiters={waiters}
+                  value={redeemers[grant.id] ?? null}
+                  onChange={(id) => setRedeemers((prev) => ({ ...prev, [grant.id]: id }))}
+                  loading={waitersLoading}
+                  error={waitersError}
+                  sedeSinAsignar={sedeSinAsignar}
+                  label="¿Quién lo entrega?"
+                />
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setExpandedId(null)}
+                    disabled={redeemingId === grant.id}
+                    className="flex h-12 min-w-[96px] items-center justify-center rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => handleRedeem(grant)}
+                    disabled={redeemingId === grant.id || !redeemers[grant.id]}
+                    className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-amber-500 text-sm font-semibold text-white transition-colors hover:bg-amber-600 active:bg-amber-700 disabled:opacity-50"
+                  >
+                    {redeemingId === grant.id ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" /> Registrando...
+                      </>
+                    ) : (
+                      'Confirmar entrega'
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )
       })}

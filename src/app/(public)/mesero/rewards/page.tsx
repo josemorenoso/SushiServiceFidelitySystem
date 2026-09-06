@@ -50,7 +50,7 @@ export default function MeseroRewardsPage() {
       </header>
 
       <main className="mx-auto w-full max-w-md flex-1 px-4 py-6">
-        <PendingRewardsList authHeaders={getAuthHeaders()} />
+        <PendingRewardsList getAuthHeaders={getAuthHeaders} />
       </main>
     </div>
   )

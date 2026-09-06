@@ -92,7 +92,7 @@ export async function GET(request: NextRequest) {
     if (deviceToken) {
       const { data: device, error: deviceError } = await supabase
         .from('staff_devices')
-        .select('id, device_name, is_trusted, expires_at, staff_user_id')
+        .select('id, device_name, is_trusted, expires_at, staff_user_id, location_id')
         .eq('device_fingerprint', deviceToken)
         .eq('tenant_id', tenant.id)
         .eq('is_trusted', true)
@@ -142,12 +142,44 @@ export async function GET(request: NextRequest) {
         })
       }
 
+      // El NOMBRE de la sede, en una consulta aparte a propósito: la FK de sede es COMPUESTA
+      // `(location_id, tenant_id)` (00044) y el embedding de PostgREST con claves compuestas
+      // es frágil — un `select` anidado que deje de resolver devolvería la sede en `null` y
+      // la pantalla diría "sin sede" sobre un aparato que sí la tiene.
+      let locationName: string | null = null
+      if (device.location_id) {
+        const { data: sede, error: sedeError } = await supabase
+          .from('restaurant_locations')
+          .select('name')
+          .eq('id', device.location_id)
+          .eq('tenant_id', tenant.id)
+          .maybeSingle()
+        if (isDbFailure(sedeError)) {
+          // No invalida la sesión: el aparato SÍ tiene sede y el `location_id` de abajo es lo
+          // que de verdad filtra la lista. Solo se queda sin la etiqueta bonita.
+          logDbFailure({
+            scope: 'StaffMe',
+            reason: 'location_name_lookup_error',
+            error: sedeError,
+            context: { tenant: tenant.slug, location_id: device.location_id },
+          })
+        } else {
+          locationName = sede?.name ?? null
+        }
+      }
+
       return NextResponse.json({
         authenticated: true,
         type: 'device',
         device: {
           id: device.id,
           name: device.device_name,
+          location_name: locationName,
+          // §19: la sede del APARATO. La pantalla la necesita para dos cosas: filtrar la
+          // lista de meseros, y —cuando viene `null`— pedir que se asigne antes de dejar
+          // escanear. NULL es "sede desconocida" y SE MUESTRA; no se adivina ni se
+          // reemplaza por "todas las sedes", que es justo lo que el dueño rechazó.
+          location_id: device.location_id ?? null,
         },
       })
     }

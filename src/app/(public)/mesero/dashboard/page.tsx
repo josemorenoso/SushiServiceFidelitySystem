@@ -82,9 +82,21 @@ export default function MeseroDashboardPage() {
         <div className="mx-auto flex max-w-md items-center justify-between">
           <div>
             <p className="text-xs text-gray-500">
-              {session.type === 'device' ? 'Dispositivo de confianza' : branding.staffLabel}
+              {session.type === 'device' ? 'Celular del local' : branding.staffLabel}
             </p>
             <h1 className="text-lg font-bold text-gray-900">{session.name}</h1>
+            {/* §19: a qué sede atribuye este aparato. Se muestra siempre —también cuando
+                falta— porque es lo que decide qué meseros salen en la lista. */}
+            {session.type === 'device' &&
+              (session.locationId ? (
+                <span className="mt-1 inline-block rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-600">
+                  {session.locationName ?? 'Sede asignada'}
+                </span>
+              ) : (
+                <span className="mt-1 inline-block rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                  Sin sede
+                </span>
+              ))}
           </div>
           <button
             onClick={logout}

@@ -193,17 +193,42 @@ export async function POST(request: NextRequest) {
     const { source = 'qr' } = body
     let { registered_by_staff_id, device_token } = body
 
-    // Si no vinieron en body, derivarlos de headers (la app del mesero los manda asi)
-    if (source === 'staff_scan' && !registered_by_staff_id && !device_token) {
+    // Se COMPLETA desde headers lo que el cuerpo no trajo, campo por campo.
+    //
+    // ⚠️ Antes esto era `if (!registered_by_staff_id && !device_token)`: solo derivaba
+    // cuando faltaban LOS DOS. Con §19 la app manda el mesero en el CUERPO (lo eligió una
+    // persona) y el aparato en la CABECERA (es la sesión), así que aquella condición nunca
+    // se cumpliría, `device_token` quedaría vacío, la sesión no se validaría y el mesero
+    // recibiría un 403 en plena hora pico. Los dos campos son ahora independientes.
+    if (source === 'staff_scan') {
       const resolved = await resolveStaffAuthFromHeaders(request)
-      registered_by_staff_id = resolved.staffId
-      device_token = resolved.deviceToken
+      registered_by_staff_id = registered_by_staff_id ?? resolved.staffId
+      device_token = device_token ?? resolved.deviceToken
+    }
+
+    // §19: la atribución es OBLIGATORIA. El mesero SIEMPRE selecciona su nombre — textual del
+    // dueño: *"tengo que separarlos para trackear eficiencia eso no se puede juntar"*. Es el
+    // propósito de la pantalla, no un adorno: sin esto la visita se registra igual y la
+    // métrica por mesero nace incompleta sin que nadie se entere.
+    if (source === 'staff_scan' && !registered_by_staff_id) {
+      return NextResponse.json(
+        {
+          error: 'Falta el mesero',
+          code: 'mesero_requerido',
+          message: 'Elige quién atiende esta mesa antes de registrar la visita.',
+        },
+        { status: 400 }
+      )
     }
 
     if (source === 'staff_scan') {
-      const staffKey = registered_by_staff_id
-        ? `checkin:staff:${registered_by_staff_id}`
-        : `checkin:device:${device_token}`
+      // El cupo se cuenta POR APARATO cuando hay aparato, no por mesero. Es el
+      // comportamiento de siempre y hay que sostenerlo a propósito: desde §19
+      // `registered_by_staff_id` viene SIEMPRE, así que la preferencia contraria
+      // multiplicaría el cupo real de una tablet por el número de meseros de la sede.
+      const staffKey = device_token
+        ? `checkin:device:${device_token}`
+        : `checkin:staff:${registered_by_staff_id}`
       const staffRl = rateLimit(staffKey, 10, MINUTE)
       if (!staffRl.allowed) {
         return NextResponse.json(
@@ -362,10 +387,13 @@ export async function POST(request: NextRequest) {
             regResolvedStaffId = staff.id
             regStaffLocationId = staff.location_id ?? null
           }
-        } else if (device_token) {
+        }
+        // `if`, NO `else if` (§19): el aparato es la SESIÓN y el mesero es la ATRIBUCIÓN.
+        // Vienen juntos y se validan por separado.
+        if (device_token) {
           const { data: device, error: deviceError } = await supabase
             .from('staff_devices')
-            .select('id, staff_user_id, is_trusted, expires_at, location_id')
+            .select('id, is_trusted, expires_at, location_id')
             .eq('device_fingerprint', device_token)
             .eq('is_trusted', true)
             .eq('tenant_id', tenant.id)
@@ -380,8 +408,9 @@ export async function POST(request: NextRequest) {
           } else if (device) {
             if (!device.expires_at || new Date(device.expires_at) >= new Date()) {
               regStaffAuthValid = true
-              // Atribuir la visita al mesero dueño del dispositivo (si lo tiene).
-              regResolvedStaffId = device.staff_user_id ?? null
+              // §19: el aparato YA NO ATRIBUYE. `regResolvedStaffId` sale del selector, no
+              // del dueño del aparato — que desde ahora es NULL. Lo que sí aporta el aparato
+              // es su sede (vía 2 del §3.1).
               regDeviceLocationId = device.location_id ?? null
             }
           }
@@ -646,10 +675,13 @@ export async function POST(request: NextRequest) {
           resolvedStaffId = staff.id
           staffLocationId = staff.location_id ?? null
         }
-      } else if (device_token) {
+      }
+      // `if`, NO `else if` (§19). Ver el bloque gemelo de más arriba: el aparato autentica,
+      // el mesero atribuye, y desde §19 llegan los dos en la misma petición.
+      if (device_token) {
         const { data: device, error: deviceError } = await supabase
           .from('staff_devices')
-          .select('id, staff_user_id, is_trusted, expires_at, location_id')
+          .select('id, is_trusted, expires_at, location_id')
           .eq('device_fingerprint', device_token)
           .eq('is_trusted', true)
           .eq('tenant_id', tenant.id)
@@ -666,13 +698,14 @@ export async function POST(request: NextRequest) {
         if (device) {
           if (!device.expires_at || new Date(device.expires_at) >= new Date()) {
             staffAuthValid = true
-            // Atribuir la visita al mesero dueño del dispositivo (si lo tiene):
-            // sin esto, todo escaneo desde dispositivo quedaba sin mesero en visits.
-            resolvedStaffId = device.staff_user_id ?? null
-            // Vía 2 del §3.1. Se usa la sede DEL DISPOSITIVO, no la del mesero al que está
-            // atribuido: el mesero no se autenticó aquí, el aparato sí. El trigger
-            // `trg_staff_devices_sede_coherente` (00044) garantiza que, cuando las dos se
-            // conocen, son la misma — así que la distinción solo importa cuando una es NULL.
+            // §19: aquí YA NO se escribe `resolvedStaffId`. Antes la visita se atribuía al
+            // dueño del aparato; ahora el aparato no tiene dueño y quien atribuye es el
+            // mesero que tocó su nombre, resuelto en el bloque de arriba.
+            //
+            // Vía 2 del §3.1: la sede DEL APARATO. Cuando el mesero elegido es de otra sede,
+            // NO se rechaza — gana el mesero (vía 1) y `resolveVisitLocation` marca
+            // `location_conflict`. El 403 de sede era del LOGIN del mesero, y §19 eliminó
+            // ese login: aquí la discrepancia se REGISTRA, no se bloquea.
             deviceLocationId = device.location_id ?? null
             // Actualizar last_used_at del dispositivo. Es telemetría —que falle no
             // invalida el escaneo— pero hasta hoy descartaba su resultado entero.

@@ -3,8 +3,10 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useStaffAuth } from '@/hooks/useStaffAuth'
+import { useWaiters } from '@/hooks/useWaiters'
 import { decodeCustomerQRTokenUnsafe } from '@/lib/utils/qrcode'
 import { RewardAlert } from '@/components/features/staff/RewardAlert'
+import { WaiterPicker } from '@/components/features/staff/WaiterPicker'
 import { Loader2, ArrowLeft, User, Hash, CheckCircle2 } from 'lucide-react'
 
 export default function MeseroConfirmPage() {
@@ -24,7 +26,7 @@ export default function MeseroConfirmPage() {
 function MeseroConfirmContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { session, loading: authLoading } = useStaffAuth()
+  const { session, loading: authLoading, getAuthHeaders } = useStaffAuth()
 
   const token = searchParams.get('token')
   const manualPhone = searchParams.get('phone')
@@ -38,6 +40,15 @@ function MeseroConfirmContent() {
     tier?: string | null
   } | null>(null)
   const [tableNumber, setTableNumber] = useState('')
+
+  // §19: quién atiende esta mesa. Obligatorio — la lista solo trae los de la sede del aparato.
+  const [waiterId, setWaiterId] = useState<string | null>(null)
+  const {
+    waiters,
+    loading: waitersLoading,
+    error: waitersError,
+    sedeSinAsignar,
+  } = useWaiters(getAuthHeaders, Boolean(session))
 
   // Leer datos del cliente desde sessionStorage (escritos por scan/page.tsx antes de navegar).
   // Lazy initializer: se ejecuta síncronamente en el primer render, evitando el "Suspense gap"
@@ -133,15 +144,11 @@ function MeseroConfirmContent() {
     }
   }, [token, decoded, error])
 
-  // Headers de auth del mesero (Bearer JWT o X-Device-Token) — reutilizados por
-  // el registro de visita y por la alerta de premio pendiente.
-  const staffAuthHeaders = (): Record<string, string> => {
-    if (session?.type === 'staff' && session.token) {
-      return { Authorization: `Bearer ${session.token}` }
-    }
-    const deviceToken = typeof window !== 'undefined' ? localStorage.getItem('staff_device_token') : null
-    return deviceToken ? { 'X-Device-Token': deviceToken } : {}
-  }
+  // Headers de auth del aparato (X-Device-Token, o el Bearer legado que siga vivo).
+  // Delega en `useStaffAuth` para que la lista de meseros y el registro de la visita usen
+  // exactamente la misma credencial: si divergen, la lista sería de una sede y la atribución
+  // se validaría contra otra.
+  const staffAuthHeaders = getAuthHeaders
 
   const handleRegister = async () => {
     if (!customerPhone) return
@@ -158,6 +165,8 @@ function MeseroConfirmContent() {
           phone: customerPhone,
           action: 'checkin',
           source: 'staff_scan',
+          // §19: la atribución viaja en el CUERPO. El aparato ya no presta su dueño.
+          registered_by_staff_id: waiterId,
           table_number: tableNumber ? parseInt(tableNumber, 10) : null,
           token: token ?? null,
         }),
@@ -296,6 +305,16 @@ function MeseroConfirmContent() {
                 className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-10 pr-4 text-base outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100"
               />
             </div>
+
+            <WaiterPicker
+              waiters={waiters}
+              value={waiterId}
+              onChange={setWaiterId}
+              loading={waitersLoading}
+              error={waitersError}
+              sedeSinAsignar={sedeSinAsignar}
+              label="¿Quién atiende?"
+            />
           </div>
         </div>
 
@@ -310,7 +329,7 @@ function MeseroConfirmContent() {
         <div className="mt-6 space-y-3">
           <button
             onClick={handleRegister}
-            disabled={loading || !customerPhone}
+            disabled={loading || !customerPhone || !waiterId}
             className="flex h-[56px] w-full items-center justify-center gap-2 rounded-2xl bg-red-500 text-lg font-semibold text-white transition-colors hover:bg-red-600 active:bg-red-700 disabled:opacity-50"
           >
             {loading ? (

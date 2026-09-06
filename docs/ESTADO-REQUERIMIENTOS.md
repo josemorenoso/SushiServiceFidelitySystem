@@ -28,7 +28,7 @@
 | 16 | Fatiga y pipeline del recorrido | **NO EMPEZADO** | Cero código; solo documentado. Preguntas 16.a–e abiertas | NO |
 | 17 | Clientes Black / VIP | **PARCIAL** | Mudanza y tarjeta hechas (`f1a7921`); beneficio permanente (17.3) y umbral configurable (17.4) sin implementar. Ojo con la **17.b** ya conocida | NO |
 | 18 | **Domicilios bajo coexistencia** | **NO EMPEZADO** | No existe apartado de Domicilios en el dashboard ni canal alternativo para el "cuadro" | **NO para el deploy — SÍ para el onboarding** (ver abajo) |
-| 19 | **Escáner QR de meseros** | **NO EMPEZADO** | Ver ficha completa abajo | NO |
+| 19 | **Escáner QR de meseros** | ✅ **HECHO** (rama `feat/staff-scanner-19`) | Migración `00046` escrita y **SIN aplicar**. Ver ficha abajo | NO |
 | 20 | Decisiones D-7 a D-10 | **PARCIAL** | Solo documentadas (`060ac01`, docs-only). Sin divisor de bloques Golden Bullet, sin `accepts_marketing:false` explícito en importación, `consent_events` sin referenciar en `src/` | NO |
 | 21 | Panel del AIOS | ✅ **HECHO** | AIOS v1.3.0: `client_locations.platform/.messaging`, `clients.billing_mode` | NO |
 | 22 | Franquicias | ⏸️ **DIFERIDO A PROPÓSITO** | El doc dice explícitamente "NO es v1"; se dejó la puerta abierta sin construir | NO |
@@ -90,16 +90,40 @@ buscarse a la hora de entregar premio es una focking bestialidad"*. Es la razón
 (un mesero es de UNA sede), que hasta hoy solo tenía razón de datos: una lista de 8 nombres es usable,
 una de 40 no. **`staff_users.location_id` (00044) es lo que hace posible este filtro.**
 
-### Preguntas abiertas de §19 — se resuelven en el spec, ANTES de codear
+### Preguntas de §19 — TODAS CERRADAS el 2026-09-05
 
-- **19.f · La identidad del mesero (BLOQUEANTE).** Es el choque de arriba: si el teléfono deja de ser
-  obligatorio, `staff_users_phone_tenant_key` deja de garantizar nada. Hace falta otra llave — la
-  candidata natural es `UNIQUE (tenant_id, location_id, nombre)`, que además es exactamente lo que la
-  pantalla necesita para que dos "Ana" de la misma sede no sean indistinguibles al elegir.
-- **19.a** login del aparato: ¿el mismo usuario del panel, o uno aparte para los celulares?
-- **19.b** los meseros que ya existen con teléfono y PIN: ¿se migran o se dan de alta de cero?
-- **19.d** "Acumular": ¿el premio queda sin vencimiento o mantiene la ventana actual?
-- **19.e** ¿cuántos intentos de PIN antes de bloquear?
+Resueltas en `docs/superpowers/specs/2026-09-05-staff-scanner-19-design.md`, aprobado por el dueño
+sobre un mockup de las 10 pantallas. **§19 ya no bloquea nada.**
+
+- **19.f · La identidad del mesero (era BLOQUEANTE) — RESUELTA.** `staff_users_phone_tenant_key`
+  **no se quita: se complementa.** Sigue dando D11 completo a todo el parque que tiene teléfono.
+  Se le suman un `CHECK (phone IS NOT NULL OR location_id IS NOT NULL)` —sin teléfono, la sede es
+  obligatoria— y un `UNIQUE (tenant_id, location_id, lower(trim(name))) WHERE location_id IS NOT
+  NULL`, que es la llave de los que no tienen teléfono y la que la pantalla necesita.
+  ⚠️ **Lo que se pierde y el dueño aceptó:** sin teléfono la base ya no puede saber que "Ana de
+  Laureles" y "Ana del Poblado" son la misma persona. Ningún índice lo recupera. Lo que sí queda
+  garantizado por el motor: ningún hecho se atribuye a dos sedes.
+- **19.a — el PIN de supervisor que ya existía.** Cada marca crea su supervisor desde su propio
+  panel y activa sus aparatos sin depender de nadie. El token del aparato **sigue siendo el
+  fingerprint**: el dueño decidió no endurecerlo (deuda D18).
+- **19.b — se migran.** `visits.registered_by_staff_id` es `ON DELETE SET NULL`: darlos de alta de
+  cero vaciaría la atribución de todo el histórico en silencio. ⚠️ Queda **un paso manual del
+  dueño**: asignarles sede en el panel (hoy todos tienen `location_id` NULL y no saldrían en
+  ninguna lista).
+- **19.d — "Guardar" no escribe nada.** No toca `expires_at` ni crea estado: es la ausencia de una
+  redención. El premio vuelve a salir en la próxima visita del cliente.
+- **19.e — ya no aplica.** Se cayó con el PIN del mesero.
+
+### El PIN del mesero se quitó (dueño, 2026-09-05)
+
+Revoca el punto 6 del encargo del 30 de agosto. Textual: *"se crea un usuario, se inicia sesión y
+ya está, no hay mayor logica ahí… ya cuando vayan a redimir un premio ponen el nombre del qué lo
+redimió"*. Con él se cayeron **19.e** (intentos y bloqueos) y **§19.7** (el interruptor) enteros.
+
+**Lo que el dueño acepta:** cualquiera con el celular en la mano puede marcar un premio como
+entregado a nombre de cualquier mesero de esa sede. Queda registrado quién, cuándo y en qué mesa,
+pero nada impide poner un nombre que no es. **Es reversible**: reponer el PIN no obliga a deshacer
+nada de lo demás.
 
 ---
 
@@ -128,7 +152,6 @@ Ninguna bloquea el deploy. Todas bloquean el trabajo que venga después.
 | Tema | Pregunta |
 |---|---|
 | §18.a–d | Domicilios bajo coexistencia — **las más urgentes para vender a los 25** |
-| §19.a–e | Escáner de meseros (arriba) |
 | §16.a–e | Etapas y días del pipeline de recorrido/fatiga |
 | §17.a–d | Qué es el "beneficio permanente" Black, con qué umbral, y si Black es el tier máximo |
 | §3 | La queja de "QR muy básico", ¿es sobre el QR Studio (mesa) o el de la tarjeta? |

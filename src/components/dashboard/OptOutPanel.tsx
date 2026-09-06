@@ -65,7 +65,11 @@ export function OptOutPanel() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch('/api/dashboard/opt-outs')
+      // `cache: 'no-store'` no es adorno. La ruta es `force-dynamic` en el servidor,
+      // pero eso no gobierna la caché HTTP del navegador: un `fetch` normal puede
+      // servir la respuesta anterior y hacer que un SALIR recién llegado solo aparezca
+      // al segundo refresco. Misma convención que `dashboard/calendar/page.tsx`.
+      const res = await fetch('/api/dashboard/opt-outs', { cache: 'no-store' })
       const json = await res.json()
       if (!res.ok) {
         setError(json.error ?? 'No se pudo cargar.')

@@ -11,9 +11,15 @@ import {
 } from '@/services/delivery.service'
 
 // Keywords de opt-out/in alineados con el Messaging Service de Twilio
-// (ver docs/features/twilio-opt-out.md). Twilio normalmente los intercepta
-// antes de llegar aquí, pero los persistimos por si acaso y para mantener
-// nuestra base de datos sincronizada (auditoría 12-Julio, tarea 8).
+// (ver docs/features/twilio-opt-out.md).
+//
+// ⚠️ LO QUE EL COMENTARIO DECÍA ANTES Y NO ERA VERDAD: decía que «Twilio
+// normalmente los intercepta antes de llegar aquí» y que persistirlos era «por si
+// acaso». El Advanced Opt-Out del Messaging Service actúa sobre SMS, no sobre
+// WhatsApp. Producción lo confirmó el 2026-09-06: el dueño probó CANCEL, CANCELAR,
+// STOP y SALIR por WhatsApp y **las cuatro llegaron a esta ruta**. O sea que esta
+// lista NO es una red de respaldo: es el único sitio donde un SALIR de WhatsApp se
+// registra y donde se le contesta al cliente. (Auditoría 12-Julio, tarea 8.)
 const OPT_OUT_KEYWORDS = ['STOP', 'STOPALL', 'UNSUBSCRIBE', 'CANCEL', 'CANCELAR', 'END', 'QUIT', 'BAJA', 'SALIR', 'SAL', 'SALI', 'FUERA', 'OPTOUT', 'NO']
 const OPT_IN_KEYWORDS = ['START', 'UNSTOP', 'YES', 'SI', 'ALTA', 'ACEPTO']
 
@@ -85,6 +91,62 @@ function buildDeliveryReply(outcome: DeliveryIntakeResult): string {
   }
 }
 
+/**
+ * Confirmación de salida — POR QUÉ ESTE TEXTO SÍ SE PUEDE ENVIAR.
+ *
+ * La regla de la casa es que solo salen PLANTILLAS APROBADAS. Esa regla vale para los
+ * envíos que INICIAMOS nosotros: una campaña, un cumpleaños, una reactivación. Esto no
+ * es eso: es la RESPUESTA a un mensaje que el cliente acaba de escribir, y sale por el
+ * mismo TwiML con el que esta ruta ya le contesta al mesero (`buildDeliveryReply()`) y
+ * al comensal que pregunta el horario (`buildMessage()`) — texto libre dentro de la
+ * ventana de atención de 24 h, que la abrió él al mandar SALIR. Es exactamente el
+ * mecanismo que ya está en producción en este archivo, no uno nuevo.
+ *
+ * ⚠️ Esto NO se puede replicar en Zernio. Allí no hay TwiML —el webhook solo devuelve un
+ * 2xx— y `src/lib/zernio/messaging.ts` únicamente sabe mandar plantillas
+ * (`sendZernioTemplateMessage`). Confirmarle la salida a un cliente de un tenant Zernio
+ * exigiría una plantilla aprobada nueva, con su ciclo de aprobación de Meta. Queda
+ * documentado en `docs/features/twilio-opt-out.md`; NO se inventa aquí.
+ *
+ * El texto es el mismo compromiso que el panel le muestra al dueño en `OptOutPanel.tsx`:
+ * salir es dejar de recibir mensajes, no perder los puntos.
+ */
+function buildOptOutReply(brandName: string): string {
+  return (
+    `✅ Listo. No vas a recibir más mensajes de *${brandName}*.\n\n` +
+    'Tus puntos y tu historial quedan intactos: salir es dejar de recibir mensajes, no ' +
+    'perder tu progreso.\n\nSi cambias de opinión, responde *ALTA* y vuelves a recibirlos.'
+  )
+}
+
+/**
+ * Confirmación de regreso. Se parte en dos porque las dos situaciones son distintas de
+ * verdad: a quien tiene ficha se le reactiva algo, y a quien no la tiene no hay nada que
+ * reactivarle. Decirle «ya vuelves a recibir» al segundo sería la misma mentira que este
+ * cambio vino a sacar del log.
+ */
+function buildOptInReply(brandName: string, matched: number): string {
+  if (matched === 0) {
+    return (
+      `👋 No encontramos tu número en la base de *${brandName}*, así que no hay nada ` +
+      'que reactivar.\n\nSi quieres registrarte, escanea el código QR en el local.'
+    )
+  }
+  return (
+    `🔔 Listo. Vuelves a recibir los mensajes de *${brandName}*.\n\n` +
+    'Para salir de nuevo, responde *SALIR* en cualquier momento.'
+  )
+}
+
+/**
+ * Lo que se contesta cuando la base falló al escribir el opt-out. No se le puede decir
+ * «listo»: el cliente seguiría recibiendo campañas, que es justo lo que su SALIR pedía
+ * parar. Mismo criterio que la rama `remitente_no_verificable` de los domicilios.
+ */
+const OPT_OUT_ERROR_REPLY =
+  '❌ Tuvimos un problema técnico y no pude registrar tu salida. Por favor inténtalo de ' +
+  'nuevo en unos minutos.'
+
 function twimlResponse(message: string): NextResponse {
   const escaped = message
     .replace(/&/g, '&amp;')
@@ -150,22 +212,87 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const from = params['From'] ?? ''
   const phone = normalizePhone(from)
 
-  // Opt-out / opt-in: Twilio intercepta STOP/START antes de llegar aquí en la
-  // mayoría de casos, pero persistimos el estado para mantener NUESTRA base de
-  // datos sincronizada y dejar de intentar enviarle (auditoría 12-Julio, tarea 8).
+  // Opt-out / opt-in. Por WhatsApp esto NO lo intercepta Twilio (ver el comentario de
+  // OPT_OUT_KEYWORDS): la keyword llega hasta aquí y este bloque es lo único que la
+  // registra y lo único que le contesta al cliente (auditoría 12-Julio, tarea 8).
+  //
+  // DOS COSAS QUE ANTES NO PASABAN Y AHORA SÍ (2026-09-06):
+  //
+  //   1. **Se le contesta al cliente.** Antes esta rama devolvía un 200 VACÍO: quien
+  //      escribía SALIR no recibía nada y no tenía forma de saber si había servido.
+  //      Nunca respondió — no es una regresión, es un hueco desde el principio. Ahora
+  //      sale una confirmación por TwiML, el mismo canal que esta ruta ya usa para el
+  //      mesero y para el comensal. Ver `buildOptOutReply()` para por qué eso NO viola
+  //      la regla de "solo plantillas aprobadas" y por qué no se replica en Zernio.
+  //
+  //   2. **El log dice la verdad.** Antes se escribía `opt-out persistido` aunque el
+  //      UPDATE no hubiera tocado NINGUNA fila —un teléfono sin ficha en este tenant da
+  //      cero filas y `error = null`, que para Postgres es un éxito—. El dueño leía ese
+  //      log, iba al panel y no encontraba nada, porque de verdad no había nada.
+  //      `matched` separa los tres desenlaces. Ver `OptOutWriteResult`.
   if (OPT_OUT_KEYWORDS.includes(upper)) {
-    if (phone.length === 10) {
-      await setWhatsappOptOut(phone, tenant.id)
-      console.log(`[twilio-incoming] opt-out persistido para ${phone} (keyword="${upper}")`)
+    const brandName = resolveBranding(tenant.config).name
+
+    if (phone.length !== 10) {
+      // Un remitente que no normaliza a 10 dígitos tampoco puede casar con
+      // `customers.phone` (formato 3XXXXXXXXX), así que no hay nada que marcar. Se le
+      // confirma igual porque el efecto para él es el mismo: no recibe nada.
+      console.warn(
+        `[twilio-incoming] opt-out sin teléfono utilizable (from="${from}", keyword="${upper}", tenant=${tenant.slug}) — 0 filas`
+      )
+      return twimlResponse(buildOptOutReply(brandName))
     }
-    return new NextResponse(null, { status: 200 })
+
+    const result = await setWhatsappOptOut(phone, tenant.id)
+    if (!result.ok) {
+      console.error(
+        `[twilio-incoming] opt-out NO persistido para ${phone} (keyword="${upper}", tenant=${tenant.slug}): ${result.error}`
+      )
+      return twimlResponse(OPT_OUT_ERROR_REPLY)
+    }
+    if (result.matched === 0) {
+      // Ni error ni éxito: no hay a quién marcarle nada. Casi siempre significa que el
+      // número escribió a la línea de una marca donde no tiene ficha (la suya vive en
+      // otro tenant) o que el cliente de prueba se borró después. Este es el log que
+      // explica un panel vacío.
+      console.warn(
+        `[twilio-incoming] opt-out SIN FICHA: ${phone} no está en customers de ${tenant.slug} (keyword="${upper}") — 0 filas actualizadas, no aparecerá en el panel`
+      )
+    } else {
+      console.log(
+        `[twilio-incoming] opt-out persistido para ${phone} (keyword="${upper}", tenant=${tenant.slug}, filas=${result.matched})`
+      )
+    }
+    return twimlResponse(buildOptOutReply(brandName))
   }
+
   if (OPT_IN_KEYWORDS.includes(upper)) {
-    if (phone.length === 10) {
-      await clearWhatsappOptOut(phone, tenant.id)
-      console.log(`[twilio-incoming] opt-in: opt-out limpiado para ${phone} (keyword="${upper}")`)
+    const brandName = resolveBranding(tenant.config).name
+
+    if (phone.length !== 10) {
+      console.warn(
+        `[twilio-incoming] opt-in sin teléfono utilizable (from="${from}", keyword="${upper}", tenant=${tenant.slug}) — 0 filas`
+      )
+      return twimlResponse(buildOptInReply(brandName, 0))
     }
-    return new NextResponse(null, { status: 200 })
+
+    const result = await clearWhatsappOptOut(phone, tenant.id)
+    if (!result.ok) {
+      console.error(
+        `[twilio-incoming] opt-in NO persistido para ${phone} (keyword="${upper}", tenant=${tenant.slug}): ${result.error}`
+      )
+      return twimlResponse(OPT_OUT_ERROR_REPLY)
+    }
+    if (result.matched === 0) {
+      console.warn(
+        `[twilio-incoming] opt-in SIN FICHA: ${phone} no está en customers de ${tenant.slug} (keyword="${upper}") — 0 filas actualizadas`
+      )
+    } else {
+      console.log(
+        `[twilio-incoming] opt-in: opt-out limpiado para ${phone} (keyword="${upper}", tenant=${tenant.slug}, filas=${result.matched})`
+      )
+    }
+    return twimlResponse(buildOptInReply(brandName, result.matched))
   }
 
   // Si el remitente es un mesero autorizado, procesar el pedido de domicilio.

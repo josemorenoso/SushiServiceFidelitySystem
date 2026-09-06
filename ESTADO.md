@@ -25,7 +25,14 @@
 
 ## 2. En vuelo ahora mismo
 
-**Nada corriendo.** `main` limpio, suite en verde, árbol de trabajo limpio.
+🔴 **TRES sesiones a la vez sobre el MISMO árbol de trabajo** (2026-09-06, tarde), con al menos
+una corriendo `git reset --hard HEAD`: **borró cambios sin commitear dos veces.** Rompe §7. Quien
+abra una sesión en paralelo saca su worktree ANTES de escribir (`git worktree add ../wt-<rama>`, ya
+hay cuatro `wt-*`) y usa un **`TEST_PG_PORT` distinto**: el `globalSetup` de vitest fija el 55432 y
+dos corridas a la vez se pisan el Postgres — la segunda dice *"No test files found"*, que despista.
+
+- **`fix/opt-out-visible`** en `..\wt-opt-out-visible`, **sin mergear** (§5) · `fix/crear-mesero-por-rol`
+  (worktree propio) y `fix/amarillos-calendario` (árbol principal), en curso.
 
 **Repo del AIOS** (`Level 2.0/aios-constelarys`, remoto propio): la rama `fix/coexistencia`
 (v1.4.0) está subida pero **su `main` NO se pusheó** — tiene un commit suelto
@@ -76,11 +83,15 @@ credenciales de terceros).
 
 ## 5. Hecho reciente
 
-- **Sushi Fun absorbido como tenant** (2026-09-06): 1.421 filas movidas desde su propio Supabase,
-  el `08` cuadró con cero cruces de marca y las otras cuatro marcas no se movieron ni una fila.
-  Conserva **su propia cuenta de Twilio** (3 columnas en `tenants`) y su marca. Runbook y parte en
-  `docs/RUNBOOK-ABSORBER-SUSHI-FUN.md` y `docs/PARTE-SUSHI-FUN-2026-09-06.md`.
-  Pendientes suyos: borrar su Supabase (§4) y el Vercel viejo tras 7 días.
+- **El SALIR se ve y se contesta** (rama `fix/opt-out-visible`, SIN mergear): `opt-out persistido`
+  se logueaba igual cuando el UPDATE tocaba **cero filas** —teléfono sin ficha en esa marca es
+  `error = null`, un éxito para Postgres—, y de ahí el panel vacío con el log en verde. Ahora
+  `setWhatsappOptOut()` devuelve `matched` y el webhook separa fallo / sin ficha / persistido, con
+  el tenant. Y **Twilio le confirma la salida al cliente por TwiML**; **Zernio queda mudo a
+  propósito** —no tiene por dónde—, costo en `docs/features/twilio-opt-out.md`. 20 arch / 358 tests.
+- **Sushi Fun absorbido como tenant** (2026-09-06): 1.421 filas, cero cruces de marca; conserva su
+  cuenta de Twilio y su marca. Detalle en `docs/RUNBOOK-ABSORBER-SUSHI-FUN.md` y su parte. Lo que
+  sigue vivo de eso (borrar su Supabase, su Vercel) está en §4.
 - **Firma de Twilio por tenant** (2026-09-06): `validateTwilioSignature()` usaba siempre el token
   master, pero Twilio firma con el token de la cuenta dueña del número, así que **todo entrante de un
   tenant con cuenta propia daba 403** — los `SALIR` se perdían en silencio. Lo destapó el primer
@@ -94,11 +105,6 @@ credenciales de terceros).
   elige en cada operación y la lista va filtrada por sede. `staff_users.phone` pasa a NULLABLE y la
   llave de identidad se **complementa** (CHECK de identidad mínima + UNIQUE parcial marca/sede/nombre)
   en vez de reemplazarse. Eliminada `POST /api/staff/login`.
-- **Pulido visual** (2026-09-06): CTA del mesero unificados con `.btn-premium` y objetivos táctiles
-  a 44px. Al mergear se descartó su versión de `mesero/page.tsx`, que era anterior a §19 y habría
-  resucitado el login por mesero.
-- **F7 / F4 / F3**: permisos por sede (D10, `00045`), el mesero es de UNA sede (D11, `00044`), y el
-  check-in escribe la sede. Todo aplicado y desplegado.
 
 ## 6. Deudas y límites conocidos
 

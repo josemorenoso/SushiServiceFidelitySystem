@@ -140,17 +140,61 @@ async function handleMessageReceived(payload: ZernioWebhookPayloadMessage): Prom
 
   // Opt-out / opt-in: réplica exacta del criterio de twilio-incoming — persistimos
   // el estado en NUESTRA base para dejar de intentar enviarle (auditoría 12-Julio, tarea 8).
+  //
+  // ⚠️ AQUÍ NO SE LE CONTESTA AL CLIENTE, Y ES DELIBERADO. `twilio-incoming` sí le manda
+  // una confirmación («no vas a recibir más mensajes…») porque puede: devuelve TwiML en
+  // la misma petición, texto libre dentro de la ventana de 24 h. Zernio no tiene nada
+  // equivalente —el webhook solo devuelve un 2xx sin cuerpo (ver la cabecera de este
+  // archivo)— y la única salida disponible, `sendZernioTemplateMessage()`, manda
+  // PLANTILLAS APROBADAS. Mandar texto libre por aquí no es que sea difícil: no existe.
+  // Confirmarle la salida a un cliente Zernio exige una plantilla nueva aprobada por
+  // Meta; el costo y el diseño están en `docs/features/twilio-opt-out.md`.
+  //
+  // Lo que sí es idéntico a Twilio es el LOG: `matched` distingue "lo marqué" de "no
+  // había a quién marcarle nada", que antes se logueaban las dos como éxito.
   if (OPT_OUT_KEYWORDS.includes(upper)) {
-    if (phone.length === 10) {
-      await setWhatsappOptOut(phone, tenant.id)
-      console.log(`[webhook/zernio] opt-out persistido para ${phone} (keyword="${upper}", tenant=${tenant.slug})`)
+    if (phone.length !== 10) {
+      console.warn(
+        `[webhook/zernio] opt-out sin teléfono utilizable (keyword="${upper}", tenant=${tenant.slug}) — 0 filas`
+      )
+      return new NextResponse(null, { status: 200 })
+    }
+    const result = await setWhatsappOptOut(phone, tenant.id)
+    if (!result.ok) {
+      console.error(
+        `[webhook/zernio] opt-out NO persistido para ${phone} (keyword="${upper}", tenant=${tenant.slug}): ${result.error}`
+      )
+    } else if (result.matched === 0) {
+      console.warn(
+        `[webhook/zernio] opt-out SIN FICHA: ${phone} no está en customers de ${tenant.slug} (keyword="${upper}") — 0 filas actualizadas, no aparecerá en el panel`
+      )
+    } else {
+      console.log(
+        `[webhook/zernio] opt-out persistido para ${phone} (keyword="${upper}", tenant=${tenant.slug}, filas=${result.matched})`
+      )
     }
     return new NextResponse(null, { status: 200 })
   }
   if (OPT_IN_KEYWORDS.includes(upper)) {
-    if (phone.length === 10) {
-      await clearWhatsappOptOut(phone, tenant.id)
-      console.log(`[webhook/zernio] opt-in: opt-out limpiado para ${phone} (keyword="${upper}", tenant=${tenant.slug})`)
+    if (phone.length !== 10) {
+      console.warn(
+        `[webhook/zernio] opt-in sin teléfono utilizable (keyword="${upper}", tenant=${tenant.slug}) — 0 filas`
+      )
+      return new NextResponse(null, { status: 200 })
+    }
+    const result = await clearWhatsappOptOut(phone, tenant.id)
+    if (!result.ok) {
+      console.error(
+        `[webhook/zernio] opt-in NO persistido para ${phone} (keyword="${upper}", tenant=${tenant.slug}): ${result.error}`
+      )
+    } else if (result.matched === 0) {
+      console.warn(
+        `[webhook/zernio] opt-in SIN FICHA: ${phone} no está en customers de ${tenant.slug} (keyword="${upper}") — 0 filas actualizadas`
+      )
+    } else {
+      console.log(
+        `[webhook/zernio] opt-in: opt-out limpiado para ${phone} (keyword="${upper}", tenant=${tenant.slug}, filas=${result.matched})`
+      )
     }
     return new NextResponse(null, { status: 200 })
   }

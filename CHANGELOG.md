@@ -8,6 +8,25 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [2026-09-06] - El SALIR se ve y se contesta: el log deja de mentir y el cliente recibe confirmacion
+
+**El log mentia.** `[twilio-incoming] opt-out persistido para 3243416918` salio cuatro veces en
+produccion con el panel en cero, y las dos cosas eran ciertas: `setWhatsappOptOut()` devolvia
+`void`, asi que "marque a un cliente" y "no habia a quien marcar" (cero filas, `error = null`, un
+exito para Postgres) llegaban al llamador identicos. Ahora devuelve `OptOutWriteResult` con
+`matched` — el `.select('id')` es lo que lo hace contable — y el webhook distingue fallo de base,
+sin ficha y persistido, diciendo ademas de que marca era la linea. Un panel vacio ya se explica
+solo desde Vercel. Mismo arreglo en el webhook de Zernio.
+**Al cliente se le contesta.** Quien escribia SALIR no recibia nada y nunca lo hizo (no es una
+regresion). Por Twilio ahora sale una confirmacion por TwiML — respuesta dentro de la ventana de
+24 h que abrio el cliente, el mismo mecanismo que esa ruta ya usaba con el mesero, no una plantilla
+nueva. **Por Zernio no se hizo: no existe la salida** (el webhook solo devuelve 2xx y el modulo solo
+manda plantillas aprobadas). El costo de cerrarlo — plantilla aprobada por Meta, 25 aprobaciones, y
+la decision de si consume presupuesto de linea — queda escrito en `docs/features/twilio-opt-out.md`.
+`OptOutPanel` pide `cache: 'no-store'`. Suite: 19→20 archivos, 341→358 tests.
+
+---
+
 ## [2026-09-06] - Sushi Fun absorbido, todo mergeado a main y la numeracion de migraciones deja de adivinarse
 
 **Sushi Fun deja de ser un despliegue aparte y pasa a ser un tenant.** 1.421 filas desde su propio

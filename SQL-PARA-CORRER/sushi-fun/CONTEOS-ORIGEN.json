@@ -1,0 +1,27 @@
+{
+  "generado": "2026-09-06T06:45:44.812Z",
+  "tenant": "b2c3d4e5-f6a7-8901-bcde-f23456789012",
+  "conteos": {
+    "reward_tiers": 6,
+    "rewards": 3,
+    "mystery_box_global_caps": 1,
+    "admin_settings": 24,
+    "authorized_numbers": 2,
+    "staff_users": 1,
+    "staff_devices": 4,
+    "imported_contacts": 0,
+    "customers": 250,
+    "campaigns": 93,
+    "campaign_rewards": 0,
+    "visits": 268,
+    "point_transactions": 268,
+    "mystery_box_results": 0,
+    "reward_grants": 0,
+    "reward_redemptions": 0,
+    "review_events": 68,
+    "campaign_messages": 237,
+    "message_logs": 193,
+    "restaurant_events": 0,
+    "__message_logs_con_twilio_sid": 91
+  }
+}

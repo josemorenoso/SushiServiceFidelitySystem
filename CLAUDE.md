@@ -30,7 +30,9 @@ un dato de la marca A jamás se ve ni se atribuye a la marca B.**
 - **`promoteVersion()` es el ÚNICO escritor de `admin_settings.*_template_sid`.** `fillEmptyPointer()` es aditivo: solo rellena claves vacías, nunca cambia un puntero vivo.
 - **El prompt de domicilios es el literal de n8n salvo la ciudad**, que sale de `tenants.config.delivery_default_city`. Hornear una ciudad se la escribe en `customers.city` a los 25 tenants. `parseDeliveryAiJson()` es PURA y replica un nodo probado en producción: no se "mejora" sin medir (`"45.000"` → `45` es comportamiento CONOCIDO; la defensa vive en el prompt).
 - **`logDeliveryIntakeFailure()` es el único embudo por el que se pierde un domicilio.** Cuando §24-B cree la tabla, el INSERT va ahí dentro y en ningún otro sitio. `/api/webhook/delivery` es una CÁSCARA sobre `registerDeliveryOrder()`: su contrato no se cambia mientras n8n lo llame.
-- **`src/constants/messaging.ts` es espejo de `message_class_map`**: se cambian los dos lados o ninguno. Igual con el contrato de variables `{{n}}` de `template-catalog.ts`, que es fijo.
+- **`src/constants/messaging.ts` es espejo de `message_class_map`**: se cambian los dos lados o ninguno. Igual con el contrato de variables `{{n}}` de `template-catalog.ts`, que es fijo, y con `QR_THEME_IDS`/`QR_SIZE_IDS` de `tenant-config-paths.ts`, espejo de `qr-poster.ts`.
+- **`tenants.config` es PÚBLICO por construcción**: `resolveBranding()` es su proyección y viaja al navegador en cada página. Lo nuevo va en espacios con nombre (`branding`, `qr_studio`, y el reservado `integrations`), se escribe SOLO con `merge_tenant_config_deep()` (el `||` plano borra el espacio entero) y SOLO por rutas de la whitelist de `src/lib/tenant-config-paths.ts`. **Cuando lleguen Google y Meta: metadato no secreto en `config.integrations`, tokens en su propia tabla, nunca acá.**
+- **Ningún hex nuevo horneado en pantalla pública.** Va a `:root` como `--brand-*` (`globals.css`) y lo pisa la marca del tenant. Un literal dentro de una clase premium es un color que ninguna marca puede cambiar — el problema que §5 vino a resolver.
 - **Prohibido hornear emojis de rubro en `template-texts.ts`** (usar `${emoji}`; hay un test que lo vigila). Los textos `calido` no se tocan sin decisión del dueño.
 - **`OPENAI_API_KEY` es server-only** y `src/lib/openai/client.ts` es el único sitio que instancia el SDK.
 - **`getTenantByDomain()` conserva su firma**: la sede viaja por `resolveHostContext()`. Cambiarla toca 16 archivos de golpe. Y las rutas de Zernio **no se inventan**: salen de `Level 2.0/aios-constelarys/docs/zernio-api-contract.md` §4.
@@ -51,7 +53,7 @@ un dato de la marca A jamás se ve ni se atribuye a la marca B.**
 | n8n | ya no se usa | `domicilios_whatsapp_v4.json` sigue **ACTIVO** en el VPS y es lo único que lo mantiene vivo. Los 5 `cron_*.json` están en retirada (ya declarados en `vercel.json`) |
 
 ## Comandos
-`npm run dev` · `npm run build` · `npx tsc --noEmit` · `npm run lint` · `npx vitest run` (14 archivos / 261 tests)
+`npm run dev` · `npm run build` · `npx tsc --noEmit` · `npm run lint` · `npx vitest run` (18 archivos / 332 tests)
 `graphify query "…"` · `graphify affected "…"` · `graphify update .` (después de commitear; AST solo, sin costo)
 
 ## Dónde está cada cosa
@@ -63,6 +65,7 @@ un dato de la marca A jamás se ve ni se atribuye a la marca B.**
 | Campañas, opt-out, cola y presupuesto de envío | `docs/features/campaigns.md` + `send-governance.md` |
 | Panel / dashboard | `docs/features/dashboard.md` |
 | Tarjeta del cliente | `docs/features/wallet-card.md` + `design-system.md` |
+| Logo, paleta, `tenants.config`, QR Studio | `docs/features/identidad-visual.md` (+ `qr-studio.md`) |
 | Premios, redenciones, escaneo del mesero | `docs/features/reward-grants.md` + `redemption-tracking.md` |
 | Calendario de eventos | `docs/features/calendar.md` |
 | Cualquier `location_id`, sedes, `resolveHostContext()` | `docs/features/multi-sede.md` (diseño: `docs/superpowers/specs/2026-09-02-multisede-design.md`) |

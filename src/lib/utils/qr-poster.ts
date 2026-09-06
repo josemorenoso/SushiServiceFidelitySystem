@@ -165,7 +165,12 @@ export interface QrPosterOptions {
   headline: string
   subline: string
   label: string
-  logoDataUrl: string | null
+  /**
+   * Logo a superponer en el centro del QR. Desde §6 es la URL pública del logo
+   * de la marca (bucket `brand-assets`); antes era un data URL de `localStorage`.
+   * Ambos siguen funcionando — `loadImage()` no distingue.
+   */
+  logoSrc: string | null
   accentOverride?: string | null
 }
 
@@ -237,6 +242,20 @@ function fitFontSize(
 
 async function loadImage(src: string): Promise<HTMLImageElement> {
   const img = new Image()
+
+  // ⚠️ `crossOrigin` ANTES de asignar `src`, y solo para imágenes remotas.
+  //
+  // El póster se arma en un `<canvas>` y se exporta con `toDataURL()`. Dibujar
+  // en ese canvas una imagen de OTRO origen sin permiso CORS lo deja "tainted":
+  // `toDataURL()` lanza SecurityError y la descarga entera se cae. Desde §6 el
+  // logo viene del bucket público de Supabase Storage, que sí manda
+  // `Access-Control-Allow-Origin`, así que pedirlo anónimo resuelve el caso.
+  //
+  // En un data URL (el QR que genera la librería, y los logos que quedaron en el
+  // `localStorage` de alguien) no se toca: no hay origen que negociar y algunos
+  // navegadores se ponen quisquillosos si se les pide CORS igual.
+  if (!src.startsWith('data:')) img.crossOrigin = 'anonymous'
+
   await new Promise<void>((resolve, reject) => {
     img.onload = () => resolve()
     img.onerror = () => reject(new Error('No se pudo cargar la imagen'))
@@ -349,8 +368,8 @@ export async function composeQrPoster(opts: QrPosterOptions): Promise<string> {
   ctx.drawImage(qrImg, qrX, qrY, qrSide, qrSide)
 
   // Logo overlay (centro del QR)
-  if (opts.logoDataUrl) {
-    const logoImg = await loadImage(opts.logoDataUrl)
+  if (opts.logoSrc) {
+    const logoImg = await loadImage(opts.logoSrc)
     const logoSize = qrSide * 0.22
     const logoX = qrX + (qrSide - logoSize) / 2
     const logoY = qrY + (qrSide - logoSize) / 2

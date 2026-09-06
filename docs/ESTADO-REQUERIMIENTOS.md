@@ -13,10 +13,10 @@
 
 | § | Tema | Estado | Evidencia | ¿Bloquea el deploy de mañana? |
 |---|------|--------|-----------|---|
-| 3 | Personalización del QR | **PARCIAL** | QR Studio existe (`dashboard/qr/page.tsx`) pero su config vive solo en `localStorage`, sin persistir en Supabase; el QR de `CustomerCard.tsx` sigue básico | NO |
+| 3 | Personalización del QR | ✅ **HECHO** (rama `feat/tarjeta-visual`) | La config del QR Studio vive en `tenants.config.qr_studio` (migración `00047`, **sin aplicar**); el QR de `CustomerCard.tsx` lleva color de marca + logo con `level="H"`. Ver `docs/features/identidad-visual.md` | NO |
 | 4 | Programa de referidos | **NO EMPEZADO** | Solo `docs/features/referral-program.md`, marcado "PLAN — NO IMPLEMENTADO". Sin schema, sin endpoints | NO |
-| 5 | Personalización pantalla teléfono + tarjeta | **NO EMPEZADO** | `CheckInForm.tsx` sin `useBranding()`; `EDITABLE_KEYS = ['google_maps_url']` intacto | NO |
-| 6 | Branding + wizard de plantillas | **PARCIAL** | Tono/estilo ya resuelto vía §12; falta logo, paleta y el wizard | NO |
+| 5 | Personalización pantalla teléfono + tarjeta | ✅ **HECHO** (rama `feat/tarjeta-visual`) | Los hex de `CheckInForm.tsx` y de las clases premium pasan a variables `--brand-*` sustituibles por tenant; `EDITABLE_KEYS` pasa a ser una whitelist **por ruta** (`src/lib/tenant-config-paths.ts`) | NO |
+| 6 | Branding + wizard de plantillas | **PARCIAL** | Tono/estilo ya resuelto vía §12. **Logo y paleta HECHOS** (`/dashboard/marca`, con vista previa en vivo, rama `feat/tarjeta-visual`). Falta el wizard de alta de tenant | NO |
 | 7 | Calendario — mensaje hardcodeado | **NO EMPEZADO** | `TEMPLATE_BODY` fijo en `scripts/twilio-create-media-templates.mjs:132`; `event_type` nunca se lee para elegir plantilla | NO |
 | 8 | Puntos al superar el tier máximo | **NO EMPEZADO** | Fallback `?? 150` intacto en `src/services/points.service.ts:187` | NO |
 | 9 | Notificaciones Push (FCM) | **NO EMPEZADO** | Cero infraestructura (sin firebase/vapid/fcm en `src/`) | NO |
@@ -154,10 +154,10 @@ Ninguna bloquea el deploy. Todas bloquean el trabajo que venga después.
 | §18.a–d | Domicilios bajo coexistencia — **las más urgentes para vender a los 25** |
 | §16.a–e | Etapas y días del pipeline de recorrido/fatiga |
 | §17.a–d | Qué es el "beneficio permanente" Black, con qué umbral, y si Black es el tier máximo |
-| §3 | La queja de "QR muy básico", ¿es sobre el QR Studio (mesa) o el de la tarjeta? |
+| ~~§3~~ | ~~La queja de "QR muy básico", ¿es sobre el QR Studio (mesa) o el de la tarjeta?~~ → **se resolvió haciendo las dos**: el Studio persiste su config y el QR de la tarjeta lleva color de marca y logo |
 | §15.b | Los 2 presets fantasma (`invite_restaurant`/`invite_delivery`): ¿borrar o crearles plantilla? |
 | §12 | El emoji 🍣 horneado en los textos "cálido" para tenants que no son japoneses |
-| §5 | ¿Quién edita la personalización de pantalla, y hace falta `logo_url` persistente? |
+| ~~§5~~ | ~~¿Quién edita la personalización de pantalla, y hace falta `logo_url` persistente?~~ → **respondido al construir**: lo edita el dueño desde `/dashboard/marca`, y sí, `logo_url` persiste en Supabase Storage (bucket `brand-assets`) |
 | §9 | Push: ¿para el cliente final o para staff? ¿Qué caso lo justifica? |
 
 ---
@@ -167,9 +167,13 @@ Ninguna bloquea el deploy. Todas bloquean el trabajo que venga después.
 **Nada de lo anterior bloquea el deploy de mañana.** El producto que se despliega está completo y
 verificado para el caso de uso actual.
 
-Lo que sí conviene ver con calma: de las 20 secciones auditadas, **5 están hechas, 6 parciales y 7 sin
-empezar**. Las sin empezar son funcionalidades de producto (referidos, push, fatiga, branding,
-escáner), no deudas técnicas. El sistema **funciona**; lo que falta es catálogo.
+Lo que sí conviene ver con calma: de las **19 secciones auditadas**, hoy **7 están hechas, 5 parciales,
+6 sin empezar y 1 diferida a propósito** (§22, franquicias). Las sin empezar son funcionalidades de
+producto (referidos, push, fatiga, calendario, puntos sobre el tier máximo, §18), no deudas técnicas.
+El sistema **funciona**; lo que falta es catálogo.
+
+*(El recuento anterior decía "20 secciones · 5 hechas · 6 parciales · 7 sin empezar". Cambió por dos
+motivos: §3 y §5 se construyeron el 2026-09-06, y la tabla tiene 19 filas, no 20.)*
 
 Para el objetivo declarado —*recibir más clientes*— las dos que más pesan son **§18** (sin ella el
 onboarding con coexistencia no tiene respuesta clara) y **§19** (hoy cada mesero necesita su propio

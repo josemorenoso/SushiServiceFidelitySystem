@@ -1204,9 +1204,39 @@ CREATE POLICY "tenant_all_template_versions" ON template_versions FOR ALL
 | `event_media_admin_update` | UPDATE | `bucket_id='event-media' AND auth.role()='authenticated'` |
 | `event_media_admin_delete` | DELETE | `bucket_id='event-media' AND auth.role()='authenticated'` |
 
+### brand-assets
+
+> Bucket público para el **logo de la marca** (§6, migración 00047).
+
+- **Público:** SI. El logo se dibuja en tres sitios que no pueden autenticarse: la pantalla de
+  check-in y la tarjeta (anónimas, un cliente con su celular) y el `<canvas>` del póster QR. Es el
+  logo comercial del restaurante, el mismo que está en su fachada: no hay nada que proteger.
+- **Escritura:** Solo `authenticated`. La subida real la hace el service role desde
+  `/api/dashboard/brand-logo`, que ya resolvió el tenant.
+- **Estructura de path:** `brand-assets/<tenant_id>/logo-<timestamp>.png`. El prefijo `tenant_id`
+  **lo impone la ruta de subida** desde `requireTenantId()`, nunca el cliente: es lo que hace
+  verificable de un vistazo que la marca A no escribe sobre el logo de la marca B. El timestamp está
+  para que el CDN no siga sirviendo el logo anterior.
+- **Formato:** siempre PNG, ≤512 px de lado, re-codificado con `sharp` en el endpoint. El SVG no se
+  acepta: en un bucket público es un vector de XSS.
+- **Un logo por tenant:** cada subida barre los anteriores. El bucket no es un archivo histórico.
+
+**Políticas:**
+
+| Nombre | Acción | Regla |
+|--------|--------|-------|
+| `brand_assets_public_read` | SELECT | `bucket_id='brand-assets'` (anónimo) |
+| `brand_assets_admin_write` | INSERT | `bucket_id='brand-assets' AND auth.role()='authenticated'` |
+| `brand_assets_admin_update` | UPDATE | `bucket_id='brand-assets' AND auth.role()='authenticated'` |
+| `brand_assets_admin_delete` | DELETE | `bucket_id='brand-assets' AND auth.role()='authenticated'` |
+
 ---
 
 ## Historial de Migraciones
+
+> ⚠️ Esta tabla llega hasta la 44 y le faltan la **00045** (permisos por sede, F7) y la **00046**
+> (escáner de meseros, §19). Es la deuda **D4/D5** ya registrada en `ESTADO.md`, anterior a la 00047.
+> La 00047 no existe: está reservada por otra sesión en vuelo.
 
 | # | Archivo | Fecha | Descripción | Estado |
 |---|---------|-------|-------------|--------|
@@ -1249,6 +1279,8 @@ CREATE POLICY "tenant_all_template_versions" ON template_versions FOR ALL
 | 42 | `00042_sede_principal_tenants_vivos.sql` | 2026-09-03 | **Migración de DATOS** (F1). Le da a cada tenant que ya existe su *"Sede principal"* y le delega el subdominio ya impreso en sus QR. Por tenant: **0 sedes** → crea `'Sede principal'` (`slug='sede-principal'`, `is_primary=true`, `domain = tenants.domain`, sin coordenadas); **1 sede** → la **adopta** (le pone `slug`/`domain` si faltan y `is_primary=true`) en vez de crear una segunda; **≥2 sedes** → **no la toca** y avisa con `RAISE WARNING`, porque elegir mal delegaría el subdominio impreso a la sede equivocada. **NO TOCA UNA SOLA FILA DE HISTORIA**: `visits`, `point_transactions`, `review_events` y `customers` se quedan como están, y cuando la 00043 les agregue `location_id` nace NULL y **se queda en NULL** — NULL significa "sede desconocida" y **SE MUESTRA** como un cubo propio llamado *"Sin sede"*, nunca se reparte ni se esconde. **Idempotente** (los `COALESCE` no pisan nada puesto a mano). `tenants.domain` e `idx_tenants_domain` (00029) **no se tocan**: `getTenantByDomain` sigue resolviendo igual y los 4 tenants Twilio funcionan exactamente como antes. | Pendiente |
 | 43 | `00043_location_id_eventos.sql` | 2026-09-03 | **F2 de multi-sede: la dimensión "sede" en las 13 tablas de HECHOS.** 18 columnas nuevas, **todas vacías**: `visits` (`location_id` + `location_source` + `location_conflict`), `point_transactions`, `review_events`, `message_logs` (**dos**: `location_id` = a quién se imputa, `line_location_id` = por qué línea salió), `tenant_wallet_transactions`, `send_queue`, `consent_events`, `campaigns`, `authorized_numbers`, `restaurant_events` (+ `audience_scope`), `reward_grants.granted_location_id` (dónde se GANÓ), `reward_redemptions.redeemed_location_id` (dónde se ENTREGÓ), `customers` (`origin_location_id` + `last_visit_location_id`). **Regla transversal sin excepciones:** cada columna es NULLABLE y lleva **FK COMPUESTA** `(columna, tenant_id) REFERENCES restaurant_locations (id, tenant_id) ON DELETE RESTRICT` — una FK simple dejaría atribuir un hecho de la marca A a una sede de la marca B y el motor no diría nada; `RESTRICT` y no `SET NULL` porque una sede **nunca se borra, se desactiva** con `is_active=false`, y `SET NULL` degradaría historia a "sede desconocida" en silencio. `MATCH SIMPLE` (el default) es deliberado: `MATCH FULL` rechazaría cada fila de historia. **CERO backfill:** el histórico se queda en NULL = "sede desconocida", y se MUESTRA. **Cero cambio de comportamiento:** nadie lee estas columnas todavía (las llena F3, las lee F5/F6/F7), así que los 4 tenants Twilio siguen igual. `restaurant_events` es la **única** tabla donde NULL no significa "sede desconocida" — por eso lleva `audience_scope ('brand'\|'location') DEFAULT 'brand'` con CHECK que lo amarra a `location_id`. Abre con una **guarda** que aborta con 42830 si falta el `UNIQUE (id, tenant_id)` de la 00041, para no quedar aplicada a medias. | Pendiente |
 | 44 | `00044_meseros_por_sede.sql` | 2026-09-03 | **F4 de multi-sede: los meseros por sede (D11)** — *"cada mesero es de cada sede, no se juntan jamás"*. `staff_users.location_id` y `staff_devices.location_id`, NULLABLE las dos y con la **FK COMPUESTA** `(location_id, tenant_id)` ON DELETE **RESTRICT** de la regla transversal, más su índice parcial. **Sin backfill:** los meseros que ya existen se quedan en NULL = *"mesero sin sede asignada"*, siguen trabajando exactamente igual (no aportan señal, la precedencia cae al host) y NINGÚN 403 nuevo los toca. **`staff_users_phone_tenant_key (phone, tenant_id)` NO se toca**: es lo que hace cumplir D11 en el motor. **Tapa una bomba verificada:** `staff_devices_fingerprint_tenant_key UNIQUE (device_fingerprint, tenant_id)` — hasta aquí `device_fingerprint` solo tenía índice normal (00018:41) y **siete** sitios del código hacen `.single()` sobre él; dos filas iguales = `PGRST116` = *"dispositivo no reconocido"* para siempre. Un bloque de guarda ABORTA con 23505 si ya hay duplicados, nombrándolos, en vez de deduplicar por su cuenta (borrar una fila saca del trabajo al dispositivo de alguien). **Dos triggers de coherencia** (`staff_device_sede_coherente()` / `staff_user_sede_coherente()`, ambos 23514): un dispositivo nunca queda a nombre de un mesero de otra sede **ni de otra marca** —esto último no lo cubre ninguna FK, porque `staff_devices_staff_user_id_fkey` es simple—, y mover de sede a un mesero con dispositivos en la sede vieja se rechaza en vez de arrastrarlos. Solo actúan con las dos sedes CONOCIDAS: NULL es *"desconocida"*, no *"otra"*. **Cierra las deudas #10 y #11:** `enqueue_send_queue(jsonb)` se reescribe con `CREATE OR REPLACE` (misma firma → conserva el REVOKE de la 00038) para copiar `send_queue.location_id`; y `log_review_shown_deduped` exige **DROP + CREATE** con un 4º parámetro `p_location_id uuid DEFAULT NULL` — añadir un parámetro NO reemplaza la función, crea una **sobrecarga**, y la llamada de 3 argumentos del servicio pasaría a ser **ambigua (42725)**, rompiendo el registro de impresiones dentro de un `catch` que solo escribe en consola. El DEFAULT al final hace que el orden de despliegue no importe. ⚠️ El **dedupe sigue siendo por (tenant, cliente) y NO por sede**, a propósito: meterle la sede subiría un número que el panel ya reporta hoy. | Pendiente |
+
+| 48 | `00047_identidad_visual.sql` | 2026-09-06 | **Identidad visual por marca (§5 pantalla + tarjeta, §6 logo y paleta, §3 config del QR Studio).** NO crea tablas, NO agrega columnas y NO toca una sola fila. Dos cosas: (1) **`jsonb_deep_merge(a, b)`** (recursiva, `LANGUAGE plpgsql` — una función `LANGUAGE sql` valida su cuerpo al crearse y la autorreferencia fallaría) + **`merge_tenant_config_deep(uuid, jsonb)`**, porque `tenants.config` pasa a tener **espacios con nombre** (`branding`, `qr_studio`, y el reservado `integrations`) y el `\|\|` de jsonb mezcla **solo el primer nivel**: guardar `{branding:{primary}}` con el merge superficial **borraría el logo**, sin error y sin aviso. ⚠️ Es una función con **NOMBRE NUEVO**, no una sobrecarga: `merge_tenant_config()` (00032) se conserva con su misma firma — agregarle un parámetro habría dejado ambigua (42725) toda llamada vieja, la trampa que ya costó `log_review_shown_deduped()`. (2) Bucket **`brand-assets`** + sus 4 policies, calcado del patrón de `event-media` (00012). **Reaplicable**: todo es `CREATE OR REPLACE`, `ON CONFLICT DO NOTHING` o `IF NOT EXISTS`. **Va ANTES del código**: sin ella, todo guardado desde `/dashboard/marca` y desde el QR Studio devuelve error. Su orden en la cola: después de la 00044, la 00045 y la 00046. | Pendiente |
 
 ### `tenant_id` en las 18 tablas de negocio
 

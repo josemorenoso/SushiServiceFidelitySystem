@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useDemo } from '@/contexts/DemoContext'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
-import { LogOut, Menu, QrCode, LayoutDashboard, Users, Gift, Megaphone, UtensilsCrossed, FileText, Settings, CalendarDays, UserCog, ShieldCheck, Ticket, Crosshair } from 'lucide-react'
+import { LogOut, Menu, QrCode, LayoutDashboard, Users, Gift, Megaphone, UtensilsCrossed, FileText, Settings, CalendarDays, UserCog, ShieldCheck, Ticket, Crosshair, Palette } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
@@ -26,7 +26,11 @@ export function DashboardHeader() {
     { href: '/dashboard/campaigns', label: 'Campañas', icon: Megaphone },
     { href: '/dashboard/imported-contacts', label: 'Golden Bullet', icon: Crosshair },
     { href: '/dashboard/calendar', label: 'Calendario', icon: CalendarDays },
-    { href: '/dashboard/qr', label: 'Código QR', icon: QrCode },
+    // "QR Studio" y no "Código QR": el nombre viejo hacía creer que era un
+    // generador pelado y por eso nadie encontraba los temas, los tamaños de
+    // imprenta ni el logo que ya existían (§3).
+    { href: '/dashboard/qr', label: 'QR Studio', icon: QrCode },
+    { href: '/dashboard/marca', label: 'Identidad visual', icon: Palette },
     { href: '/dashboard/templates', label: 'Plantillas', icon: FileText },
     { href: '/dashboard/staff', label: `${branding.staffLabelPlural} QR`, icon: UserCog },
     { href: '/dashboard/authorized-numbers', label: 'Autorizados Domicilio', icon: ShieldCheck },

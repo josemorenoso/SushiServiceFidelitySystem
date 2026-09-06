@@ -9,7 +9,9 @@
  *   - `brandWalletCardTheme(branding)` — el de siempre: gradiente de marca del
  *     tenant, texto blanco. Los valores son EXACTAMENTE los que tenía la tarjeta
  *     antes de esta refactorización (`text-white/50` → `rgba(255,255,255,0.5)`,
- *     etc.), así que el aspecto por defecto no cambia.
+ *     etc.), así que el aspecto por defecto no cambia. Desde §6, los tres que SÍ
+ *     dependen de la marca (`pageBg`, `cardBg` y el ✓ del sello) los trae
+ *     `Branding` ya resueltos; un tenant sin color propio recibe los literales.
  *   - `BLACK_WALLET_CARD_THEME` — negro y dorado, REQUERIMIENTOS_AGOSTO_2026.md
  *     §17.2: *"al entrar a Black, la tarjeta del cliente en su celular cambia a
  *     negro y dorado"*, con distintivo claro (`badge`).
@@ -117,7 +119,10 @@ export function brandWalletCardTheme(branding: Branding): WalletCardTheme {
       filledBg: 'rgba(255,255,255,1)',
       filledBorder: '2px solid rgba(255,255,255,0.9)',
       filledShadow: '0 2px 8px rgba(0,0,0,0.18)',
-      check: '#C1121F',
+      // Antes era el literal '#C1121F'. Ahora sale de la marca: `resolveBranding()`
+      // lo deriva del color del tenant y, si no eligió ninguno, devuelve ese
+      // mismo literal — la tarjeta por defecto no cambió ni un píxel (§6).
+      check: branding.stampCheck,
       emptyBg: 'rgba(255,255,255,0.18)',
       emptyBorder: '2px solid rgba(255,255,255,0.35)',
     },

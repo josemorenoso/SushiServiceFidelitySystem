@@ -1,6 +1,6 @@
 # ESTADO — RestaurantQR / Cada1
 
-> **Última actualización:** 2026-09-05 (sesión "§19 escáner de meseros", Opus 5)
+> **Última actualización:** 2026-09-06 (sesión "identidad visual §5/§6/§3", Opus 5)
 > Toda sesión lo lee PRIMERO. Toda sesión que cierra un bloque lo ACTUALIZA al final. Límite: 150 líneas.
 > Lo obsoleto se **saca**, no se tacha: un ítem tachado sigue costando tokens cada vez que alguien lee esto.
 >
@@ -15,9 +15,9 @@
 | Qué | Estado |
 |-----|--------|
 | Código en `main` local | F7 mergeado + migración al método — **24 commits adelante de `origin/main`, SIN pushear** (`git rev-list --count origin/main..main` para el número de hoy) |
-| Verificación | ✅ `tsc` limpio · eslint 7 errores (los mismos preexistentes, React hooks) · **vitest 14 archivos / 261 tests en verde** |
+| Verificación | ✅ `tsc` limpio · eslint 7 errores (los mismos preexistentes, React hooks) · **vitest 15 archivos / 278 tests en verde** (medido en `main`; las ramas en vuelo suman más) |
 | Código en producción | Anterior a TODO: multi-sede F3/F4/F7, §25 F2 y el fix de db-errors |
-| Base de datos de producción | Aplicadas hasta la **00043**. ⚠️ **00044 (F4) y 00045 (F7) PENDIENTES** — van antes del deploy. La 00030 NUNCA aplicada (a propósito). La 00015 NO se aplica (reabre fuga) |
+| Base de datos de producción | Aplicadas hasta la **00043**. ⚠️ **00044 (F4) y 00045 (F7) PENDIENTES** — van antes del deploy. Después, en orden: **00046** (§19) y **00047** (identidad visual). La 00030 NUNCA aplicada (a propósito). La 00015 NO se aplica (reabre fuga). *La 00047 está reservada por otra sesión* |
 | Remoto correcto | `origin` = `SushiServiceFidelitySystem` ✅ (los remotos `fun` y `donalirio` NO son el destino) |
 | Red de seguridad | rama `backup/pre-f7-merge` = `53555f0` (estado de `main` justo antes del merge de F7) |
 | Método | **Maestro LuisRAI v3** (`METODO_MAESTRO_LUISRAI.md`). El AInnovate v2 está en `docs/archive/` |
@@ -34,10 +34,9 @@ pantallas. El aparato es del LOCAL (un login, una vez, con PIN de supervisor), e
 en CADA operación y la lista va filtrada por sede. Sin PIN del mesero: el dueño lo quitó el
 2026-09-05 y con él se cayeron 19.e y §19.7. **Verificado**: `tsc` limpio, eslint con los mismos 7
 errores preexistentes, **15 archivos / 278 tests** (eran 14/261; +17, ninguno perdido).
-⚠️ **La migración `00046` está escrita y SIN APLICAR** — aplicarla la decide el dueño, y va
-DESPUÉS de la 00044 y la 00045. Spec: `docs/superpowers/specs/2026-09-05-staff-scanner-19-design.md`.
-Un paso manual pendiente al desplegar: **asignarle sede a cada mesero existente** desde el panel
-(hoy todos tienen `location_id` NULL y no saldrían en ninguna lista).
+⚠️ **La `00046` está escrita y SIN APLICAR** — la decide el dueño, y va DESPUÉS de la 00044 y la
+00045. Spec: `docs/superpowers/specs/2026-09-05-staff-scanner-19-design.md`. Paso manual al desplegar:
+**asignarle sede a cada mesero existente** (hoy todos tienen `location_id` NULL y no salen en ninguna lista).
 
 ⏳ **ESPERANDO DECISIÓN DEL DUEÑO — rama `feat/pulido-visual` (worktree `../wt-pulido-visual`)**
 Pulido visual de las pantallas de cara al cliente, commit `206f067`. **Verificado**: solo presentación
@@ -48,22 +47,31 @@ check-in sea el área táctil (antes solo la línea de texto), y agranda la "×"
 hasta que el dueño lo mire** — el detalle por pantalla está en `docs/PULIDO-VISUAL.md` de esa rama.
 Para mergear: `git merge --no-ff feat/pulido-visual`.
 
-Limpieza trivial pendiente: `git worktree remove ../wt-f7-permisos` (ya mergeado) · el worktree
-`port/sushi-fun-2.8` del scratchpad quedó *prunable* · `git branch -d backup/pre-f7-merge` **solo
-después del deploy exitoso**.
+⏳ **ESPERANDO DECISIÓN DEL DUEÑO — rama `feat/tarjeta-visual` (worktree `../wt-tarjeta-visual`)**
+**§5 + §6 + §3, la identidad visual por marca.** Logo y UN color desde `/dashboard/marca`, con vista
+previa en vivo; gradientes, ✓ del sello, color del QR y texto del botón se derivan. Los hex de
+`globals.css` y `CheckInForm` pasan a variables `--brand-*` con los literales de hoy en `:root`: **un
+tenant sin color propio no cambia ni un píxel**, con prueba que lo fija. §3: la config del QR Studio
+va a `tenants.config.qr_studio`. 🚪 `config` gana espacios con nombre y reserva `integrations` para
+Google/Meta (metadato no secreto ahí, tokens en su propia tabla). **Verificado**: `tsc`, build, eslint
+con los 7 preexistentes, **18 archivos / 332 tests** (+54). → `docs/features/identidad-visual.md`.
+⚠️ **La `00047` está escrita, SIN APLICAR, y va ANTES del código.** ⚠️ **Choca con `feat/pulido-visual`**
+en `CheckInForm.tsx` (la "×" de ciudad): conflicto chico —su `className`, mi `style`— pero a mano;
+mergear `pulido-visual` PRIMERO, que además ya trae 2 conflictos propios contra `main` en `mesero/`.
+
+Limpieza trivial: `git worktree remove ../wt-f7-permisos` (ya mergeado) · el worktree
+`port/sushi-fun-2.8` quedó *prunable* · `git branch -d backup/pre-f7-merge` **solo tras el deploy**.
 
 ## 3. Siguiente, en orden (camino a producción — no saltarse pasos)
 
-1. **← AQUÍ VAS. Features CONGELADAS**, con UNA excepción que ordenó el dueño: **§19 ya está construido** en `feat/staff-scanner-19` (ver §2). No se mergea ni se aplica su migración sin que él lo diga. Fuera de eso, solo pulido visual en bloques chicos (`docs/features/design-system.md`).
+1. **← AQUÍ VAS. Features CONGELADAS**, con las excepciones que ordenó el dueño y que ya están construidas y esperando su visto bueno: **§19** (`feat/staff-scanner-19`) y **§5/§6/§3** (`feat/tarjeta-visual`). Ninguna se mergea ni aplica su migración sin que él lo diga. Ver §2.
 2. **Pre-deploy** (micro): confirmar Vercel **Pro** activo (por los crons `*/15`) · `OPENAI_API_KEY` creada en Vercel · `git remote -v` una vez más · push a `origin`.
-3. **Migraciones ANTES del código** (micro): aplicar **00044** y luego **00045** en Supabase producción, en ese orden.
+3. **Migraciones ANTES del código** (micro): **00044** y luego **00045** en Supabase producción, en ese orden (la 00046 y la 00047 van después, con sus ramas — ver §1).
 4. **Deploy** → smoke test con Sushi Service real: check-in con mesero, tarjeta, panel (incluido el selector de sede nuevo), un domicilio de prueba.
 5. **Cutover n8n** (feature): apagar los 5 Schedule Triggers (los crons ya viven en `vercel.json`) → probar domicilios en el producto → apagar el VPS.
 6. **Aplicar la 00030** en ventana tranquila (cierra el riesgo del DEFAULT puente).
 7. **Onboarding de los 25** (ola): wildcard DNS ya decidido; provisioning por tenant.
-8. Después del deploy, en bloques chicos: **mergear §19** y aplicar su `00046`, **17.b**, las deudas
-   D1–D5, y el catálogo de producto que prioriza el dueño en `docs/ESTADO-REQUERIMIENTOS.md`
-   (**§18** es ahora la que más pesa para vender: §19 ya está hecho).
+8. Después del deploy, en bloques chicos: **mergear §19** (`00046`) y **la identidad visual** (`00047`), **17.b**, las deudas D1–D5, y el catálogo que priorice el dueño (**§18** es la que más pesa: §19, §3 y §5 ya están hechos).
 
 **El norte, para tenerlo en cuenta al diseñar — NO se desarrolla todavía** (dueño, 2026-09-05):
 el producto va hacia **automatizaciones dentro del restaurante**. Dos concretas ya nombradas: que el
@@ -77,10 +85,12 @@ hoy cierre esa puerta (sobre todo en `tenants.config` y en cómo se guardan cred
 - **`OPENAI_API_KEY` en Vercel** — sin ella §25 Fase 2 (domicilios dentro del producto) no se activa.
 - **Aplicar 00044 y 00045** en Supabase producción — es una migración sobre datos reales.
 - **Mirar `feat/pulido-visual`** en el navegador y decidir si se mergea.
-- **Las preguntas abiertas de producto** (§18.a–d, §16.a–e, §17.a–d, §3, §15.b, §12, §5, §9):
+- **Las preguntas abiertas de producto** (§18.a–d, §16.a–e, §17.a–d, §15.b, §12, §9):
   la lista completa está en `docs/ESTADO-REQUERIMIENTOS.md`. Ninguna bloquea el deploy; todas bloquean
   el trabajo que venga después. **§19 ya no está acá**: el dueño cerró su modelo el 2026-09-05, sus
-  cinco preguntas se resolvieron en el spec y la feature está construida.
+  cinco preguntas se resolvieron en el spec y la feature está construida. **§3 y §5 tampoco**: se
+  respondieron construyéndolas el 2026-09-06.
+- **Mirar `feat/tarjeta-visual`** en el navegador y decidir si se mergea, y **cuándo se aplica la `00047`**.
 - **Mirar `feat/staff-scanner-19`** y decidir si se mergea, y **cuándo se aplica la `00046`**.
 - **D6 CERRADA** (2026-09-05): la línea de WhatsApp es **N líneas por marca y la sede no obliga a
   ninguna** — se elige al enviar. En la práctica, una sola para todas. El eje es el cupo (calentar una
@@ -89,37 +99,34 @@ hoy cierre esa puerta (sobre todo en `tenants.config` y en cómo se guardan cred
 
 ## 5. Hecho reciente
 
+- **§5/§6/§3 — identidad visual por marca** (2026-09-06, sin mergear): `EDITABLE_KEYS` deja de ser una lista de claves y pasa a ser una whitelist **por ruta** (`src/lib/tenant-config-paths.ts`). La 00047 agrega `merge_tenant_config_deep()` — nombre NUEVO, no sobrecarga — porque el `||` de jsonb borra el espacio entero, y el bucket `brand-assets`. Cierra §5, §3 y la mitad de §6 (falta el wizard de alta), y con ellos las preguntas abiertas §3 y §5.
 - **§19 — el escáner de meseros** (2026-09-05, sin mergear): invertido el modelo del aparato. `staff_users.phone` pasa a NULLABLE y la llave de identidad (19.f) se **complementa** en vez de reemplazarse: el UNIQUE de teléfono se conserva y se le suman un CHECK de identidad mínima y un UNIQUE parcial `(marca, sede, nombre)`. Nuevas `GET /api/staff/waiters` y `/locations`; eliminada `POST /api/staff/login`. `resolveStaffAuth` deja de atribuir desde la sesión.
-- **Migración al Método Maestro v3** (2026-09-05): `ESTADO.md` a la raíz, `CLAUDE.md` de 161 a **78 líneas** sin perder una sola trampa, borradas las 5 copias de reglas por IDE, `AGENTS.md` y README reales. Grafo completado (le faltaban 145 archivos de la corrida que se cortó) y `docs/archive/` sacado de su alcance: devolvía docs obsoletos mezclados con el código vivo. Nada se borró: lo viejo está en `docs/archive/`.
-- **`ec46d47` / F7**: permisos por sede (D10) y selector del panel. Migración `00045` (tabla `dashboard_user_locations`, 3 helpers SECURITY DEFINER, trigger que estampa `role='brand'` al nacer la 2ª sede, policies RESTRICTIVE autodescubiertas por catálogo). Tipo opaco `LocationScope` con `requireLocationScope()` como única fábrica; ~9 rutas pasan de `(tenantId)` a `(scope)`. Selector en `DashboardHeader` vía `LocationScopeContext` (localStorage, NO la URL). **D16 cerrada.** De paso arregló un hueco del arnés de tests (`bootstrap.sql` no daba `USAGE ON SCHEMA auth` a `authenticated`).
-- **`53555f0` + los 19 de `dashboard/**`**: cerrado el patrón "error de Supabase indistinguible de vacío" en todo el código. Nuevo helper `src/lib/db-failure.ts`.
+- **`53555f0`**: cerrado el patrón "error de Supabase indistinguible de vacío" (`src/lib/db-failure.ts`).
+- **`ec46d47` / F7**: permisos por sede (D10) y selector del panel. Migración `00045` (`dashboard_user_locations`, 3 helpers SECURITY DEFINER, policies RESTRICTIVE). Tipo opaco `LocationScope`; ~9 rutas pasan de `(tenantId)` a `(scope)`. **D16 cerrada.** Detalle en `docs/features/multi-sede.md`.
 - **v2.12.1 / §25 Fase 2**: los domicilios salen de n8n y entran al producto (OpenAI dentro de Vercel). El webhook n8n queda de cáscara; `domicilios_whatsapp_v4.json` sigue ACTIVO en el VPS hasta el cutover.
 - **v2.12.0 / F4**: el mesero es de UNA sede (D11). ⚠️ La 00044 va aplicada ANTES del deploy — al revés, TODOS los meseros reciben 403.
-- **v2.11.0 / F3**: el check-in averigua y escribe la sede (mesero → dominio → nada); geocerca muerta eliminada.
-- **v2.10.0 / F1+F2**: `restaurant_locations` ES la sede; 18 columnas de sede en 13 tablas de hechos (00041–00043; la 00043 sí está aplicada en prod).
-- **Auditoría 00030**: el DEFAULT puente a Sushi Service sigue vivo en 18 tablas; hoy no rompe nada (100% de INSERTs auditados pasan `tenant_id` explícito) pero no hay red de seguridad.
+- **v2.11.0 / F3 · v2.10.0 / F1+F2**: el check-in escribe la sede (mesero → dominio → nada) y `restaurant_locations` ES la sede, con 18 columnas de sede en 13 tablas de hechos (00041–00043; la 00043 sí está aplicada en prod).
 
 ## 6. Deudas y límites conocidos
 
-**Multi-sede** (detalle en `docs/features/multi-sede.md`): **D1** `config` sin whitelist de claves ·
-**D2** trigger cruzado de una sola dirección · **D3** `is_primary` sin UNIQUE por tenant · **D4**
-diagrama ER de DB_SCHEMA obsoleto · **D5** conteo de migraciones desactualizado en comentarios ·
+**Multi-sede** (detalle en `docs/features/multi-sede.md`): **D1** `restaurant_locations.config` sin
+whitelist (la de `tenants.config` sí existe desde 2026-09-06) · **D2** trigger cruzado de una
+dirección · **D3** `is_primary` sin UNIQUE por tenant · **D4** diagrama ER de DB_SCHEMA obsoleto ·
+**D5** conteo de migraciones desactualizado en comentarios (el arnés de tests ya dice 48) ·
 **D7** premios sin precio → matriz D12 solo en conteos · **D8** adopción de histórico irreversible
 (solo con orden explícita) · **D9** el 409 de sede no acepta elección por API · **D12** campañas
 masivas con `location_id` NULL (es F6) · **D13** 5 columnas de sede aún vacías · **D15** FK simple en
 `staff_devices.staff_user_id` (mitigada con trigger) · **D17** las sedes no se crean ni se editan
 desde el producto (es F8, wizard AIOS).
 
-**Rutas que F7 dejó SIN cablear a propósito** (razón en el código y en `docs/features/multi-sede.md`
-§3.quater): `send-queue` GET, `check-in-override`, `campaigns/manual`, `imported-contacts/confirm`,
-`campaigns/run-auto`. Hasta que F6 llene `reward_grants`/`reward_redemptions`/`campaigns`, el filtro de
-sede en esas tablas es un **no-op seguro (fail-closed, no fail-open)**.
+**Rutas que F7 dejó SIN cablear a propósito** (`docs/features/multi-sede.md` §3.quater): `send-queue`
+GET, `check-in-override`, `campaigns/manual`, `imported-contacts/confirm`, `campaigns/run-auto`. Hasta
+que F6 llene esas tablas, el filtro de sede ahí es **no-op seguro (fail-closed, no fail-open)**.
 
-**De §19** (detalle en el spec `2026-09-05-staff-scanner-19-design.md` §10): **D18** el token
-del aparato es el fingerprint del navegador, y con §19 pasa a ser la ÚNICA credencial del local —
-el dueño decidió dejarlo así · **D19** un mesero sin teléfono dado de alta en dos sedes cuenta como
-dos meseros y su métrica se parte; la base ya no puede saber que son la misma persona · **D20**
-quién activó un aparato deja de quedar en `staff_user_id`, solo en `device_name` y `trusted_at`.
+**De §19** (spec `2026-09-05-staff-scanner-19-design.md` §10): **D18** el token del aparato es el
+fingerprint del navegador y pasa a ser la ÚNICA credencial del local — el dueño lo aceptó · **D19** un
+mesero sin teléfono en dos sedes cuenta como dos y su métrica se parte · **D20** quién activó un
+aparato deja de quedar en `staff_user_id`, solo en `device_name` y `trusted_at`.
 ⚠️ **Un mesero en DOS sedes sería caro**: choca con D11, que vive en la FK compuesta, en el trigger
 de la 00044 y en el índice nuevo. Si el dueño lo pide, cambiar la llave es barato ANTES de aplicar
 la 00046 y caro después.
@@ -129,7 +136,7 @@ la 00046 y caro después.
 - **17.b**: "quién es Black" difiere entre la tarjeta (`black-tier.ts`) y el panel (`POWER_RANKS`, 10+ visitas).
 - **§25 Fase 1**: los crons ya están en `vercel.json`, pero los dos `*/15` rompen el build sin Pro, y cron en Vercel + Schedule Trigger n8n a la vez = doble disparo.
 - **§25 Fase 3** diferida: Google Contacts OAuth propio (opcional).
-- **Catálogo de producto sin empezar**: 7 de 20 secciones auditadas (referidos, push, fatiga, branding, §19…). No son deuda técnica: es catálogo. Ver `docs/ESTADO-REQUERIMIENTOS.md`.
+- **Catálogo de producto sin empezar**: 6 de 19 secciones auditadas (referidos, push, fatiga, calendario, §8, §18). No son deuda técnica: es catálogo. Ver `docs/ESTADO-REQUERIMIENTOS.md`.
 
 ## 7. Reglas de esta casa
 

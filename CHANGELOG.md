@@ -24,6 +24,22 @@ Twilio reintentara la entrega. Rechazar la acción y avisarle un error a Twilio 
 **Verificación:** `tsc` limpio · eslint 7 errores preexistentes (sin relación) · 16 archivos / **287
 tests** (+9): `tests/unit/twilio-signature.test.ts`.
 **Origen:** 403 real en producción hoy 17:57 UTC, con el primer `SALIR` de un cliente de Sushi Fun.
+## [2026-09-06] - §5/§6/§3: cada marca pone su cara
+
+**Qué:** las 25 marcas dejan de compartir una sola piel. Nueva pantalla `/dashboard/marca` con **vista
+previa en vivo** del teléfono y de la tarjeta: logo (bucket `brand-assets`, PNG ≤512 px, path con
+`tenant_id` por delante) y **un** color. Del resto se encarga `brand-palette.ts`: segundo tono,
+gradientes de tarjeta y fondo, ✓ del sello, color del QR y si el texto del botón va blanco o tinta.
+Los hex horneados de `globals.css` y de `CheckInForm` pasan a variables `--brand-*`; **`:root` lleva
+los literales de hoy, así que un tenant sin color propio no cambia ni un píxel** (fijado por prueba).
+§3: la config del QR Studio sale de `localStorage` a `tenants.config.qr_studio` (con rescate de lo que
+hubiera en el navegador); el QR de la tarjeta gana color de marca y logo, con `level="H"`.
+**Migración `00047`: escrita y SIN APLICAR.** `jsonb_deep_merge()` + `merge_tenant_config_deep()` —
+nombre NUEVO, no sobrecarga — porque el `||` plano borra el espacio entero, y el bucket.
+**La puerta abierta:** `tenants.config` pasa a tener espacios con nombre y reserva `integrations` para
+las cuentas de Google/Meta. Ahí va metadato no secreto; los tokens, en su propia tabla.
+**Verificación:** `tsc` limpio · `build` OK · eslint 7 errores preexistentes · 18 archivos / **332 tests** (+54).
+**Request:** «Construí la personalización visual: §5, §6 y §3».
 
 ## [2026-09-05] - §19: el escáner es del local, el mesero se elige por operación
 

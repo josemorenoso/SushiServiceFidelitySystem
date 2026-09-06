@@ -106,8 +106,10 @@ Webhooks validan origen por número autorizado o `x-webhook-secret`. Cron jobs v
 | PATCH | /api/dashboard/campaign-rewards | Actualizar premio (título, descripción, `is_active`) | Admin Cookie |
 | DELETE | /api/dashboard/campaign-rewards?id=X | Baja lógica del premio (`is_active=false`, no borra) | Admin Cookie |
 | GET | /api/dashboard/review-metrics | Funnel de reseñas: mostrado → click → premio redimido **(sede — `shown` sí filtra, grants no-op por deuda #13)** | Admin Cookie |
-| GET | /api/dashboard/tenant-config | Claves editables de `tenants.config` (hoy: `google_maps_url`) | Admin Cookie |
-| PUT | /api/dashboard/tenant-config | Escribe `tenants.config` con **whitelist** de claves (merge, no reemplazo) | Admin Cookie |
+| GET | /api/dashboard/tenant-config | Rutas editables de `tenants.config` (link de Google, `branding.*`, `qr_studio.*`) | Admin Cookie |
+| PUT | /api/dashboard/tenant-config | Escribe `tenants.config` con **whitelist por ruta** (merge profundo, no reemplazo) | Admin Cookie |
+| POST | /api/dashboard/brand-logo | Sube el logo de la marca al bucket `brand-assets` | Admin Cookie |
+| DELETE | /api/dashboard/brand-logo | Borra el logo de la marca | Admin Cookie |
 | POST | /api/dashboard/imported-contacts/validate | Validar CSV de contactos (sin insertar) | Admin Cookie + flag |
 | POST | /api/dashboard/imported-contacts/confirm | Confirmar e importar/enviar Golden Bullet | Admin Cookie + flag |
 | GET | /api/dashboard/imported-contacts | Listar lotes o contactos de un lote | Admin Cookie |
@@ -597,21 +599,89 @@ nunca ve, ni aquí, las sedes que no le asignaron.
 
 ---
 
-### Dashboard: Config del tenant (link de Google)
+### Dashboard: Config del tenant (link de Google, marca, QR Studio)
 
-**`GET /api/dashboard/tenant-config`** — Admin Cookie → `{ "google_maps_url": "https://..." }`
+**`GET /api/dashboard/tenant-config`** — Admin Cookie
+
+Devuelve **solo las rutas editables**, aplanadas. Nada de `brand_name`, `delivery_default_city` ni
+`integrations.*` sale por acá.
+
+```json
+{
+  "google_maps_url": "https://g.page/r/.../review",
+  "branding.logo_url": "https://…/brand-assets/<tenant_id>/logo-1757000000000.png",
+  "branding.primary": "#0a7c4a",
+  "branding.primary_end": null,
+  "branding.surface": null,
+  "branding.ink": null,
+  "branding.card_bg": null,
+  "branding.page_bg": null,
+  "qr_studio.theme": "sushi",
+  "qr_studio.size": "a4",
+  "qr_studio.accent": "",
+  "qr_studio.headline": "¡GANA PREMIOS GRATIS!",
+  "qr_studio.subline": "Escanea, regístrate y suma puntos",
+  "qr_studio.tables": 14
+}
+```
 
 **`PUT /api/dashboard/tenant-config`** — Admin Cookie
 
+El cuerpo es **plano y por rutas**. Se eligió así porque hace imposible mandar un espacio entero por
+accidente: cada campo viaja solo.
+
 ```json
-{ "google_maps_url": "https://g.page/r/.../review" }
+{ "branding.primary": "#0A7C4A", "qr_studio.theme": "sushi" }
 ```
 
-Escribe sobre `tenants.config` (jsonb) con **lectura → merge → escritura** y una **whitelist de claves
-editables** (hoy solo `google_maps_url`). Un `UPDATE` directo de la columna borraría el branding entero del
-tenant. Un valor vacío es válido: apaga el pop-up de reseñas.
+→ `200 { "message": "Configuración actualizada", "updated": ["branding.primary", "qr_studio.theme"] }`
 
-**Response 400:** si el link no empieza por `http://` o `https://`.
+Escribe sobre `tenants.config` (jsonb) con **merge atómico y PROFUNDO** en la base
+(`merge_tenant_config_deep()`, migración 00047) y una **whitelist por ruta**
+(`src/lib/tenant-config-paths.ts`). Dos cosas que resuelve y ninguna es opcional:
+
+- **Atómico** — un `UPDATE` directo de la columna borraría el branding entero del tenant, y un
+  lectura-merge-en-JS-escritura deja una ventana en la que dos escrituras concurrentes se pisan.
+- **Profundo** — el `||` de jsonb mezcla solo el primer nivel: guardar `{branding:{primary}}` con el
+  merge superficial **borraría el logo**, sin error y sin aviso.
+
+Una ruta fuera de la whitelist se **ignora en silencio**; un valor mal formado corta con 400. El
+vacío siempre es válido: significa "volver al valor del sistema de diseño" (o, en el link de Google,
+apagar el pop-up de reseñas).
+
+**Response 400:** `{ "error": "branding.primary: debe ser un color hex (#RRGGBB)" }` · el link de
+Google que no empieza por `http(s)://` · un gradiente que no sea `linear-gradient(...)` /
+`radial-gradient(...)` · un tema o tamaño de QR fuera de lista · `qr_studio.tables` fuera de 1–200 ·
+un cuerpo sin nada editable.
+
+---
+
+### Dashboard: Logo de la marca
+
+**`POST /api/dashboard/brand-logo`** — Admin Cookie · `multipart/form-data` con `file`
+
+Acepta `image/png`, `image/jpeg` y `image/webp` de hasta 8 MB. Re-codifica **siempre a PNG** con
+`sharp`, acotado a 512 px de lado (`fit: inside`, sin agrandar). Sube a
+`brand-assets/<tenant_id>/logo-<timestamp>.png` y barre los logos anteriores del mismo tenant.
+
+```json
+{ "url": "https://…/brand-assets/<tenant_id>/logo-1757000000000.png",
+  "path": "<tenant_id>/logo-1757000000000.png", "bytes": 18422, "original_bytes": 240118 }
+```
+
+**No escribe `tenants.config`.** El único escritor de `branding.logo_url` es el endpoint de config: el
+panel hace el PUT con la URL que devuelve esto. Un solo escritor por clave.
+
+- El prefijo `<tenant_id>` del path lo impone la ruta desde `requireTenantId()`, **nunca** el cuerpo
+  de la petición: es lo que hace verificable que la marca A no escriba sobre el logo de la marca B.
+- El SVG **no se acepta**: en un bucket público es un vector de XSS.
+- El nombre lleva timestamp para que el CDN no siga sirviendo el logo anterior.
+
+**Response 415:** tipo no soportado · **413:** pesa más de 8 MB.
+
+**`DELETE /api/dashboard/brand-logo`** — Admin Cookie → `{ "ok": true, "removed": 1 }`
+
+Borra todos los archivos del tenant en el bucket. Tampoco toca `tenants.config`.
 
 ---
 

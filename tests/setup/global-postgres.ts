@@ -1,6 +1,6 @@
 /**
  * globalSetup de vitest: levanta UN Postgres real para toda la corrida y le
- * replica las 37 migraciones del producto.
+ * replica las 48 migraciones del producto.
  *
  * POR QUÉ UN POSTGRES DE VERDAD Y NO UN DOBLE
  * ────────────────────────────────────────────
@@ -79,7 +79,7 @@ export default async function setup(project: TestProject) {
     port: PORT,
     persistent: false,
     // OBLIGATORIO en Windows: sin esto initdb hereda la configuración regional
-    // del sistema y crea la base en WIN1252. Las 37 migraciones llevan cajas
+    // del sistema y crea la base en WIN1252. Las 48 migraciones llevan cajas
     // de comentarios con caracteres Unicode (═, ─, á…) y TODAS fallan con
     // "character with byte sequence 0xe2 0x95 0x90 ... has no equivalent in
     // encoding WIN1252". Supabase es UTF8, así que esto además iguala producción.

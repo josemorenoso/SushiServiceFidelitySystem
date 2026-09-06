@@ -6,6 +6,8 @@ import { QRCodeSVG } from 'qrcode.react'
 import { useBranding } from '@/lib/branding-context'
 import { getTierEmoji } from '@/lib/tier-emojis'
 import { StampsGrid } from '@/components/features/wallet'
+import { BrandMark } from '@/components/features/branding'
+import { brandWalletCardTheme } from '@/constants/wallet-card-theme'
 import { AvailableRewardBanner, type ActiveGrant } from './AvailableRewardBanner'
 
 interface TierItem {
@@ -42,6 +44,10 @@ export function CustomerCard({
   onBack,
 }: CustomerCardProps) {
   const branding = useBranding()
+  // Misma paleta que la tarjeta permanente de `/tarjeta`. Antes esta pantalla
+  // llamaba a `StampsGrid` sin tema y se quedaba con el ✓ rojo del sistema de
+  // diseño aunque el tenant tuviera otro color (§5).
+  const theme = brandWalletCardTheme(branding)
   const sorted = [...tiers].sort((a, b) => a.point_threshold - b.point_threshold)
   const nextTier = sorted.find((t) => totalPoints < t.point_threshold) ?? null
   const nextIndex = nextTier ? sorted.indexOf(nextTier) : -1
@@ -90,6 +96,7 @@ export function CustomerCard({
       >
         <div className="px-5 pt-7 pb-8 flex flex-col items-center">
           {/* Brand */}
+          <BrandMark variant="onColor" size={52} className="mb-3" />
           <p className="text-xs font-bold tracking-[0.2em] uppercase text-white/50">
             {branding.name}
           </p>
@@ -107,7 +114,7 @@ export function CustomerCard({
 
           {/* Stamps */}
           <div className="mt-5 w-full">
-            <StampsGrid totalVisits={totalVisits} />
+            <StampsGrid totalVisits={totalVisits} theme={theme.stamps} />
           </div>
 
           {/* Points progress bar */}
@@ -176,9 +183,26 @@ export function CustomerCard({
             </div>
           </div>
 
-          {/* QR */}
+          {/* QR — §3, "el QR de la tarjeta es 100% básico".
+              Dos cambios y ninguno es cosmético:
+              · `fgColor` sale de la marca, pero PASADO por `qrSafe()`: garantiza
+                7:1 de contraste contra el blanco, así que un restaurante con
+                color claro no se queda con un QR que ninguna cámara lee.
+              · `level="H"` (30 % de redundancia) porque el logo tapa el centro.
+                Con el nivel "M" de antes, un logo encima lo volvía ilegible. */}
           <div className="mt-5 rounded-2xl bg-white p-4 shadow-2xl">
-            <QRCodeSVG value={qrUrl} size={210} level="M" />
+            <QRCodeSVG
+              value={qrUrl}
+              size={210}
+              level="H"
+              fgColor={branding.qrForeground}
+              bgColor="#ffffff"
+              imageSettings={
+                branding.logoUrl
+                  ? { src: branding.logoUrl, height: 44, width: 44, excavate: true }
+                  : undefined
+              }
+            />
           </div>
 
           {/* Estado de polling */}

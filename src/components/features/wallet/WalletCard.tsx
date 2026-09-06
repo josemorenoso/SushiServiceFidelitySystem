@@ -5,6 +5,7 @@ import { Crown } from 'lucide-react'
 import { useBranding } from '@/lib/branding-context'
 import { isBlackMember } from '@/lib/black-tier'
 import { BLACK_WALLET_CARD_THEME, brandWalletCardTheme } from '@/constants/wallet-card-theme'
+import { BrandMark } from '@/components/features/branding'
 import { StampsGrid } from './StampsGrid'
 
 interface TierItem {
@@ -65,6 +66,10 @@ export function WalletCard({ name, totalPoints, totalVisits, tiers }: WalletCard
         }}
       >
         <div className="px-5 pt-7 pb-8 flex flex-col items-center">
+          {/* Logo del restaurante (§6). Sin logo subido no dibuja nada y la
+              tarjeta arranca en el nombre de la marca, como siempre. */}
+          <BrandMark variant="onColor" size={56} className="mb-3" />
+
           {/* Brand */}
           <p
             className="text-xs font-bold tracking-[0.2em] uppercase"

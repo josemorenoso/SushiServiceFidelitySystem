@@ -9,6 +9,7 @@ import {
   Gift,
   Megaphone,
   QrCode,
+  Palette,
   UtensilsCrossed,
   FileText,
   Settings,
@@ -35,7 +36,11 @@ export function DashboardSidebar({ isSuperAdmin = false }: { isSuperAdmin?: bool
     { href: '/dashboard/campaigns', label: 'Campañas', icon: Megaphone },
     { href: '/dashboard/imported-contacts', label: 'Golden Bullet', icon: Crosshair },
     { href: '/dashboard/calendar', label: 'Calendario', icon: CalendarDays },
-    { href: '/dashboard/qr', label: 'Código QR', icon: QrCode },
+    // "QR Studio" y no "Código QR": el nombre viejo hacía creer que era un
+    // generador pelado y por eso nadie encontraba los temas, los tamaños de
+    // imprenta ni el logo que ya existían (§3).
+    { href: '/dashboard/qr', label: 'QR Studio', icon: QrCode },
+    { href: '/dashboard/marca', label: 'Identidad visual', icon: Palette },
     { href: '/dashboard/templates', label: 'Plantillas', icon: FileText },
     { href: '/dashboard/staff', label: `${branding.staffLabelPlural} QR`, icon: UserCog },
     { href: '/dashboard/authorized-numbers', label: 'Autorizados Domicilio', icon: ShieldCheck },

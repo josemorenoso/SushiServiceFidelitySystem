@@ -6,7 +6,7 @@
 -- producto y NUNCA debe aplicarse en Supabase: allí todos estos objetos ya
 -- existen, con implementaciones reales.
 --
--- Sale de auditar los 37 archivos de supabase/migrations. La cadena completa
+-- Sale de auditar los 48 archivos de supabase/migrations. La cadena completa
 -- depende de MUY POCOS objetos propios de Supabase, y son estos:
 --
 --   auth.role()        — 00001:62 y 23 usos más. Aunque 00026 borra después
@@ -18,8 +18,8 @@
 --                        LANGUAGE sql, y Postgres SÍ valida el cuerpo de una
 --                        función sql al crearla.
 --   auth.users         — 00028:56, único uso en toda la cadena.
---   storage.buckets    — 00012:152, único archivo que toca storage.
---   storage.objects
+--   storage.buckets    — 00012 (bucket `event-media`) y 00048 (`brand-assets`),
+--   storage.objects      los dos únicos archivos que tocan storage.
 --   roles anon /       — 00037:533 (REVOKE UPDATE, DELETE ON consent_events).
 --   authenticated        Único sitio donde se usan como ROLES de verdad.
 --
@@ -121,6 +121,6 @@ CREATE TABLE IF NOT EXISTS storage.objects (
   bucket_id text,
   name      text
 );
--- 00012:165-215 crea políticas sobre storage.objects; sin RLS habilitado
+-- 00012:165-215 y 00048 crean políticas sobre storage.objects; sin RLS habilitado
 -- Postgres las acepta igual, pero así el estado se parece al real.
 ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;

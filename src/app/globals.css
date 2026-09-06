@@ -260,27 +260,61 @@
   border-radius: 16px !important;
 }
 
+/* ─── Tokens de marca (§5/§6) ─────────────────────────────
+ *
+ * Estos son los valores del sistema de diseño de la casa
+ * (docs/features/design-system.md), tal cual estaban horneados en las clases
+ * premium hasta esta versión. No cambió ninguno.
+ *
+ * Lo que cambió es QUIÉN los puede pisar: el root layout estampa en <html> las
+ * variables que el tenant configuró en `tenants.config.branding` (ver
+ * `src/lib/brand-css.ts`). Un tenant sin marca propia no estampa nada y hereda
+ * esto entero.
+ *
+ * ⚠️ Si agregás un color nuevo a una clase premium, definilo ACÁ primero. Un hex
+ * horneado dentro de la clase vuelve a ser un color que ninguna marca puede
+ * cambiar — que es exactamente el problema que §5 vino a resolver.
+ */
+:root {
+  --brand-primary: #FF4D6D;
+  --brand-primary-rgb: 255, 77, 109;
+  --brand-primary-end: #E63946;
+  --brand-primary-end-rgb: 230, 57, 70;
+  /* Texto ENCIMA del gradiente del CTA. Lo calcula onColor() por contraste. */
+  --brand-on-primary: #ffffff;
+  /* Marfil suave del fondo público. */
+  --brand-surface: #F9F8F6;
+  /* Texto más oscuro del sistema. Nunca negro puro. */
+  --brand-ink: #1a1c1d;
+  /* Grises de apoyo: NO son de marca, son la escala del sistema. */
+  --brand-ink-soft: #6b7280;
+  --brand-ink-muted: #9ca3af;
+  --brand-ink-faint: #d1d5db;
+  /* Radio de las superficies grandes (card premium). */
+  --brand-radius: 24px;
+}
+
 /* ─── Premium Design Classes ────────────────────────────── */
 
 /* Fondo marfil con textura noise sutil */
 .premium-bg {
-  background-color: #F9F8F6;
+  background-color: var(--brand-surface);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23noise)' opacity='0.02'/%3E%3C/svg%3E");
 }
 
 /* Card central premium */
 .premium-card {
   background: #ffffff;
-  border-radius: 24px;
+  border-radius: var(--brand-radius);
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.04);
   border: none !important;
 }
 
 /* Botón primario con gradiente rojo (dopamina) */
 .btn-premium {
-  background: linear-gradient(135deg, #FF4D6D 0%, #E63946 100%) !important;
-  color: #ffffff !important;
-  box-shadow: 0 4px 16px rgba(230, 57, 70, 0.28);
+  background: linear-gradient(135deg, var(--brand-primary) 0%, var(--brand-primary-end) 100%) !important;
+  color: var(--brand-on-primary) !important;
+  box-shadow: 0 4px 16px rgba(var(--brand-primary-end-rgb), 0.28);
   transition: transform 300ms cubic-bezier(0.4, 0, 0.2, 1),
               box-shadow 300ms cubic-bezier(0.4, 0, 0.2, 1),
               background 300ms cubic-bezier(0.4, 0, 0.2, 1) !important;
@@ -289,7 +323,7 @@
 
 .btn-premium:hover:not(:disabled) {
   transform: scale(1.02);
-  box-shadow: 0 7px 24px rgba(230, 57, 70, 0.44);
+  box-shadow: 0 7px 24px rgba(var(--brand-primary-end-rgb), 0.44);
 }
 
 .btn-premium:disabled {
@@ -323,7 +357,7 @@
 
 .input-premium:focus-within,
 .input-premium:focus {
-  border-color: #FF4D6D !important;
-  box-shadow: 0 0 0 3px rgba(255, 77, 109, 0.12) !important;
+  border-color: var(--brand-primary) !important;
+  box-shadow: 0 0 0 3px rgba(var(--brand-primary-rgb), 0.12) !important;
   outline: none !important;
 }

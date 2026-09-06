@@ -51,6 +51,15 @@ import type {
   RegisterResult,
 } from './CheckInForm.types'
 
+/**
+ * Pantalla de teléfono + registro del check-in (§5).
+ *
+ * ⚠️ ACÁ NO SE HORNEA UN COLOR. Todo lo que era un hex literal
+ * (`#1a1c1d`, `#9ca3af`, `#E63946`…) es hoy una variable `--brand-*`: los valores
+ * son los mismos del sistema de diseño, pero un tenant con marca propia los pisa
+ * desde `tenants.config.branding` sin que haya que tocar este archivo.
+ * Ver `src/lib/brand-css.ts` y `docs/features/identidad-visual.md`.
+ */
 export function CheckInForm({
   onLookupResult,
   onRegisterSuccess,
@@ -337,11 +346,11 @@ export function CheckInForm({
         <div className="mb-6 text-center">
           <h2
             className="font-playfair text-2xl font-bold"
-            style={{ color: "#1a1c1d", letterSpacing: "-0.02em" }}
+            style={{ color: "var(--brand-ink)", letterSpacing: "-0.02em" }}
           >
             Bienvenido
           </h2>
-          <p className="mt-1 text-sm" style={{ color: "#9ca3af" }}>
+          <p className="mt-1 text-sm" style={{ color: "var(--brand-ink-muted)" }}>
             Ingresa tu número de celular para continuar
           </p>
         </div>
@@ -351,7 +360,7 @@ export function CheckInForm({
             <label
               htmlFor="phone"
               className="text-xs font-semibold uppercase tracking-widest"
-              style={{ color: "#6b7280", letterSpacing: "0.05em" }}
+              style={{ color: "var(--brand-ink-soft)", letterSpacing: "0.05em" }}
             >
               Número de celular
             </label>
@@ -359,7 +368,7 @@ export function CheckInForm({
               <Phone
                 className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4"
                 strokeWidth={1.5}
-                style={{ color: "#9ca3af" }}
+                style={{ color: "var(--brand-ink-muted)" }}
               />
               <input
                 id="phone"
@@ -369,13 +378,13 @@ export function CheckInForm({
                 value={phone}
                 onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
                 className="input-premium w-full rounded-xl py-3.5 pl-10 pr-4 text-lg font-medium outline-none"
-                style={{ color: "#1a1c1d", letterSpacing: "-0.01em" }}
+                style={{ color: "var(--brand-ink)", letterSpacing: "-0.01em" }}
                 maxLength={10}
                 required
                 autoFocus
               />
             </div>
-            <p className="text-xs" style={{ color: "#d1d5db" }}>
+            <p className="text-xs" style={{ color: "var(--brand-ink-faint)" }}>
               10 dígitos, empieza con 3
             </p>
           </div>
@@ -409,11 +418,11 @@ export function CheckInForm({
         <div className="mb-6 text-center">
           <h2
             className="font-playfair text-2xl font-bold"
-            style={{ color: "#1a1c1d", letterSpacing: "-0.02em" }}
+            style={{ color: "var(--brand-ink)", letterSpacing: "-0.02em" }}
           >
             Regístrate
           </h2>
-          <p className="mt-1 text-sm" style={{ color: "#9ca3af" }}>
+          <p className="mt-1 text-sm" style={{ color: "var(--brand-ink-muted)" }}>
             Es tu primera vez. ¡Completa tu registro!
           </p>
         </div>
@@ -424,7 +433,7 @@ export function CheckInForm({
             <label
               htmlFor="name"
               className="text-xs font-semibold uppercase tracking-widest"
-              style={{ color: "#6b7280", letterSpacing: "0.05em" }}
+              style={{ color: "var(--brand-ink-soft)", letterSpacing: "0.05em" }}
             >
               Nombre
             </label>
@@ -432,7 +441,7 @@ export function CheckInForm({
               <User
                 className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4"
                 strokeWidth={1.5}
-                style={{ color: "#9ca3af" }}
+                style={{ color: "var(--brand-ink-muted)" }}
               />
               <input
                 id="name"
@@ -441,7 +450,7 @@ export function CheckInForm({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="input-premium w-full rounded-xl py-3.5 pl-10 pr-4 text-base outline-none"
-                style={{ color: "#1a1c1d" }}
+                style={{ color: "var(--brand-ink)" }}
                 required
                 autoFocus
               />
@@ -453,7 +462,7 @@ export function CheckInForm({
             <label
               htmlFor="city-input"
               className="text-xs font-semibold uppercase tracking-widest"
-              style={{ color: "#6b7280", letterSpacing: "0.05em" }}
+              style={{ color: "var(--brand-ink-soft)", letterSpacing: "0.05em" }}
             >
               Ciudad
             </label>
@@ -461,7 +470,7 @@ export function CheckInForm({
               <MapPin
                 className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 z-10"
                 strokeWidth={1.5}
-                style={{ color: "#9ca3af" }}
+                style={{ color: "var(--brand-ink-muted)" }}
               />
               <input
                 id="city-input"
@@ -476,7 +485,7 @@ export function CheckInForm({
                 }}
                 onFocus={() => { if (!city) setCityOpen(true) }}
                 className="input-premium w-full rounded-xl py-3.5 pl-10 pr-4 text-base outline-none"
-                style={{ color: "#1a1c1d" }}
+                style={{ color: "var(--brand-ink)" }}
               />
               {city && (
                 <button
@@ -494,7 +503,7 @@ export function CheckInForm({
                       key={c}
                       onMouseDown={() => { setCity(c); setCityInput(''); setCityOpen(false) }}
                       className="cursor-pointer px-4 py-3 text-sm hover:bg-gray-50 active:bg-gray-100 border-b last:border-0 border-gray-100"
-                      style={{ color: "#1a1c1d" }}
+                      style={{ color: "var(--brand-ink)" }}
                     >
                       {c}
                     </li>
@@ -506,16 +515,16 @@ export function CheckInForm({
 
           {/* Fecha de nacimiento */}
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold uppercase tracking-widest" style={{ color: "#6b7280", letterSpacing: "0.05em" }}>
+            <label className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--brand-ink-soft)", letterSpacing: "0.05em" }}>
               Cumpleaños{" "}
-              <span style={{ color: "#d1d5db", textTransform: "none", fontSize: "0.65rem" }}>(opcional)</span>
+              <span style={{ color: "var(--brand-ink-faint)", textTransform: "none", fontSize: "0.65rem" }}>(opcional)</span>
             </label>
             <div className="grid grid-cols-3 gap-2">
               <select
                 value={birthDay}
                 onChange={(e) => setBirthDay(e.target.value)}
                 className="input-premium w-full rounded-xl py-3.5 px-3 text-base outline-none appearance-none text-center"
-                style={{ color: birthDay ? "#1a1c1d" : "#9ca3af" }}
+                style={{ color: birthDay ? "var(--brand-ink)" : "var(--brand-ink-muted)" }}
               >
                 <option value="">Día</option>
                 {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
@@ -527,7 +536,7 @@ export function CheckInForm({
                 value={birthMonth}
                 onChange={(e) => setBirthMonth(e.target.value)}
                 className="input-premium w-full rounded-xl py-3.5 px-3 text-base outline-none appearance-none text-center"
-                style={{ color: birthMonth ? "#1a1c1d" : "#9ca3af" }}
+                style={{ color: birthMonth ? "var(--brand-ink)" : "var(--brand-ink-muted)" }}
               >
                 <option value="">Mes</option>
                 {['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'].map((m, i) => (
@@ -539,7 +548,7 @@ export function CheckInForm({
                 value={birthYear}
                 onChange={(e) => setBirthYear(e.target.value)}
                 className="input-premium w-full rounded-xl py-3.5 px-3 text-base outline-none appearance-none text-center"
-                style={{ color: birthYear ? "#1a1c1d" : "#9ca3af" }}
+                style={{ color: birthYear ? "var(--brand-ink)" : "var(--brand-ink-muted)" }}
               >
                 <option value="">Año</option>
                 {Array.from({ length: 85 }, (_, i) => new Date().getFullYear() - 10 - i).map((y) => (
@@ -556,12 +565,16 @@ export function CheckInForm({
               type="checkbox"
               checked={acceptsMarketing}
               onChange={(e) => setAcceptsMarketing(e.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded border-gray-300 accent-[#E63946] cursor-pointer"
+              className="mt-0.5 h-4 w-4 rounded border-gray-300 cursor-pointer"
+              // `accentColor` inline y no una clase arbitraria de Tailwind: el
+              // valor es una variable CSS y así no depende de cómo la versión de
+              // Tailwind de turno compile `accent-[var(--x)]`.
+              style={{ accentColor: 'var(--brand-primary-end)' }}
             />
             <label
               htmlFor="accepts_marketing"
               className="text-xs leading-relaxed cursor-pointer"
-              style={{ color: "#6b7280" }}
+              style={{ color: "var(--brand-ink-soft)" }}
             >
               Acepto recibir regalos, recompensas y comunicaciones por WhatsApp. He leído y acepto la{' '}
             <a
@@ -569,7 +582,7 @@ export function CheckInForm({
               target="_blank"
               rel="noopener noreferrer"
               className="underline"
-              style={{ color: '#E63946' }}
+              style={{ color: 'var(--brand-primary-end)' }}
             >
               Política de Privacidad
             </a>.
@@ -595,7 +608,7 @@ export function CheckInForm({
           <button
             type="button"
             className="flex w-full items-center justify-center gap-1.5 py-2 text-sm font-medium transition-colors duration-200"
-            style={{ color: "#9ca3af" }}
+            style={{ color: "var(--brand-ink-muted)" }}
             onClick={() => setStep('phone')}
             disabled={loading}
           >

@@ -1,10 +1,10 @@
 # Feature: Design System Premium — "The Hospitality Editorial"
 
 > **Estado:** Activo (en evolución)
-> **Versión:** 1.0
-> **Creado:** 2026-04-11
-> **Archivos clave:** `src/app/globals.css`, `src/app/layout.tsx`
-> **Referencia de diseño:** `Changes/DESIGN.md`
+> **Versión:** 1.1 — los colores pasan a variables CSS sustituibles por tenant (§5/§6)
+> **Creado:** 2026-04-11 · **Actualizado:** 2026-09-06
+> **Archivos clave:** `src/app/globals.css`, `src/app/layout.tsx`, `src/lib/brand-css.ts`
+> **Referencia de diseño:** `Changes/DESIGN.md` · **Personalización por marca:** [`identidad-visual.md`](identidad-visual.md)
 
 ---
 
@@ -31,15 +31,29 @@ Sistema de diseño visual premium orientado a la hostelería de lujo. El concept
 
 ## Paleta de Colores
 
-| Token | Hex | Uso |
-|-------|-----|-----|
-| `ivory` | `#F9F8F6` | Fondo base (marfil suave) |
-| `primary-start` | `#FF4D6D` | Inicio gradiente botón CTA |
-| `primary-end` | `#E63946` | Fin gradiente botón CTA |
-| `on-surface` | `#1a1c1d` | Texto principal (nunca negro puro) |
-| `on-surface-variant` | `#6b7280` | Texto secundario |
-| `muted` | `#9ca3af` | Texto terciario / placeholders |
-| `ghost-border` | `rgba(226,190,192,0.35)` | Borde inputs (20% opacidad) |
+**Desde §5/§6 son variables CSS, no literales.** Los valores no cambiaron: lo que cambió es que
+ahora se pueden sustituir por tenant. Ver [`identidad-visual.md`](identidad-visual.md).
+
+| Variable CSS | Hex | Uso | ¿La marca la puede cambiar? |
+|---|---|---|---|
+| `--brand-surface` | `#F9F8F6` | Fondo base (marfil suave) | ✅ |
+| `--brand-primary` | `#FF4D6D` | Inicio gradiente botón CTA | ✅ |
+| `--brand-primary-end` | `#E63946` | Fin gradiente botón CTA | ✅ |
+| `--brand-on-primary` | `#ffffff` | Texto ENCIMA del gradiente | derivado (`onColor()`) |
+| `--brand-ink` | `#1a1c1d` | Texto principal (nunca negro puro) | ✅ |
+| `--brand-ink-soft` | `#6b7280` | Texto secundario | ❌ escala del sistema |
+| `--brand-ink-muted` | `#9ca3af` | Texto terciario / placeholders | ❌ escala del sistema |
+| `--brand-ink-faint` | `#d1d5db` | Texto de ayuda | ❌ escala del sistema |
+| `--brand-radius` | `24px` | Radio de la card premium | ❌ |
+| — | `rgba(226,190,192,0.35)` | Borde inputs (20% opacidad) | ❌ |
+
+> ⚠️ **Un color nuevo en una clase premium se define en `:root` PRIMERO.** Un hex horneado dentro de
+> la clase vuelve a ser un color que ninguna marca puede cambiar — el problema exacto que §5 vino a
+> resolver. Lo mismo vale para un `style={{ color: "#…" }}` en una pantalla pública.
+
+**Los grises no son de marca a propósito.** `--brand-ink-soft/-muted/-faint` son la escala tipográfica
+del sistema: existen como variables para que las pantallas dejen de hornear hex, no para que cada
+restaurante elija su gris. Solo se estampan por tenant las cuatro de arriba marcadas ✅.
 
 ---
 
@@ -65,9 +79,9 @@ Card central flotante. Sombra ultra-difusa que imita luz natural.
 
 ### `.btn-premium`
 ```css
-background: linear-gradient(135deg, #FF4D6D 0%, #E63946 100%) !important;
-color: #ffffff !important;
-box-shadow: 0 4px 16px rgba(230, 57, 70, 0.28);
+background: linear-gradient(135deg, var(--brand-primary) 0%, var(--brand-primary-end) 100%) !important;
+color: var(--brand-on-primary) !important;
+box-shadow: 0 4px 16px rgba(var(--brand-primary-end-rgb), 0.28);
 transition: transform 300ms cubic-bezier(0.4, 0, 0.2, 1), ...
 ```
 Hover: `scale(1.02)` + sombra más intensa. Disabled: `opacity: 0.65`.
@@ -84,7 +98,7 @@ Botón secundario glassmorphism.
 background: #ffffff !important;
 border: 1px solid rgba(226, 190, 192, 0.35) !important;
 ```
-Focus: `border-color: #FF4D6D` + glow `rgba(255,77,109,0.12)`.
+Focus: `border-color: var(--brand-primary)` + glow `rgba(var(--brand-primary-rgb), 0.12)`.
 
 ---
 
@@ -109,6 +123,7 @@ Aplicar en el contenedor principal de cada página pública para entrada suave.
 3. **Sin sombras visibles** — Si se puede ver dónde termina la sombra, es muy oscura.
 4. **Iconos ultra-thin** — `strokeWidth={1.25}` o `{1.5}` en lucide-react.
 5. **Gradientes en CTAs** — Botones primarios siempre con gradiente, nunca flat fill.
+6. **Ningún hex nuevo horneado en pantalla pública** — va a `:root` como `--brand-*` (§5/§6).
 
 ---
 
@@ -121,6 +136,7 @@ Aplicar en el contenedor principal de cada página pública para entrada suave.
 | `src/app/(public)/check-in/page.tsx` | `.premium-bg` |
 | `CheckInForm.tsx` | `.premium-card`, `.btn-premium`, `.input-premium` |
 | `CheckInSuccess.tsx` | `.premium-card`, `.btn-secondary-premium` |
+| `dashboard/marca/page.tsx` | Editor de la marca del tenant + vista previa en vivo (§5/§6) |
 
 ---
 

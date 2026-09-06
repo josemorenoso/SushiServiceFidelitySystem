@@ -1,7 +1,7 @@
 # Wallet Card — Tarjeta Digital de Fidelidad
 
 > Estado: 🟢 Implementado (v2.1.0)
-> Última actualización: 2026-06-18
+> Última actualización: 2026-09-06 — logo y paleta por marca (§5/§6), ver [`identidad-visual.md`](identidad-visual.md)
 
 ---
 
@@ -22,7 +22,7 @@ Resuelve tres problemas de engagement:
 |----------|----------|-------|
 | Puntos vs Sellos | Puntos como lógica de negocio, **sellos como visualización** | No romper tiers, mystery box, campaigns existentes |
 | QR vs Barcode | Solo QR | Meseros usan cámara de celular; barcode necesita lector láser |
-| Color de tarjeta | Gradient rojo brand (`#7B0D1E → #E63946 → #FF6B6B`), fijo | Sin config por restaurante en esta fase (YAGNI) |
+| Color de tarjeta | Gradient rojo brand (`#7B0D1E → #E63946 → #FF6B6B`) **por defecto**; desde §6 cada marca puede poner el suyo | El literal se conserva: un tenant sin color propio ve exactamente el mismo gradiente. Ver [`identidad-visual.md`](identidad-visual.md) |
 | Tarjeta permanente | `/tarjeta?phone=XXXX` sin token | Solo expone nombre + puntos (datos públicos equivalentes al flujo existente) |
 | Scope | Fases A + C (tarjeta permanente + sellos) | Máximo impacto, menor riesgo; check-in rediseñado incluido |
 
@@ -47,14 +47,20 @@ cycleNumber  = (totalVisits > 0) ? floor((totalVisits - 1) / STAMPS_COUNT) + 1 :
 
 Ejemplos: 0 visitas → 0/10 #1 · 7 visitas → 7/10 #1 · 10 visitas → 10/10 #1 · 11 visitas → 1/10 #2 · 20 visitas → 10/10 #2
 
-- **Círculo lleno**: fondo blanco, check rojo `✓`, sombra
+- **Círculo lleno**: fondo blanco, check `✓` en el color de la marca (`branding.stampCheck`; sin
+  marca propia es el `#C1121F` de siempre), sombra
 - **Círculo vacío**: fondo blanco/20, borde blanco/40
+
+⚠️ `CustomerCard` llamaba a `StampsGrid` **sin tema**, así que el ✓ del check-in se quedaba en el rojo
+del sistema aunque el tenant tuviera otro color. Corregido en §5: ahora le pasa
+`brandWalletCardTheme(branding).stamps`, el mismo tema que usa `/tarjeta`.
 
 ### WalletCard (`src/components/features/wallet/WalletCard.tsx`)
 
 Tarjeta visual pura para la ruta `/tarjeta`. Vista de solo lectura (sin QR de check-in).
 
 **Layout:**
+0. Logo de la marca (`BrandMark`, §6). Sin logo subido no dibuja nada y la tarjeta arranca en el punto 1
 1. Brand name (pequeño, blanco/50)
 2. "Tarjeta de Fidelidad" subtítulo
 3. Nombre del cliente (Playfair Display)
@@ -118,12 +124,15 @@ tocar el flujo de check-in. `src/app/(public)/tarjeta/page.tsx` **no necesitó c
 Misma lógica de polling, nuevo look de tarjeta wallet. Ocupa pantalla completa (`fixed inset-0 z-50`).
 
 **Layout:**
+0. Logo de la marca (`BrandMark variant="onColor"`, §6)
 1. Brand name
 2. `¡Hola, {name}!`
 3. Puntos + texto de progreso
 4. StampsGrid
 5. Banner de acción (glass effect: "DILE AL MESERO QUE TE ESCANEE")
-6. QR sobre fondo blanco
+6. QR sobre fondo blanco — desde §3 lleva el color de la marca (pasado por `qrSafe()`, ≥7:1 contra
+   blanco) y el logo en el centro, con `level="H"`: el 30 % de redundancia que hace falta para que un
+   logo encima no lo vuelva ilegible. Con el `level="M"` de antes, poner un logo lo habría roto
 7. Estado de polling (spinner)
 8. Texto de expiración
 9. Botón Volver
@@ -219,6 +228,8 @@ Endpoint JSON alternativo (útil para integraciones futuras). Mismos datos que e
 ## Limitaciones / Próximas Fases
 
 - **Fase D (Barcode)**: no implementado. Requiere `react-barcode` y hardware de lector en el restaurante.
-- **Fase E (Branding configurable)**: color de tarjeta hardcodeado en brand red. Configuración por restaurante → pendiente (requiere `admin_settings` entry `wallet_card_color`).
+- ~~**Fase E (Branding configurable)**~~ → ✅ **HECHA** en §5/§6 (2026-09-06). No usó una entrada de
+  `admin_settings`: la marca vive en `tenants.config.branding`, donde ya vivía el resto del branding.
+  Ver [`identidad-visual.md`](identidad-visual.md).
 - **PWA / Agregar a inicio**: no implementado. Requiere `manifest.json` y service worker.
 - **TiersRoadmap en /tarjeta**: versión compacta incluida como lista de tiers, no el componente completo.

@@ -8,6 +8,21 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [2026-09-06] - Sushi Fun absorbido, todo mergeado a main y la numeracion de migraciones deja de adivinarse
+
+**Sushi Fun deja de ser un despliegue aparte y pasa a ser un tenant.** 1.421 filas desde su propio
+Supabase; el `08` cuadro con cero cruces de marca y las otras cuatro marcas no se movieron ni una
+fila. Conserva su cuenta de Twilio y su marca. Nuevo `10-CREDITO-ABSORCION.sql`: con la billetera en
+cero, `canSendBulk()` le rechazaria toda campana masiva.
+**A `main` entran las dos ramas visuales.** La migracion de identidad visual se **renumera de 00048
+a 00047**: la 00047 no existia y el 00048 estaba reservado para F9 de multi-sede en su propio spec.
+Al mergear `pulido-visual` se descarto su `mesero/page.tsx`, anterior a §19, que habria resucitado
+el login por mesero ya eliminado.
+**Nuevo `scripts/proxima-migracion.mjs`, obligatorio antes de crear una migracion.** El numero libre
+no es visible desde el arbol de una rama: esta repartido entre las otras ramas vivas y las reservas
+escritas en los docs. Ninguna ceremonia de lectura lo resuelve; un comando si.
+**Verificacion:** `tsc` limpio · `build` OK · 19 archivos / **341 tests** (+54).
+
 ## [2026-09-06] - fix: la firma de Twilio se valida con el token del TENANT, no siempre el master
 
 **Qué:** `validateTwilioSignature()` recibía el `authToken` de `process.env.TWILIO_AUTH_TOKEN` a

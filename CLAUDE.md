@@ -19,6 +19,10 @@ un dato de la marca A jamás se ve ni se atribuye a la marca B.**
 - Un comentario o un doc que dejó de ser verdad se corrige en el MISMO commit.
 - Ningún servicio externo se dispara sin que el dueño sepa (Twilio, Zernio, OpenAI, Supabase de producción).
 - Cerrar sesión = `ESTADO.md` + entrada de `CHANGELOG.md` (≤15 líneas) + el doc de la feature si cambió el comportamiento + `graphify update .`.
+- **El número de una migración nueva NO se elige mirando `supabase/migrations/`.** Ese directorio solo
+  muestra tu rama. Se saca con `node scripts/proxima-migracion.mjs`, que mira TODAS las ramas vivas y
+  las reservas escritas en los docs. Pasó el 2026-09-06: una rama tomó la 00048 que multi-sede tenía
+  reservada para F9, y se saltó la 00047. Un hueco es barato; dos archivos con el mismo número, no.
 - Lo repetitivo (auditorías, inventarios, barridos) va a subagentes Sonnet o Haiku, nunca al modelo caro.
 
 ## Guardrails del dominio (romperlos cuesta datos reales)
@@ -55,6 +59,7 @@ un dato de la marca A jamás se ve ni se atribuye a la marca B.**
 ## Comandos
 `npm run dev` · `npm run build` · `npx tsc --noEmit` · `npm run lint` · `npx vitest run` (18 archivos / 332 tests)
 `graphify query "…"` · `graphify affected "…"` · `graphify update .` (después de commitear; AST solo, sin costo)
+`node scripts/proxima-migracion.mjs` — **obligatorio antes de crear cualquier migración**
 
 ## Dónde está cada cosa
 | Si tocás… | Leé antes |

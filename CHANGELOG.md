@@ -8,6 +8,25 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [2026-09-06] - fix: el modal de "Crear Mesero" deja de mentir y ahora lo gobierna el Rol
+
+**Qué:** el subtítulo del modal decía que el PIN era "para que el mesero inicie sesión en la app",
+un modelo que §19 borró (`POST /api/staff/login` no existe), y contradecía a sus propios textos de
+ayuda. Peor: el formulario ignoraba el campo Rol y pedía Celular y PIN aunque eligieras "Mesero".
+**Arreglo (dueño, 2026-09-06):** el Rol va primero y decide qué hay debajo. `waiter` → Nombre +
+Sede, con Celular y PIN ni dibujados ni enviados; `supervisor`/`admin` → además Celular y PIN, que
+son la llave que activa un aparato del local. Mismo tratamiento en "Editar Mesero".
+**La Sede se pide siempre, con default:** si la marca tiene UNA sede activa viene preseleccionada, y
+para un `waiter` "Sin sede" deja de ser opción. Antes el formulario dejaba armar la combinación que
+rechaza el `CHECK staff_users_identidad_minima` (00046) y el error llegaba tarde, desde Postgres.
+**Los meseros que ya existen** tienen todos `location_id` NULL, así que no salen en NINGÚN escáner.
+El panel los marca (badge ámbar, "No aparece en ningún escáner", conteo y botón "Ver solo esos") y
+el trabajo manual está preparado en `SQL-PARA-CORRER/meseros-sin-sede/`, verificado contra un
+Postgres real. **No se backfillean:** NULL es "sede desconocida", no "la principal".
+`/api/dashboard/staff` no se tocó; la columna `pin` sigue existiendo para supervisores.
+**Verificación:** `tsc` limpio · eslint 7 errores preexistentes (sin relación) · 19 archivos / **341
+tests**, ninguno perdido.
+
 ## [2026-09-06] - Sushi Fun absorbido, todo mergeado a main y la numeracion de migraciones deja de adivinarse
 
 **Sushi Fun deja de ser un despliegue aparte y pasa a ser un tenant.** 1.421 filas desde su propio

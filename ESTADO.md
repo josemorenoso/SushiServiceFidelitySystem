@@ -1,6 +1,6 @@
 # ESTADO — RestaurantQR / Cada1
 
-> **Última actualización:** 2026-09-06, 13:40 (sesión "absorción de Sushi Fun + deploy", Opus 5)
+> **Última actualización:** 2026-09-06, 14:40 (sesión "crear mesero por rol", Opus 5)
 > Toda sesión lo lee PRIMERO. Toda sesión que cierra un bloque lo ACTUALIZA al final. Límite: 150 líneas.
 > Lo obsoleto se **saca**, no se tacha: un ítem tachado sigue costando tokens cada vez que alguien lee esto.
 >
@@ -25,12 +25,17 @@
 
 ## 2. En vuelo ahora mismo
 
-**Nada corriendo.** `main` limpio, suite en verde, árbol de trabajo limpio.
+**DOS sesiones sobre el MISMO árbol de trabajo** (2026-09-06 14:40), territorios disjuntos:
+`fix/crear-mesero-por-rol` (commiteada) y `fix/opt-out-visible` (otra sesión, sin commitear:
+`calendar/campaign/settings.service.ts`, dos crons y un test nuevo). El árbol es uno solo y la rama
+activa la cambia quien haga `checkout`.
 
-**Repo del AIOS** (`Level 2.0/aios-constelarys`, remoto propio): la rama `fix/coexistencia`
-(v1.4.0) está subida pero **su `main` NO se pusheó** — tiene un commit suelto
-(`la sede se crea SIEMPRE, aunque no haya coordenadas`) que está respaldado dentro de esa rama.
-Pushear ese `main` despliega el AIOS: es decisión del dueño. Parte completo en
+⚠️ **`git stash` en un árbol compartido se lleva el trabajo de la otra sesión** — hoy barrió 12
+archivos suyos y hubo que restaurarlos a mano. Con otra sesión viva: `git worktree`, y nunca stash.
+
+**Repo del AIOS** (`Level 2.0/aios-constelarys`): `fix/coexistencia` (v1.4.0) está subida pero **su
+`main` NO se pusheó** — tiene suelto `la sede se crea SIEMPRE, aunque no haya coordenadas`,
+respaldado dentro de esa rama. Pushearlo despliega el AIOS: es decisión del dueño. Parte en
 `Level 2.0/aios-constelarys/docs/PARTE-COEXISTENCIA-2026-09-06.md`.
 
 ## 3. Siguiente, en orden
@@ -40,19 +45,16 @@ Pushear ese `main` despliega el AIOS: es decisión del dueño. Parte completo en
    —`--brand-primary` tiene su literal en `:root`— pero la feature nueva no funciona.
    Archivo: `supabase/migrations/00047_identidad_visual.sql`.
 2. **Asignarle sede a los meseros que ya existen.** Todos tienen `location_id` NULL, así que **no
-   aparecen en ningún escáner**. Es lo que más se nota en la operación diaria.
-3. **Arreglar el modal "Crear Mesero"** (`dashboard/staff/page.tsx`): su subtítulo todavía dice que
-   el PIN es "para que el mesero inicie sesión", que es del mundo pre-§19 y contradice sus propios
-   textos de ayuda. Y el formulario no reacciona al campo *Rol*: debería pedir Celular y PIN solo
-   para supervisor/admin, y para un mesero solo Nombre + Sede (obligatoria, con la única sede
-   preseleccionada si la marca tiene una). Lo pidió el dueño el 2026-09-06.
-4. **Zernio E2E** con la cuenta ya limpia → desbloquea al primer cliente nuevo bajo coexistencia.
-5. **Responder §18.a–d** (`docs/DECISION-18-DOMICILIOS-COEXISTENCIA.md`, con opciones y consecuencias).
+   aparecen en ningún escáner**. Es lo que más se nota en la operación diaria. **El trabajo está
+   preparado**: `SQL-PARA-CORRER/meseros-sin-sede/` (el `01` lista quién y con qué sedes, el `02`
+   las aplica con guardas). Lo que falta es la DECISIÓN, persona por persona: no se backfillea.
+3. **Zernio E2E** con la cuenta ya limpia → desbloquea al primer cliente nuevo bajo coexistencia.
+4. **Responder §18.a–d** (`docs/DECISION-18-DOMICILIOS-COEXISTENCIA.md`, con opciones y consecuencias).
    Son las últimas preguntas que bloquean el onboarding.
-6. **Los 3 ROJO / 6 AMARILLO** de `docs/AUDITORIA-POST-DEPLOY-2026-09-06.md`. El que queda vivo es
+5. **Los 3 ROJO / 6 AMARILLO** de `docs/AUDITORIA-POST-DEPLOY-2026-09-06.md`. El que queda vivo es
    ROJO 3: un domicilio perdido no deja rastro (`logDeliveryIntakeFailure()` solo va a `console.error`).
-7. **Aplicar la 00030** en ventana tranquila (cierra el riesgo del DEFAULT puente).
-8. **Onboarding de los 25**: wildcard DNS ya resuelto y probado con Sushi Fun.
+6. **Aplicar la 00030** en ventana tranquila (cierra el riesgo del DEFAULT puente).
+7. **Onboarding de los 25**: wildcard DNS ya resuelto y probado con Sushi Fun.
 
 **El norte, para tenerlo en cuenta al diseñar — NO se desarrolla todavía** (dueño, 2026-09-05):
 el producto va hacia **automatizaciones dentro del restaurante**: conectar la cuenta de **Google**
@@ -76,6 +78,11 @@ credenciales de terceros).
 
 ## 5. Hecho reciente
 
+- **El alta de un mesero la gobierna el ROL** (2026-09-06): el modal decía que el PIN era "para que
+  el mesero inicie sesión" —modelo que §19 borró— y pedía Celular y PIN aunque eligieras "Mesero".
+  Ahora el Rol manda: `waiter` = Nombre + Sede; `supervisor`/`admin` = además Celular y PIN. La sede
+  única viene preseleccionada y para un mesero "Sin sede" ya no es opción (CHECK de la 00046). El
+  panel MARCA a los que no tienen sede. → `docs/features/staff-qr-scan.md`.
 - **Sushi Fun absorbido como tenant** (2026-09-06): 1.421 filas movidas desde su propio Supabase,
   el `08` cuadró con cero cruces de marca y las otras cuatro marcas no se movieron ni una fila.
   Conserva **su propia cuenta de Twilio** (3 columnas en `tenants`) y su marca. Runbook y parte en
@@ -94,9 +101,6 @@ credenciales de terceros).
   elige en cada operación y la lista va filtrada por sede. `staff_users.phone` pasa a NULLABLE y la
   llave de identidad se **complementa** (CHECK de identidad mínima + UNIQUE parcial marca/sede/nombre)
   en vez de reemplazarse. Eliminada `POST /api/staff/login`.
-- **Pulido visual** (2026-09-06): CTA del mesero unificados con `.btn-premium` y objetivos táctiles
-  a 44px. Al mergear se descartó su versión de `mesero/page.tsx`, que era anterior a §19 y habría
-  resucitado el login por mesero.
 - **F7 / F4 / F3**: permisos por sede (D10, `00045`), el mesero es de UNA sede (D11, `00044`), y el
   check-in escribe la sede. Todo aplicado y desplegado.
 

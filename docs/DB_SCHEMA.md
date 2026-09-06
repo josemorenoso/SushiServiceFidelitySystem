@@ -440,6 +440,7 @@ CREATE POLICY "admin_insert_settings" ON admin_settings
 | `filters` | `jsonb` | NO | `'{}'` | Filtros de audiencia (mismo shape que `campaigns.filters`) |
 | `media_url` | `text` | SI | `NULL` | URL pública del bucket `event-media` |
 | `media_type` | `text` | SI | `NULL` | 'image' o 'video' |
+| `link_url` | `text` | SI | `NULL` | **Nueva (00050).** Enlace opcional (carta, reserva, boletería) que se pega al final del CTA `{{5}}` al enviar. NO es una variable propia de la plantilla: el contrato `{{1}}..{{6}}` está aprobado por Meta y un `{{7}}` obligaría a re-aprobar las 25 marcas. CHECK: `http(s)://`, sin espacios, ≤500 — porque `{{5}}` es variable de plantilla y Twilio rechaza (21656) los saltos de línea, lo que tumbaría el envío de **toda** la audiencia |
 | `content_sid` | `text` | SI | `NULL` | Twilio Content SID resuelto desde `admin_settings` según `media_type` |
 | `campaign_id` | `uuid` | SI | `NULL` | FK a `campaigns(id)`. Se llena cuando el evento se ejecuta. |
 | `status` | `text` | NO | `'planned'` | 'planned' \| 'scheduled' \| 'sent' \| 'cancelled' \| 'failed' |

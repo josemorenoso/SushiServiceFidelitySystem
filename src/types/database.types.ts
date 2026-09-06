@@ -131,6 +131,7 @@ export type EventType = 'promo' | 'festival' | 'activacion' | 'aniversario' | 'o
 export type EventSendMode = 'auto' | 'remind'
 export type EventStatus = 'planned' | 'scheduled' | 'sent' | 'cancelled' | 'failed'
 export type EventMediaType = 'image' | 'video'
+export type EventAudienceScope = 'brand' | 'location'
 
 export interface RestaurantEvent {
   id: string
@@ -145,10 +146,26 @@ export interface RestaurantEvent {
   filters: Record<string, unknown>
   media_url: string | null
   media_type: EventMediaType | null
+  /**
+   * Enlace opcional (carta, reserva, boletería) que se agrega al final del CTA
+   * de la invitación (00050). NO es una variable propia de la plantilla: se
+   * compone dentro de {{5}} al enviar, porque el contrato {{1}}..{{6}} está
+   * aprobado por Meta y agregar un {{7}} obligaría a re-aprobar las 25 marcas.
+   */
+  link_url: string | null
   content_sid: string | null
   campaign_id: string | null
   status: EventStatus
   blackout_days: number
+  /**
+   * ⚠️ LA EXCEPCIÓN DEL MODELO (00043). En el resto del schema `location_id` NULL
+   * significa "sede desconocida"; **aquí no**: solo es válido con
+   * `audience_scope='brand'`, y entonces significa "evento de TODA la marca".
+   * Lo amarra el CHECK `restaurant_events_audience_pareja_check`.
+   */
+  location_id: string | null
+  /** 'brand' exige `location_id` NULL · 'location' lo exige NOT NULL (00043). */
+  audience_scope: EventAudienceScope
   created_at: string
   updated_at: string
 }

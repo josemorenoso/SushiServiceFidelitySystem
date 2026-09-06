@@ -16,11 +16,13 @@ import type {
   EventType,
   EventStatus,
 } from '@/types/database.types'
+import { formatInAppTz } from '@/lib/timezone'
 import {
   Calendar,
   Clock,
   Filter,
   Image as ImageIcon,
+  Link as LinkIcon,
   Video as VideoIcon,
   Trash2,
   AlertTriangle,
@@ -70,22 +72,24 @@ function formatDateLegible(yyyymmdd: string): string {
   return `${d} de ${months[m - 1]} de ${y}`
 }
 
+/** Hora de Bogotá SIEMPRE, no la del navegador: es la hora a la que el cron va a
+ *  disparar de verdad, y el admin la compara con la que escribió al programar. */
 function formatScheduledAt(iso: string | null): string {
   if (!iso) return '—'
-  const date = new Date(iso)
-  return date.toLocaleString('es-CO', {
+  return `${formatInAppTz(iso, {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
-  })
+  })} (hora Colombia)`
 }
 
 export function EventDetailDrawer({ open, onOpenChange, event, onUpdated }: EventDetailDrawerProps) {
   const [editing, setEditing] = useState(false)
   const [draftTitle, setDraftTitle] = useState('')
   const [draftDescription, setDraftDescription] = useState('')
+  const [draftLink, setDraftLink] = useState('')
   const [busy, setBusy] = useState(false)
   const [dispatching, setDispatching] = useState(false)
   const [dispatchResult, setDispatchResult] = useState<string | null>(null)
@@ -96,6 +100,7 @@ export function EventDetailDrawer({ open, onOpenChange, event, onUpdated }: Even
     if (event) {
       setDraftTitle(event.title)
       setDraftDescription(event.description ?? '')
+      setDraftLink(event.link_url ?? '')
       setEditing(false)
       setError(null)
       setDispatchResult(null)
@@ -152,7 +157,12 @@ export function EventDetailDrawer({ open, onOpenChange, event, onUpdated }: Even
         return
       }
       setDispatchResult(
-        `Enviados: ${data.sent} · Fallidos: ${data.failed} · Excluidos por cap mensual: ${data.excluded_monthly_cap}`
+        `Enviados: ${data.sent}` +
+        // `queued` es lo que no cupo en el presupuesto de línea de hoy y sale solo en los
+        // próximos días. Antes esos mismos clientes se contaban como "fallidos" y se
+        // perdían, así que decir solo "enviados/fallidos" ya no describe lo que pasó.
+        (data.queued > 0 ? ` · En cola para los próximos días: ${data.queued}` : '') +
+        ` · Fallidos: ${data.failed} · Excluidos por cap mensual: ${data.excluded_monthly_cap}`
       )
       onUpdated?.()
     } catch (err) {
@@ -173,6 +183,7 @@ export function EventDetailDrawer({ open, onOpenChange, event, onUpdated }: Even
         body: JSON.stringify({
           title: draftTitle.trim(),
           description: draftDescription.trim() || null,
+          link_url: draftLink.trim() || null,
         }),
       })
       const data = await res.json()
@@ -278,6 +289,41 @@ export function EventDetailDrawer({ open, onOpenChange, event, onUpdated }: Even
               <p className="text-sm">
                 {event.description || <span className="text-muted-foreground italic">Sin descripción</span>}
               </p>
+            )}
+          </section>
+
+          {/* Link */}
+          <section className="space-y-1.5">
+            <h4 className="text-xs font-medium uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+              <LinkIcon className="h-3.5 w-3.5" />
+              Enlace
+            </h4>
+            {editing ? (
+              <>
+                <input
+                  type="url"
+                  inputMode="url"
+                  value={draftLink}
+                  onChange={(e) => setDraftLink(e.target.value)}
+                  placeholder="https://tucarta.com/festival"
+                  maxLength={500}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Va al final del mensaje. Vacío = sin enlace.
+                </p>
+              </>
+            ) : event.link_url ? (
+              <a
+                href={event.link_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-primary underline break-all"
+              >
+                {event.link_url}
+              </a>
+            ) : (
+              <p className="text-sm text-muted-foreground italic">Sin enlace</p>
             )}
           </section>
 

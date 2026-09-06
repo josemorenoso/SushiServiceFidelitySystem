@@ -1580,6 +1580,7 @@ Devuelve los eventos cuyo `event_date` cae en el rango (inclusive en ambos extre
   "filters": { "city": "Envigado", "minVisits": 2 },
   "media_url": "https://...supabase.co/storage/v1/object/public/event-media/...",
   "media_type": "image",
+  "link_url": "https://tucarta.com/festival",
   "blackout_days": 5
 }
 ```
@@ -1592,6 +1593,11 @@ Devuelve los eventos cuyo `event_date` cae en el rango (inclusive en ambos extre
 - Si `send_mode='auto'`, `scheduled_send_at` es obligatorio y debe ser ≤ `event_date`
 - `media_type` ∈ `'image' | 'video' | null`. Obligatorio si `media_url` está presente.
 - `blackout_days` ∈ `[0, 30]`, default 5
+- `link_url` (00050, opcional): enlace que se pega al final del CTA de la invitación. Debe empezar por
+  `http://` o `https://`, **sin espacios ni saltos de línea**, ≤500 caracteres. Cadena vacía y `null`
+  son lo mismo: sin enlace. Un valor inválido responde **400 con el motivo legible**, no 500.
+  El saneo es estricto porque el link viaja dentro de `{{5}}`, que es una variable de plantilla:
+  Twilio rechaza con 21656 las que llevan salto de línea y eso tumba el envío de la audiencia entera.
 - Si `send_mode='auto'` + `scheduled_send_at`, el evento se crea con `status='scheduled'`; si no, con `status='planned'`
 
 **Response 201:** `{ "event": { ... } }`
@@ -1612,6 +1618,8 @@ Devuelve los eventos cuyo `event_date` cae en el rango (inclusive en ambos extre
 **`PATCH /api/dashboard/calendar/events/:id`** — Admin JWT
 
 **Request body:** cualquier subconjunto de los campos de creación + `status` (`'planned' | 'scheduled' | 'sent' | 'cancelled' | 'failed'`).
+
+`link_url: null` es la forma de **borrar** el enlace de un evento (omitirlo lo deja como estaba).
 
 Si el PATCH toca `send_mode` o `scheduled_send_at` (y no manda `status` explícito), el `status` se
 realinea solo a la invariante: `'scheduled'` si el evento queda en `send_mode='auto'` **con** fecha,

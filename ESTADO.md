@@ -1,6 +1,6 @@
 # ESTADO — RestaurantQR / Cada1
 
-> **Última actualización:** 2026-09-06, 13:40 (sesión "absorción de Sushi Fun + deploy", Opus 5)
+> **Última actualización:** 2026-09-06, 15:00 (sesión "los 3 AMARILLO del calendario", Opus 5)
 > Toda sesión lo lee PRIMERO. Toda sesión que cierra un bloque lo ACTUALIZA al final. Límite: 150 líneas.
 > Lo obsoleto se **saca**, no se tacha: un ítem tachado sigue costando tokens cada vez que alguien lee esto.
 >
@@ -15,24 +15,19 @@
 | Qué | Estado |
 |-----|--------|
 | Código | **`main` = `origin/main` = producción.** Todo lo de 2026-09-05/06 está mergeado, pusheado y desplegado. No queda nada en ramas salvo `respaldo/*` (código de mayo que ya no compila) |
-| Verificación | ✅ `tsc` limpio · `build` OK · eslint 7 errores preexistentes (React hooks, sin relación) · **vitest 19 archivos / 341 tests en verde** |
+| Verificación | ✅ `tsc` limpio · eslint 7 errores preexistentes (React hooks, sin relación) · **vitest 23 archivos / 385 tests en verde** |
 | Marcas vivas | **5**: sushi-service (542 clientes), demo-ventas (412), sushi-fun (251), don-alirio (244), cafe-frangal (8) |
 | Base de datos de producción | Aplicadas hasta la **00046**. 🔴 **La `00047` (identidad visual) está SIN APLICAR y su código YA ESTÁ DESPLEGADO** — ver §3.1. La 00030 NUNCA aplicada (a propósito). La 00015 NO se aplica (reabre fuga) |
-| Crons | Los 5 en `vercel.json`, corriendo. Horario corregido hoy a **18:00/20:00 UTC** (birthday/reactivation), que es lo que n8n hacía; estaban 5 h antes y dispararon así una vez |
+| Crons | Los 5 en `vercel.json`, corriendo. `birthday` 18:00 y `reactivation` 20:00 UTC (= 13:00/15:00 Bogotá), verificado. ⚠️ **`reward-reminder` sigue en 16:00 UTC (11:00 Bogotá)**: de los 3 del ROJO 1 se corrigieron 2. Su hora real no se pudo confirmar por retención de logs; la auditoría la estimó ≈21:00 UTC. **Decisión del dueño** |
 | n8n | Apagado. `domicilios_whatsapp_v4.json` sigue en el VPS pero ya no dispara |
 | Grafo | Sobre `4124ea3` (2026-09-05) — **desactualizado**, correr `graphify update .` |
 | Deadline | ~2026-09-10 — onboarding de los 25 clientes de Zernio |
 
 ## 2. En vuelo ahora mismo
 
-🔴 **TRES sesiones a la vez sobre el MISMO árbol de trabajo** (2026-09-06, tarde), con al menos
-una corriendo `git reset --hard HEAD`: **borró cambios sin commitear dos veces.** Rompe §7. Quien
-abra una sesión en paralelo saca su worktree ANTES de escribir (`git worktree add ../wt-<rama>`, ya
-hay cuatro `wt-*`) y usa un **`TEST_PG_PORT` distinto**: el `globalSetup` de vitest fija el 55432 y
-dos corridas a la vez se pisan el Postgres — la segunda dice *"No test files found"*, que despista.
-
-- **`fix/opt-out-visible`** en `..\wt-opt-out-visible`, **sin mergear** (§5) · `fix/crear-mesero-por-rol`
-  (worktree propio) y `fix/amarillos-calendario` (árbol principal), en curso.
+**El árbol de trabajo NO está limpio.** Sin commitear conviven dos trabajos: el enlace del
+evento (00050, `fix/opt-out-visible`) y los 3 AMARILLO del calendario (§5). Suite en verde
+sobre esa mezcla. **Nada se pushea hasta separarlos por rama.**
 
 **Repo del AIOS** (`Level 2.0/aios-constelarys`, remoto propio): la rama `fix/coexistencia`
 (v1.4.0) está subida pero **su `main` NO se pusheó** — tiene un commit suelto
@@ -45,7 +40,8 @@ Pushear ese `main` despliega el AIOS: es decisión del dueño. Parte completo en
 1. 🔴 **Correr la `00047` en Supabase producción.** Es lo único urgente. Su código ya está vivo:
    sin ella, guardar en `/dashboard/marca` y subir el logo fallan. **Nada de lo anterior se rompe**
    —`--brand-primary` tiene su literal en `:root`— pero la feature nueva no funciona.
-   Archivo: `supabase/migrations/00047_identidad_visual.sql`.
+   Archivo: `supabase/migrations/00047_identidad_visual.sql`. Detrás va la **`00050`** (enlace del
+   evento), que **debe aplicarse ANTES** de desplegar su código: si no, crear un evento da 42703.
 2. **Asignarle sede a los meseros que ya existen.** Todos tienen `location_id` NULL, así que **no
    aparecen en ningún escáner**. Es lo que más se nota en la operación diaria.
 3. **Arreglar el modal "Crear Mesero"** (`dashboard/staff/page.tsx`): su subtítulo todavía dice que
@@ -56,8 +52,9 @@ Pushear ese `main` despliega el AIOS: es decisión del dueño. Parte completo en
 4. **Zernio E2E** con la cuenta ya limpia → desbloquea al primer cliente nuevo bajo coexistencia.
 5. **Responder §18.a–d** (`docs/DECISION-18-DOMICILIOS-COEXISTENCIA.md`, con opciones y consecuencias).
    Son las últimas preguntas que bloquean el onboarding.
-6. **Los 3 ROJO / 6 AMARILLO** de `docs/AUDITORIA-POST-DEPLOY-2026-09-06.md`. El que queda vivo es
-   ROJO 3: un domicilio perdido no deja rastro (`logDeliveryIntakeFailure()` solo va a `console.error`).
+6. **De `docs/AUDITORIA-POST-DEPLOY-2026-09-06.md` quedan vivos: ROJO 3** (un domicilio perdido no
+   deja rastro) y el AMARILLO de `reward-reminder` (fila de Crons). Los 3 AMARILLO del calendario,
+   cerrados (§5). Sin corregir todavía: `docs/ESTADO-REQUERIMIENTOS.md` y `docs/04-deployment.md`.
 7. **Aplicar la 00030** en ventana tranquila (cierra el riesgo del DEFAULT puente).
 8. **Onboarding de los 25**: wildcard DNS ya resuelto y probado con Sushi Fun.
 
@@ -83,28 +80,30 @@ credenciales de terceros).
 
 ## 5. Hecho reciente
 
-- **El SALIR se ve y se contesta** (rama `fix/opt-out-visible`, SIN mergear): `opt-out persistido`
-  se logueaba igual cuando el UPDATE tocaba **cero filas** —teléfono sin ficha en esa marca es
-  `error = null`, un éxito para Postgres—, y de ahí el panel vacío con el log en verde. Ahora
-  `setWhatsappOptOut()` devuelve `matched` y el webhook separa fallo / sin ficha / persistido, con
-  el tenant. Y **Twilio le confirma la salida al cliente por TwiML**; **Zernio queda mudo a
-  propósito** —no tiene por dónde—, costo en `docs/features/twilio-opt-out.md`. 20 arch / 358 tests.
-- **Sushi Fun absorbido como tenant** (2026-09-06): 1.421 filas, cero cruces de marca; conserva su
-  cuenta de Twilio y su marca. Detalle en `docs/RUNBOOK-ABSORBER-SUSHI-FUN.md` y su parte. Lo que
-  sigue vivo de eso (borrar su Supabase, su Vercel) está en §4.
-- **Firma de Twilio por tenant** (2026-09-06): `validateTwilioSignature()` usaba siempre el token
-  master, pero Twilio firma con el token de la cuenta dueña del número, así que **todo entrante de un
-  tenant con cuenta propia daba 403** — los `SALIR` se perdían en silencio. Lo destapó el primer
-  `SALIR` de Sushi Fun. Ahora la ruta resuelve el tenant por `To` y valida con SU token; se quitó
-  la puerta trasera `NODE_ENV === 'development'` y la comparación pasa a tiempo constante.
-- **Identidad visual por marca (§5/§6/§3)** (2026-09-06): logo y un color desde `/dashboard/marca`,
-  del que se derivan gradientes, ✓ del sello y color del QR. `tenants.config` gana whitelist **por
-  ruta** y reserva `integrations`. Migración **renumerada de 00048 a 00047**: el 48 estaba reservado
-  para F9 en el spec de multi-sede. → `docs/features/identidad-visual.md`.
-- **§19 — el escáner es del local** (2026-09-05, desplegado): un login por aparato, el mesero se
-  elige en cada operación y la lista va filtrada por sede. `staff_users.phone` pasa a NULLABLE y la
-  llave de identidad se **complementa** (CHECK de identidad mínima + UNIQUE parcial marca/sede/nombre)
-  en vez de reemplazarse. Eliminada `POST /api/staff/login`.
+- **Los 3 AMARILLO del calendario** (2026-09-06): **(1)** la hora del picker se leía en la zona del
+  navegador; la conversión vive ahora solo en `src/lib/timezone.ts` (el servidor siempre estuvo bien).
+  **(2)** `calendar_event` **ya gotea por `send_queue`** — antes lo que excedía el cupo del día se
+  marcaba `failed` y se perdía. **(3)** el reclamo del despacho no miraba las filas afectadas, así que
+  dos corridas creían ganar y despachaban dos veces; lo cierra `claimScheduledEvent()` y lo reproduce
+  `tests/db/calendar-claim.test.ts` con 8 reclamos simultáneos. → `docs/features/calendar.md`.
+- **Sushi Fun absorbido como tenant** (2026-09-06): 1.421 filas desde su propio Supabase, cero cruces
+  de marca, las otras 4 marcas intactas. Conserva **su cuenta de Twilio** (3 columnas en `tenants`).
+  Pendientes: borrar su Supabase (§4) y el Vercel viejo tras 7 días. → `docs/PARTE-SUSHI-FUN-2026-09-06.md`.
+- **Enlace del evento + plantillas verificadas** (2026-09-06): `link_url` (00050, **sin aplicar**)
+  viaja dentro de `{{5}}` para no re-aprobar plantillas en las 25 marcas. Contra Twilio: la de imagen
+  de la master está **approved** y dinámica; **Sushi Fun, con cuenta propia, no tiene ninguna
+  `twilio/media` y ahí NO sale**. Video: **rejected**. → `docs/features/calendar.md`.
+- **Firma de Twilio por tenant** (2026-09-06): se validaba siempre con el token master, pero Twilio
+  firma con el de la cuenta dueña del número → **todo entrante de un tenant con cuenta propia daba
+  403** y los `SALIR` se perdían. Ahora resuelve el tenant por `To`; fuera la puerta trasera de `dev`.
+- **Identidad visual por marca** (2026-09-06): logo y un color desde `/dashboard/marca`, del que se
+  derivan gradientes, sello y QR. `tenants.config` gana whitelist **por ruta** y reserva
+  `integrations`. Migración renumerada 00048 → **00047** (el 48 era de F9). → `identidad-visual.md`.
+- **§19 — el escáner es del local** (2026-09-05, desplegado): un login por aparato, el mesero se elige
+  en cada operación y la lista va filtrada por sede. `staff_users.phone` pasa a NULLABLE y la llave de
+  identidad se **complementa**, no se reemplaza. Eliminada `POST /api/staff/login`.
+- **F7 / F4 / F3**: permisos por sede (D10, `00045`), el mesero es de UNA sede (D11, `00044`), y el
+  check-in escribe la sede. Todo aplicado y desplegado.
 
 ## 6. Deudas y límites conocidos
 

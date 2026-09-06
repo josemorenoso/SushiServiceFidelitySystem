@@ -1,6 +1,10 @@
 import { createClient } from '@supabase/supabase-js'
 import { isDbFailure, logDbFailure } from '@/lib/db-failure'
-import { REACTIVATION_DAYS, REACTIVATION_AGGRESSIVE_DAYS } from '@/constants/rewards'
+import {
+  normalizeReactivationDays,
+  deriveRecoveryZone,
+  type RecoveryZone,
+} from '@/constants/rewards'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -112,18 +116,26 @@ export async function getReactivationDaysConfig(tenantId: string): Promise<React
     'reactivation_aggressive_days',
   ], tenantId)
 
-  const parsePositive = (value: string | undefined, fallback: number): number => {
-    const n = Number(value)
-    return Number.isInteger(n) && n > 0 ? n : fallback
-  }
+  // La regla de normalización vive en constants/rewards.ts porque la tarjeta del
+  // ciclo de recuperación (cliente) tiene que llegar al mismo número que el cron.
+  return normalizeReactivationDays(
+    settings.reactivation_soft_days,
+    settings.reactivation_aggressive_days
+  )
+}
 
-  const softDays = parsePositive(settings.reactivation_soft_days, REACTIVATION_DAYS)
-  let aggressiveDays = parsePositive(settings.reactivation_aggressive_days, REACTIVATION_AGGRESSIVE_DAYS)
-
-  // La agresiva siempre debe ser posterior a la suave
-  if (aggressiveDays <= softDays) {
-    aggressiveDays = softDays + 4
-  }
-
-  return { softDays, aggressiveDays }
+/**
+ * La ventana reservada al cron de reactivación, DERIVADA de los días que el
+ * tenant configuró en Ajustes.
+ *
+ * No es una preferencia aparte a propósito: la zona existe para proteger el
+ * toque suave y el agresivo, así que tiene que moverse con ellos. Dos keys
+ * independientes dejarían configurar una zona que no cubre el día del toque.
+ *
+ * Con los defaults (21 / 25) devuelve 18-25, igual que las constantes que esto
+ * reemplaza: ningún tenant que no haya tocado sus días cambia de comportamiento.
+ */
+export async function getRecoveryZoneConfig(tenantId: string): Promise<RecoveryZone> {
+  const { softDays, aggressiveDays } = await getReactivationDaysConfig(tenantId)
+  return deriveRecoveryZone(softDays, aggressiveDays)
 }

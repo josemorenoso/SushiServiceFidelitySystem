@@ -175,7 +175,7 @@ Público (lectura anónima requerida por Twilio/Meta para descargar el asset al 
 
 Esto se suma a las protecciones existentes (no las reemplaza):
 - Cap de 7 días (`FREQUENCY_CAP_DAYS`) sigue activo
-- Recovery Zone (18-25 días) sigue activa para reservar clientes al cron de reactivación
+- Recovery Zone (18-25 días con los días por defecto; se deriva de los del tenant) sigue activa para reservar clientes al cron de reactivación
 
 ### ¿Por qué birthday queda fuera?
 

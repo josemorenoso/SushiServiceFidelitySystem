@@ -31,7 +31,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { useDemo } from '@/contexts/DemoContext'
 import { useLocationScope } from '@/contexts/LocationScopeContext'
 import { useDashboardAnalytics } from '@/hooks/useDashboardAnalytics'
-import { FREQUENCY_CAP_DAYS, RECOVERY_ZONE_START_DAYS, RECOVERY_ZONE_END_DAYS } from '@/constants/rewards'
+import { FREQUENCY_CAP_DAYS, normalizeReactivationDays, deriveRecoveryZone } from '@/constants/rewards'
 
 interface Campaign {
   id: string
@@ -140,8 +140,18 @@ export default function CampaignsPage() {
       .finally(() => setLoading(false))
   }, [campaignsUrl])
 
-  const softDays = settings.reactivation_soft_days ?? '21'
-  const aggressiveDays = settings.reactivation_aggressive_days ?? '25'
+  // Los días efectivos y la ventana reservada al cron se derivan con las MISMAS
+  // funciones que usa el servidor (`getReactivationDaysConfig` /
+  // `getRecoveryZoneConfig`). Antes las bandas del ciclo salían de constantes
+  // fijas 18-25: cambiar las fechas en Ajustes movía el texto del toque pero no
+  // los rótulos, y la tarjeta terminaba contradiciéndose sola.
+  const { softDays: softDaysNum, aggressiveDays: aggressiveDaysNum } = normalizeReactivationDays(
+    settings.reactivation_soft_days,
+    settings.reactivation_aggressive_days
+  )
+  const recoveryZone = deriveRecoveryZone(softDaysNum, aggressiveDaysNum)
+  const softDays = String(softDaysNum)
+  const aggressiveDays = String(aggressiveDaysNum)
 
   /** SID de plantilla configurada para una campaña automática (primer setting con valor). */
   const configuredTemplateSid = (keys: string[]): string | null => {
@@ -317,21 +327,21 @@ export default function CampaignsPage() {
               </p>
             </div>
             <div className="rounded-lg border border-blue-200 bg-blue-50/60 p-3">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-700">Días {FREQUENCY_CAP_DAYS}–{RECOVERY_ZONE_START_DAYS - 1}</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-700">Días {FREQUENCY_CAP_DAYS}–{recoveryZone.startDays - 1}</p>
               <p className="text-sm font-semibold text-blue-900 mt-0.5">Ventana manual</p>
               <p className="text-xs text-blue-800/80 mt-1">
                 Burbujas de riesgo y campañas manuales con filtro por días sin venir.
               </p>
             </div>
             <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700">Días {RECOVERY_ZONE_START_DAYS}–{RECOVERY_ZONE_END_DAYS}</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700">Días {recoveryZone.startDays}–{recoveryZone.endDays}</p>
               <p className="text-sm font-semibold text-amber-900 mt-0.5">Recuperación automática</p>
               <p className="text-xs text-amber-800/80 mt-1">
                 Zona reservada: toque suave al día {softDays} y agresivo al día {aggressiveDays}, sin intervención tuya.
               </p>
             </div>
             <div className="rounded-lg border border-red-200 bg-red-50/60 p-3">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-red-700">Día {RECOVERY_ZONE_END_DAYS + 1}+</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-red-700">Día {recoveryZone.endDays + 1}+</p>
               <p className="text-sm font-semibold text-red-900 mt-0.5">Rescate</p>
               <p className="text-xs text-red-800/80 mt-1">
                 Campaña manual &quot;Rescatar Perdidos&quot; con oferta fuerte: última oportunidad.

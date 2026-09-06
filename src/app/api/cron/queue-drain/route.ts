@@ -42,6 +42,7 @@ import { getTenantById } from '@/lib/tenant'
 import { sendTemplateMessage } from '@/services/whatsapp.service'
 import { getLineBudget } from '@/services/line-budget.service'
 import { isPhoneOptedOut } from '@/services/customer.service'
+import { getRecoveryZoneConfig } from '@/services/settings.service'
 import {
   passesFrequencyCap,
   isInRecoveryZone,
@@ -399,6 +400,10 @@ async function filtrarPorGuardas(
 
   const porId = new Map((clientes ?? []).map((c) => [c.id as string, c]))
 
+  // La ventana reservada al cron, según los días que este tenant configuró.
+  // Se lee una vez por tanda, no por item.
+  const recoveryZone = await getRecoveryZoneConfig(tenantId)
+
   // ── 2. Frequency cap ──
   // Puede haberle llegado otra campaña entre el encolado y ahora.
   // `birthday` y `reward_reminder` están exentos por diseño (ver
@@ -430,9 +435,11 @@ async function filtrarPorGuardas(
     // misma regla que se le aplicó al crear la campaña.
     //
     // Solo para 'manual': es el único emisor que filtra por Recovery Zone.
+    // La ventana es la MISMA que se aplicó al crear la campaña: derivada de los
+    // días de reactivación de este tenant, no las constantes fijas.
     if (
       item.message_type === 'manual' &&
-      isInRecoveryZone(cliente.last_visit_at as string | null)
+      isInRecoveryZone(cliente.last_visit_at as string | null, recoveryZone)
     ) {
       await cancelQueueItem(item.id, 'Volvió al restaurante: entró en la zona de recuperación')
       res.skipped++

@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { requireTenantId } from '@/lib/tenant'
-import { FREQUENCY_CAP_DAYS, RECOVERY_ZONE_START_DAYS, RECOVERY_ZONE_END_DAYS } from '@/constants/rewards'
+import { FREQUENCY_CAP_DAYS } from '@/constants/rewards'
+import { getRecoveryZoneConfig } from '@/services/settings.service'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -80,10 +81,13 @@ export async function GET(request: NextRequest) {
     const capCutoff = new Date(Date.now() - FREQUENCY_CAP_DAYS * 24 * 60 * 60 * 1000).toISOString()
     query = query.or(`last_campaign_at.is.null,last_campaign_at.lt.${capCutoff}`)
 
-    // Recovery Zone: excluir clientes entre RECOVERY_ZONE_START y END días sin visitar
-    // (reservados para el cron de reactivación). Keeper = NULL o fuera del rango.
-    const zoneCutoffNear = new Date(Date.now() - RECOVERY_ZONE_START_DAYS * 24 * 60 * 60 * 1000).toISOString()
-    const zoneCutoffFar = new Date(Date.now() - RECOVERY_ZONE_END_DAYS * 24 * 60 * 60 * 1000).toISOString()
+    // Recovery Zone: excluir clientes dentro de la ventana reservada al cron de
+    // reactivación. La ventana sale de los días que este tenant configuró, la MISMA
+    // que aplica manual/route.ts — si divergen, el estimado miente sobre el envío.
+    // Keeper = NULL o fuera del rango.
+    const zone = await getRecoveryZoneConfig(tenantId)
+    const zoneCutoffNear = new Date(Date.now() - zone.startDays * 24 * 60 * 60 * 1000).toISOString()
+    const zoneCutoffFar = new Date(Date.now() - zone.endDays * 24 * 60 * 60 * 1000).toISOString()
     query = query.or(`last_visit_at.is.null,last_visit_at.gte.${zoneCutoffNear},last_visit_at.lt.${zoneCutoffFar}`)
 
     const { count, error } = await query

@@ -2,11 +2,8 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { requireTenantId } from '@/lib/tenant'
-import {
-  FREQUENCY_CAP_DAYS,
-  RECOVERY_ZONE_START_DAYS,
-  RECOVERY_ZONE_END_DAYS,
-} from '@/constants/rewards'
+import { FREQUENCY_CAP_DAYS } from '@/constants/rewards'
+import { getRecoveryZoneConfig } from '@/services/settings.service'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -28,27 +25,31 @@ export async function GET() {
     const tenantId = await requireTenantId()
     const db = getServiceClient()
 
+    // La ventana reservada al cron sale de los días que este tenant configuró en
+    // Ajustes; con los defaults (21/25) son los 18-25 de siempre.
+    const zone = await getRecoveryZoneConfig(tenantId)
+
     const capCutoff = daysAgo(FREQUENCY_CAP_DAYS)
-    const activeStart = daysAgo(RECOVERY_ZONE_START_DAYS)       // 18d ago
-    const recoveryEnd = daysAgo(RECOVERY_ZONE_START_DAYS)       // 18d ago
-    const recoveryStart = daysAgo(RECOVERY_ZONE_END_DAYS)       // 25d ago
-    const lostCutoff = daysAgo(RECOVERY_ZONE_END_DAYS)          // 25d ago
+    const activeStart = daysAgo(zone.startDays)       // inicio de la zona
+    const recoveryEnd = daysAgo(zone.startDays)       // inicio de la zona
+    const recoveryStart = daysAgo(zone.endDays)       // fin de la zona
+    const lostCutoff = daysAgo(zone.endDays)          // fin de la zona
 
     const getBase = () => db.from('customers').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId).or('accepts_marketing.is.null,accepts_marketing.eq.true')
 
-    // Activos: visitaron hace menos de 18d (fuera de recovery zone)
+    // Activos: visitaron después del inicio de la zona (fuera de recovery zone)
     const [{ count: activeCount }, { count: recoveryCount }, { count: lostCount }, { count: capCount }] =
       await Promise.all([
         getBase()
           .gte('last_visit_at', activeStart)
           .or(`last_campaign_at.is.null,last_campaign_at.lt.${capCutoff}`),
 
-        // Recovery zone: entre 18 y 25d sin visitar
+        // Recovery zone: dentro de la ventana reservada al cron
         getBase()
           .lt('last_visit_at', recoveryEnd)
           .gte('last_visit_at', recoveryStart),
 
-        // Perdidos: más de 25d sin visitar (disponibles para campaña agresiva)
+        // Perdidos: pasado el fin de la zona (disponibles para campaña agresiva)
         getBase()
           .or(`last_visit_at.is.null,last_visit_at.lt.${lostCutoff}`)
           .or(`last_campaign_at.is.null,last_campaign_at.lt.${capCutoff}`),
@@ -58,9 +59,9 @@ export async function GET() {
       ])
 
     return NextResponse.json({
-      active: activeCount ?? 0,        // 0-18d: disponibles para campaña manual
-      recovery: recoveryCount ?? 0,    // 18-25d: reservados para cron reactivación
-      lost: lostCount ?? 0,            // 25+d: disponibles para oferta agresiva
+      active: activeCount ?? 0,        // antes de la zona: disponibles para campaña manual
+      recovery: recoveryCount ?? 0,    // dentro de la zona: reservados para cron reactivación
+      lost: lostCount ?? 0,            // pasada la zona: disponibles para oferta agresiva
       inCap: capCount ?? 0,            // <7d contactados: en espera
     })
   } catch (error) {

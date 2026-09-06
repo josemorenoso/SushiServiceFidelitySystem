@@ -207,3 +207,12 @@ Admin login (Supabase Auth) → /dashboard → Métricas, Clientes, Recompensas,
 **Contexto:** Los umbrales de marketing (cap 7 días, recovery zone 18-25 días) estaban hardcodeados en distintos archivos.
 **Decisión:** Centralizar en `src/constants/rewards.ts` como `FREQUENCY_CAP_DAYS`, `RECOVERY_ZONE_START_DAYS`, `RECOVERY_ZONE_END_DAYS`.
 **Consecuencias:** Cambiar un número cambia el comportamiento en todos los motores (cron, manual, estimador, radar).
+
+**Enmienda (2026-09-06):** centralizar no alcanzó. Los días de reactivación se volvieron
+configurables por tenant (v1.4.0) pero la Recovery Zone siguió fija en 18-25: un tenant que bajaba el
+toque suave a 15 quedaba con los días 15-17 sin proteger, y la tarjeta del ciclo mostraba una banda
+que no correspondía a sus fechas. La zona ahora se DERIVA de esos días con `deriveRecoveryZone()` y se
+lee por tenant con `getRecoveryZoneConfig()`. Las dos constantes quedan como fallback: con los
+defaults (21 / 25) la derivación devuelve exactamente 18-25. La regla de normalización vive en
+`constants/rewards.ts` y no en el service porque el panel (cliente) debe llegar al mismo número que
+el cron (servidor).

@@ -40,6 +40,7 @@ import {
   Check,
   Search,
   Ban,
+  MapPin,
 } from 'lucide-react'
 import { Toaster, toast } from 'sonner'
 import type { StaffUser, StaffDevice } from '@/types/database.types'
@@ -120,6 +121,16 @@ export default function StaffPage() {
   const locationName = (id: string | null) =>
     id ? (assignableLocations.find((l) => l.id === id)?.name ?? 'Sede desconocida') : 'Sin sede'
 
+  // El ROL gobierna el formulario (dueño, 2026-09-06). Desde §19 el mesero NO inicia sesión:
+  // se elige de una lista que el escáner filtra por la sede del aparato. El celular y el PIN
+  // dejaron de ser "para entrar" y pasaron a ser la llave que ACTIVA un aparato — y eso solo
+  // lo hace un supervisor o un admin. Pedírselos a un mesero es pedirle un dato que nadie usa.
+  const rolUsaCredenciales = (rol: string) => rol !== 'waiter'
+
+  // Con UNA sola sede activa, «Sin sede» no es una elección: es un olvido. Y para un mesero
+  // además rompe `staff_users_identidad_minima` (00046) — celular O sede, alguna de las dos.
+  const sedeUnica = assignableLocations.length === 1 ? assignableLocations[0].id : ''
+
   // Delete dialog
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -131,6 +142,8 @@ export default function StaffPage() {
   const [search, setSearch] = useState('')
   const [filterRole, setFilterRole] = useState<'all' | 'waiter' | 'supervisor' | 'admin'>('all')
   const [filterActive, setFilterActive] = useState<'all' | 'active' | 'inactive'>('all')
+  // Atajo del aviso de arriba: aísla a los que no aparecen en ningún escáner.
+  const [onlySinSede, setOnlySinSede] = useState(false)
 
   // Copy link state
   const [copied, setCopied] = useState(false)
@@ -150,13 +163,36 @@ export default function StaffPage() {
 
   useEffect(() => { fetchData() }, [fetchData])
 
+  // La sede única llega preseleccionada al abrir el modal, y también si las sedes terminan
+  // de cargar con el modal ya abierto. `prev ||` a propósito: no le pisa una elección hecha
+  // —un supervisor puede querer quedarse en «Sin sede»— porque el efecto no vuelve a correr
+  // cuando cambia `newLocationId`.
+  useEffect(() => {
+    if (showCreate) setNewLocationId((prev) => prev || sedeUnica)
+  }, [showCreate, sedeUnica])
+
   const resetCreateForm = () => {
     setNewName('')
     setNewPhone('')
     setNewPin('')
     setNewRole('waiter')
-    setNewLocationId('')
+    setNewLocationId(sedeUnica)
     setPhoneError(null)
+  }
+
+  /**
+   * Cambiar de rol no arrastra lo del rol anterior: al volver a «Mesero», el celular y el
+   * PIN que se hubieran escrito se BORRAN, no se esconden. Un campo invisible que igual
+   * viaja en el POST es un dato que el dueño grabó sin verlo.
+   */
+  const handleNewRole = (rol: 'waiter' | 'supervisor' | 'admin') => {
+    setNewRole(rol)
+    if (!rolUsaCredenciales(rol)) {
+      setNewPhone('')
+      setNewPin('')
+      setPhoneError(null)
+      setNewLocationId((prev) => prev || sedeUnica)
+    }
   }
 
   const handleCopyLink = async () => {
@@ -173,16 +209,27 @@ export default function StaffPage() {
   const handleCreate = async () => {
     setPhoneError(null)
     if (!newName.trim()) return
-    // §19.2: el celular y el PIN son OPCIONALES y solo los llevan los supervisores. Si se
-    // escribe un celular, sigue teniendo que ser válido: medio número es peor que ninguno.
-    if (newPhone.trim() && !/^\d{10}$/.test(newPhone)) {
+    const conCredenciales = rolUsaCredenciales(newRole)
+    // Un mesero se manda SIEMPRE sin celular y sin PIN, aunque hayan quedado restos de haber
+    // pasado por el rol de supervisor: el formulario ya no los muestra, así que enviarlos
+    // sería grabar un dato que el dueño no está viendo.
+    const phone = conCredenciales ? newPhone.trim() : ''
+    const pin = conCredenciales ? newPin.trim() : ''
+    // §19.2: el celular sigue siendo OPCIONAL para un supervisor. Si lo escribe, tiene que
+    // ser válido: medio número es peor que ninguno.
+    if (phone && !/^\d{10}$/.test(phone)) {
       setPhoneError('El número debe tener exactamente 10 dígitos')
       return
     }
-    // 19.f — el CHECK `staff_users_identidad_minima` de la 00046. Sin celular NI sede, el
-    // mesero no tiene ninguna llave de identidad y encima no saldría en ningún escáner.
-    if (!newPhone.trim() && !newLocationId) {
-      toast.error('Un mesero sin celular tiene que tener sede: es lo que lo hace aparecer en su escáner.')
+    // 19.f — el CHECK `staff_users_identidad_minima` de la 00046. Sin celular NI sede no hay
+    // ninguna llave de identidad, y encima el mesero no saldría en ningún escáner. El
+    // formulario ya no deja armar esa combinación; esto es el cinturón por si se cuela.
+    if (!phone && !newLocationId) {
+      toast.error(
+        assignableLocations.length === 0
+          ? 'Esta marca no tiene sedes activas todavía. Sin sede solo se puede crear un supervisor o un admin, y con celular.'
+          : 'Elige la sede: es lo que hace que aparezca en el escáner de ese local.'
+      )
       return
     }
     setCreating(true)
@@ -192,8 +239,8 @@ export default function StaffPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: newName.trim(),
-          phone: newPhone.trim() || null,
-          pin: newPin.trim() || null,
+          phone: phone || null,
+          pin: pin || null,
           role: newRole,
           location_id: newLocationId || null,
         }),
@@ -203,7 +250,7 @@ export default function StaffPage() {
         toast.error(json.message || json.error || `Error ${res.status} al crear mesero`)
         return
       }
-      toast.success(`Mesero "${newName.trim()}" creado`)
+      toast.success(`${roleLabel(newRole)} "${newName.trim()}" creado`)
       resetCreateForm()
       setShowCreate(false)
       fetchData()
@@ -211,6 +258,15 @@ export default function StaffPage() {
       toast.error('Error de conexión al crear mesero')
     } finally {
       setCreating(false)
+    }
+  }
+
+  /** Mismo criterio que `handleNewRole`, del lado de la edición. */
+  const handleEditRole = (rol: 'waiter' | 'supervisor' | 'admin') => {
+    setEditRole(rol)
+    if (!rolUsaCredenciales(rol)) {
+      setEditPin('')
+      setEditLocationId((prev) => prev || sedeUnica)
     }
   }
 
@@ -224,6 +280,12 @@ export default function StaffPage() {
 
   const handleEditSave = async () => {
     if (!editingStaff) return
+    // Guardar es la vía por la que se arregla el parque viejo (todos con `location_id`
+    // NULL): dejar salir a un mesero sin sede sería reponer el mismo problema.
+    if (!rolUsaCredenciales(editRole) && !editLocationId && assignableLocations.length > 0) {
+      toast.error('Elige la sede: sin ella este mesero no aparece en ningún escáner.')
+      return
+    }
     setSavingEdit(true)
     try {
       const payload: Record<string, unknown> = {
@@ -341,8 +403,13 @@ export default function StaffPage() {
     if (filterRole !== 'all' && s.role !== filterRole) return false
     if (filterActive === 'active' && !s.is_active) return false
     if (filterActive === 'inactive' && s.is_active) return false
+    if (onlySinSede && s.location_id) return false
     return true
   })
+
+  // Los invisibles del escáner. `location_id` NULL no se adivina NUNCA (D11): se marca, se
+  // cuenta y se le pide al dueño que la asigne. Ver `SQL-PARA-CORRER/meseros-sin-sede/`.
+  const sinSede = data.staff.filter((s) => s.is_active && !s.location_id)
 
   return (
     <div className="space-y-6">
@@ -364,10 +431,44 @@ export default function StaffPage() {
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Meseros del restaurante</CardTitle>
           <CardDescription>
-            Administra meseros con PIN para escaneo QR. Los dispositivos de confianza se registran desde la app del mesero.
+            Los meseros se eligen de una lista en el escáner del local; no inician sesión ni tienen
+            PIN. El PIN lo llevan los supervisores, que es con lo que activan un aparato.
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {/*
+            Problema B: el parque viejo tiene `location_id` NULL y en la tabla se veía igual
+            que cualquier otro. Se MARCA y se cuenta, nunca se adivina (D11): asignar una sede
+            por nosotros atribuiría visitas a un local en el que esa persona no trabajó. El
+            listado para asignarlas a mano está en `SQL-PARA-CORRER/meseros-sin-sede/`.
+          */}
+          {sinSede.length > 0 && (
+            <div className="mb-4 flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-medium text-amber-900">
+                  {sinSede.length === 1
+                    ? '1 mesero sin sede: no aparece en ningún escáner'
+                    : `${sinSede.length} meseros sin sede: no aparecen en ningún escáner`}
+                </p>
+                <p className="mt-0.5 text-xs text-amber-800">
+                  {assignableLocations.length === 0
+                    ? 'Esta marca todavía no tiene sedes activas. Hasta que exista una, la lista del escáner sale vacía.'
+                    : 'La lista del escáner se arma con la sede del aparato. Asígnalas con el lápiz de cada fila — nadie las adivina.'}
+                </p>
+              </div>
+              {assignableLocations.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setOnlySinSede((v) => !v)}
+                  className="shrink-0 border-amber-300 text-amber-900 hover:bg-amber-100"
+                >
+                  {onlySinSede ? 'Ver todos' : 'Ver solo esos'}
+                </Button>
+              )}
+            </div>
+          )}
+
           {/* Filters */}
           <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center">
             <div className="relative flex-1">
@@ -413,7 +514,7 @@ export default function StaffPage() {
                 {data.staff.length === 0 ? 'Aún no hay meseros registrados' : 'Sin resultados para la búsqueda'}
               </p>
               {data.staff.length === 0 && (
-                <p className="text-xs mt-1">Crea un mesero para habilitar el escaneo QR con PIN.</p>
+                <p className="text-xs mt-1">Crea el primero: le basta su nombre y su sede.</p>
               )}
             </div>
           ) : (
@@ -441,10 +542,25 @@ export default function StaffPage() {
                     </TableCell>
                     {assignableLocations.length > 0 && (
                       <TableCell>
-                        {/* NULL se muestra como "Sin sede", nunca se adivina (D11). */}
-                        <Badge variant={s.location_id ? 'secondary' : 'outline'} className="text-[10px]">
-                          {locationName(s.location_id)}
-                        </Badge>
+                        {/* NULL se muestra, nunca se adivina (D11) — y se muestra COMO EL
+                            PROBLEMA QUE ES: ese mesero no sale en ninguna lista del escáner. */}
+                        {s.location_id ? (
+                          <Badge variant="secondary" className="text-[10px]">
+                            {locationName(s.location_id)}
+                          </Badge>
+                        ) : (
+                          <div className="flex flex-col items-start gap-0.5">
+                            <Badge
+                              variant="outline"
+                              className="border-amber-300 bg-amber-50 text-[10px] text-amber-800"
+                            >
+                              Sin sede
+                            </Badge>
+                            <span className="text-[10px] leading-tight text-amber-700">
+                              No aparece en ningún escáner
+                            </span>
+                          </div>
+                        )}
                       </TableCell>
                     )}
                     <TableCell>
@@ -595,7 +711,9 @@ export default function StaffPage() {
             App del Mesero
           </CardTitle>
           <CardDescription>
-            Comparte este enlace con tus meseros. Al abrirlo, pueden iniciar sesión con su PIN o escanear directo si el dispositivo ya fue activado.
+            Este es el enlace del escáner. Se abre una sola vez en el celular o la tablet del
+            local, un supervisor lo activa con su PIN, y desde ahí cualquier mesero de esa sede
+            escanea sin volver a entrar.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -619,21 +737,23 @@ export default function StaffPage() {
           <div className="grid gap-2 sm:grid-cols-3">
             <div className="rounded-lg bg-white p-3 text-center shadow-sm">
               <p className="text-2xl font-bold text-red-500 mb-1">1</p>
-              <p className="text-xs text-gray-600">Crea un mesero con PIN desde esta página</p>
+              <p className="text-xs text-gray-600">Crea los meseros de la sede, y un supervisor con PIN</p>
             </div>
             <div className="rounded-lg bg-white p-3 text-center shadow-sm">
               <p className="text-2xl font-bold text-red-500 mb-1">2</p>
-              <p className="text-xs text-gray-600">Envía el enlace al celular del local o del mesero</p>
+              <p className="text-xs text-gray-600">Abre el enlace en el celular del local y actívalo con ese PIN</p>
             </div>
             <div className="rounded-lg bg-white p-3 text-center shadow-sm">
               <p className="text-2xl font-bold text-red-500 mb-1">3</p>
-              <p className="text-xs text-gray-600">El mesero toca <strong>Escanear QR</strong> y listo</p>
+              <p className="text-xs text-gray-600">Se toca <strong>Escanear QR</strong> y se elige quién atiende</p>
             </div>
           </div>
 
           <p className="text-xs text-muted-foreground">
-            <strong>Dispositivo del local:</strong> El supervisor abre el enlace y toca &quot;Activar este dispositivo&quot; con su PIN una sola vez. Después, cualquier mesero puede escanear sin login.
-            {' '}<strong>Dispositivo de un mesero:</strong> en la misma pantalla, marca &quot;Asignar a un mesero específico&quot; e ingresa el celular del mesero — las visitas que registre ese dispositivo quedarán a su nombre.
+            <strong>El aparato es del local, no de una persona.</strong> El supervisor lo activa con
+            su celular y su PIN una sola vez, y elige a qué sede pertenece: eso es lo que decide qué
+            meseros salen en la lista. Después, en cada visita se marca quién atendió — por eso los
+            meseros no necesitan ni celular ni PIN.
           </p>
         </CardContent>
       </Card>
@@ -647,10 +767,27 @@ export default function StaffPage() {
               Crear Mesero
             </DialogTitle>
             <DialogDescription>
-              Asigna un PIN numérico de 4 a 6 dígitos para que el mesero inicie sesión en la app.
+              El rol decide qué se pide. Un <strong>mesero</strong> solo necesita nombre y sede:
+              no inicia sesión en ningún lado, se elige de la lista del escáner del local. El
+              celular y el PIN son la llave que <strong>activa un aparato</strong>, y esa la
+              tienen los supervisores y los admins.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
+            {/* El Rol va PRIMERO porque es lo que decide qué campos existen debajo. */}
+            <div className="space-y-1.5">
+              <Label className="text-xs">Rol</Label>
+              <select
+                value={newRole}
+                onChange={(e) => handleNewRole(e.target.value as 'waiter' | 'supervisor' | 'admin')}
+                className="w-full h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                <option value="waiter">Mesero — solo nombre y sede</option>
+                <option value="supervisor">Supervisor — con celular y PIN, activa aparatos</option>
+                <option value="admin">Admin — con celular y PIN, activa aparatos</option>
+              </select>
+            </div>
+
             <div className="space-y-1.5">
               <Label className="text-xs flex items-center gap-1.5">
                 <User className="h-3.5 w-3.5" />
@@ -661,81 +798,100 @@ export default function StaffPage() {
                 onChange={(e) => setNewName(e.target.value)}
                 placeholder="Ej: Juan Pérez"
               />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs flex items-center gap-1.5">
-                <Phone className="h-3.5 w-3.5" />
-                Celular <span className="text-muted-foreground">(opcional)</span>
-              </Label>
-              <Input
-                value={newPhone}
-                onChange={(e) => {
-                  setNewPhone(e.target.value.replace(/\D/g, '').slice(0, 10))
-                  setPhoneError(null)
-                }}
-                placeholder="3001234567"
-                maxLength={10}
-                inputMode="numeric"
-                className={phoneError ? 'border-red-400 focus-visible:ring-red-300' : ''}
-              />
-              {phoneError ? (
-                <p className="text-[10px] text-red-500">{phoneError}</p>
-              ) : (
-                <p className="text-[10px] text-muted-foreground">
-                  Colombiano sin +57. Déjalo vacío para un mesero normal: solo lo necesitan los
-                  supervisores, que son quienes activan los celulares del local.
-                </p>
-              )}
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs flex items-center gap-1.5">
-                <KeyRound className="h-3.5 w-3.5" />
-                PIN <span className="text-muted-foreground">(solo supervisores)</span>
-              </Label>
-              <Input
-                value={newPin}
-                onChange={(e) => setNewPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                placeholder="1234"
-                maxLength={6}
-                type="password"
-                inputMode="numeric"
-                pattern="[0-9]*"
-              />
               <p className="text-[10px] text-muted-foreground">
-                4 a 6 dígitos. Un mesero no lo necesita: desde §19 no inicia sesión, se elige
-                de una lista.
+                Es el nombre que sale en la lista del escáner: tiene que distinguirse de sus
+                compañeros de sede («Ana L.», «Ana P.»).
               </p>
             </div>
+
+            {/* La Sede se pide SIEMPRE: es lo que decide en qué escáner aparece. */}
             <div className="space-y-1.5">
-              <Label className="text-xs">Rol</Label>
-              <select
-                value={newRole}
-                onChange={(e) => setNewRole(e.target.value as 'waiter' | 'supervisor' | 'admin')}
-                className="w-full h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              >
-                <option value="waiter">Mesero</option>
-                <option value="supervisor">Supervisor</option>
-                <option value="admin">Admin</option>
-              </select>
-            </div>
-            {assignableLocations.length > 0 && (
-              <div className="space-y-1.5">
-                <Label className="text-xs">Sede</Label>
-                <select
-                  value={newLocationId}
-                  onChange={(e) => setNewLocationId(e.target.value)}
-                  className="w-full h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                >
-                  <option value="">Sin sede</option>
-                  {assignableLocations.map((loc) => (
-                    <option key={loc.id} value={loc.id}>{loc.name}</option>
-                  ))}
-                </select>
-                <p className="text-[10px] text-muted-foreground">
-                  Un mesero es de UNA sede (D11), y es la que decide en qué escáner aparece.
-                  Obligatoria si no tiene celular.
+              <Label className="text-xs flex items-center gap-1.5">
+                <MapPin className="h-3.5 w-3.5" />
+                Sede
+              </Label>
+              {assignableLocations.length === 0 ? (
+                <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+                  Esta marca todavía no tiene sedes activas. Sin sede solo se puede crear un
+                  supervisor o un admin, que se identifican por su celular: un mesero sin sede no
+                  aparecería en ningún escáner.
                 </p>
-              </div>
+              ) : (
+                <>
+                  <select
+                    value={newLocationId}
+                    onChange={(e) => setNewLocationId(e.target.value)}
+                    className="w-full h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  >
+                    {/* Para un mesero, «Sin sede» deja de ser una opción: sin ella no aparece
+                        en ningún escáner y —si además no tiene celular— la rechaza el CHECK. */}
+                    {rolUsaCredenciales(newRole) ? (
+                      <option value="">Sin sede</option>
+                    ) : (
+                      newLocationId === '' && (
+                        <option value="" disabled>Elige una sede…</option>
+                      )
+                    )}
+                    {assignableLocations.map((loc) => (
+                      <option key={loc.id} value={loc.id}>{loc.name}</option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-muted-foreground">
+                    {rolUsaCredenciales(newRole)
+                      ? 'Un supervisor puede quedarse sin sede: lo identifica su celular.'
+                      : 'Un mesero es de UNA sede (D11), y es la que decide en qué escáner aparece.'}
+                  </p>
+                </>
+              )}
+            </div>
+
+            {rolUsaCredenciales(newRole) && (
+              <>
+                <div className="space-y-1.5">
+                  <Label className="text-xs flex items-center gap-1.5">
+                    <Phone className="h-3.5 w-3.5" />
+                    Celular <span className="text-muted-foreground">(opcional)</span>
+                  </Label>
+                  <Input
+                    value={newPhone}
+                    onChange={(e) => {
+                      setNewPhone(e.target.value.replace(/\D/g, '').slice(0, 10))
+                      setPhoneError(null)
+                    }}
+                    placeholder="3001234567"
+                    maxLength={10}
+                    inputMode="numeric"
+                    className={phoneError ? 'border-red-400 focus-visible:ring-red-300' : ''}
+                  />
+                  {phoneError ? (
+                    <p className="text-[10px] text-red-500">{phoneError}</p>
+                  ) : (
+                    <p className="text-[10px] text-muted-foreground">
+                      Colombiano sin +57. Es la mitad de la llave que activa un celular o una
+                      tablet del local: sin él, este supervisor no puede activar ninguno.
+                    </p>
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs flex items-center gap-1.5">
+                    <KeyRound className="h-3.5 w-3.5" />
+                    PIN <span className="text-muted-foreground">(opcional)</span>
+                  </Label>
+                  <Input
+                    value={newPin}
+                    onChange={(e) => setNewPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="1234"
+                    maxLength={6}
+                    type="password"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    4 a 6 dígitos. Es la otra mitad de esa llave, y se teclea una sola vez por
+                    aparato.
+                  </p>
+                </div>
+              </>
             )}
           </div>
           <DialogFooter>
@@ -744,7 +900,7 @@ export default function StaffPage() {
             </Button>
             <Button
               onClick={handleCreate}
-              disabled={creating || !newName.trim()}
+              disabled={creating || !newName.trim() || (!rolUsaCredenciales(newRole) && !newLocationId)}
               className="gap-2"
             >
               {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
@@ -763,10 +919,26 @@ export default function StaffPage() {
               Editar Mesero
             </DialogTitle>
             <DialogDescription>
-              Actualiza datos o restablece el PIN de {editingStaff?.name}.
+              Cambia el rol, el nombre o la sede de {editingStaff?.name}. El rol decide qué se
+              pide: el PIN solo existe para supervisores y admins, que son los que activan los
+              aparatos del local.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
+            {/* Mismo orden que en «Crear»: el Rol manda, y va primero. */}
+            <div className="space-y-1.5">
+              <Label className="text-xs">Rol</Label>
+              <select
+                value={editRole}
+                onChange={(e) => handleEditRole(e.target.value as 'waiter' | 'supervisor' | 'admin')}
+                className="w-full h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                <option value="waiter">Mesero — solo nombre y sede</option>
+                <option value="supervisor">Supervisor — con celular y PIN, activa aparatos</option>
+                <option value="admin">Admin — con celular y PIN, activa aparatos</option>
+              </select>
+            </div>
+
             <div className="space-y-1.5">
               <Label className="text-xs flex items-center gap-1.5">
                 <User className="h-3.5 w-3.5" />
@@ -778,54 +950,73 @@ export default function StaffPage() {
                 placeholder="Nombre completo"
               />
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Rol</Label>
-              <select
-                value={editRole}
-                onChange={(e) => setEditRole(e.target.value as 'waiter' | 'supervisor' | 'admin')}
-                className="w-full h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              >
-                <option value="waiter">Mesero</option>
-                <option value="supervisor">Supervisor</option>
-                <option value="admin">Admin</option>
-              </select>
-            </div>
-            {assignableLocations.length > 0 && (
-              <div className="space-y-1.5">
-                <Label className="text-xs">Sede</Label>
-                <select
-                  value={editLocationId}
-                  onChange={(e) => setEditLocationId(e.target.value)}
-                  className="w-full h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                >
-                  <option value="">Sin sede</option>
-                  {assignableLocations.map((loc) => (
-                    <option key={loc.id} value={loc.id}>{loc.name}</option>
-                  ))}
-                </select>
-                {devicesForStaff(editingStaff?.id ?? '').length > 0 && (
-                  <p className="text-[10px] text-amber-600">
-                    Este mesero tiene dispositivos. Moverlo de sede se rechaza si alguno quedó en otra (D11).
-                  </p>
-                )}
-              </div>
-            )}
+
             <div className="space-y-1.5">
               <Label className="text-xs flex items-center gap-1.5">
-                <KeyRound className="h-3.5 w-3.5" />
-                Nuevo PIN (opcional)
+                <MapPin className="h-3.5 w-3.5" />
+                Sede
               </Label>
-              <Input
-                value={editPin}
-                onChange={(e) => setEditPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                placeholder="Dejar vacío para no cambiar"
-                maxLength={6}
-                type="password"
-                inputMode="numeric"
-                pattern="[0-9]*"
-              />
-              <p className="text-[10px] text-muted-foreground">4-6 dígitos numéricos. Solo se actualiza si escribes uno nuevo.</p>
+              {assignableLocations.length === 0 ? (
+                <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+                  Esta marca todavía no tiene sedes activas, así que no hay ninguna que asignar.
+                  Mientras tanto, este mesero no aparece en ningún escáner.
+                </p>
+              ) : (
+                <>
+                  <select
+                    value={editLocationId}
+                    onChange={(e) => setEditLocationId(e.target.value)}
+                    className="w-full h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  >
+                    {/* «Sin sede» sigue siendo el valor de las filas viejas, así que se DIBUJA
+                        —tapar el estado real sería mentir— pero para un mesero va `disabled`:
+                        se puede salir de ahí, no volver. */}
+                    {rolUsaCredenciales(editRole) ? (
+                      <option value="">Sin sede</option>
+                    ) : (
+                      editLocationId === '' && (
+                        <option value="" disabled>
+                          Sin sede — no aparece en ningún escáner
+                        </option>
+                      )
+                    )}
+                    {assignableLocations.map((loc) => (
+                      <option key={loc.id} value={loc.id}>{loc.name}</option>
+                    ))}
+                  </select>
+                  {!rolUsaCredenciales(editRole) && editLocationId === '' && (
+                    <p className="text-[10px] text-amber-700">
+                      Hoy no aparece en ninguna lista del escáner. Elige su sede para que sus
+                      compañeros lo vean al registrar una visita.
+                    </p>
+                  )}
+                  {devicesForStaff(editingStaff?.id ?? '').length > 0 && (
+                    <p className="text-[10px] text-amber-600">
+                      Este mesero tiene dispositivos. Moverlo de sede se rechaza si alguno quedó en otra (D11).
+                    </p>
+                  )}
+                </>
+              )}
             </div>
+
+            {rolUsaCredenciales(editRole) && (
+              <div className="space-y-1.5">
+                <Label className="text-xs flex items-center gap-1.5">
+                  <KeyRound className="h-3.5 w-3.5" />
+                  Nuevo PIN (opcional)
+                </Label>
+                <Input
+                  value={editPin}
+                  onChange={(e) => setEditPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="Dejar vacío para no cambiar"
+                  maxLength={6}
+                  type="password"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                />
+                <p className="text-[10px] text-muted-foreground">4-6 dígitos numéricos. Solo se actualiza si escribes uno nuevo.</p>
+              </div>
+            )}
 
             {/* Devices for this staff */}
             {editingStaff && devicesForStaff(editingStaff.id).length > 0 && (
@@ -848,7 +1039,7 @@ export default function StaffPage() {
             </Button>
             <Button
               onClick={handleEditSave}
-              disabled={savingEdit || !editName.trim()}
+              disabled={savingEdit || !editName.trim() || (!rolUsaCredenciales(editRole) && !editLocationId && assignableLocations.length > 0)}
               className="gap-2"
             >
               {savingEdit ? <Loader2 className="h-4 w-4 animate-spin" /> : <Pencil className="h-4 w-4" />}

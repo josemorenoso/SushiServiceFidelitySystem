@@ -1,9 +1,9 @@
 # Feature: Verificación Cliente-Mesero con QR Dinámico
 
-> **Estado:** ✅ COMPLETADO · **§19 (el aparato es del local) implementado el 2026-09-05**,
-> con la migración `00046` escrita y **SIN APLICAR**.
+> **Estado:** ✅ COMPLETADO · **§19 (el aparato es del local) implementado el 2026-09-05**.
+> La `00046` **está aplicada** en producción (ver `ESTADO.md` §1).
 > **Prioridad:** URGENTE
-> **Última actualización:** 2026-09-05
+> **Última actualización:** 2026-09-06 — el alta de un mesero la gobierna el ROL, y no lleva PIN
 > **Spec de §19:** `docs/superpowers/specs/2026-09-05-staff-scanner-19-design.md`
 > **Archivos clave:** `src/app/(public)/mesero/*`, `src/app/api/staff/*`, `src/app/api/check-in/route.ts`, `src/app/api/reward-redeem/route.ts`, `src/lib/staff-auth.ts`, `src/hooks/useWaiters.ts`, `src/components/features/staff/WaiterPicker.tsx`, `src/app/(dashboard)/dashboard/staff/page.tsx`
 > **Dependencias:** `qrcode.react` (QR del cliente), `html5-qrcode` (escáner), `jose` (JWT — solo legado)
@@ -68,7 +68,7 @@ es dónde está el aparato, y es lo único que hace posible la lista filtrada. `
 nota de a quién pertenece.
 
 **2. El mesero se elige por operación.** `staff_users` deja de ser identidad de LOGIN y pasa a ser identidad
-de ATRIBUCIÓN: `phone` NULLABLE (alta con nombre + PIN) y el mesero no inicia sesión nunca.
+de ATRIBUCIÓN: `phone` NULLABLE (alta con **nombre y sede, sin PIN**) y el mesero no inicia sesión nunca.
 `visits.registered_by_staff_id` y `reward_redemptions.redeemed_by_staff_id` no cambian de forma, cambian de
 FUENTE: antes el dueño del aparato, ahora el selector, explícito en el cuerpo de cada petición. **El escaneo
 NO pide PIN; solo la redención** (decisión del dueño: regalarle tu premio a otro es una estupidez, no un bug).
@@ -81,11 +81,52 @@ el JWT.**
 
 | Cambio | Por qué |
 |---|---|
-| `staff_users.phone` → NULLABLE | §19.2: alta solo con nombre y PIN de 4 dígitos |
+| `staff_users.phone` → NULLABLE | §19.2: un mesero se da de alta solo con nombre y sede. El PIN quedó **exclusivo de supervisores y admins**: es la credencial que activa un aparato, no una forma de entrar |
 | `staff_users_phone_tenant_key` **se conserva** | **19.f**: no se quita, se complementa. Sigue siendo D11 en el motor para todo el parque que sí tiene teléfono |
 | `+ CHECK (phone IS NOT NULL OR location_id IS NOT NULL)` | **19.f**: sin teléfono la sede es OBLIGATORIA — sin sede un mesero no sale en ninguna lista y no tiene llave |
 | `+ UNIQUE (tenant_id, location_id, lower(trim(name))) WHERE location_id IS NOT NULL` | **19.f**: dos «Ana» de la misma sede son indistinguibles al elegir. Parcial a propósito: **los NULL no colisionan** |
 | `+ staff_users.pin_failed_attempts` / `.pin_locked_until` · `+ admin_settings.staff_redeem_requires_pin` (por tenant) | **19.e** el contador debe ser durable (`rateLimit()` vive en memoria y Vercel tiene N instancias) · **§19.7** el PIN se activa/desactiva desde el apartado de escaneo |
+
+---
+
+## El alta desde el panel — el ROL gobierna el formulario
+
+> **Dueño, 2026-09-06:** *«solo se debería poder crear un administrador que inicie sesión en
+> el celular y los meseros se crean solo con su nombre sin posibilidad de pin»*.
+
+`/dashboard/staff` («Crear Mesero» y «Editar Mesero») pone el campo **Rol arriba del todo** y
+de él cuelga el resto del formulario:
+
+| Rol | Campos | Por qué |
+|---|---|---|
+| `waiter` | **Nombre + Sede** | No inicia sesión: se elige de la lista del escáner. El celular y el PIN no se dibujan y **se mandan vacíos**, aunque hayan quedado escritos por haber pasado antes por otro rol |
+| `supervisor` / `admin` | Nombre + Sede **+ Celular + PIN** | Son la llave que activa un aparato del local (`/mesero` pide celular + PIN una sola vez por aparato) |
+
+**La Sede se pide siempre**, con dos reglas que antes no estaban:
+
+- Si la marca tiene **una sola sede activa**, viene **preseleccionada**. Con una sola sede,
+  «Sin sede» no era una elección: era un olvido.
+- Para un `waiter`, **«Sin sede» deja de ser una opción**. En «Editar» sí se DIBUJA cuando la
+  fila ya viene así —tapar el estado real sería mentir— pero va `disabled`: se puede salir de
+  ahí, no volver.
+
+El motivo es el `CHECK staff_users_identidad_minima` de la **00046**
+(`phone IS NOT NULL OR location_id IS NOT NULL`): el formulario viejo dejaba armar la
+combinación inválida (mesero, sin celular, sin sede) y el error llegaba tarde, traducido
+desde un 23514 de Postgres. Ahora no se puede llegar hasta ahí. La validación del servidor
+en `/api/dashboard/staff` **no cambió** — sigue siendo la que manda; el formulario es el
+cinturón, no el motor.
+
+### Los meseros que ya existen no aparecen en ningún escáner
+
+Todo el parque actual tiene `location_id` NULL, y la lista del escáner se filtra por la sede
+del aparato: **existen en el panel y no existen en la operación**. El panel los marca —badge
+ámbar «Sin sede», la leyenda *«No aparece en ningún escáner»*, un aviso con el conteo y un
+botón «Ver solo esos»— y el trabajo de asignarlas está preparado en
+`SQL-PARA-CORRER/meseros-sin-sede/`.
+
+**No se backfillean.** `location_id` NULL es «sede desconocida», no «la principal»: adivinarla
+le atribuiría a un local las visitas de alguien que quizá atiende en el otro.
 
 ---
 

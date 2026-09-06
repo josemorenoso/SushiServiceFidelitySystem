@@ -40,7 +40,9 @@
 ## §19 — Escáner QR de meseros (lo que el dueño recordaba)
 
 **Pedido el 2026-08-30. Sin empezar y SIN SPEC** — el propio requerimiento dice "merece spec propio" y
-ese spec no existe en `docs/superpowers/specs/`.
+ese spec no existe en `docs/superpowers/specs/`. **El 2026-09-05 el dueño cerró el modelo** (ver
+"Decisiones del dueño" abajo): el aparato es del restaurante, el mesero se elige en cada operación y
+la lista va filtrada por sede.
 
 No es construir de cero: es **invertir el modelo**. Hoy el celular pertenece a un mesero
 (`staff_devices.staff_user_id`); se pide que pertenezca al **restaurante** y que el mesero se elija por
@@ -72,12 +74,32 @@ Textual del dueño: *"sí se podrán registrar QR a nombre de otros meseros pero
 porque es una estupidez regalar tu premio a otro"*. **La atribución del escaneo NO se protege con PIN;
 solo la redención.** Está registrado a propósito para que nadie lo trate como un bug.
 
-### Preguntas abiertas de §19
+### Decisiones del dueño — 2026-09-05 (cierran el modelo; no se reabren)
 
-19.a login de admin: ¿el mismo del dashboard o uno aparte para los celulares? · 19.b ¿qué pasa con los
-meseros que ya existen con teléfono y PIN: migración o alta de cero? · 19.c con el PIN desactivado,
-¿igual se elige mesero para la atribución? · 19.d "Acumular": ¿el premio queda indefinido o mantiene la
-ventana de vencimiento actual? · 19.e ¿cuántos intentos de PIN antes de bloquear?
+**1. El celular es del RESTAURANTE, no del mesero. Confirmado.** Textual: *"si lo hacemos por mesero
+hay que estar pendiente de que cierren y abran sesión no tiene sentido alguno"*. Un login por aparato,
+y el mesero se identifica por operación — no hay sesión de mesero que abrir ni cerrar.
+
+**2. El mesero SIEMPRE selecciona su nombre, en toda operación.** Textual: *"tengo que separarlos para
+trackear eficiencia eso no se puede juntar"*. La atribución por mesero es el **propósito** de la
+pantalla, no un adorno. **Esto responde la 19.c:** con el PIN desactivado igual se elige mesero — el
+PIN protege la redención, la selección alimenta la métrica de eficiencia y no se puede saltar.
+
+**3. La lista de meseros se filtra POR SEDE.** Textual: *"si metemos a todos de todas las sedes
+buscarse a la hora de entregar premio es una focking bestialidad"*. Es la razón de producto de D11
+(un mesero es de UNA sede), que hasta hoy solo tenía razón de datos: una lista de 8 nombres es usable,
+una de 40 no. **`staff_users.location_id` (00044) es lo que hace posible este filtro.**
+
+### Preguntas abiertas de §19 — se resuelven en el spec, ANTES de codear
+
+- **19.f · La identidad del mesero (BLOQUEANTE).** Es el choque de arriba: si el teléfono deja de ser
+  obligatorio, `staff_users_phone_tenant_key` deja de garantizar nada. Hace falta otra llave — la
+  candidata natural es `UNIQUE (tenant_id, location_id, nombre)`, que además es exactamente lo que la
+  pantalla necesita para que dos "Ana" de la misma sede no sean indistinguibles al elegir.
+- **19.a** login del aparato: ¿el mismo usuario del panel, o uno aparte para los celulares?
+- **19.b** los meseros que ya existen con teléfono y PIN: ¿se migran o se dan de alta de cero?
+- **19.d** "Acumular": ¿el premio queda sin vencimiento o mantiene la ventana actual?
+- **19.e** ¿cuántos intentos de PIN antes de bloquear?
 
 ---
 

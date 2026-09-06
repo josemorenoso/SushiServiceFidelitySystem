@@ -53,16 +53,26 @@ después del deploy exitoso**.
 8. Después del deploy, en bloques chicos: **17.b**, las deudas D1–D5, y el catálogo de producto que
    prioriza el dueño en `docs/ESTADO-REQUERIMIENTOS.md` (§18 y §19 son las que más pesan para vender).
 
+**El norte, para tenerlo en cuenta al diseñar — NO se desarrolla todavía** (dueño, 2026-09-05):
+el producto va hacia **automatizaciones dentro del restaurante**. Dos concretas ya nombradas: que el
+restaurante conecte su cuenta de **Google** para responder reseñas automáticamente, y su cuenta de
+**Meta** para campañas especiales. Nada de esto se codea ahora; se anota para que ninguna decisión de
+hoy cierre esa puerta (sobre todo en `tenants.config` y en cómo se guardan credenciales de terceros).
+
 ## 4. Bloqueado: solo lo puede destrabar el dueño
 
 - **Vercel Pro activo** — sin él los dos crons `*/15` de `vercel.json` hacen fallar el build.
 - **`OPENAI_API_KEY` en Vercel** — sin ella §25 Fase 2 (domicilios dentro del producto) no se activa.
 - **Aplicar 00044 y 00045** en Supabase producción — es una migración sobre datos reales.
 - **Mirar `feat/pulido-visual`** en el navegador y decidir si se mergea.
-- **Las preguntas abiertas de producto** (§18.a–d, §19.a–e, §16.a–e, §17.a–d, §3, §15.b, §12, §5, §9):
+- **Las preguntas abiertas de producto** (§18.a–d, §16.a–e, §17.a–d, §3, §15.b, §12, §5, §9):
   la lista completa está en `docs/ESTADO-REQUERIMIENTOS.md`. Ninguna bloquea el deploy; todas bloquean
-  el trabajo que venga después.
-- **D6** separación de una sede — aplazada por decisión del dueño.
+  el trabajo que venga después. **§19 ya no está acá**: el dueño cerró su modelo el 2026-09-05 y lo que
+  queda (19.a, 19.b, 19.d, 19.e y la llave de identidad 19.f) se resuelve en su spec, no antes.
+- **D6 CERRADA** (2026-09-05): la línea de WhatsApp es **N líneas por marca y la sede no obliga a
+  ninguna** — se elige al enviar. En la práctica, una sola para todas. El eje es el cupo (calentar una
+  línea nueva), no la geografía. Detalle en `docs/features/multi-sede.md` §5, deuda 6.bis.
+- **Separación de una sede** (venta, franquicia, socio distinto) — aplazada por el dueño, 2026-09-02.
 
 ## 5. Hecho reciente
 

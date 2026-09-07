@@ -361,3 +361,103 @@
   box-shadow: 0 0 0 3px rgba(var(--brand-primary-rgb), 0.12) !important;
   outline: none !important;
 }
+/* ─── Capa visual v3 — el movimiento de la tarjeta (2026-09-07) ────────────
+ *
+ * Origen: el "Kit Visual Cada1" del dueño (investigación sobre 21st.dev,
+ * 2026-09-07). Las cuatro reglas que ordenan todo lo de abajo:
+ *
+ *   01 · Una sola cosa brilla por pantalla. En `/tarjeta` es el marco.
+ *   02 · Toda animación CONFIRMA algo que hizo el cliente (el sello que se
+ *        gana, los puntos que suben). Si se mueve sola y no confirma nada, sobra.
+ *   03 · Profundidad por luz: sombra TEÑIDA del color del objeto + borde
+ *        interior claro de 1px. Nunca una sombra gris genérica.
+ *   04 · Los números son tipografía: `tabular-nums`, peso 700, escala grande.
+ *
+ * ⚠️ Acá NO hay ni un color. A propósito: los de la tarjeta viven en
+ * `src/constants/wallet-card-theme.ts` (y salen de la marca del tenant), y
+ * llegan por `style`. Esto es solo geometría y tiempo. Un hex acá volvería a ser
+ * un color que ninguna marca puede cambiar — lo que §5 vino a resolver.
+ */
+
+/* El ángulo del gradiente cónico. Sin `@property` el navegador no sabe
+ * interpolar un <angle> y el borde vivo no gira: salta. */
+@property --shine-ang {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes shine-spin {
+  to { --shine-ang: 360deg; }
+}
+
+/* Barrido de luz que cruza la barra de progreso. */
+@keyframes bar-sweep {
+  0%        { transform: translateX(-100%); }
+  60%, 100% { transform: translateX(100%); }
+}
+
+/* Onda que sale del sello recién ganado. El color lo pone quien la usa en
+ * `--stamp-ring-color`; el blanco es solo el fallback del tema de siempre. */
+@keyframes stamp-ring {
+  from { box-shadow: 0 0 0 0 var(--stamp-ring-color, rgba(255, 255, 255, 0.6)); }
+  to   { box-shadow: 0 0 0 16px transparent; }
+}
+
+/* El ✓ del sello se DIBUJA trazo a trazo en vez de aparecer de golpe. */
+@keyframes draw-check {
+  to { stroke-dashoffset: 0; }
+}
+
+@utility animate-shine-spin {
+  animation: shine-spin 6s linear infinite;
+}
+
+@utility animate-bar-sweep {
+  animation: bar-sweep 2.6s ease-in-out infinite;
+}
+
+@utility animate-stamp-ring {
+  animation: stamp-ring 0.75s ease-out both;
+}
+
+@utility animate-draw-check {
+  animation: draw-check 0.42s ease 0.12s both;
+}
+
+/* Accesibilidad: quien pidió menos movimiento ve la tarjeta en su estado final,
+ * no a medio dibujar. El ✓ necesita el `stroke-dashoffset` explícito porque su
+ * estado "terminado" lo pone la animación, no el CSS base. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-shine-spin,
+  .animate-bar-sweep,
+  .animate-stamp-ring,
+  .animate-stamp-pop,
+  .animate-fade-in-up,
+  .animate-float,
+  .animate-bubble-pop,
+  .animate-draw-check {
+    animation: none !important;
+  }
+  .animate-draw-check {
+    stroke-dashoffset: 0 !important;
+  }
+}
+
+/* La línea que barre el marco del QR: le dice al mesero "acá se escanea" sin
+ * que tenga que leer nada. Va en % para no depender del tamaño del QR. */
+@keyframes qr-scan {
+  0%, 100% { top: 6%; }
+  50%      { top: 94%; }
+}
+
+@utility animate-qr-scan {
+  animation: qr-scan 2.6s cubic-bezier(0.6, 0, 0.4, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-qr-scan {
+    animation: none !important;
+    display: none !important;
+  }
+}

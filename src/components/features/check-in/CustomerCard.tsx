@@ -4,11 +4,13 @@ import { useEffect, useState } from 'react'
 import { ArrowLeft, ScanLine, Loader2, PartyPopper } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { useBranding } from '@/lib/branding-context'
-import { getTierEmoji } from '@/lib/tier-emojis'
 import { StampsGrid } from '@/components/features/wallet'
 import { BrandMark } from '@/components/features/branding'
+import { Odometer } from '@/components/ui/odometer'
+import { ShineBorder } from '@/components/ui/shine-border'
 import { brandWalletCardTheme } from '@/constants/wallet-card-theme'
 import { AvailableRewardBanner, type ActiveGrant } from './AvailableRewardBanner'
+import { QrCountdown } from './QrCountdown'
 
 interface TierItem {
   tier_name: string
@@ -50,7 +52,6 @@ export function CustomerCard({
   const theme = brandWalletCardTheme(branding)
   const sorted = [...tiers].sort((a, b) => a.point_threshold - b.point_threshold)
   const nextTier = sorted.find((t) => totalPoints < t.point_threshold) ?? null
-  const nextIndex = nextTier ? sorted.indexOf(nextTier) : -1
   const nextThreshold = nextTier?.point_threshold ?? totalPoints
   const remaining = nextTier ? Math.max(nextThreshold - totalPoints, 0) : 0
   const progressPercent = nextTier
@@ -83,18 +84,23 @@ export function CustomerCard({
         </div>
       )}
 
-      {/* Card */}
-      <div
+      {/* Card. Los colores salen del MISMO tema que `/tarjeta`. Antes estaban
+          copiados a mano acá y las dos pantallas se iban separando solas. */}
+      <ShineBorder
+        gradient={theme.shine}
+        radius={32}
         className="w-full max-w-sm animate-fade-in-up"
-        style={{
-          background: branding.cardBg,
-          borderRadius: '2rem',
-          border: '1.5px solid rgba(255,255,255,0.22)',
-          boxShadow: '0 25px 60px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.15)',
-          overflow: 'hidden',
-        }}
+        style={{ boxShadow: theme.cardShadow }}
       >
-        <div className="px-5 pt-7 pb-8 flex flex-col items-center">
+        <div
+          className="px-5 pt-7 pb-8 flex flex-col items-center"
+          style={{
+            background: theme.cardBg,
+            borderRadius: 'inherit',
+            border: theme.cardBorder,
+            overflow: 'hidden',
+          }}
+        >
           {/* Brand */}
           <BrandMark variant="onColor" size={52} className="mb-3" />
           <p className="text-xs font-bold tracking-[0.2em] uppercase text-white/50">
@@ -106,9 +112,14 @@ export function CustomerCard({
             ¡Hola, {name}!
           </h1>
 
-          {/* Points big */}
+          {/* Puntos: ruedan al entrar (regla 04 del kit visual). */}
           <div className="mt-3 flex items-end justify-center gap-2">
-            <span className="text-5xl font-bold text-white leading-none">{totalPoints}</span>
+            <Odometer
+              value={totalPoints}
+              ariaLabel={`${totalPoints} puntos`}
+              className="text-5xl font-bold"
+              style={{ color: theme.points, textShadow: theme.pointsShadow }}
+            />
             <span className="text-white/60 text-xl mb-0.5">pts</span>
           </div>
 
@@ -121,15 +132,22 @@ export function CustomerCard({
           <div className="mt-4 w-full">
             <div
               className="relative h-7 rounded-full overflow-hidden"
-              style={{ background: 'rgba(0,0,0,0.25)' }}
+              style={{ background: theme.barTrack }}
             >
               <div
-                className="absolute inset-y-0 left-0 rounded-full transition-all duration-1000 ease-out"
+                className="absolute inset-y-0 left-0 rounded-full overflow-hidden transition-all duration-1000 ease-out"
                 style={{
                   width: `${barWidth}%`,
-                  background: 'rgba(255,255,255,0.5)',
+                  background: theme.barFill,
+                  boxShadow: theme.barFillGlow,
                 }}
-              />
+              >
+                <span
+                  aria-hidden
+                  className="absolute inset-y-0 left-0 w-full animate-bar-sweep"
+                  style={{ background: theme.barSweep }}
+                />
+              </div>
               <div className="absolute inset-0 flex items-center justify-center">
                 <span
                   className="text-xs font-bold text-white"
@@ -141,7 +159,7 @@ export function CustomerCard({
             </div>
             {nextTier && (
               <p className="text-[11px] text-white/50 mt-1.5 text-center">
-                {getTierEmoji(nextIndex, nextTier.is_black)} Faltan{' '}
+                Faltan{' '}
                 <span className="text-white/75 font-semibold">{remaining} pts</span>{' '}
                 para {nextTier.safe_reward_title}
               </p>
@@ -190,7 +208,7 @@ export function CustomerCard({
                 color claro no se queda con un QR que ninguna cámara lee.
               · `level="H"` (30 % de redundancia) porque el logo tapa el centro.
                 Con el nivel "M" de antes, un logo encima lo volvía ilegible. */}
-          <div className="mt-5 rounded-2xl bg-white p-4 shadow-2xl">
+          <div className="relative mt-5 overflow-hidden rounded-2xl bg-white p-4 shadow-2xl">
             <QRCodeSVG
               value={qrUrl}
               size={210}
@@ -203,6 +221,10 @@ export function CustomerCard({
                   : undefined
               }
             />
+            {/* Marco de escaner: cuatro esquinas + una linea que barre. El QR
+                suelto era un cuadro blanco que no decia que hacer con el; el
+                marco lo dice sin texto, en el color de la marca. */}
+            <ScannerCorners color={branding.primary} />
           </div>
 
           {/* Estado de polling */}
@@ -213,7 +235,7 @@ export function CustomerCard({
             </div>
           )}
 
-          <p className="mt-3 text-[11px] text-white/25">Este código expira en 30 minutos</p>
+          <QrCountdown qrUrl={qrUrl} className="mt-3" />
 
           <button
             type="button"
@@ -224,7 +246,32 @@ export function CustomerCard({
             Volver
           </button>
         </div>
-      </div>
+      </ShineBorder>
     </div>
+  )
+}
+
+/**
+ * Las cuatro esquinas del marco de escaner + la linea que barre, en el color de
+ * la marca. Solo decoracion: no toca el QR ni su contraste, que los resuelve
+ * `branding.qrForeground` (pasado por `qrSafe()`).
+ */
+function ScannerCorners({ color }: { color: string }) {
+  const common = 'pointer-events-none absolute h-5 w-5'
+  return (
+    <>
+      <span className={`${common} left-2 top-2 rounded-tl-md border-l-2 border-t-2`} style={{ borderColor: color }} />
+      <span className={`${common} right-2 top-2 rounded-tr-md border-r-2 border-t-2`} style={{ borderColor: color }} />
+      <span className={`${common} bottom-2 left-2 rounded-bl-md border-b-2 border-l-2`} style={{ borderColor: color }} />
+      <span className={`${common} bottom-2 right-2 rounded-br-md border-b-2 border-r-2`} style={{ borderColor: color }} />
+      <span
+        aria-hidden
+        className="pointer-events-none absolute left-3 right-3 h-0.5 rounded-full animate-qr-scan"
+        style={{
+          background: `linear-gradient(90deg, transparent, ${color}, transparent)`,
+          boxShadow: `0 0 12px 2px ${color}59`,
+        }}
+      />
+    </>
   )
 }

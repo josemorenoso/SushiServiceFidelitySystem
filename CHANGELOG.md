@@ -8,6 +8,29 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [2026-09-07] - Consolidacion: las cuatro ramas del 07 entran a `main`
+
+**Tipo:** chore · **Rama:** `main` · **Origen:** pedido del dueno ("varias sesiones a la vez, hace falta commitear todo")
+
+- **El problema.** Cuatro sesiones cerraron el mismo dia en cuatro ramas (`feat/salud-aios`,
+  `feat/domicilios`, `feat/conexiones`, `feat/visual`) y ninguna estaba mergeada. El dueno veia en
+  `supabase/migrations/` solo las de la rama puesta y creia que le faltaban migraciones.
+- **No falta ninguna migracion.** `00048`, `00049` y `00052` son HUECOS a proposito: reservadas en
+  docs y nunca escritas. El inventario real lo da `node scripts/proxima-migracion.mjs` (hoy: 00055).
+- **Merge.** Tres conflictos reales, ninguno de logica: `DashboardSidebar.tsx` (solo la lista de
+  imports — el array ya traia las dos entradas), `CHANGELOG.md` y `ESTADO.md`.
+- **Se quito `.worktrees/visual`**, ya mergeado y limpio. ⚠️ Al hacerlo se vacio `node_modules` de
+  la RAIZ: el del worktree estaba enlazado al de la raiz y el borrado siguio el enlace. Nada del
+  repo se perdio (`node_modules` esta en `.gitignore`); se rehizo con `npm ci` y **toda la
+  verificacion se repitio despues**, porque la anterior ya no valia.
+- **Verificado sobre `main` mergeado:** `tsc` limpio · vitest **31 archivos / 502 tests** · `build`
+  OK (79 paginas, 121 rutas) · eslint con sus 7 errores preexistentes, ninguno en lo de hoy.
+- **Grafo:** 4.928 nodos / 8.697 aristas / 430 comunidades.
+- 🔴 **Mergear no despliega.** Las cinco migraciones (`00047`, `00050`, `00051`, `00053`, `00054`)
+  siguen SIN APLICAR y `main` sin pushear.
+
+---
+
 ## [2026-09-07] - Capa visual v3: la tarjeta, la pantalla de entrada y el panel
 
 **Tipo:** feat · **Rama:** `feat/visual` · **Origen:** pedido del dueno + su "Kit Visual Cada1" (21st.dev)

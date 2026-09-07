@@ -1,6 +1,6 @@
 # ESTADO — RestaurantQR / Cada1
 
-> **Última actualización:** 2026-09-07, 00:05 (sesión "plantillas: enviar tal cual o editar", Opus 5)
+> **Última actualización:** 2026-09-07, 09:30 (sesión "consolidación: las 4 ramas del 07 a `main`", Opus 5)
 > Toda sesión lo lee PRIMERO. Toda sesión que cierra un bloque lo ACTUALIZA al final. Límite: 150 líneas.
 > Lo obsoleto se **saca**, no se tacha: un ítem tachado sigue costando tokens cada vez que alguien lee esto.
 >
@@ -14,63 +14,67 @@
 
 | Qué | Estado |
 |-----|--------|
-| Código | **`main` está 3 commits ADELANTE de `origin/main`** (plantillas, 2026-09-07): mergeado local, **sin pushear ni desplegar** (decisión del dueño). Lo del 05/06, incluido QR Studio, sí está en producción |
-| Verificación | ✅ `tsc` limpio · eslint 7 errores preexistentes (React hooks, sin relación) · **vitest 27 archivos / 452 tests en verde** (medido en `feat/domicilios`, que ya trae `main` mergeado) |
+| Código | **Las 4 ramas del 07 están MERGEADAS en `main` local**: `feat/salud-aios`, `feat/domicilios`, `feat/conexiones` y `feat/visual`. `main` va **39 commits adelante de `origin/main`** (81 archivos, +10.475 líneas) y **sin pushear ni desplegar** — decisión del dueño. Lo del 05/06, incluido QR Studio, sí está en producción |
+| Verificación | ✅ Medido sobre `main` YA mergeado: `tsc` limpio · **vitest 31 archivos / 502 tests en verde** · `build` OK (79 páginas, 121 rutas) · eslint **7 errores preexistentes** (React hooks y gráficas del panel), **ninguno** en lo mergeado hoy |
 | Marcas vivas | **5**: sushi-service (542 clientes), demo-ventas (412), sushi-fun (251), don-alirio (244), cafe-frangal (8) |
-| Base de datos de producción | Aplicadas hasta la **00046**. 🔴 **La `00047` (identidad visual) está SIN APLICAR y su código YA ESTÁ DESPLEGADO** — ver §3.1. Detrás van, escritas y **sin aplicar**, la **00050** (enlace del evento), la **00051** (dominio cruzado) y la **00053** (salud + `delivery_intake_failures`): las tres están ya en `main`. La 00030 NUNCA aplicada (a propósito). La 00015 NO se aplica (reabre fuga) |
+| Base de datos de producción | Aplicadas hasta la **00046**. 🔴 **La `00047` (identidad visual) está SIN APLICAR y su código YA ESTÁ DESPLEGADO** — ver §3.1. Detrás van, escritas, **todas en `main` y ninguna aplicada**: **00050** (enlace del evento), **00051** (dominio cruzado), **00053** (salud + `delivery_intake_failures`) y **00054** (Conexiones). La 00030 NUNCA aplicada (a propósito). La 00015 NO se aplica (reabre fuga) |
+| Migraciones: dónde están | **No falta ninguna.** `00048`, `00049` y `00052` son **huecos a propósito**: reservadas en docs y nunca escritas. El directorio muestra **solo la rama puesta**; el inventario real lo da `node scripts/proxima-migracion.mjs`, que hoy dice **usar la 00055** |
 | Crons | Los 5 en `vercel.json`, corriendo. `birthday` 18:00 y `reactivation` 20:00 UTC (= 13:00/15:00 Bogotá), verificado. ⚠️ **`reward-reminder` sigue en 16:00 UTC (11:00 Bogotá)**: de los 3 del ROJO 1 se corrigieron 2. Su hora real no se pudo confirmar por retención de logs; la auditoría la estimó ≈21:00 UTC. **Decisión del dueño** |
 | n8n | Apagado. `domicilios_whatsapp_v4.json` sigue en el VPS pero ya no dispara |
-| Grafo | ⚠️ **El del árbol principal está viejo**: al día sobre `918dadd` (4.640 nodos / 7.981 aristas / 416 comunidades), o sea **sin la 00053 ni el apartado de domicilios**. Sobre `feat/domicilios` (que ya trae `main`) son **4.720 / 8.229 / 420**. El grafo solo ve la rama que el árbol tenga puesta: **`graphify update .` al mergear** |
+| Grafo | Al día sobre `main` con las 4 ramas dentro: **4.928 nodos / 8.697 aristas / 430 comunidades**. ⚠️ 169 comunidades quedaron renombradas por su hub: los nombres se refrescan con `graphify label` (cuesta LLM, no se corrió) |
 | Deadline | ~2026-09-10 — onboarding de los 25 clientes de Zernio |
 
 ## 2. En vuelo ahora mismo
 
-**Nada mío en vuelo.** Sigue viva `feat/conexiones` (signup de WhatsApp del cliente, 00052), con su
-territorio en su propia rama.
+**NADA en vuelo. El tablero está vacío y el árbol limpio.** Las cuatro ramas del 07 cerraron y
+están dentro de `main` (§1). Las ramas siguen existiendo por si hace falta mirarlas; borrarlas es
+decisión del dueño. **`.worktrees/` quedó vacío**: el de `feat/visual` se quitó al mergear.
 
-📦 **`feat/domicilios` está CERRADA y esperando merge** (el apartado de domicilios, §18.d +
-§24.3-B). Ya tiene `main` mergeado dentro, así que va limpia salvo **una línea** de
-`DashboardSidebar.tsx`, que `feat/conexiones` también toca: son dos entradas distintas del mismo
-array y se resuelven quedando las dos. Su worktree se borró al cerrar; para volver a sacarla:
-`git worktree add .worktrees/domicilios feat/domicilios`.
-
-QR Studio y plantillas cerraron los dos en `main`, que quedó **sin pushear**: lo decide el dueño.
+⚠️ **Al quitar ese worktree se vació `node_modules` de la raíz** — el del worktree estaba enlazado
+al de la raíz y el borrado recursivo se fue por el enlace. **No se perdió nada del repo** (está en
+`.gitignore`), se rehízo con `npm ci` y la verificación de §1 se repitió entera después. Si volvés
+a usar worktrees: `npm ci` en la raíz apenas quites uno, antes de creer en un `tsc` verde.
 
 📌 **Esta sección es el TABLERO.** Toda sesión anota acá su territorio (qué toca, en qué rama)
 **antes** de escribir, y lo commitea solo; si se cruza con uno ya anotado, **espera y va después**.
-Al cerrar, borra su línea. `stash` y `reset --hard` con otra sesión viva están **prohibidos**: hoy
-barrieron 12 archivos. Regla completa en `CLAUDE.md` § "Trabajar en paralelo".
+Al cerrar, borra su línea. `stash` y `reset --hard` con otra sesión viva están **prohibidos**.
+Regla completa en `CLAUDE.md` § "Trabajar en paralelo".
 
-**Repo del AIOS**: `fix/coexistencia` (v1.4.0) subida, pero **su `main` NO se pusheó** — pushearlo
-despliega el AIOS y es decisión del dueño. Parte en `…/docs/PARTE-COEXISTENCIA-2026-09-06.md`.
+**Repo del AIOS**: ✅ **`main` PUSHEADO el 2026-09-07 en `9bc3167` (v1.5.0), por orden del dueño** —
+lleva el tablero de salud y, detrás, la coexistencia (v1.4.0) y el arreglo de la sede sin
+coordenadas. **El AIOS está desplegado.** ⚠️ **`/salud` sale ENTERO EN GRIS hasta que se corra la
+`00053`** — no rompe nada del resto del panel, pero no sirve.
 
 ## 3. Siguiente, en orden
 
 1. 🔴 **Correr la `00047` en Supabase producción.** Es lo único urgente. Su código ya está vivo:
    sin ella, guardar en `/dashboard/marca` y subir el logo fallan. **Nada de lo anterior se rompe**
    —`--brand-primary` tiene su literal en `:root`— pero la feature nueva no funciona.
-   Archivo: `supabase/migrations/00047_identidad_visual.sql`. Detrás va la **`00050`** (enlace del
-   evento), que **debe aplicarse ANTES** de desplegar su código: si no, crear un evento da 42703.
-2. **Asignarle sede a los meseros que ya existen.** Todos tienen `location_id` NULL, así que **no
+2. 🔴 **Antes de pushear/desplegar `main`, correr las otras cuatro**, en orden: **`00050`** (si no,
+   crear un evento da 42703), **`00051`** (dominio cruzado), **`00053`** (sin ella el tablero del
+   AIOS sale en gris y el apartado de Domicilios dice "todavía no se está guardando") y **`00054`**
+   (sin ella Conexiones responde **403**, que parece permisos y no lo es). **Mergear no despliega:
+   el código de las cuatro ya está en `main` local, y ahí no le hace daño a nadie.**
+3. **Asignarle sede a los meseros que ya existen.** Todos tienen `location_id` NULL, así que **no
    aparecen en ningún escáner**: es lo que más se nota en la operación diaria. El trabajo está
    preparado en `SQL-PARA-CORRER/meseros-sin-sede/`; falta la DECISIÓN, persona por persona.
-3. **Zernio E2E** con la cuenta ya limpia → desbloquea al primer cliente nuevo bajo coexistencia.
+4. **Zernio E2E** con la cuenta ya limpia → desbloquea al primer cliente nuevo bajo coexistencia.
    Con él va **`ZERNIO_TEMPLATE_SAMPLE_IMAGE_URL`** = `…/event-media/5103017800669793459.jpg` en
    Vercel (la muestra que Meta YA aprobó en Twilio; el HEIC del bucket **no sirve**, Meta solo
    acepta JPEG/PNG). Sin ella las 2 de calendario salen bloqueadas, con el motivo escrito.
-4. **De §18 quedan DOS, no cuatro** (`docs/DECISION-18-DOMICILIOS-COEXISTENCIA.md`). 18.a y 18.b
-   las cerraron los hechos y el código, y **18.d está construida** en `feat/domicilios`. Vivas:
-   **18.e** — hoy el sistema le contesta a los clientes de Sushi Fun que ese número «es exclusivo
-   para mensajes automáticos», por su línea real — y **18.c**, la plantilla de fallo de Zernio,
-   que se somete a Meta cuando se agende el primer alta por el wizard.
-5. **De `docs/AUDITORIA-POST-DEPLOY-2026-09-06.md` queda vivo el AMARILLO de `reward-reminder`**
-   (fila de Crons). El **ROJO 3** (un domicilio perdido solo dejaba un `console.error`) ya está
-   **entero en `main` y sin desplegar**: la tabla y el `INSERT` los trajo la 00053, y la pantalla
-   que los muestra está en `feat/domicilios`, sin mergear. Sigue vivo **hasta que la 00053 corra
-   en Supabase**: hasta entonces no se guarda ni un fallo. Los 3 AMARILLO del calendario, cerrados (§5). Siguen stale:
-   `docs/ESTADO-REQUERIMIENTOS.md` y `docs/04-deployment.md`.
-6. **Aplicar la 00030** en ventana tranquila (cierra el riesgo del DEFAULT puente).
-7. **Onboarding de los 25**: wildcard DNS ya resuelto y probado con Sushi Fun.
+5. **`owner_email` está vacío en las 5 marcas**, así que hoy Conexiones **solo la opera el
+   super-admin**: `isTenantOwner()` es fail-closed y la pantalla lo dice. Es una llamada por cada
+   alta hasta que el AIOS lo mande.
+6. **De §18 quedan DOS** (`docs/DECISION-18-DOMICILIOS-COEXISTENCIA.md`): **18.e** —hoy el sistema
+   le contesta a los clientes de Sushi Fun que ese número «es exclusivo para mensajes
+   automáticos», por su línea real— y **18.c**, la plantilla de fallo de Zernio. 18.a, 18.b y 18.d
+   las cerraron los hechos y el código.
+7. **De `docs/AUDITORIA-POST-DEPLOY-2026-09-06.md` queda vivo el AMARILLO de `reward-reminder`**
+   (fila de Crons). El **ROJO 3** está **entero en `main`** —tabla, `INSERT` y pantalla— y sigue
+   vivo **solo hasta que la 00053 corra en Supabase**. Los 3 AMARILLO del calendario, cerrados
+   (§5). Siguen stale: `docs/ESTADO-REQUERIMIENTOS.md` y `docs/04-deployment.md`.
+8. **Aplicar la 00030** en ventana tranquila (cierra el riesgo del DEFAULT puente).
+9. **Onboarding de los 25**: wildcard DNS ya resuelto y probado con Sushi Fun.
 
 **El norte, para tenerlo en cuenta al diseñar — NO se desarrolla todavía** (dueño, 2026-09-05): el
 producto va hacia **automatizaciones dentro del restaurante**: conectar **Google** para responder
@@ -79,8 +83,8 @@ todo en `tenants.config` y en cómo se guardan credenciales de terceros).
 
 ## 4. Bloqueado: solo lo puede destrabar el dueño
 
-- **Correr la `00047` y la `00050`** (§3.1). Son migraciones sobre datos reales.
-- **Pushear `main` del AIOS**, que lo despliega (§2).
+- **Correr la `00047`, `00050`, `00051`, `00053` y `00054`** (§3.1–2). Son migraciones sobre datos reales.
+- **Pushear `main` del producto**, que lo despliega. Va DESPUÉS de las migraciones (§3.2).
 - **Borrar el Supabase de Sushi Fun.** Se acordó esperar a un fin de semana de operación normal. El
   respaldo son los `SQL-PARA-CORRER/sushi-fun/*.sql` (1.421 filas), que **NO cubren** Auth, RLS ni
   storage. El Vercel viejo queda **pausado, no borrado**.
@@ -96,45 +100,44 @@ todo en `tenants.config` y en cómo se guardan credenciales de terceros).
 
 ## 5. Hecho reciente
 
-- **Un domicilio perdido deja rastro** (2026-09-07, ROJO 3, **ya en `main`, sin desplegar**):
+- **Un domicilio perdido deja rastro** (2026-09-07, ROJO 3, **en `main`, sin desplegar**):
   `delivery_intake_failures` (00053). El INSERT va dentro de `logDeliveryIntakeFailure()`, que
   pasa a `async`. Sin esa tabla, «llegaron tres pedidos y se perdieron» y «hoy no pidió nadie»
   eran el mismo dato. Con ella va `aios_health()`, que le da al AIOS conteos por marca sin un solo
-  GRANT nuevo sobre una tabla. (Lo trajo `feat/salud-aios`, que se mergeó a `main` sin anotarlo
-  acá; se anota ahora.)
-- **El apartado de Domicilios** (2026-09-07, §18.d + §24.3-B, rama `feat/domicilios`, **sin
-  desplegar ni mergear**): el dashboard tenía 14 secciones y ninguna de domicilios. Pero lo que de
-  verdad arregla es otra cosa: **«llegaron tres pedidos y se perdieron» y «hoy no pidió nadie» eran
-  el mismo dato** — cero filas en `visits`. `/dashboard/domicilios` los separa, y separa además
-  «no hubo fallos» de «no pudimos leer» y de «falta la 00053»: un cero solo se pinta cuando es
-  cierto. Muestra **a qué número manda el operador el cuadro en ESA marca** (el requisito que
-  destapó la coexistencia), reusa `/dashboard/authorized-numbers` tal cual, y trae la alarma de
-  silencio con **umbral derivado del historial de cada marca**: 3 días sin pedidos alarman a Sushi
-  Service y no dicen nada de una barbería. **Solo lectura, sin migración, y no manda ni un
-  mensaje** (eso es §24-A, en el AIOS). → `docs/features/delivery-dashboard.md`.
-- **Plantillas: enviar tal cual o editar** (2026-09-07): un alta nueva dejaba las 13 vacías y el único
-  camino masivo solo se abría al CAMBIAR de estilo — con el default `calido`, 13 ediciones a mano. Cada
-  fila tiene ya «Enviar a Meta» (texto del catálogo, sin casilla: no lo escribió el dueño) y «Editar».
-- **El `SALIR` se ve y se contesta** (2026-09-06): `setWhatsappOptOut()` devolvía `void`, así que
-  "marqué a un cliente" y "no había a quién marcar" (cero filas, un éxito para Postgres) llegaban
-  idénticos: el log decía "persistido" con el panel en cero y las dos eran ciertas. Ahora devuelve
-  `matched`, y al cliente se le contesta por TwiML. → `docs/features/twilio-opt-out.md`.
-- **Los 3 AMARILLO del calendario** (2026-09-06): **(1)** la hora del picker se leía en la zona del
-  navegador; la conversión vive ya solo en `src/lib/timezone.ts`. **(2)** `calendar_event` **gotea por
-  `send_queue`**: antes lo que excedía el cupo se perdía como `failed`. **(3)** el reclamo no contaba
-  filas y dos corridas creían ganar; lo cierra `claimScheduledEvent()` (`calendar-claim.test.ts`).
-- **Enlace del evento** (2026-09-06): `link_url` (00050, **sin aplicar**) va dentro de `{{5}}` para no
-  re-aprobar en las 25. Imagen de la master **approved**; **Sushi Fun no la tiene**; video **rejected**.
-- **La Recovery Zone se deriva de los días del tenant** (2026-09-06): era fija 18–25 con días de
-  reactivación configurables; bajar el suave a 15 dejaba 15–17 sin proteger.
-- **D2 cerrada — el dominio cruzado va en las DOS direcciones** (2026-09-06, `00051`): faltaba el
-  trigger simétrico sobre `tenants`; sin él una marca podía tomar el subdominio de la sede de OTRA.
-- **El alta de un mesero la gobierna el ROL** (2026-09-06): pedía Celular y PIN aunque eligieras
-  "Mesero", un modelo que §19 ya había borrado. Ahora `waiter` = Nombre + Sede; `supervisor`/`admin`
-  = además Celular y PIN. El panel MARCA a los que no tienen sede: no salen en ningún escáner.
-- **Sushi Fun absorbido como tenant** (2026-09-06): 1.421 filas, cero cruces, las otras 4 intactas.
-  Conserva **su cuenta de Twilio**. Pendientes: su Supabase y su Vercel (§4).
-- Lo anterior a esto (§19, F7/F4/F3, identidad visual) está desplegado y vive en `CHANGELOG.md`.
+  GRANT nuevo sobre una tabla. Lo trajo `feat/salud-aios`.
+- **El apartado de Domicilios** (2026-09-07, §18.d + §24.3-B, **en `main`, sin desplegar**): lo que
+  de verdad arregla no es el hueco en el menú — **«llegaron tres pedidos y se perdieron» y «hoy no
+  pidió nadie» eran el mismo dato**, cero filas en `visits`. `/dashboard/domicilios` los separa, y
+  separa además «no hubo fallos» de «no pudimos leer» y de «falta la 00053»: un cero solo se pinta
+  cuando es cierto. Muestra **a qué número manda el operador el cuadro en ESA marca**, reusa
+  `/dashboard/authorized-numbers` tal cual, y su alarma de silencio deriva el umbral **del
+  historial de cada marca**. **Solo lectura, sin migración y no manda ni un mensaje.**
+  → `docs/features/delivery-dashboard.md`.
+- **Conexiones: el cliente conecta su propio WhatsApp** (2026-09-07, **en `main`, sin desplegar**,
+  migración **00054**): el dueño no tenía NINGUNA pantalla que le dijera por qué número sale su
+  WhatsApp, y el alta se cerraba por fuera del producto. Ese rodeo tapaba dos cosas rotas: el
+  `redirect_url` apuntaba a `/api/webhook/zernio`, que solo exporta POST y le da **405** a un
+  navegador, y `whatsapp.number.verification_required` —donde el alta se traba EN SILENCIO— llegaba
+  al webhook y no lo miraba nadie. El nonce del `state` es NUESTRO e `isTenantOwner()` es
+  fail-closed: todos VEN, solo el dueño ACTÚA. → `docs/features/conexiones.md`.
+- **Capa visual v3** (2026-09-07, **en `main`, sin desplegar**): la tarjeta del cliente, el
+  check-in y el panel. **Solo pinta** — ni una regla de negocio, ni una migración, ni un endpoint.
+  Salen los emojis del sistema (🥉🥈🥇💎), que cada teléfono dibuja distinto, y de paso se cierran
+  ~20 hex horneados en pantalla pública (la fuga de §5). **Sin probar en un teléfono real**: falta
+  la pasada visual del dueño.
+- **Plantillas: enviar tal cual o editar** (2026-09-07): un alta nueva dejaba las 13 vacías y el
+  único camino masivo se abría solo al CAMBIAR de estilo — con el default `calido`, 13 ediciones a
+  mano. Cada fila tiene ya «Enviar a Meta» y «Editar».
+- **Lo del 2026-09-06, ya desplegado** (detalle entero en `CHANGELOG.md`): el `SALIR` se ve y se
+  contesta (`setWhatsappOptOut()` devolvía `void`, así que "marqué a un cliente" y "no había a
+  quién marcar" llegaban idénticos) · los 3 AMARILLO del calendario (zona horaria, `calendar_event`
+  goteando por `send_queue`, reclamo con `claimScheduledEvent()`) · la Recovery Zone derivada de
+  los días del tenant · el alta de mesero gobernada por el ROL, con los sin-sede MARCADOS · Sushi
+  Fun absorbido (1.421 filas, cero cruces; conserva su Twilio, §4).
+  Con migración **sin aplicar**: el **enlace del evento** (`link_url` dentro de `{{5}}`, 00050) y
+  **D2, el dominio cruzado simétrico** (00051) — sin el trigger sobre `tenants` una marca podía
+  tomar el subdominio de la sede de OTRA.
+- Lo anterior (§19, F7/F4/F3, identidad visual) está desplegado y vive en `CHANGELOG.md`.
 
 ## 6. Deudas y límites conocidos
 
@@ -156,13 +159,14 @@ quién activó un aparato solo queda en `device_name` y `trusted_at`.
 **Fuera de multi-sede:**
 - **00030 sin aplicar**: DEFAULT puente → un INSERT sin `tenant_id` se va calladito a Sushi Service.
   Y **17.b**: "quién es Black" difiere entre la tarjeta (`black-tier.ts`) y el panel (`POWER_RANKS`).
-- **Domicilios perdidos sin rastro** (ROJO 3): **escrito, y la mitad ya en `main`.** La tabla y el
-  `INSERT` dentro de `logDeliveryIntakeFailure()` llegaron con la 00053; la pantalla que los
-  muestra sigue en `feat/domicilios`, sin mergear. **Nada de esto sirve hasta que la 00053 se
-  corra en Supabase**: hasta entonces el INSERT no tiene dónde escribir, ese `console.error` es el
-  único registro y, con n8n apagado, no hay otro.
-- **00048 y 00049 están RESERVADAS**, no libres: son de multi-sede (`…/2026-09-02-multisede-design.md`
-  §6.3 y §7.2) y las dos dependen de una decisión del dueño. El número se saca con el script.
+- **Domicilios perdidos sin rastro** (ROJO 3): **escrito y entero en `main`** —tabla, `INSERT`
+  dentro de `logDeliveryIntakeFailure()` y pantalla—, pero **no sirve hasta que la 00053 se corra
+  en Supabase**: hasta entonces el INSERT no tiene dónde escribir, ese `console.error` es el único
+  registro y, con n8n apagado, no hay otro.
+- **00048, 00049 y 00052 son HUECOS a propósito**, no migraciones perdidas: las dos primeras están
+  RESERVADAS para multi-sede (`…/2026-09-02-multisede-design.md` §6.3 y §7.2) y dependen de una
+  decisión del dueño; la 00052 la reservó el diseño de Conexiones y al final se escribió como
+  00054. **Un hueco es gratis; dos archivos con el mismo número, no.** El número sale del script.
 - **Choques de migración en ramas muertas**: `sushi-sync` (00015) y `port/sushi-fun-2.8` (00028).
 - **Catálogo de producto sin empezar** (referidos, push, fatiga, §7, §8, §18): no es deuda técnica.
   Ver `docs/ESTADO-REQUERIMIENTOS.md`.

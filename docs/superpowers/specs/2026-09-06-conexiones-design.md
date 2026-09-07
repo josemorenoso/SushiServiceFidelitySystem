@@ -197,7 +197,50 @@ que el día que se enrute por línea no haya que rehacerla. **Lo que este diseñ
 `tenants.zernio_*` sigue siendo la **línea principal** y `sendViaZernio()` **no se toca ni una
 línea**. La tabla es estado del alta, no del envío.
 
-### 4.1 Multi-sede: quién usa qué línea — **D6 se reabre y se decide** (2026-09-07)
+### 4.0 D6, RE-CERRADA el 2026-09-07 (tarde): **un número por marca, compartido**
+
+El §4.1 de abajo reabrió D6 por la mañana («que cada sede pueda tener su número»). **A la tarde el
+dueño la volvió a cerrar**, con el argumento correcto: *«si dos sedes tienen números diferentes eso
+implicaría un estado de salud para cada sede, plantillas nuevas para cada sede — es demasiado, no
+tiene sentido»*. Es exactamente lo que dice el §4.1: dos números son dos WABA, y eso arrastra
+plantillas duplicadas, cupo por línea y resolución del entrante por dos cuentas.
+
+**Vale lo de siempre: una línea para toda la marca.** La 00048 `location_messaging` **vuelve a
+quedar reservada y sin usar**. `tenant_connections` sigue soportando N líneas por marca — pero por
+la razón ORIGINAL de D6, que es el **cupo** (calentar una línea nueva), **no la geografía**.
+
+El §4.1 se conserva entero, sin borrar: es el análisis de lo que costaría, y es la razón por la que
+la respuesta es que no. Si algún día se reabre, ahí está el precio ya calculado.
+
+#### «Si comparten número, ¿las plantillas tienen que cambiar por sede?» — **NO. Verificado.**
+
+Esta era la duda que quedaba, y el catálogo la responde solo. Las variables de las 13 plantillas
+(`src/constants/template-catalog.ts`) son **nombre del cliente, puntos ganados, saldo, nombre del
+nivel, premio y camino de niveles**. Ninguna lleva sede, dirección ni enlace. Y el nombre del
+negocio **no es variable**: se resuelve en el token `{negocio}` *antes* de someter el texto a Meta,
+igual que el emoji del rubro.
+
+O sea: **las 13 plantillas hablan del cliente y de sus puntos, que son de la MARCA** — una fila por
+persona por marca (`customers_phone_tenant_key`), puntos unificados. No hay nada adentro que dependa
+de en qué sede comió.
+
+**No hacen falta dos apartados de plantillas. Hace falta uno solo, el que ya existe.** Lo que sí
+tenga que cambiar por sede viaja como **variable en el momento del envío**, no como una plantilla
+distinta aprobada aparte — que es justo para lo que sirve que el contrato de `{{n}}` sea fijo. El
+precedente ya está: el enlace del evento viaja **dentro de `{{5}}`** (00050) precisamente para no
+tener que re-aprobar nada en las 25 marcas.
+
+Y para lo que es «a dónde te mando / cómo te contacto» de cada sede ya existe el mecanismo:
+**`restaurant_locations.config`**, override por sede de esas claves de `tenants.config`; vacío =
+hereda la marca. No necesita ni una plantilla nueva.
+
+> Regla, entonces: **la plantilla es de la marca. La sede viaja en las variables.** Duplicar
+> plantillas solo tendría sentido con una **segunda WABA**, o sea con un segundo número — que es
+> justamente lo que se decidió no hacer.
+
+---
+
+### 4.1 El análisis de «cada sede su número» — CONSERVADO, no vigente (ver §4.0)
 
 > «Tengo que poder decidir si usan el mismo número todas, o cada una el suyo. Si una usa
 > coexistencia y la otra línea nueva, ¿entendés?»

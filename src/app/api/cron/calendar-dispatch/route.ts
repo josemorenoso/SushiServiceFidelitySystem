@@ -23,11 +23,12 @@ async function handleCron() {
           ok: true,
           sent: result.sent,
           failed: result.failed,
+          queued: result.queued,
           excluded_monthly_cap: result.excluded_monthly_cap,
           campaign_id: result.campaign_id,
         })
         console.log(
-          `[CronCalendar] ✓ ${event.title}: sent=${result.sent} failed=${result.failed} excluded=${result.excluded_monthly_cap}`
+          `[CronCalendar] ✓ ${event.title}: sent=${result.sent} queued=${result.queued} failed=${result.failed} excluded=${result.excluded_monthly_cap}`
         )
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Error desconocido'
@@ -38,11 +39,13 @@ async function handleCron() {
 
     const totalSent = results.reduce((acc, r) => acc + (r.sent ?? 0), 0)
     const totalFailed = results.reduce((acc, r) => acc + (r.failed ?? 0), 0)
+    const totalQueued = results.reduce((acc, r) => acc + (r.queued ?? 0), 0)
 
     return NextResponse.json({
       ok: true,
       processed: dueEvents.length,
       total_sent: totalSent,
+      total_queued: totalQueued,
       total_failed: totalFailed,
       results,
     })

@@ -408,7 +408,13 @@ async function filtrarPorGuardas(
   // Puede haberle llegado otra campaña entre el encolado y ahora.
   // `birthday` y `reward_reminder` están exentos por diseño (ver
   // MONTHLY_CAP_SOURCES en constants/rewards.ts).
-  const EXENTOS_DEL_CAP = new Set(['birthday', 'reward_reminder'])
+  //
+  // `calendar_event` también está exento, y por una razón distinta a las otras dos: el
+  // camino INMEDIATO de `executeAutoEvent()` nunca aplicó el frequency cap. Si el
+  // drenador se lo aplicara, la mitad encolada de UN MISMO evento se comportaría distinto
+  // de la mitad que salió al instante — la gente que no cupo en el presupuesto de hoy
+  // quedaría sin invitación justo por haber quedado de última en la lista.
+  const EXENTOS_DEL_CAP = new Set(['birthday', 'reward_reminder', 'calendar_event'])
   const trasCap: QueueRow[] = []
   for (const item of conCliente) {
     const cliente = porId.get(item.customer_id!)

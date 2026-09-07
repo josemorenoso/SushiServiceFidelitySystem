@@ -298,11 +298,21 @@ cumpleaños y una campaña manual.
 | `birthday` | ❌ Todavía no | Ver la pregunta abierta al final. |
 | `reactivation` | ❌ Todavía no | Variables volátiles (fecha límite del premio) y un efecto posterior: `grantReward()`. Si el envío se difiere, **¿cuándo se otorga el premio?** No está decidido. |
 | `reward_reminder` | ❌ Todavía no | `days_left` caduca: encolar hoy y enviar en dos días manda un número mentiroso. Y `markReminderSent()` tendría que moverse al drenaje. |
-| `calendar_event` | ❌ Todavía no | La lógica de media provider-aware vive dentro de `executeAutoEvent()`. |
+| `calendar_event` | ✅ Sí (2026-09-06) | Envía lo que cabe en el presupuesto del día y encola el resto. La media provider-aware se resuelve al encolar: `media_url` guarda la URL pública COMPLETA (la que Zernio necesita como `headerMediaUrl`) y `{{6}}` viaja en `variables` solo para Twilio. `expiresAt` = fin del día del evento (P1). |
 | Golden Bullet (`import`) | ❌ No | Es el Bloque 5; depende de los Bloques 3 y 4. Además sigue registrando `messageType: 'manual'` en vez de `'import'`. |
 
 **El drenador ya sabe enviar cualquiera de esos tipos** — lo que falta es decidir qué variables se
 congelan y cuáles se recalculan al drenar, y dónde van los efectos posteriores.
+
+> **`calendar_event` está exento del frequency cap al drenar**, junto a `birthday` y
+> `reward_reminder`, pero por una razón distinta: el camino inmediato de `executeAutoEvent()`
+> **nunca** aplicó ese cap. Si el drenador se lo aplicara, la mitad encolada de un mismo evento se
+> comportaría distinto de la mitad que salió al instante — quedaría sin invitación justo quien cayó
+> de último en la lista. El cap MENSUAL sí se re-evalúa en los dos caminos.
+>
+> **Y con esto `calendar-dispatch` deja de ser el eslabón frágil del doble disparo:** su reclamo
+> ahora comprueba el conteo de filas afectadas (`claimScheduledEvent()`, ver más abajo el §243 y
+> `docs/features/calendar.md`).
 
 ## Endpoints
 
@@ -384,8 +394,8 @@ Corregido en el bloque 13 de `00037` (la migración **no estaba aplicada** todav
 
 ### Pregunta abierta que este bloque deja sobre la mesa
 
-**¿Cómo se difieren los mensajes con datos que caducan y con efectos posteriores?** Afecta a
-`reactivation`, `reward_reminder` y `calendar_event`. Concretamente:
+**¿Cómo se difieren los mensajes con datos que caducan y con efectos posteriores?** Sigue abierta
+para `reactivation` y `reward_reminder`. Concretamente:
 
 1. ¿Qué variables se congelan al encolar y cuáles se recalculan al drenar? (`days_left` y las fechas
    límite tendrían que recalcularse siempre.)
@@ -396,3 +406,10 @@ Corregido en el bloque 13 de `00037` (la migración **no estaba aplicada** todav
    simplemente no se manda?
 
 No se asumió ninguna respuesta (Mandamiento I).
+
+> **`calendar_event` salió de esta pregunta el 2026-09-06**, porque no tiene ninguno de los dos
+> problemas: **(1)** ninguna de sus variables caduca —el título, la fecha del evento y el CTA son
+> fijos desde que se crea—, así que congelarlas al encolar es correcto; y **(2)** no tiene efectos
+> posteriores tipo `grantReward()`: al enviar solo se registra el `campaign_message` y se marca
+> `last_campaign_at`, que es justo lo que el drenador ya hace por su cuenta. Su `expires_at` sí tenía
+> respuesta obvia: **el fin del día del evento**. Ver `docs/features/calendar.md`.

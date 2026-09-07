@@ -1,9 +1,10 @@
 # Feature: Verificación Cliente-Mesero con QR Dinámico
 
-> **Estado:** ✅ COMPLETADO · **§19 (el aparato es del local) implementado el 2026-09-05**,
-> con la migración `00046` escrita y **SIN APLICAR**.
+> **Estado:** ✅ COMPLETADO · **§19 (el aparato es del local) implementado el 2026-09-05 y
+> DESPLEGADO a producción el 2026-09-06.**
+> ⚠️ **El estado de la `00046` en producción está SIN CONFIRMAR** — ver el recuadro de abajo.
 > **Prioridad:** URGENTE
-> **Última actualización:** 2026-09-05
+> **Última actualización:** 2026-09-06
 > **Spec de §19:** `docs/superpowers/specs/2026-09-05-staff-scanner-19-design.md`
 > **Archivos clave:** `src/app/(public)/mesero/*`, `src/app/api/staff/*`, `src/app/api/check-in/route.ts`, `src/app/api/reward-redeem/route.ts`, `src/lib/staff-auth.ts`, `src/hooks/useWaiters.ts`, `src/components/features/staff/WaiterPicker.tsx`, `src/app/(dashboard)/dashboard/staff/page.tsx`
 > **Dependencias:** `qrcode.react` (QR del cliente), `html5-qrcode` (escáner), `jose` (JWT — solo legado)
@@ -77,7 +78,7 @@ NO pide PIN; solo la redención** (decisión del dueño: regalarle tu premio a o
 la del aparato. 8 nombres se buscan; 40 no. **La sede vive en la FILA y se relee en cada petición, nunca en
 el JWT.**
 
-**Schema — migración `00046`, se escribe y se deja SIN aplicar:**
+**Schema — migración `00046` (estado en producción SIN CONFIRMAR, ver la cabecera):**
 
 | Cambio | Por qué |
 |---|---|
@@ -926,7 +927,29 @@ leían `staff_user_id`).
 ## §19 — El aparato es del local (2026-09-05)
 
 > Spec completo: `docs/superpowers/specs/2026-09-05-staff-scanner-19-design.md`.
-> Migración `00046`: **escrita y SIN aplicar.** Aplicarla en producción lo decide el dueño.
+>
+> **Migración `00046`: estado en producción SIN CONFIRMAR (2026-09-06).** El commit de merge
+> `5badf79` dice que ya está aplicada; cuatro documentos decían lo contrario. La auditoría
+> post-deploy no tuvo acceso a Supabase para resolverlo y los logs de Vercel no aportan señal
+> (cero tráfico real a `/api/staff/waiters` desde el deploy). Este doc deja de afirmar cualquiera
+> de las dos cosas hasta que alguien mire la base.
+>
+> **Qué se rompe si NO está aplicada:** el check-in normal de un mesero con teléfono **no** —esas
+> rutas usan columnas de la `00044`—. Lo que falla, en silencio, es el **alta de un mesero sin
+> teléfono**: el `INSERT` con `phone: null` da `23502`, que el `catch` no maneja, y sale un 500
+> genérico. Es decir, se rompe justo la función estrella de §19.
+>
+> **Cómo confirmarlo** (SQL Editor de Supabase, solo lectura):
+>
+> ```sql
+> select is_nullable from information_schema.columns
+>  where table_name = 'staff_users' and column_name = 'phone';
+> select conname  from pg_constraint where conname  = 'staff_users_identidad_minima';
+> select indexname from pg_indexes   where indexname = 'staff_users_nombre_sede_key';
+> ```
+>
+> Si falta cualquiera de las tres, aplicar `supabase/migrations/00046_escaner_meseros.sql` (es
+> idempotente, con guardas `IF NOT EXISTS`) y corregir este recuadro en el mismo commit.
 
 ### Los tres flujos
 

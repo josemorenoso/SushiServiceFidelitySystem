@@ -27,7 +27,12 @@
   reclamos simultaneos contra Postgres real (falla contra el codigo viejo, verificado).
 - **Docs:** `calendar.md`, `send-governance.md` y `staff-qr-scan.md` corregidos.
   `ESTADO-REQUERIMIENTOS.md` y `04-deployment.md` siguen stale, anotado en ESTADO.md §3.6.
-- Sin migraciones. `tsc` limpio, eslint en su linea base (7 errores preexistentes), 23 archivos / 385 tests.
+- **Tests nuevos:** `tests/db/calendar-claim.test.ts` (la carrera, contra Postgres real) y
+  `tests/unit/timezone.test.ts`, que fija el anclaje a Bogota **independiente de la zona de la
+  maquina** — y que de paso destapo que `2026-02-31` rodaba en silencio a marzo 3 en vez de
+  rechazarse; corregido en `appLocalInputToISO()`.
+- Sin migraciones. `tsc` limpio, eslint en su linea base (7 errores preexistentes),
+  24 archivos / 400 tests en verde.
 
 ---
 

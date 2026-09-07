@@ -70,7 +70,8 @@ Todo pedido que no llega a la base pasa por `logDeliveryIntakeFailure()`, que de
 `[Delivery][FALLO]` con el tenant, el operador, el **motivo real** y el mensaje original. En
 Twilio, además, el operador recibe un texto que distingue *"escribe mejor el pedido"* de
 *"avisa al administrador"*. La tabla completa de motivos está en
-`docs/features/delivery-ai-parsing.md`.
+`docs/features/delivery-ai-parsing.md`, y desde el 2026-09-07 **el dueño la ve traducida en
+`/dashboard/domicilios`** (`docs/features/delivery-dashboard.md`).
 
 ### Plantilla WhatsApp por escenario (v1.0.9+)
 - Cliente nuevo → `welcome_template_sid` (`{{1}}=nombre`, `{{2}}=puntos totales`, `{{3}}=roadmap tiers`)
@@ -219,9 +220,14 @@ por IP, exige `tenant_slug` y `celular`.
 - [ ] Borrar `N8N_DOMICILIOS_WEBHOOK_URL` del proyecto Vercel (ya no se lee en ningún sitio)
 
 ### Abierto
-- [ ] **§24-B — apartado de domicilios**: la lista de qué clientes entraron por domicilio y la
-      **alarma de silencio**. Hoy el registro de un pedido perdido es el log de Vercel, no una
-      tabla. Cuando esa tabla exista, el `INSERT` va dentro de `logDeliveryIntakeFailure()`
+- [x] ~~**§24-B — apartado de domicilios**~~ — **HECHO** (2026-09-07, `feat/domicilios`, sin
+      desplegar): `/dashboard/domicilios` explica el flujo, muestra a qué número se manda el
+      cuadro, lista los pedidos que entraron y los que no, y trae la alarma de silencio con el
+      umbral derivado del historial de cada marca. → `docs/features/delivery-dashboard.md`.
+      La tabla `delivery_intake_failures` la crea la **00053** y el `INSERT` va dentro de
+      `logDeliveryIntakeFailure()`; mientras no esté aplicada, la pantalla lo **dice** en vez de
+      pintar cero fallos. Queda vivo de §24-B: **la ALERTA** (que alguien se entere sin abrir el
+      panel), que es §24-A y vive en el AIOS.
 - [ ] Confirmación al operador en el canal Zernio (exige una plantilla aprobada propia — ver
       `docs/features/zernio-messaging.md`)
 - [ ] Fase 3 — Google Contacts con OAuth propio del cliente (**diferida**, §25.7 respuesta 1)

@@ -15,7 +15,7 @@
 | Qué | Estado |
 |-----|--------|
 | Código | **`main` está 3 commits ADELANTE de `origin/main`** (plantillas, 2026-09-07): mergeado local, **sin pushear ni desplegar** (decisión del dueño). Lo del 05/06, incluido QR Studio, sí está en producción |
-| Verificación | ✅ `tsc` limpio · eslint 7 errores preexistentes (React hooks, sin relación) · **vitest 25 archivos / 418 tests en verde** |
+| Verificación | ✅ `tsc` limpio · eslint 7 errores preexistentes (React hooks, sin relación) · **vitest 25 archivos / 418 tests en verde** — en `feat/domicilios`, **26 / 442** |
 | Marcas vivas | **5**: sushi-service (542 clientes), demo-ventas (412), sushi-fun (251), don-alirio (244), cafe-frangal (8) |
 | Base de datos de producción | Aplicadas hasta la **00046**. 🔴 **La `00047` (identidad visual) está SIN APLICAR y su código YA ESTÁ DESPLEGADO** — ver §3.1. La 00030 NUNCA aplicada (a propósito). La 00015 NO se aplica (reabre fuga) |
 | Crons | Los 5 en `vercel.json`, corriendo. `birthday` 18:00 y `reactivation` 20:00 UTC (= 13:00/15:00 Bogotá), verificado. ⚠️ **`reward-reminder` sigue en 16:00 UTC (11:00 Bogotá)**: de los 3 del ROJO 1 se corrigieron 2. Su hora real no se pudo confirmar por retención de logs; la auditoría la estimó ≈21:00 UTC. **Decisión del dueño** |
@@ -25,23 +25,8 @@
 
 ## 2. En vuelo ahora mismo
 
-- **Domicilios — el apartado del dashboard (§18.d + §24.3-B)** · rama `feat/domicilios`, salida de
-  `main` · worktree `.worktrees/domicilios` · **SIN MIGRACIÓN**. Territorio, todo NUEVO:
-  `src/app/(dashboard)/dashboard/domicilios/`, `src/app/api/dashboard/domicilios/`,
-  `src/components/dashboard/domicilios/`, `src/services/delivery-dashboard.service.ts`,
-  `src/lib/delivery-reasons.ts`, `src/lib/delivery-silence.ts` y sus tests.
-  **SOLO LECTURA** sobre `visits`, `customers`, `tenants` y `delivery_intake_failures` (00053).
-  **No toca** `delivery.service.ts`, `webhook/twilio-incoming`, `webhook/zernio`,
-  `webhook/delivery`, `tenants`, gobernanza ni el AIOS. §18.c y §18.e quedan FUERA de alcance.
-  ⚠️ **UN cruce declarado: `DashboardSidebar.tsx`** — 1 línea de nav. `feat/conexiones` agrega
-  otra ahí mismo; son líneas distintas del mismo array y el merge se resuelve a mano en
-  segundos. Nada más compartido.
-  ⚠️ **La 00053 NO está mergeada en `main`** (vive en `feat/salud-aios`). El Bloque 3 se
-  construye contra su forma exacta y **degrada solo** si la tabla no existe: la pantalla dice
-  «falta la 00053» en vez de pintar cero fallos, que sería mentir.
-
-**También en vuelo, en otra rama:** `feat/conexiones` (signup de WhatsApp del cliente, 00052).
-Su territorio completo está en su propia rama; acá solo se anota el cruce del sidebar.
+**Nada mío en vuelo.** Sigue viva `feat/conexiones` (signup de WhatsApp del cliente, 00052), con su
+territorio en su propia rama.
 
 QR Studio y plantillas cerraron los dos en `main`, que quedó **sin pushear**: lo decide el dueño.
 
@@ -67,8 +52,11 @@ despliega el AIOS y es decisión del dueño. Parte en `…/docs/PARTE-COEXISTENC
    Con él va **`ZERNIO_TEMPLATE_SAMPLE_IMAGE_URL`** = `…/event-media/5103017800669793459.jpg` en
    Vercel (la muestra que Meta YA aprobó en Twilio; el HEIC del bucket **no sirve**, Meta solo
    acepta JPEG/PNG). Sin ella las 2 de calendario salen bloqueadas, con el motivo escrito.
-4. **Responder §18.a–d** (`docs/DECISION-18-DOMICILIOS-COEXISTENCIA.md`): las últimas preguntas que
-   bloquean el onboarding.
+4. **De §18 quedan DOS, no cuatro** (`docs/DECISION-18-DOMICILIOS-COEXISTENCIA.md`). 18.a y 18.b
+   las cerraron los hechos y el código, y **18.d está construida** en `feat/domicilios`. Vivas:
+   **18.e** — hoy el sistema le contesta a los clientes de Sushi Fun que ese número «es exclusivo
+   para mensajes automáticos», por su línea real — y **18.c**, la plantilla de fallo de Zernio,
+   que se somete a Meta cuando se agende el primer alta por el wizard.
 5. **De `docs/AUDITORIA-POST-DEPLOY-2026-09-06.md` quedan vivos: ROJO 3** (un domicilio perdido no
    deja rastro: `logDeliveryIntakeFailure()` solo va a `console.error`) y el AMARILLO de
    `reward-reminder` (fila de Crons). Los 3 AMARILLO del calendario, cerrados (§5). Siguen stale:
@@ -100,6 +88,16 @@ todo en `tenants.config` y en cómo se guardan credenciales de terceros).
 
 ## 5. Hecho reciente
 
+- **El apartado de Domicilios** (2026-09-07, §18.d + §24.3-B, rama `feat/domicilios`, **sin
+  desplegar ni mergear**): el dashboard tenía 14 secciones y ninguna de domicilios. Pero lo que de
+  verdad arregla es otra cosa: **«llegaron tres pedidos y se perdieron» y «hoy no pidió nadie» eran
+  el mismo dato** — cero filas en `visits`. `/dashboard/domicilios` los separa, y separa además
+  «no hubo fallos» de «no pudimos leer» y de «falta la 00053»: un cero solo se pinta cuando es
+  cierto. Muestra **a qué número manda el operador el cuadro en ESA marca** (el requisito que
+  destapó la coexistencia), reusa `/dashboard/authorized-numbers` tal cual, y trae la alarma de
+  silencio con **umbral derivado del historial de cada marca**: 3 días sin pedidos alarman a Sushi
+  Service y no dicen nada de una barbería. **Solo lectura, sin migración, y no manda ni un
+  mensaje** (eso es §24-A, en el AIOS). → `docs/features/delivery-dashboard.md`.
 - **Plantillas: enviar tal cual o editar** (2026-09-07): un alta nueva dejaba las 13 vacías y el único
   camino masivo solo se abría al CAMBIAR de estilo — con el default `calido`, 13 ediciones a mano. Cada
   fila tiene ya «Enviar a Meta» (texto del catálogo, sin casilla: no lo escribió el dueño) y «Editar».
@@ -144,8 +142,10 @@ quién activó un aparato solo queda en `device_name` y `trusted_at`.
 **Fuera de multi-sede:**
 - **00030 sin aplicar**: DEFAULT puente → un INSERT sin `tenant_id` se va calladito a Sushi Service.
   Y **17.b**: "quién es Black" difiere entre la tarjeta (`black-tier.ts`) y el panel (`POWER_RANKS`).
-- **Domicilios perdidos sin rastro** (ROJO 3): `logDeliveryIntakeFailure()` solo va a `console.error`,
-  la tabla de §24-B no existe y no hay alerta. Con n8n apagado es el único registro.
+- **Domicilios perdidos sin rastro** (ROJO 3): **escrito en dos ramas, ninguna desplegada.** La tabla
+  y el `INSERT` van en la 00053 (`feat/salud-aios`); la pantalla que los muestra, en
+  `feat/domicilios`. Hasta que las dos se mergeen y la 00053 corra, `logDeliveryIntakeFailure()`
+  sigue yendo solo a `console.error` y con n8n apagado ese log es el único registro.
 - **00048 y 00049 están RESERVADAS**, no libres: son de multi-sede (`…/2026-09-02-multisede-design.md`
   §6.3 y §7.2) y las dos dependen de una decisión del dueño. El número se saca con el script.
 - **Choques de migración en ramas muertas**: `sushi-sync` (00015) y `port/sushi-fun-2.8` (00028).

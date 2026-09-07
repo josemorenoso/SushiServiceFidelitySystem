@@ -143,11 +143,17 @@ el prefijo estable `[Delivery][FALLO]`, el tenant, el operador, el motivo y el m
 original recortado. Ese prefijo es sobre lo que se monta una alerta de log en Vercel sin
 tocar código.
 
-> **Deuda abierta, explícita:** hoy el registro del fallo es el **log**, no una tabla. El
-> «apartado de domicilios» con la lista de clientes cargados y la alarma de silencio es
-> §24-B, es trabajo aparte y lleva su propia migración. Cuando esa tabla exista, el `INSERT`
-> va **dentro de `logDeliveryIntakeFailure()`** y en ningún otro sitio: por eso es una
-> función y no un `console.error` suelto en cada `catch`.
+> **Actualizado el 2026-09-07 — la deuda se cerró en dos mitades, ninguna desplegada aún:**
+> la tabla `delivery_intake_failures` la crea la **00053** (`feat/salud-aios`) y su `INSERT` va
+> **dentro de `logDeliveryIntakeFailure()`** y en ningún otro sitio — por eso esto es una
+> función y no un `console.error` suelto en cada `catch`. El **apartado de domicilios** que la
+> lee es `/dashboard/domicilios` (`feat/domicilios`,
+> `docs/features/delivery-dashboard.md`), y ahí **esta tabla de motivos se muestra traducida**:
+> `src/lib/delivery-reasons.ts` es su espejo y un test lo vigila en las dos direcciones — si
+> acá aparece un motivo nuevo, allá hay que traducirlo **en el mismo commit**.
+>
+> Mientras la 00053 no esté aplicada, el registro del fallo sigue siendo **solo el log**, y la
+> pantalla lo dice con esas palabras en vez de pintar «cero fallos».
 
 ## Variables de entorno
 

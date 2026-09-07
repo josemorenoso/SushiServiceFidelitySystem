@@ -14,10 +14,10 @@
 
 | Qué | Estado |
 |-----|--------|
-| Código | **Las 4 ramas del 07 están MERGEADAS en `main` local**: `feat/salud-aios`, `feat/domicilios`, `feat/conexiones` y `feat/visual`. `main` va **39 commits adelante de `origin/main`** (81 archivos, +10.475 líneas) y **sin pushear ni desplegar** — decisión del dueño. Lo del 05/06, incluido QR Studio, sí está en producción |
+| Código | **`main` PUSHEADO a `origin` el 2026-09-07 (`3b5ec78..4d8ace1`, 41 commits)** — decisión del dueño, tomada sabiendo que las 5 migraciones siguen sin aplicar (§3.1). Lleva las 4 ramas del 07 dentro: `feat/salud-aios`, `feat/domicilios`, `feat/conexiones` y `feat/visual`. **Si la integración de git de Vercel está activa, esto ya desplegó a producción.** Local y remoto en sync. Rama de vistazo: `preview/capa-visual`, también en `origin`. Quedaron SIN mergear a propósito `master`, `port/sushi-fun-2.8` y `sushi-sync`: son líneas viejas o de otro producto, no parte de este trabajo |
 | Verificación | ✅ Medido sobre `main` YA mergeado: `tsc` limpio · **vitest 31 archivos / 502 tests en verde** · `build` OK (79 páginas, 121 rutas) · eslint **7 errores preexistentes** (React hooks y gráficas del panel), **ninguno** en lo mergeado hoy |
 | Marcas vivas | **5**: sushi-service (542 clientes), demo-ventas (412), sushi-fun (251), don-alirio (244), cafe-frangal (8) |
-| Base de datos de producción | Aplicadas hasta la **00046**. 🔴 **La `00047` (identidad visual) está SIN APLICAR y su código YA ESTÁ DESPLEGADO** — ver §3.1. Detrás van, escritas, **todas en `main` y ninguna aplicada**: **00050** (enlace del evento), **00051** (dominio cruzado), **00053** (salud + `delivery_intake_failures`) y **00054** (Conexiones). La 00030 NUNCA aplicada (a propósito). La 00015 NO se aplica (reabre fuga) |
+| Base de datos de producción | Aplicadas hasta la **00046**. 🔴🔴 **CINCO migraciones sin aplicar y el código de las cinco YA ESTÁ EN `origin/main`**: `00047` (identidad visual), `00050` (enlace del evento), `00051` (dominio cruzado), `00053` (salud + `delivery_intake_failures`) y `00054` (Conexiones). Ya no es "antes de desplegar": el código salió primero, así que **cada minuto sin correrlas es una función rota en producción** — ver §3.1. La 00030 NUNCA aplicada (a propósito). La 00015 NO se aplica (reabre fuga) |
 | Migraciones: dónde están | **No falta ninguna.** `00048`, `00049` y `00052` son **huecos a propósito**: reservadas en docs y nunca escritas. El directorio muestra **solo la rama puesta**; el inventario real lo da `node scripts/proxima-migracion.mjs`, y el numero de la proxima **sale de el, nunca de este doc**: cualquier `000NN` escrito aca el script lo lee como RESERVA y lo saltea |
 | Crons | Los 5 en `vercel.json`, corriendo. `birthday` 18:00 y `reactivation` 20:00 UTC (= 13:00/15:00 Bogotá), verificado. ⚠️ **`reward-reminder` sigue en 16:00 UTC (11:00 Bogotá)**: de los 3 del ROJO 1 se corrigieron 2. Su hora real no se pudo confirmar por retención de logs; la auditoría la estimó ≈21:00 UTC. **Decisión del dueño** |
 | n8n | Apagado. `domicilios_whatsapp_v4.json` sigue en el VPS pero ya no dispara |
@@ -47,14 +47,22 @@ coordenadas. **El AIOS está desplegado.** ⚠️ **`/salud` sale ENTERO EN GRIS
 
 ## 3. Siguiente, en orden
 
-1. 🔴 **Correr la `00047` en Supabase producción.** Es lo único urgente. Su código ya está vivo:
-   sin ella, guardar en `/dashboard/marca` y subir el logo fallan. **Nada de lo anterior se rompe**
-   —`--brand-primary` tiene su literal en `:root`— pero la feature nueva no funciona.
-2. 🔴 **Antes de pushear/desplegar `main`, correr las otras cuatro**, en orden: **`00050`** (si no,
-   crear un evento da 42703), **`00051`** (dominio cruzado), **`00053`** (sin ella el tablero del
-   AIOS sale en gris y el apartado de Domicilios dice "todavía no se está guardando") y **`00054`**
-   (sin ella Conexiones responde **403**, que parece permisos y no lo es). **Mergear no despliega:
-   el código de las cuatro ya está en `main` local, y ahí no le hace daño a nadie.**
+1. 🔴🔴 **Correr las CINCO migraciones en Supabase producción. Es lo único urgente y ya no
+   admite espera:** el 2026-09-07 el dueño decidió pushear `main` **antes** de correrlas, así que
+   el orden natural quedó invertido y el código está vivo sin su esquema. En el SQL Editor, el
+   archivo completo, uno detrás del otro:
+   **`00047`** (sin ella, guardar en `/dashboard/marca` y subir el logo fallan) →
+   **`00050`** (sin ella, crear un evento da 42703) →
+   **`00051`** (dominio cruzado; ⚠️ **puede ABORTAR sola** si ya hay un host apuntando a dos
+   marcas: si aborta, NO se fuerza — se resuelve a quién pertenece cada host primero, y las otras
+   cuatro corren igual) →
+   **`00053`** (sin ella el tablero del AIOS sale en gris y Domicilios dice "todavía no se está
+   guardando") →
+   **`00054`** (sin ella Conexiones responde **403**, que parece permisos y no lo es).
+   La `00051` y la `00054` traen autoverificación al final: si algo queda a medias abortan con
+   `FALTA: …`. **Lo visual (tarjeta, check-in, panel) no depende de ninguna: eso salió sano.**
+2. **Smoke test** del `docs/RUNBOOK-DEPLOY.md` §5 con Sushi Service real, apenas terminen las
+   cinco: crear un evento con enlace, abrir Conexiones, y mirar la tarjeta en un celular.
 3. **Asignarle sede a los meseros que ya existen.** Todos tienen `location_id` NULL, así que **no
    aparecen en ningún escáner**: es lo que más se nota en la operación diaria. El trabajo está
    preparado en `SQL-PARA-CORRER/meseros-sin-sede/`; falta la DECISIÓN, persona por persona.

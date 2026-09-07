@@ -1,94 +1,126 @@
-# Feature: QR Studio (Generador de QR personalizable para imprimir)
+# Feature: QR Studio (el QR imprimible de cada sede)
 
-> **Estado:** Implementado (v1.7.0 — §3: la config deja de vivir en `localStorage`)
-> **Archivos clave:** `src/app/(dashboard)/dashboard/qr/page.tsx`, `src/lib/utils/qr-poster.ts`
-> **Hermano:** [`identidad-visual.md`](identidad-visual.md) — el logo y el color de la marca
-> **Dependencias:** `qrcode` (ya instalada) — todo el render es client-side con `<canvas>`, sin servicios externos
+> **Estado:** Implementado (v1.8.0 — el Studio se reduce a **una sede, un QR, en SVG**)
+> **Archivos clave:** `src/app/(dashboard)/dashboard/qr/page.tsx`, `src/lib/utils/qr-svg.ts`,
+> `src/app/api/dashboard/qr-locations/route.ts`
+> **Decisiones que lo gobiernan:** [`DECISIONES-QR-Y-SEDE-2026-09-06.md`](../DECISIONES-QR-Y-SEDE-2026-09-06.md) — D-QR-1, D-QR-3 y D-QR-4
+> **Hermanos:** [`multi-sede.md`](multi-sede.md) (de dónde sale la sede) · [`staff-qr-scan.md`](staff-qr-scan.md) (dónde vive ahora la mesa)
+> **Dependencias:** `qrcode` (ya instalada). Todo el render es client-side, sin servicios externos.
 
 ---
 
-## Descripción
-Evolución de la página "Código QR por Mesa" a un **QR Studio**: el dueño del negocio genera material imprimible (QR de mesa, póster, cartel) **dopaminico y vistoso** sin necesidad de un diseñador, eligiendo:
+## Qué hace hoy
 
-1. **Tema visual** según el tipo de negocio (patrón de iconos de fondo + paleta de colores)
-2. **Tamaño de impresión** a 300 DPI (mesa, A5, A4 póster, A3 cartel, cuadrado para pizarra)
-3. **Textos personalizables** (titular gancho + subtítulo)
-4. Color de acento y número de mesa (ya existentes). **El logo ya no es de esta página**: es el de la
-   marca, se administra en `/dashboard/marca` (§6) y acá solo se muestra cuál se va a estampar
+Elegís una **sede** y bajás su QR de check-in en **SVG** (y en PNG, como respaldo). Nada más.
 
-## Objetivo
-Eliminar la dependencia de diseñar un material nuevo para cada cliente del modelo clone-por-cliente. Cada restaurante/barbería/café arma su pieza en minutos desde el dashboard.
+Un SVG es vector: no tiene resolución. El mismo archivo sirve para un sticker de 5 cm y para una
+pancarta de 3 m. El diseño de la pieza lo arma quien sepa —el diseñador del restaurante, Canva, la
+imprenta— con el QR adentro.
 
-## Temas disponibles (`QR_THEMES`)
-| ID | Negocio | Patrón de fondo (emojis) | Paleta |
-|----|---------|--------------------------|--------|
-| `restaurante` | Restaurante | 🍽️ 🍷 🔥 🥘 | Rojo cálido sobre crema |
-| `barberia` | Barbería | 💈 ✂️ 🪒 | Azul marino + rojo barber |
-| `cafe` | Café | ☕ 🥐 🫘 | Café/marrón sobre beige |
-| `bar` | Bar / Cocteles | 🍸 🍹 🍻 | Violeta neón sobre oscuro |
-| `pizzeria` | Pizzería | 🍕 🧀 🍅 | Verde/rojo italiano |
-| `sushi` | Sushi | 🍣 🥢 🍱 | Negro + rojo japonés |
-| `postres` | Postres / Heladería | 🍰 🍦 🧁 | Rosa pastel |
-| `elegante` | Premium / BLACK | ✦ ✧ ★ | Negro + dorado |
+## Por qué hace MENOS que antes
 
-Cada tema define: fondo, opacidad/iconos del patrón, gradiente del header, color del QR, color de textos y fondo de la tarjeta del QR.
+Hasta el 2026-09-06 esta pantalla armaba pósters completos: 8 temas de negocio, 5 tamaños de
+impresión a 300 DPI, titular, subtítulo, color de acento, logo al centro y **un QR distinto por cada
+mesa**, todo dibujado en un `<canvas>`.
 
-## Tamaños de impresión (`QR_SIZES`) — 300 DPI
-| ID | Uso | Físico | Píxeles |
-|----|-----|--------|---------|
-| `mesa` | Tent card / mesa | 10×15 cm | 1181×1772 |
-| `cuadrado` | Sticker / pizarra | 12×12 cm | 1417×1417 |
-| `a5` | Media carta | 14.8×21 cm | 1748×2480 |
-| `a4` | Póster | 21×29.7 cm | 2480×3508 |
-| `a3` | Cartel grande | 29.7×42 cm | 3508×4961 |
+**Veredicto del dueño:** *"la gente no va a imprimir con los diseños, es muy básico"*. Eran 583
+líneas sosteniendo algo que nadie mandaba a imprenta.
 
-> El render es proporcional: el layout se calcula en unidades relativas al ancho/alto del canvas, por lo que cualquier tamaño sale nítido. Costo de cómputo: solo el canvas del navegador (sin tokens externos).
+### El póster está EN PAUSA, no borrado (D-QR-3)
 
-## Layout del póster (de arriba hacia abajo)
-1. Fondo del tema + patrón de emojis en grilla diagonal (baja opacidad)
-2. Nombre del negocio (header, color del tema)
-3. **Titular gancho** editable (default: "¡GANA PREMIOS GRATIS!") — grande, color de acento
-4. Subtítulo editable (default: "Escanea, regístrate y suma puntos en cada visita")
-5. Tarjeta blanca redondeada con sombra que contiene el **QR** (+ logo al centro, ECC H)
-6. CTA: "Sólo escanea el QR y regístrate"
-7. Etiqueta de mesa (MESA N / GENERAL) prominente
+| Qué | Dónde quedó |
+|---|---|
+| `src/lib/utils/qr-poster.ts` | **Intacto en el repo.** Ya no lo importa ninguna pantalla; sí lo sigue usando el test espejo de la whitelist |
+| `qr_studio.theme/size/accent/headline/subline/tables` | **Siguen en la whitelist** de `src/lib/tenant-config-paths.ts` y **siguen guardados** en `tenants.config` de los tenants que ya los tenían. Nada se borró |
+| `QR_THEME_IDS` / `QR_SIZE_IDS` | Siguen siendo espejo de `QR_THEMES` / `QR_SIZES`, con su test |
 
-## Persistencia — §3
+Volver a encender los diseños es revertir un commit, no reconstruir una feature. **El rediseño
+visual del QR queda fuera de alcance** hasta que el dueño lo defina.
 
-**Antes:** seis claves de `localStorage` (`qr_color`, `qr_logo_dataurl`, `qr_theme`, `qr_size`,
-`qr_headline`, `qr_subline`). El diseño que el restaurante mandó a imprenta se perdía al cambiar de
-equipo, de navegador o al limpiar el caché, y nadie podía reimprimir la misma pieza.
+## Un QR por SEDE, y por qué no hay alternativa (D-QR-1)
 
-**Ahora:** `tenants.config.qr_studio` (`theme`, `size`, `accent`, `headline`, `subline`, `tables`),
-por `PUT /api/dashboard/tenant-config` con un botón **"Guardar diseño"** explícito. Viaja con la
-cuenta.
+> *"si todos los primeros escaneos son libres, no se va a saber de ninguna manera en qué sede están"*
 
-**Migración de lo que había:** la primera vez que se abre la página sin config en el servidor, se
-sube lo que hubiera en `localStorage` y después se limpian esas claves. Si la subida falla, el
-`localStorage` **se deja donde está** — es lo único que queda del diseño y borrarlo sería perderlo.
-`qr_logo_dataurl` solo se borra: su reemplazo es `branding.logo_url`.
+Un cliente **nuevo** no tiene tarjeta digital, así que **no hay ningún QR de cliente que el mesero
+pueda escanear**. Su primera visita es obligatoriamente el flujo del cartel (`/check-in`), y ahí el
+cartel es la **única** señal de sede que existe.
 
-> ⚠️ `loadImage()` de `qr-poster.ts` pone `crossOrigin = 'anonymous'` en las imágenes remotas. El
-> póster se arma en un `<canvas>` y se exporta con `toDataURL()`; dibujar ahí una imagen de otro
-> origen sin permiso CORS deja el canvas *tainted* y `toDataURL()` lanza `SecurityError`, tirando la
-> descarga entera. Con el logo en un data URL nunca pasó; con el logo en Storage, pasa siempre. En
-> los data URL no se toca.
+**La sede se resuelve del HOST, nunca de un parámetro.** No existe ni va a existir `?sede=`. Por eso
+el QR de una sede es su subdominio:
+
+```
+https://laureles.clubsushx.constelarys.com/check-in
+```
+
+### Una sede sin subdominio no tiene QR, y la pantalla lo dice
+
+`checkInUrlForDomain()` devuelve `null` si la sede no tiene `domain`, y la pantalla la muestra
+**deshabilitada** con un aviso.
+
+⚠️ **No es una restricción cosmética.** Con 2+ sedes activas, el dominio **raíz** deja de registrar
+clientes nuevos: `pickLocationForHost()` devuelve `requiresChoice` y `/api/check-in` responde **409**
+pidiendo elegir sede. Un QR impreso sobre el dominio raíz sería un cartel que **no registra a
+nadie** — y eso no se descubre hasta que ya está pegado en la pared.
+
+La sede principal de cada tenant vivo **ya tiene** subdominio: la `00042` le copió el `tenants.domain`
+que ya está impreso en los QR viejos (cero reimpresión). Las sedes nuevas reciben el suyo al darlas
+de alta (F8, wizard del AIOS).
+
+## La mesa ya no está acá (D-QR-4)
+
+El QR por mesa codificaba `?mesa=N` y terminaba en `visits.table_number`. **Ese dato no se perdió: se
+mudó.** Ahora la mesa la elige el **mesero** al escanear, en `/mesero/confirm` — entrada numérica,
+**opcional, nunca bloquea el check-in**.
+
+- `visits.table_number` y la migración `00009` **no se tocan**: el histórico vive ahí.
+- `CheckInForm.tsx` **sigue leyendo `?mesa=N`** de la URL. Es compatibilidad, no una feature viva:
+  hay carteles por mesa ya pegados en mesas reales y mientras existan siguen trayendo su número.
+  **No es código muerto — está comentado como tal para que nadie lo borre.**
+- En el autoservicio (cliente escaneando el cartel) la mesa ya no se conoce, y está bien: la mesa
+  solo se sabe cuando hay un mesero de por medio.
+
+## Tres decisiones del archivo que parecen estéticas y no lo son
+
+1. **Negro sobre blanco.** Máximo contraste, y es lo que mejor imprime cualquier imprenta. El color
+   de la marca va en el diseño **alrededor** del QR: un acento claro sobre fondo claro es un código
+   que no escanea, y se descubre tarde.
+2. **Corrección de errores `H`** (~30% recuperable). Es lo que deja meter un logo en el centro sin
+   romper el código. El archivo sale preparado aunque el rediseño no esté hecho.
+3. **Quiet zone de 4 módulos.** Es lo que exige la norma. Recortarla es la causa número uno de un QR
+   impreso que no escanea.
+
+El `<svg>` sale con `width`/`height` en **milímetros** *y* con su `viewBox` intacto: solo el viewBox
+lo deja a merced de cada programa, solo las medidas lo vuelven rígido. Las dos cosas juntas.
 
 ## Componentes / Archivos
 | Archivo | Responsabilidad |
 |---------|----------------|
-| `src/lib/utils/qr-poster.ts` | Lógica pura de render: temas, tamaños, `composeQrPoster()` |
-| `src/app/(dashboard)/dashboard/qr/page.tsx` | UI del QR Studio (selección de tema/tamaño/textos, preview, descargas) |
-| `src/lib/tenant-config-paths.ts` | Valida `qr_studio.*` en el server. ⚠️ Su `QR_THEME_IDS` / `QR_SIZE_IDS` son **espejo** de `QR_THEMES` / `QR_SIZES`: se cambian los dos lados o ninguno (hay un test que los compara) |
+| `src/lib/utils/qr-svg.ts` | Puro: `buildQrSvg()`, `buildQrPngDataUrl()`, `checkInUrlForDomain()` y el tipo `QrLocation` |
+| `src/app/api/dashboard/qr-locations/route.ts` | GET de las sedes activas **con su `domain`**. Ver abajo por qué es una ruta nueva |
+| `src/app/(dashboard)/dashboard/qr/page.tsx` | UI: selector de sede, vista previa, descarga SVG/PNG |
+| `src/lib/utils/qr-poster.ts` | **Congelado** (D-QR-3). El póster de temas y mesas, en pausa |
+| `tests/unit/qr-svg.test.ts` | Fija que la sede viaja en el host, que sin subdominio no hay QR y que el SVG conserva su `viewBox` |
+
+### Por qué `/api/dashboard/qr-locations` y no una de las rutas que ya existían
+
+- **`/api/dashboard/location`** devuelve un **objeto plano** con la sede principal. Su contrato está
+  congelado: devolver una lista rompe `dashboard/settings/page.tsx` en silencio.
+- **`/api/dashboard/location-scope`** sí devuelve la lista, pero su `LocationOption`
+  (`src/lib/location-scope-shared.ts`) alimenta el selector de **todo** el panel. Agregarle `domain`
+  mueve un hub por una pantalla sola.
+
+La ruta nueva es de solo lectura y no comparte tipo con nadie. Devuelve **todas** las sedes activas
+de la marca, incluidas las que no tienen subdominio: quien imprime el material de una sede necesita
+ver justamente eso.
 
 ## Restricciones
-- El logo lo acota la ruta de subida (`/api/dashboard/brand-logo`): entrada de hasta 8 MB, guardado
-  como PNG de 512 px como máximo. Se superpone al centro del QR, ECC `H` tolera 30 % de oclusión.
-- El número de mesas está acotado a 1–200 en el server (`qr_studio.tables`).
-- "Descargar todas las mesas" usa el tema/tamaño seleccionados.
-- Los emojis del patrón se renderizan con la fuente del sistema operativo — pueden variar levemente entre equipos (no afecta el QR).
+- Sin sedes activas no hay nada que imprimir, y la pantalla lo dice en vez de mostrar un QR vacío.
+- El PNG de respaldo sale a 2000×2000 px (≈16,9 cm a 300 DPI), **sin tema, sin textos y sin logo**:
+  es el mismo QR, no el póster viejo.
+- El SVG se descarga por `Blob` y no por `data:` — un `data:` largo lo truncan algunos navegadores.
 
 ## Pendiente
-- [x] ~~Persistir la config por tenant~~ → hecho en §3 (2026-09-06)
-- [ ] (Futuro) Subir patrones/imágenes de fondo propias del cliente
-- [ ] (Futuro) Export a PDF multi-página con todas las mesas
+- [x] ~~Persistir la config por tenant~~ → §3 (2026-09-06); la config sigue guardada aunque la UI esté en pausa
+- [x] ~~SVG + un QR por sede + sacar las mesas del QR~~ → 2026-09-06
+- [ ] **Rediseño visual del QR** — fuera de alcance hasta que el dueño lo defina (D-QR-3)
+- [ ] Subdominio automático al dar de alta una sede — es **F8**, wizard del AIOS (D-QR-1)

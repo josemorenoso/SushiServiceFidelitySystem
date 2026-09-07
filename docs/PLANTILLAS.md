@@ -431,50 +431,115 @@ _Responde SALIR para no recibir más mensajes._
 ## Plantilla 12 — Evento con Imagen (Calendar)
 
 **Key en admin_settings:** `event_template_image_sid`
-**Tipo Twilio:** `twilio/media`
-**Categoría Meta:** `MARKETING`
-**Variables:** `{{1}}`=Nombre · `{{2}}`=Restaurante · `{{3}}`=Título evento · `{{4}}`=Fecha · `{{5}}`=CTA · `{{6}}`=**path del archivo dentro del bucket `event-media`** (NO la URL completa)
+**Tipo Twilio:** `twilio/media` · **Categoría Meta:** `MARKETING` · **Idioma:** `es`
 
-> **El contrato de 6 variables NO se amplía.** El enlace opcional del evento (`link_url`, 00050) se
-> compone **dentro de `{{5}}`** (`"<CTA> 👉 <link>"`), no en un `{{7}}`: agregar una variable obliga a
-> crear y re-aprobar una plantilla en las 25 cuentas, 24-72h cada una. Y `{{5}}` no puede llevar saltos
-> de línea — Twilio los rechaza con **21656** y eso tumba el envío de la audiencia entera.
+### Cuál usar (verificado contra Twilio el 2026-09-06)
 
-> **Antes de pegar un SID acá, verificalo:** `node --env-file=<env de la cuenta> scripts/verificar-plantillas-evento.mjs`
-> (solo lectura, no envía nada). Comprueba las tres condiciones que hacen daño en silencio si fallan:
-> que sea `twilio/media`, que la media tenga `{{6}}` **dinámico** (una media fija manda la imagen de
-> muestra a todos) y que esté **approved**. Estado verificado el 2026-09-06 en
-> `docs/features/calendar.md` § "Verificación del envío con imagen".
+| Cuenta Twilio | SID a pegar en Ajustes | Estado |
+|---|---|---|
+| Master `ACa5e3…dd7d` — Sushi Service y toda marca **sin** subcuenta propia | **`HXf30219c2b31c3ac1c6eb751d2b4ea689`** (`evento_imagen__sushi_service_barra__v2`) | ✅ **approved**, media dinámica, dominio correcto |
+| Master — `HX76a64b…` (v1), `combomundial`, `dia_del_sushi` | — | ❌ **NO USAR**: approved pero con media **FIJA**. Todos los clientes recibirían la imagen de muestra |
+| **Sushi Fun** `AC0470…8e87` (cuenta propia) | — | ❌ **No existe ninguna `twilio/media`** en esa cuenta: hay que crearla y esperar a Meta |
+| Don Alirio `ACf551…8576` (cuenta propia) | — | ❌ Sin plantilla media (última revisión 2026-08-21) |
 
-### Media dinámica — cómo funciona (v2.4.5)
+**Para revisar cualquier cuenta, incluida una marca nueva del onboarding:**
 
-Twilio solo admite variables en la URL de media **después del dominio**. Por eso la plantilla se aprueba con el dominio del bucket como parte **fija** y `{{6}}` como el **path** del archivo:
-
-```
-media: ["https://<proj>.supabase.co/storage/v1/object/public/event-media/{{6}}"]
-→ al enviar: contentVariables { "6": "<event_id>/1720000000_flyer.jpg" }
+```bash
+node --env-file=<env de esa cuenta> scripts/verificar-plantillas-evento.mjs
 ```
 
-Meta aprueba la **estructura** (header de imagen + texto), no la imagen concreta: una vez aprobada, cada evento manda su propia imagen **sin re-aprobar nada**.
+Es **solo lectura, no envía nada**, y comprueba las tres condiciones que hacen daño en silencio si
+fallan: que sea `twilio/media`, que la media lleve `{{6}}` **dinámico** y que esté **approved**.
+Imprime al final qué SID pegar. Son los mismos tres chequeos que `assertEventTemplateUsable()` hace
+en caliente antes de despachar un evento.
 
-⚠️ `ContentSid` y `MediaUrl` son **mutuamente excluyentes**: la media sale únicamente de la plantilla y no se puede sobreescribir al enviar.
+### Estructura exacta de la aprobada (copiada de la Content API, no de memoria)
 
-⚠️ El **sample** de `{{6}}` debe ser un archivo real y público del bucket — Meta lo descarga para revisar la plantilla.
+**Variables:** `{{1}}`=Nombre · `{{2}}`=Restaurante · `{{3}}`=Título del evento · `{{4}}`=Fecha legible ·
+`{{5}}`=CTA · `{{6}}`=**path del archivo dentro del bucket `event-media`** (NO la URL completa)
+
+**Media:**
 
 ```
-¡Hola {{1}}! 🎉 *{{2}}* te invita a *{{3}}* — {{4}}.
+https://bredfyugmjjctxysnasw.supabase.co/storage/v1/object/public/event-media/{{6}}
+```
+
+**Samples con los que Meta la aprobó:**
+
+```json
+{"1":"María","2":"\"Sushi Service Barra\"","3":"Festival Gastronómico",
+ "4":"sábado 14 de junio","5":"¡Te esperamos con tu familia! 🍽️","6":"5103017800669793459.jpg"}
+```
+
+**Cuerpo, literal:**
+
+```
+¡Hola {{1}}! 🎉
+
+*{{2}}* tiene el placer de invitarte a vivir una noche especial:
+*{{3}}* 🍽️
+
+📅 {{4}}
 
 {{5}}
 
+¡Te esperamos con tu familia!
+
 _Responde SALIR para no recibir más mensajes._
+```
+
+⚠️ **`{{5}}` NO es la última línea del mensaje.** Debajo van el cierre fijo y el aviso de SALIR. Como
+el enlace del evento (`link_url`, 00050) se pega al final de `{{5}}`, en el teléfono aparece **en
+medio**, no al final. Es a propósito: la alternativa era un `{{7}}` y re-aprobar en las 25 cuentas.
+
+### Media dinámica — cómo funciona
+
+Twilio solo admite variables en la URL de media **después del dominio**. Por eso la plantilla se
+aprueba con el dominio del bucket como parte **FIJA** y `{{6}}` como el **path** del archivo:
+
+```
+media: ["https://<proj>.supabase.co/storage/v1/object/public/event-media/{{6}}"]
+→ al enviar: contentVariables { "6": "1720000000_flyer.jpg" }
+```
+
+Meta aprueba la **estructura** (header de imagen + texto), no la imagen concreta: una vez aprobada,
+cada evento manda su propia imagen **sin re-aprobar nada**.
+
+⚠️ El dominio es fijo → **todo flyer debe vivir en el bucket `event-media` de ESE proyecto**. Una
+plantilla creada contra otro Supabase entrega 404 a Meta.
+
+⚠️ El path que manda `/api/dashboard/calendar/media-upload` es **plano** (sin subcarpetas), igual que
+el sample aprobado: el valor se sustituye dentro de una URL ya formada y una barra dependería de que
+Twilio no la escape.
+
+⚠️ `ContentSid` y `MediaUrl` son **mutuamente excluyentes**: la media sale únicamente de la plantilla
+y no se puede sobreescribir al enviar.
+
+⚠️ El **sample** de `{{6}}` debe ser un archivo real y público del bucket — Meta lo descarga para
+revisar la plantilla.
+
+### El contrato de 6 variables NO se amplía
+
+El enlace opcional del evento se compone **dentro de `{{5}}`** (`"<CTA> 👉 <link>"`), no en un `{{7}}`:
+una variable nueva obliga a crear y re-aprobar una plantilla en las 25 cuentas, 24-72h cada una. Y
+`{{5}}` no puede llevar saltos de línea — Twilio los rechaza con **21656** y eso tumba el envío de la
+audiencia entera, no el de un cliente. Ver `docs/features/calendar.md` § "Enlace del evento".
 
 ---
 
 ## Plantilla 13 — Evento con Video (Calendar)
 
 **Key en admin_settings:** `event_template_video_sid`
-**Tipo Twilio:** `twilio/media`
-**Idéntico al 12 pero con HEADER video MP4.**
+**Tipo Twilio:** `twilio/media` · **Idéntica a la 12 pero con HEADER video MP4.**
+
+🔴 **Hoy no existe en ninguna cuenta.** La única que se intentó (`evento_video_sushi_service_barra`,
+master) está **rejected** por Meta: *"Error downloading invalid media URL"* — el sample apuntaba a un
+MP4 de `storage.googleapis.com` que Meta no pudo bajar. Para reintentar: subir un MP4 real al bucket
+`event-media` y correr `scripts/twilio-create-media-templates.mjs` **sin** `SKIP_VIDEO`, con
+`SAMPLE_VIDEO_PATH` apuntando a ese archivo.
+
+Mientras tanto, un evento con `media_type='video'` **falla al despachar** con el error explícito de
+que falta `event_template_video_sid`. No envía nada equivocado.
 
 ---
 
@@ -547,10 +612,20 @@ CAMPAÑAS MANUALES
 - [ ] Verificar que al llegar a 150 pts muestra opción safe/mystery box
 
 **Plantillas de media (12-13) — Script de setup:**
-- [ ] Ejecutar `node scripts/twilio-create-media-templates.mjs`
+- [ ] **Antes de nada:** subir un JPG real al bucket `event-media` y pasarlo en `SAMPLE_IMAGE_PATH`.
+      Meta lo descarga para aprobar; si no es público, rechaza. El script lo comprueba y aborta antes
+      de crear nada. Usar path **plano** (sin subcarpetas).
+- [ ] Ejecutar `node scripts/twilio-create-media-templates.mjs` con `SKIP_VIDEO=1`
+      (la de video no se puede aprobar sin un MP4 de muestra real — ver Plantilla 13)
 - [ ] Esperar aprobación de Meta (24-72h)
-- [ ] Agregar SIDs en `admin_settings`: `event_template_image_sid`, `event_template_video_sid`
-- [ ] Verificar con evento de prueba
+- [ ] **Verificar antes de pegar el SID:** `node --env-file=<env de la cuenta> scripts/verificar-plantillas-evento.mjs`
+      (solo lectura). Si dice `[NO]`, **no la pegues**: una plantilla con media fija manda la imagen
+      de muestra a toda la audiencia y eso no se ve hasta que ya salió.
+- [ ] Agregar el SID que el script marque `[SIRVE]` en `admin_settings.event_template_image_sid`
+- [ ] Verificar con evento de prueba (audiencia filtrada a un solo cliente)
+
+> ⚠️ Una marca con **cuenta Twilio propia** necesita SU propia plantilla: las de la master no le
+> sirven. Es lo que hoy deja a Sushi Fun sin poder enviar eventos con imagen.
 
 ---
 

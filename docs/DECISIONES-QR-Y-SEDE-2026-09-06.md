@@ -138,7 +138,7 @@ no es Constelarys, es **cada restaurante**. Venderle esto a 25 marcas sin resolv
 
 | | Qué | Estado |
 |---|---|---|
-| 1 | **QR en SVG** + diseños en pausa + mesa fuera del QR + mesa en el escaneo (D-QR-3 y D-QR-4) | Listo para lanzar |
+| 1 | **QR en SVG** + diseños en pausa + mesa fuera del QR + mesa en el escaneo (D-QR-3 y D-QR-4) | ✅ **Hecho** (2026-09-06, `feat/qr-svg-por-sede`) — `docs/features/qr-studio.md` |
 | 2 | **Bandera `rotativo`** + el aparato manda (D-QR-2) | Listo para lanzar |
 | 3 | **Subdominio + QR por sede** al dar de alta una sede (D-QR-1) | Es F8, wizard del AIOS |
 | 4 | Rediseño visual del QR | Espera al dueño |

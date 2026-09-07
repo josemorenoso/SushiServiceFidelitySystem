@@ -91,7 +91,7 @@ se pisan el Postgres y la segunda dice "No test files found", que despista much�
 | n8n | ya no se usa | `domicilios_whatsapp_v4.json` sigue **ACTIVO** en el VPS y es lo único que lo mantiene vivo. Los 5 `cron_*.json` están en retirada (ya declarados en `vercel.json`) |
 
 ## Comandos
-`npm run dev` · `npm run build` · `npx tsc --noEmit` · `npm run lint` · `npx vitest run` (18 archivos / 332 tests)
+`npm run dev` · `npm run build` · `npx tsc --noEmit` · `npm run lint` · `npx vitest run` (25 archivos / 418 tests)
 `graphify query "…"` · `graphify affected "…"` · `graphify update .` (después de commitear; AST solo, sin costo)
 `node scripts/proxima-migracion.mjs` — **obligatorio antes de crear cualquier migración**
 

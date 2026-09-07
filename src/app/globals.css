@@ -461,3 +461,78 @@
     display: none !important;
   }
 }
+
+/* ─── Capa visual v3 — pantalla de entrada (check-in) ──────────────────────
+ *
+ * Dos cosas y ninguna suma un color: los halos de marca que ya estaban ahora se
+ * MUEVEN (aurora), y el CTA primario recibe un destello que lo cruza.
+ *
+ * El destello vive en `.btn-premium` a propósito, y no en un componente nuevo:
+ * así lo heredan de una todos los CTA del producto en vez de quedar solo en la
+ * pantalla que uno se acordó de tocar.
+ */
+
+@keyframes aurora-drift-a {
+  0%, 100% { transform: translate(0, 0); }
+  50%      { transform: translate(34px, 26px); }
+}
+
+@keyframes aurora-drift-b {
+  0%, 100% { transform: translate(0, 0); }
+  50%      { transform: translate(-30px, -22px); }
+}
+
+@utility animate-aurora-a {
+  animation: aurora-drift-a 15s ease-in-out infinite;
+}
+
+@utility animate-aurora-b {
+  animation: aurora-drift-b 19s ease-in-out infinite;
+}
+
+/* Destello que cruza el botón primario cada ~3.4s. */
+@keyframes btn-shimmer {
+  0%        { transform: skewX(-18deg) translateX(-260%); }
+  55%, 100% { transform: skewX(-18deg) translateX(360%); }
+}
+
+.btn-premium {
+  position: relative;
+  overflow: hidden;
+}
+
+/* Sin `z-index`: el destello tiene que pasar POR ENCIMA del gradiente del botón
+ * (y del texto, que es blanco translúcido y no se molesta). Mandarlo atrás con
+ * `z-index:-1` lo esconde detrás del propio fondo del botón y no se ve nada. */
+.btn-premium::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 45%;
+  pointer-events: none;
+  background: linear-gradient(
+    100deg,
+    transparent,
+    rgba(255, 255, 255, 0.45),
+    transparent
+  );
+  animation: btn-shimmer 3.4s ease-in-out infinite;
+}
+
+/* Un botón apagado no promete nada: sin destello. */
+.btn-premium:disabled::after {
+  animation: none;
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-aurora-a,
+  .animate-aurora-b {
+    animation: none !important;
+  }
+  .btn-premium::after {
+    animation: none !important;
+    opacity: 0;
+  }
+}

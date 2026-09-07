@@ -62,14 +62,25 @@ export default function CheckInPage() {
   return (
     <div className="premium-bg relative flex min-h-screen flex-col items-center justify-center overflow-hidden p-4">
       {/* Halos de marca. Antes eran los dos hex del sistema de diseño; ahora salen
-          del color del tenant (§5), que por defecto ES ese mismo par. */}
+          del color del tenant (§5), que por defecto ES ese mismo par.
+          Desde la capa visual v3 se MUEVEN, muy lento y desfasados entre sí: el
+          fondo respira en vez de ser un marfil plano. Siguen sin ser un color
+          nuevo — es el mismo par de la marca, solo que ya no está quieto. */}
       <div
-        className="pointer-events-none absolute -top-28 -right-28 h-[420px] w-[420px] rounded-full opacity-[0.05]"
+        className="animate-aurora-a pointer-events-none absolute -top-28 -right-28 h-[420px] w-[420px] rounded-full opacity-[0.10]"
         style={{ background: `radial-gradient(circle, ${branding.primary} 0%, transparent 70%)` }}
       />
       <div
-        className="pointer-events-none absolute -bottom-20 -left-20 h-[300px] w-[300px] rounded-full opacity-[0.04]"
+        className="animate-aurora-b pointer-events-none absolute -bottom-20 -left-20 h-[300px] w-[300px] rounded-full opacity-[0.09]"
         style={{ background: `radial-gradient(circle, ${branding.primaryEnd} 0%, transparent 70%)` }}
+      />
+      <div
+        className="animate-aurora-a pointer-events-none absolute top-1/3 -left-24 h-[260px] w-[260px] rounded-full opacity-[0.06]"
+        style={{
+          background: `radial-gradient(circle, ${branding.primary} 0%, transparent 70%)`,
+          animationDirection: 'reverse',
+          animationDuration: '23s',
+        }}
       />
 
       <Toaster position="top-center" richColors />

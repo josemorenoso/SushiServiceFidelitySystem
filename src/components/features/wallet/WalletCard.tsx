@@ -5,6 +5,7 @@ import { Crown } from 'lucide-react'
 import { useBranding } from '@/lib/branding-context'
 import { isBlackMember } from '@/lib/black-tier'
 import { BLACK_WALLET_CARD_THEME, brandWalletCardTheme } from '@/constants/wallet-card-theme'
+import { walletMedalPalette } from '@/constants/tier-medal-theme'
 import { BrandMark } from '@/components/features/branding'
 import { Odometer } from '@/components/ui/odometer'
 import { ShineBorder } from '@/components/ui/shine-border'
@@ -54,6 +55,7 @@ export function WalletCard({ name, totalPoints, totalVisits, tiers }: WalletCard
 
   const isBlack = isBlackMember(tiers, totalPoints)
   const theme = isBlack ? BLACK_WALLET_CARD_THEME : brandWalletCardTheme(branding)
+  const medals = walletMedalPalette(theme)
 
   const [barWidth, setBarWidth] = useState(0)
   useEffect(() => {
@@ -215,7 +217,7 @@ export function WalletCard({ name, totalPoints, totalVisits, tiers }: WalletCard
                       reached={reached}
                       isBlack={tier.is_black}
                       rank={index + 1}
-                      theme={theme}
+                      palette={medals}
                     />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold" style={{ color: theme.tierName }}>

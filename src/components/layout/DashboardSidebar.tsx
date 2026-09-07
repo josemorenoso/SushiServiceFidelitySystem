@@ -20,6 +20,7 @@ import {
   Ticket,
   PackageOpen,
   Wallet,
+  Bike,
 } from 'lucide-react'
 import { useBranding } from '@/lib/branding-context'
 
@@ -43,6 +44,7 @@ export function DashboardSidebar({ isSuperAdmin = false }: { isSuperAdmin?: bool
     { href: '/dashboard/marca', label: 'Identidad visual', icon: Palette },
     { href: '/dashboard/templates', label: 'Plantillas', icon: FileText },
     { href: '/dashboard/staff', label: `${branding.staffLabelPlural} QR`, icon: UserCog },
+    { href: '/dashboard/domicilios', label: 'Domicilios', icon: Bike },
     { href: '/dashboard/authorized-numbers', label: 'Autorizados Domicilio', icon: ShieldCheck },
     // Solo super-admin (operador de Cada1): billeteras de todos los tenants.
     ...(isSuperAdmin ? [{ href: '/dashboard/admin/wallets', label: 'Billeteras', icon: Wallet }] : []),

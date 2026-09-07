@@ -14,6 +14,15 @@ import { useEffect, useState, type CSSProperties } from 'react'
  * la vista. Las columnas arrancan escalonadas (`stagger`) para que la rueda se
  * lea de izquierda a derecha y no como un bloque.
  *
+ * ⚠️ **La columna mide `1ch` y ese número NO se baja.** `overflow: hidden` es lo
+ * que recorta la tira en vertical, pero recorta los DOS ejes: si la columna es
+ * más angosta que el dígito, le come los costados. Estuvo en `0.62ch` —copiado
+ * de una demo con otra tipografía— y salió a producción el 2026-09-07 con los
+ * dígitos cortados en la tarjeta del cliente (`322` se veía mordido).
+ * `1ch` es exactamente el avance de un dígito, y con `tabular-nums` todos los
+ * dígitos miden lo mismo: no sobra ni falta un píxel. Apretar las columnas se
+ * hace con `letter-spacing`, nunca achicando la caja que recorta.
+ *
  * Es una pieza PURA de presentación: no sabe qué son puntos ni visitas. El color
  * y el tamaño los pone quien la usa (`className` / `style`), como el resto de la
  * tarjeta — acá no se hornea ni un hex.
@@ -63,7 +72,7 @@ export function Odometer({
           key={i}
           aria-hidden
           className="block overflow-hidden"
-          style={{ height: '1em', width: '0.62ch' }}
+          style={{ height: '1em', width: '1ch' }}
         >
           <span
             className="flex flex-col motion-safe:transition-transform"

@@ -1,6 +1,6 @@
 # ESTADO — RestaurantQR / Cada1
 
-> **Última actualización:** 2026-09-07, 00:05 (sesión "plantillas: enviar tal cual o editar", Opus 5)
+> **Última actualización:** 2026-09-07, 02:55 (sesión "capa visual v3", Opus 5)
 > Toda sesión lo lee PRIMERO. Toda sesión que cierra un bloque lo ACTUALIZA al final. Límite: 150 líneas.
 > Lo obsoleto se **saca**, no se tacha: un ítem tachado sigue costando tokens cada vez que alguien lee esto.
 >
@@ -15,7 +15,7 @@
 | Qué | Estado |
 |-----|--------|
 | Código | **`main` está 3 commits ADELANTE de `origin/main`** (plantillas, 2026-09-07): mergeado local, **sin pushear ni desplegar** (decisión del dueño). Lo del 05/06, incluido QR Studio, sí está en producción |
-| Verificación | ✅ `tsc` limpio · eslint 7 errores preexistentes (React hooks, sin relación) · **vitest 25 archivos / 418 tests en verde** |
+| Verificación | ✅ `tsc` limpio · build ok (76 páginas) · eslint 7 errores preexistentes (React hooks, sin relación) · **vitest 25 archivos / 418 tests en verde**. Todo eso en `feat/visual`, 2026-09-07 02:52 |
 | Marcas vivas | **5**: sushi-service (542 clientes), demo-ventas (412), sushi-fun (251), don-alirio (244), cafe-frangal (8) |
 | Base de datos de producción | Aplicadas hasta la **00046**. 🔴 **La `00047` (identidad visual) está SIN APLICAR y su código YA ESTÁ DESPLEGADO** — ver §3.1. La 00030 NUNCA aplicada (a propósito). La 00015 NO se aplica (reabre fuga) |
 | Crons | Los 5 en `vercel.json`, corriendo. `birthday` 18:00 y `reactivation` 20:00 UTC (= 13:00/15:00 Bogotá), verificado. ⚠️ **`reward-reminder` sigue en 16:00 UTC (11:00 Bogotá)**: de los 3 del ROJO 1 se corrigieron 2. Su hora real no se pudo confirmar por retención de logs; la auditoría la estimó ≈21:00 UTC. **Decisión del dueño** |
@@ -25,7 +25,23 @@
 
 ## 2. En vuelo ahora mismo
 
-**Nada en vuelo.** QR Studio y plantillas cerraron los dos en `main`, que quedó **sin pushear**: lo decide el dueño.
+- **Capa visual v3 — la tarjeta del cliente y el panel** · rama `feat/visual` · worktree
+  `.worktrees/visual` · **CERRADA y verificada, sin mergear ni pushear**. Solo pinta: ni una regla
+  de negocio, ni una migración, ni un endpoint. Territorio:
+  `components/features/wallet/*`, `components/features/check-in/*`, `components/ui/*` (piezas
+  nuevas), `components/dashboard/MetricsCards.tsx` + `MiniSparkline.tsx`,
+  `constants/wallet-card-theme.ts` + `tier-medal-theme.ts`, `app/(public)/{tarjeta,check-in}` y
+  `globals.css` (solo agregando al final).
+  ⚠️ **`DashboardSidebar.tsx` NO se tocó**, a propósito: lo tienen `-08` (Conexiones, ya commiteada)
+  y `-86` (Domicilios). Falta la pasada visual del dueño en un teléfono real.
+  ⚠️ Al mergear, **§2 de este archivo va a chocar** con las líneas de las otras ramas: las cuatro
+  sesiones del 07 insertaron su línea en el mismo sitio. Es un conflicto de tablero, no de código.
+
+**El resto de esta rama:** QR Studio y plantillas cerraron los dos en `main`, que quedó **sin pushear**: lo decide el dueño.
+
+**Lo que hay en otras ramas vivas del 2026-09-07** (sus líneas de tablero viven allá, no acá):
+`feat/conexiones` (`-08`, C2 + la 00054), `feat/domicilios` (`-86`, worktree propio) y
+`feat/salud-aios` (la 00053, cerrada). La próxima migración libre es la **00055**.
 
 📌 **Esta sección es el TABLERO.** Toda sesión anota acá su territorio (qué toca, en qué rama)
 **antes** de escribir, y lo commitea solo; si se cruza con uno ya anotado, **espera y va después**.
@@ -37,6 +53,11 @@ despliega el AIOS y es decisión del dueño. Parte en `…/docs/PARTE-COEXISTENC
 
 ## 3. Siguiente, en orden
 
+0. 👀 **Mirar la capa visual en un teléfono** y decir qué se queda (rama `feat/visual`). Lo que el
+   kit propone y **NO se hizo, a propósito**: el *Scratch To Reveal* de la Mystery Box —hoy el
+   premio se revela solo a los 1.8 s y raspar cambia la INTERACCIÓN, no el aspecto: si el cliente no
+   raspa, no ve su premio— y el cambio de familia de iconos a Phosphor, que toca todo el producto.
+   Las dos esperan tu OK.
 1. 🔴 **Correr la `00047` en Supabase producción.** Es lo único urgente. Su código ya está vivo:
    sin ella, guardar en `/dashboard/marca` y subir el logo fallan. **Nada de lo anterior se rompe**
    —`--brand-primary` tiene su literal en `:root`— pero la feature nueva no funciona.

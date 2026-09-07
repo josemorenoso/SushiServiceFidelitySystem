@@ -41,6 +41,7 @@ ahora se pueden sustituir por tenant. Ver [`identidad-visual.md`](identidad-visu
 | `--brand-primary-end` | `#E63946` | Fin gradiente botón CTA | ✅ |
 | `--brand-on-primary` | `#ffffff` | Texto ENCIMA del gradiente | derivado (`onColor()`) |
 | `--brand-ink` | `#1a1c1d` | Texto principal (nunca negro puro) | ✅ |
+| `--brand-ink-raised` | `#262a2d` | Segundo tono del ink, para superficies oscuras (tarjeta héroe del panel) | ✅ (sigue a `--brand-ink`) |
 | `--brand-ink-soft` | `#6b7280` | Texto secundario | ❌ escala del sistema |
 | `--brand-ink-muted` | `#9ca3af` | Texto terciario / placeholders | ❌ escala del sistema |
 | `--brand-ink-faint` | `#d1d5db` | Texto de ayuda | ❌ escala del sistema |
@@ -86,6 +87,14 @@ transition: transform 300ms cubic-bezier(0.4, 0, 0.2, 1), ...
 ```
 Hover: `scale(1.02)` + sombra más intensa. Disabled: `opacity: 0.65`.
 
+**Desde la capa visual v3 (2026-09-07) lleva un destello** que lo cruza cada 3.4 s
+(`::after` + `@keyframes btn-shimmer`). Vive en la CLASE y no en un componente nuevo a propósito:
+así lo heredan de una todos los CTA del producto, en vez de quedar solo en la pantalla que alguien
+se acordó de tocar. Un botón `:disabled` no destella — no promete nada.
+
+⚠️ El `::after` va **sin `z-index`**. Mandarlo atrás con `z-index: -1` lo esconde detrás del propio
+gradiente del botón y no se ve nada.
+
 ### `.btn-secondary-premium`
 ```css
 background: rgba(255, 255, 255, 0.85) !important;
@@ -113,6 +122,27 @@ Focus: `border-color: var(--brand-primary)` + glow `rgba(var(--brand-primary-rgb
 animation: fade-in-up 0.55s cubic-bezier(0.4, 0, 0.2, 1) both;
 ```
 Aplicar en el contenedor principal de cada página pública para entrada suave.
+
+### Capa visual v3 (2026-09-07)
+
+Todo lo de abajo se agregó **al final de `globals.css`, sin tocar nada de lo anterior**, y **no
+contiene ni un color**: los colores llegan por `style` desde `wallet-card-theme.ts` o desde
+`Branding`. Estas reglas son solo geometría y tiempo.
+
+| Utility | Para qué | Dónde |
+|---|---|---|
+| `animate-shine-spin` | Gira el borde vivo. Necesita `@property --shine-ang` registrado como `<angle>`, si no salta en vez de girar | `ShineBorder` |
+| `animate-bar-sweep` | Barrido de luz sobre el relleno de la barra de progreso | `WalletCard`, `CustomerCard` |
+| `animate-stamp-ring` | Onda del último sello ganado. El color entra por `--stamp-ring-color` | `StampsGrid` |
+| `animate-draw-check` | Dibuja el ✓ del sello trazo a trazo | `StampsGrid` |
+| `animate-qr-scan` | La línea que barre el marco del QR | `CustomerCard` |
+| `animate-aurora-a` / `-b` | Los halos de marca del check-in se mueven, lento y desfasados | `check-in/page.tsx` |
+
+**Accesibilidad.** Hay un bloque `@media (prefers-reduced-motion: reduce)` que apaga todas estas y
+también las viejas (`animate-fade-in-up`, `animate-float`, `animate-bubble-pop`, `animate-stamp-pop`).
+`animate-draw-check` además fuerza `stroke-dashoffset: 0`: su estado "terminado" lo pone la
+animación, así que sin eso el ✓ quedaría invisible. El confeti (`ui/confetti.tsx`) es canvas y no
+tiene animación CSS que apagar, así que consulta la media query en JS antes de dibujar.
 
 ---
 

@@ -536,3 +536,35 @@
     opacity: 0;
   }
 }
+
+/* ─── Capa visual v3 — jerarquía en el panel ───────────────────────────────
+ *
+ * El panel abría con SIETE tarjetas idénticas, del mismo tamaño, con el mismo
+ * borde y siete colores distintos. Todo pesaba igual, entonces nada pesaba: el
+ * dueño abría el panel y no sabía en tres segundos si el mes iba bien.
+ *
+ * La tarjeta HÉROE es la respuesta a esa pregunta y por eso es la única oscura y
+ * grande. Las otras seis siguen ahí — no se saca información — pero en su lugar,
+ * claras y chicas.
+ *
+ * El segundo tono del ink va como variable y no horneado acá: la regla de §5
+ * vale igual en el panel. Un tenant que cambie su `--brand-ink` se lleva las dos.
+ */
+:root {
+  /* Superficie oscura elevada, un paso arriba de `--brand-ink`. */
+  --brand-ink-raised: #262a2d;
+}
+
+.metric-card-hero {
+  background: linear-gradient(150deg, var(--brand-ink-raised) 0%, var(--brand-ink) 100%) !important;
+  border: none !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.16) !important;
+  transition: transform 300ms cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 300ms cubic-bezier(0.4, 0, 0.2, 1) !important;
+  cursor: default;
+}
+
+.metric-card-hero:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 24px 46px rgba(0, 0, 0, 0.24) !important;
+}

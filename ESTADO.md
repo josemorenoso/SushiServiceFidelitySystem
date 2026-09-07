@@ -20,13 +20,19 @@
 | Base de datos de producción | Aplicadas hasta la **00046**. 🔴 **La `00047` (identidad visual) está SIN APLICAR y su código YA ESTÁ DESPLEGADO** — ver §3.1. Detrás van, escritas y **sin aplicar**, la **00050** (enlace del evento), la **00051** (dominio cruzado) y la **00053** (salud + `delivery_intake_failures`): las tres están ya en `main`. La 00030 NUNCA aplicada (a propósito). La 00015 NO se aplica (reabre fuga) |
 | Crons | Los 5 en `vercel.json`, corriendo. `birthday` 18:00 y `reactivation` 20:00 UTC (= 13:00/15:00 Bogotá), verificado. ⚠️ **`reward-reminder` sigue en 16:00 UTC (11:00 Bogotá)**: de los 3 del ROJO 1 se corrigieron 2. Su hora real no se pudo confirmar por retención de logs; la auditoría la estimó ≈21:00 UTC. **Decisión del dueño** |
 | n8n | Apagado. `domicilios_whatsapp_v4.json` sigue en el VPS pero ya no dispara |
-| Grafo | Al día sobre `918dadd` (2026-09-07): 4.640 nodos, 7.981 aristas, 416 comunidades. ⚠️ **No incluye `feat/domicilios`** (ahí son 4.706 / 8.198 / 419): el grafo del árbol principal solo ve la rama que tenga puesta, así que **hay que correr `graphify update .` después de mergear** |
+| Grafo | ⚠️ **El del árbol principal está viejo**: al día sobre `918dadd` (4.640 nodos / 7.981 aristas / 416 comunidades), o sea **sin la 00053 ni el apartado de domicilios**. Sobre `feat/domicilios` (que ya trae `main`) son **4.720 / 8.229 / 420**. El grafo solo ve la rama que el árbol tenga puesta: **`graphify update .` al mergear** |
 | Deadline | ~2026-09-10 — onboarding de los 25 clientes de Zernio |
 
 ## 2. En vuelo ahora mismo
 
 **Nada mío en vuelo.** Sigue viva `feat/conexiones` (signup de WhatsApp del cliente, 00052), con su
 territorio en su propia rama.
+
+📦 **`feat/domicilios` está CERRADA y esperando merge** (el apartado de domicilios, §18.d +
+§24.3-B). Ya tiene `main` mergeado dentro, así que va limpia salvo **una línea** de
+`DashboardSidebar.tsx`, que `feat/conexiones` también toca: son dos entradas distintas del mismo
+array y se resuelven quedando las dos. Su worktree se borró al cerrar; para volver a sacarla:
+`git worktree add .worktrees/domicilios feat/domicilios`.
 
 QR Studio y plantillas cerraron los dos en `main`, que quedó **sin pushear**: lo decide el dueño.
 

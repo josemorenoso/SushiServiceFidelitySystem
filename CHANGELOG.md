@@ -8,6 +8,32 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [2026-09-07] - Conexiones: el cliente conecta su propio WhatsApp
+
+**Tipo:** feat · **Rama:** `feat/conexiones` · **Migracion:** `00054` (SIN APLICAR) · **Origen:** el dueno
+
+- **El hueco.** El dueno del restaurante no tenia NINGUNA pantalla que le dijera por que numero
+  sale su WhatsApp, y el alta se cerraba por fuera del producto: el operador le copiaba el `authUrl`
+  y el dueno le dictaba de vuelta el `code` de Meta. Ese rodeo tapaba dos cosas rotas: el
+  `redirect_url` apuntaba a `/api/webhook/zernio` —que solo exporta POST y le da **405** a un
+  navegador— y `whatsapp.number.verification_required`, donde el alta se traba EN SILENCIO, llegaba
+  al webhook y no lo miraba nadie.
+- **C1, sin migracion**: `/dashboard/conexiones` con el numero, la salud de la linea (reusa
+  `/api/dashboard/line-budget` tal cual), los enlaces a plantillas y autorizados, y el interruptor
+  de §18.e en `admin_settings`. Twilio ve una tarjeta de SOLO LECTURA. Ambito MARCA siempre: no se
+  filtra por el selector de sede, porque filtrar escondería la línea.
+- **C2, con la 00054**: `tenant_connections` (SIN `location_id` — D6 re-cerrada) y
+  `connection_apply_whatsapp()` como UNICO cuerpo, con `aios_activate_whatsapp()` de cascara y
+  `DROP FUNCTION` antes del `CREATE` (una firma distinta crearia una SOBRECARGA, 42725).
+- **El nonce es NUESTRO**: el `state` de Zernio lleva timestamp y URL publica, no identifica al
+  tenant. Un `code` sin nonce valido da 409 y no cierra nada. `isTenantOwner()` es fail-closed
+  incluso ante un fallo de base: todos VEN, solo el dueno ACTUA.
+- ⚠️ **La 00054 se aplica ANTES de desplegar.** Si no, PostgREST da 42703 y la ruta responde 403.
+  Los 6 eventos del webhook solo llegan si se re-registra el webhook y si el header de la firma es
+  el que dice el contrato — por eso el estado tambien se avanza a mano. → `docs/features/conexiones.md`
+
+---
+
 ## [2026-09-07] - Plantillas: enviar el texto tal cual o editarlo, sin 13 ediciones a mano
 
 **Tipo:** feat · **Rama:** `feat/plantillas-enviar-o-editar` · **Origen:** reporte del dueno

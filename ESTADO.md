@@ -49,11 +49,13 @@ vive en este checkout, que está en `feat/conexiones`): se corre al mergear.
 si se cruza con una ya anotada, esperá. Al cerrar, borrala. Regla completa (incluido por qué `stash`
 y `reset --hard` están prohibidos con otra sesión viva) en `CLAUDE.md` § "Trabajar en paralelo".
 
-**Repo del AIOS**: `fix/coexistencia` (v1.4.0) subida y ahora **`feat/salud` (v1.5.0)** con el
-tablero de salud, **sin mergear ni pushear**. Su `main` tampoco se pusheó — pushearlo despliega el
-AIOS y es decisión del dueño. Parte en `…/docs/PARTE-COEXISTENCIA-2026-09-06.md`.
-En ESTE repo, el trabajo del producto que lo alimenta vive en **`feat/salud-aios`** (la 00053),
-también sin mergear: va detrás de `feat/conexiones`, que estaba antes.
+**Repo del AIOS**: ✅ **`main` PUSHEADO el 2026-09-07 en `9bc3167` (v1.5.0), por orden del dueño** —
+lleva el tablero de salud y, detrás, la coexistencia (v1.4.0) y el arreglo de la sede sin
+coordenadas, que hasta hoy no habían llegado a `main`. **El AIOS está desplegado.**
+⚠️ **`/salud` sale ENTERO EN GRIS hasta que se corra la `00053`** — no rompe nada del resto del
+panel, pero no sirve. Parte de coexistencia en `…/docs/PARTE-COEXISTENCIA-2026-09-06.md`.
+En ESTE repo, el trabajo del producto que lo alimenta vive en **`feat/salud-aios`**, ya mergeado a
+`main` local (la 00053), **SIN PUSHEAR: lo sube el dueño a mano**.
 
 ## 3. Siguiente, en orden
 
@@ -88,7 +90,9 @@ todo en `tenants.config` y en cómo se guardan credenciales de terceros).
 ## 4. Bloqueado: solo lo puede destrabar el dueño
 
 - **Correr la `00047`, la `00050`, la `00053` y la `00054`** (§3.1). Son migraciones sobre datos reales.
-- **Pushear `main` del AIOS**, que lo despliega (§2).
+- **Pushear `main` del PRODUCTO.** Son 7 commits locales: plantillas, QR Studio y la 00053. El
+  dueño lo sube a mano (decisión del 2026-09-07); ninguna sesión lo pushea por su cuenta.
+  ~~Pushear `main` del AIOS~~ — **hecho el 2026-09-07** (§2).
 - **Borrar el Supabase de Sushi Fun.** Se acordó esperar a un fin de semana de operación normal. El
   respaldo son los `SQL-PARA-CORRER/sushi-fun/*.sql` (1.421 filas), que **NO cubren** Auth, RLS ni
   storage. El Vercel viejo queda **pausado, no borrado**.
@@ -112,7 +116,7 @@ todo en `tenants.config` y en cómo se guardan credenciales de terceros).
   `/api/webhook/zernio`, que solo exporta POST y le da **405** a un navegador; y
   `verification_required` —donde el alta se traba en silencio— no lo miraba nadie. El nonce del
   signup es NUESTRO: el `state` de Zernio no identifica al tenant. → `docs/features/conexiones.md`.
-- **Salud por cliente en el AIOS** (2026-09-07, §24-A, **sin desplegar**): no existía ninguna
+- **Salud por cliente en el AIOS** (2026-09-07, §24-A, **DESPLEGADO, en gris hasta la 00053**): no existía ninguna
   señal de que un cliente se hubiera roto — nos enterábamos cuando llamaba. `/salud` pone las
   sedes con cuatro bombillos, ordenadas por gravedad. **Gris no es verde**, el umbral del
   silencio sale del historial de CADA marca, y los crons van aparte porque corren una vez para

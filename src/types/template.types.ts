@@ -113,6 +113,16 @@ export interface TemplateCatalogEntry {
    * `null` cuando hay `current` o cuando el slot está vacío.
    */
   adoptedRef: string | null
+  /**
+   * Por qué este mensaje NO se puede enviar a revisión todavía, en palabras del
+   * dueño. `null` = se puede.
+   *
+   * Hoy solo lo llenan las 2 de evento cuando falta configurar la media de
+   * muestra que Meta descarga para revisarlas. Se calcula en el servidor y viaja
+   * hasta acá para que el botón salga DESHABILITADO con el motivo a la vista, en
+   * vez de dejar que el dueño lo apriete y se coma un error.
+   */
+  blockedReason: string | null
 }
 
 /** Respuesta de `GET /api/dashboard/templates/catalog`. */

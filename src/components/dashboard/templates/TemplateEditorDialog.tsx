@@ -258,9 +258,12 @@ export default function TemplateEditorDialog({ entry, brandName, onClose, onSave
           <Button variant="outline" onClick={onClose} disabled={saving}>
             Cancelar
           </Button>
+          {/* Un mensaje que nunca se ha enviado no tiene "cambios" que guardar:
+              lo que hace el botón es mandarlo a revisión por primera vez, y así
+              lo dice. Con uno vivo sigue siendo una edición. */}
           <Button onClick={handleSave} disabled={!canSave} className="gap-2">
             {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-            {saving ? 'Guardando…' : 'Guardar cambios'}
+            {saving ? 'Enviando…' : current ? 'Guardar cambios' : 'Enviar a Meta'}
           </Button>
         </DialogFooter>
         {unchanged && issues.length === 0 && (

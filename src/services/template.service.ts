@@ -232,6 +232,7 @@ export async function getTemplateCatalogState(tenant: Tenant): Promise<TemplateC
       // plantilla está activa pero no tenemos su texto. La UI lo dice tal cual
       // en vez de inventarse un cuerpo que quizá no es el que se está enviando.
       adoptedRef: current ? null : (pointers[definition.settingsKey] ?? null),
+      blockedReason: headerSampleMissingReason(definition),
     }
   })
 
@@ -288,6 +289,24 @@ function headerSampleUrl(format: 'image' | 'video'): string | null {
   return env?.trim() || null
 }
 
+/**
+ * Lo mismo que arriba, pero en palabras del dueño y ANTES de que apriete nada.
+ *
+ * La pantalla lo usa para deshabilitar «Enviar a Meta» en las 2 de evento
+ * cuando falta la muestra: sin esto el botón se ve normal, se aprieta y devuelve
+ * un error de servidor por una configuración que el dueño no puede tocar.
+ */
+function headerSampleMissingReason(definition: CatalogTemplate): string | null {
+  if (!definition.header) return null
+  if (headerSampleUrl(definition.header.format)) return null
+  const que = definition.header.format === 'image' ? 'una imagen' : 'un video'
+  return (
+    `Para revisar este mensaje, WhatsApp necesita descargar ${que} de muestra, y todavía no hay ` +
+    'ninguna configurada. Avísale al equipo de Cada1: es un ajuste de una sola vez para todos los ' +
+    'negocios, no algo tuyo.'
+  )
+}
+
 // ─────────────────────────────────────────────────────────────
 // Guardar una edición (= crear + someter, sin tocar lo vigente)
 // ─────────────────────────────────────────────────────────────
@@ -327,6 +346,89 @@ export async function saveTemplateEdit(input: SaveTemplateInput): Promise<SaveTe
   }
 
   const body = input.body.trim()
+  const brandName = brandNameOf(tenant)
+
+  return submitTemplateBody({
+    tenant,
+    definition,
+    body,
+    editor,
+    style: detectTemplateStyle(key, body, brandName, emojiOf(tenant)),
+    // El texto lo escribió el dueño: la aceptación es real y queda fechada.
+    disclaimerAcceptedAt: new Date().toISOString(),
+    unchangedError: 'No cambiaste nada: el texto es idéntico al que estás enviando hoy.',
+  })
+}
+
+// ─────────────────────────────────────────────────────────────
+// Enviar el texto del catálogo TAL CUAL (el alta de un negocio nuevo)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Somete a Meta el texto que el catálogo propone para el estilo del negocio,
+ * sin pasar por el editor.
+ *
+ * POR QUÉ EXISTE: un tenant recién dado de alta nace con las 13 sin configurar
+ * (`aios_provision_tenant` no siembra ningún `*_template_sid`), y hasta ahora el
+ * único camino masivo era `applyStyleToCatalog()` — que la pantalla solo ofrece
+ * al ELEGIR UN ESTILO DISTINTO al actual. Con el estilo por defecto (`calido`)
+ * no había ningún botón: eran 13 ediciones a mano para mandar textos que nadie
+ * quería cambiar.
+ *
+ * ⚠️ NO PIDE LA ADVERTENCIA DE RESPONSABILIDAD, y no es un descuido. La decisión
+ * 3 del dueño ("si se las llegan a bloquear va a ser su culpa") es sobre el texto
+ * que ESCRIBE ÉL; acá el texto es el nuestro, salido de `template-texts.ts`. No
+ * hay nada que el dueño pueda aceptar sobre una redacción que no es suya, así
+ * que `disclaimer_accepted_at` queda NULL en vez de estampar una aceptación que
+ * nunca ocurrió. Quién apretó el botón sí queda, en `edited_by`.
+ */
+export async function submitSuggestedTemplate(input: {
+  tenant: Tenant
+  key: TemplateKey
+  editor: TemplateEditor
+}): Promise<SaveTemplateResult> {
+  const { tenant, key, editor } = input
+  assertZernioTenant(tenant)
+
+  const definition = TEMPLATE_CATALOG_BY_KEY[key]
+  if (!definition) throw new TemplateError('Esa plantilla no existe en el catálogo.', 404)
+
+  const style = await getTenantTemplateStyle(tenant.id)
+  const body = buildTemplateBody(key, style, brandNameOf(tenant), emojiOf(tenant))
+
+  return submitTemplateBody({
+    tenant,
+    definition,
+    body,
+    editor,
+    style,
+    disclaimerAcceptedAt: null,
+    unchangedError:
+      'Este mensaje ya se está enviando con este mismo texto. Si quieres cambiarlo, usa Editar.',
+  })
+}
+
+/**
+ * El tronco común de los dos caminos por los que un texto llega a Meta: «Enviar
+ * a Meta» (el del catálogo, tal cual) y «Editar» (el que escribió el dueño).
+ *
+ * Comparten TODAS las guardas —texto válido, una sola pendiente por plantilla,
+ * no re-someter lo que ya se está enviando— y se diferencian solo en de dónde
+ * sale el texto y en si hubo una advertencia que aceptar.
+ */
+async function submitTemplateBody(args: {
+  tenant: Tenant
+  definition: CatalogTemplate
+  body: string
+  editor: TemplateEditor
+  style: TemplateVersion['style']
+  disclaimerAcceptedAt: string | null
+  /** Qué decirle al dueño si el texto es idéntico al que ya está enviando. */
+  unchangedError: string
+}): Promise<SaveTemplateResult> {
+  const { tenant, definition, body, editor } = args
+  assertZernioTenant(tenant)
+
   const issues = validateTemplateBody(body, {
     category: definition.category,
     expectedVariables: definition.variables.length,
@@ -336,7 +438,7 @@ export async function saveTemplateEdit(input: SaveTemplateInput): Promise<SaveTe
   }
 
   const versions = await fetchVersions(tenant.id)
-  const mine = versions.filter((v) => v.template_key === key)
+  const mine = versions.filter((v) => v.template_key === definition.key)
 
   // Una edición a la vez por plantilla: dos pendientes competirían por el mismo
   // puntero al aprobarse. La base también lo impide (índice parcial único).
@@ -349,22 +451,22 @@ export async function saveTemplateEdit(input: SaveTemplateInput): Promise<SaveTe
 
   const current = mine.find((v) => v.is_current) ?? null
   if (current && current.body.trim() === body) {
-    throw new TemplateError('No cambiaste nada: el texto es idéntico al que estás enviando hoy.', 400)
+    throw new TemplateError(args.unchangedError, 400)
   }
 
   const pointers = await fetchPointers(tenant.id)
-  const brandName = brandNameOf(tenant)
 
   return createAndSubmit({
     tenant,
     definition,
     body,
-    brandName,
-    style: detectTemplateStyle(key, body, brandName, emojiOf(tenant)),
+    brandName: brandNameOf(tenant),
+    style: args.style,
     editor,
     existing: mine,
     pointer: pointers[definition.settingsKey] ?? null,
     hasCurrent: Boolean(current) || Boolean(pointers[definition.settingsKey]),
+    disclaimerAcceptedAt: args.disclaimerAcceptedAt,
   })
 }
 
@@ -378,6 +480,13 @@ interface CreateAndSubmitInput {
   existing: TemplateVersion[]
   pointer: string | null
   hasCurrent: boolean
+  /**
+   * Cuándo aceptó el dueño la advertencia de responsabilidad, o `null` si no
+   * hubo nada que aceptar porque el texto no lo escribió él (ver
+   * `submitSuggestedTemplate`). Antes esto era un `now` literal, y estampaba
+   * una aceptación que en el camino «Enviar a Meta» nunca ocurrió.
+   */
+  disclaimerAcceptedAt: string | null
 }
 
 /**
@@ -386,7 +495,7 @@ interface CreateAndSubmitInput {
  * Meta aprueba.
  */
 async function createAndSubmit(input: CreateAndSubmitInput): Promise<SaveTemplateResult> {
-  const { tenant, definition, body, brandName, editor } = input
+  const { tenant, definition, body, brandName, editor, disclaimerAcceptedAt } = input
   const supabase = getServiceClient()
   const providerRef = nextProviderRef(definition, input.existing, input.pointer)
   const now = new Date().toISOString()
@@ -438,7 +547,7 @@ async function createAndSubmit(input: CreateAndSubmitInput): Promise<SaveTemplat
       rejection_reason: detail.slice(0, 500),
       edited_by: editor.userId,
       edited_by_email: editor.email,
-      disclaimer_accepted_at: now,
+      disclaimer_accepted_at: disclaimerAcceptedAt,
       submitted_at: now,
       resolved_at: now,
     })
@@ -469,7 +578,7 @@ async function createAndSubmit(input: CreateAndSubmitInput): Promise<SaveTemplat
       status: 'pending' satisfies TemplateVersionStatus,
       edited_by: editor.userId,
       edited_by_email: editor.email,
-      disclaimer_accepted_at: now,
+      disclaimer_accepted_at: disclaimerAcceptedAt,
       submitted_at: now,
     })
     .select('*')
@@ -577,6 +686,9 @@ export async function applyStyleToCatalog(args: {
         existing: mine,
         pointer: pointers[definition.settingsKey] ?? null,
         hasCurrent: Boolean(current) || Boolean(pointers[definition.settingsKey]),
+        // Re-aplicar un estilo SÍ exige la casilla (se valida al entrar): el
+        // dueño declaró que se hace cargo de los 13 textos nuevos.
+        disclaimerAcceptedAt: new Date().toISOString(),
       })
       result.submitted.push(definition.key)
     } catch (err) {

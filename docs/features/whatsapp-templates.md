@@ -65,6 +65,49 @@ Lo que pasa por debajo:
 **El invariante que sostiene todo:** `promoteVersion()` es el **único** punto del sistema que escribe
 `admin_settings.<settings_key>`, y solo corre cuando Meta ya dijo `APPROVED`.
 
+## El alta de un negocio nuevo: enviar tal cual o editar
+
+`aios_provision_tenant` **no siembra ningún `*_template_sid`**: un tenant recién creado llega a esta
+pantalla con las 13 vacías. Hasta 2026-09-06 el único camino que las creaba en bloque era
+`applyStyleToCatalog()`, y la pantalla solo lo ofrece **al elegir un estilo DISTINTO al actual**
+(`StyleSelector` no deja clicar el estilo activo). Como el default es `calido`, un negocio que
+quisiera cálido —o sea, casi todos— **no tenía ningún botón**: eran 13 ediciones a mano para mandar
+textos que nadie quería cambiar. Reportado por el dueño.
+
+Ahora cada mensaje sin enviar muestra **dos salidas**:
+
+| Botón | Qué manda | Advertencia de responsabilidad |
+|---|---|---|
+| **Enviar a Meta** | El texto del catálogo para el estilo del negocio, tal cual | **No.** El texto es nuestro |
+| **Editar** | Lo que escriba el dueño, con las variables protegidas | **Sí**, como siempre |
+
+**Por qué «Enviar a Meta» no pide la casilla.** La decisión 3 (*"si se las llegan a bloquear va a ser
+su culpa, ahí se lo especificamos"*) es sobre **el texto que escribe él**. Cuando aprieta "Enviar a
+Meta" el texto sale de `template-texts.ts`: no hay nada que pueda aceptar sobre una redacción ajena, y
+estampar `disclaimer_accepted_at` ahí sería un registro falso — justo lo que la columna existe para
+evitar. Queda **NULL**, y `edited_by` sigue guardando quién apretó. Es también lo que distingue las
+dos filas al auditarlas: una aceptación fechada significa que alguien redactó.
+
+**El body NO viaja desde el cliente** en ese camino: `POST …/[key]/submit` no lee cuerpo y resuelve el
+texto en el servidor con el estilo del tenant. Si lo aceptara, sería el `PUT` sin la casilla — es
+decir, la forma de saltarse la decisión 3 desde la consola del navegador.
+
+Todo lo demás lo comparten: `submitTemplateBody()` es el tronco único, así que las dos rutas pasan por
+la misma validación de variables, la misma regla de "una pendiente por plantilla" y el mismo
+`createAndSubmit()`. **`promoteVersion()` sigue siendo el único que mueve el puntero**, y solo con el
+`APPROVED` de Meta: enviar tal cual no adelanta nada.
+
+**"Enviar a Meta" solo existe mientras el mensaje no tenga nada vivo ni nada en revisión.** Reemplazar
+un mensaje que ya se está enviando pasa SIEMPRE por el editor, con su advertencia.
+
+### Las 2 de evento y su media de muestra
+
+Las del calendario llevan cabecera de imagen/video, y Meta **descarga** un archivo de muestra para
+revisarlas (`ZERNIO_TEMPLATE_SAMPLE_*_URL`, ver Configuración). Cuando falta, `blockedReason` viaja en
+la respuesta del catálogo y la pantalla **deshabilita el botón con el motivo a la vista**, en vez de
+dejar que el dueño lo apriete y se coma un 409 por una variable de entorno que no puede tocar. Las
+otras 11 no se enteran.
+
 ## El detector de aprobación
 
 **Es un webhook, no un poll.** El contrato verificado de Zernio
@@ -211,6 +254,7 @@ importa: un tenant dado de alta por el AIOS (`aios_set_template_settings()`) tie
 | `src/lib/zernio/templates.ts` | Adaptador REST de Zernio (crear / consultar) |
 | `src/app/api/dashboard/templates/catalog/route.ts` | `GET` estado del catálogo |
 | `src/app/api/dashboard/templates/catalog/[key]/route.ts` | `PUT` editar una plantilla |
+| `src/app/api/dashboard/templates/catalog/[key]/submit/route.ts` | `POST` enviar el texto del catálogo tal cual |
 | `src/app/api/dashboard/templates/style/route.ts` | `PUT` cambiar estilo (± re-aplicar) |
 | `src/app/api/webhook/zernio/route.ts` | Recibe `whatsapp.template.status_updated` |
 | `src/components/dashboard/templates/TemplateCatalogEditor.tsx` | La pantalla (Zernio) |
@@ -281,8 +325,14 @@ responda — y cuando responda, aparece solo, sin que nadie tenga que volver a e
 | `ZERNIO_TEMPLATE_SAMPLE_IMAGE_URL` | Solo para `evento_imagen` | URL pública de la imagen de muestra que Meta revisa |
 | `ZERNIO_TEMPLATE_SAMPLE_VIDEO_URL` | Solo para `evento_video` | Ídem, para video |
 
-Sin las dos últimas, las 11 plantillas de texto funcionan igual y las 2 de evento devuelven un error
-claro al intentar crearlas. Meta **descarga** el archivo de muestra: no se puede inventar una URL.
+Sin las dos últimas, las 11 plantillas de texto funcionan igual y las 2 de evento salen con el botón
+**deshabilitado y el motivo escrito en su fila** (`blockedReason`); si algo llegara igual al servicio,
+`createAndSubmit()` corta con un 409. Meta **descarga** el archivo de muestra: no se puede inventar
+una URL, tiene que ser pública sin firma y parecerse a lo que la plantilla dice ser. El intento de
+video de la cuenta master quedó `rejected` con *"Error downloading invalid media URL"*.
+
+Las dos son **de una sola vez para todo el despliegue**, no por tenant: solo las mira Meta al aprobar.
+Cada evento real manda después su propia imagen.
 
 ## Lo que falta / decisiones no tomadas
 

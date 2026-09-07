@@ -129,6 +129,7 @@ Webhooks validan origen por número autorizado o `x-webhook-secret`. Cron jobs v
 | POST | /api/dashboard/templates | Crear plantilla + submit aprobación WhatsApp | Admin Cookie |
 | GET | /api/dashboard/templates/catalog | Estado del catálogo estándar (13 plantillas) — **solo Zernio** | Admin Cookie |
 | PUT | /api/dashboard/templates/catalog/:key | Editar una plantilla del catálogo | Admin Cookie |
+| POST | /api/dashboard/templates/catalog/:key/submit | Enviar a Meta el texto del catálogo **tal cual** | Admin Cookie |
 | PUT | /api/dashboard/templates/style | Cambiar estilo (± re-aplicar a las 13) | Admin Cookie |
 | GET | /api/dashboard/templates/standard | Qué le falta del set estándar — **solo Twilio** | Admin Cookie |
 | POST | /api/dashboard/templates/standard | Crear UNA plantilla estándar que falte (aditivo) | Admin Cookie |
@@ -1266,7 +1267,8 @@ texto propone el estilo del negocio.
       "pending":  null,
       "lastRejected": null,
       "suggestedBody": "¡Hola {{1}}! 🎉…",
-      "adoptedRef": null
+      "adoptedRef": null,
+      "blockedReason": null
     }
   ]
 }
@@ -1274,6 +1276,11 @@ texto propone el estilo del negocio.
 
 `adoptedRef` no-nulo con `current: null` = el mensaje **está activo** pero se cargó fuera del panel
 (alta por el AIOS o SQL directo) y no tenemos su texto. La pantalla lo dice tal cual.
+
+`blockedReason` no-nulo = ese mensaje **no se puede mandar a revisión todavía**, con el motivo ya
+redactado para el dueño. Hoy solo lo llenan las 2 de evento cuando falta
+`ZERNIO_TEMPLATE_SAMPLE_IMAGE_URL` / `_VIDEO_URL`. La pantalla deshabilita "Enviar a Meta" con ese
+texto en vez de dejar que se apriete y devuelva un 409 por una variable que el dueño no puede tocar.
 
 **Response 409:** `{ "provider": "twilio" }` — el negocio no es Zernio. El frontend cae al gestor Twilio.
 
@@ -1314,6 +1321,38 @@ bloquear va a ser su culpa") no se sostiene sin ese registro.
 | 404 | `:key` no existe en el catálogo |
 | 409 | Ya hay una edición de esa plantilla en revisión, el negocio no es Zernio, o no tiene WhatsApp conectado |
 | 502 | Zernio rechazó la creación. **La plantilla actual sigue funcionando**; el intento queda registrado con `status='failed'` |
+
+#### `POST /api/dashboard/templates/catalog/:key/submit` — Admin JWT
+
+Manda a revisión de Meta el texto que el catálogo propone para el estilo del negocio, **sin pasar por
+el editor**. Es el camino del alta: un tenant nuevo nace con las 13 sin configurar y en la mayoría no
+hay nada que cambiar.
+
+**No recibe body.** Qué texto se somete lo decide el servidor
+(`buildTemplateBody(key, estilo del tenant, marca, emoji)`). Es deliberado: si el cliente pudiera
+mandar el texto, esta ruta sería el `PUT` **sin** la advertencia de responsabilidad.
+
+> **No pide `acceptedDisclaimer`, y no es un olvido.** El texto no lo escribió el dueño, así que no
+> hay nada que aceptar: `template_versions.disclaimer_accepted_at` queda **NULL** en vez de estampar
+> una aceptación que nunca ocurrió. `edited_by` sí guarda quién apretó el botón. Ver
+> `docs/features/whatsapp-templates.md` § "El alta de un negocio nuevo".
+
+Comparte con el `PUT` todas las demás guardas (`submitTemplateBody()` es el tronco único) y **no toca
+el puntero**: eso sigue siendo exclusivo de `promoteVersion()` con el `APPROVED` de Meta.
+
+**Response 200:** idéntica a la del `PUT` (`success`, `message`, `version`).
+
+**Errores:**
+
+| Código | Cuándo |
+|---|---|
+| 400 | El mensaje ya se está enviando con ese mismo texto (para cambiarlo, va por el `PUT`) |
+| 404 | `:key` no existe en el catálogo |
+| 409 | Ya hay una edición de esa plantilla en revisión; el negocio no es Zernio o no tiene WhatsApp conectado; o es una de evento y falta `ZERNIO_TEMPLATE_SAMPLE_IMAGE_URL` / `_VIDEO_URL` |
+| 502 | Zernio rechazó la creación. Queda registrado con `status='failed'` |
+
+La pantalla no llega a ese 409 de media faltante: `GET /catalog` ya devuelve `blockedReason` por
+entrada y el botón sale deshabilitado con el motivo escrito.
 
 #### `GET /api/dashboard/templates/standard` — Admin JWT
 

@@ -35,6 +35,18 @@
   ⚠️ **La migración pasa de 00052 a 00054**: `scripts/proxima-migracion.mjs` ve la 00053 ya creada
   por salud-aios y la 00052 reservada en los docs, y manda usar la **00054**. Obedezco al script.
 
+- **Capa visual — la tarjeta del cliente y el panel** · rama `feat/visual` · worktree `.worktrees/visual`
+  (rama propia porque el árbol compartido está en `feat/conexiones`). Sale del `Kit Visual Cada1`
+  (artifact del dueño, 2026-09-07) e investigación en 21st.dev. **Solo pinta: ni una regla de negocio,
+  ni una migración, ni un endpoint.** Territorio exacto:
+  `src/components/features/wallet/*`, `src/constants/wallet-card-theme.ts`,
+  `src/app/(public)/tarjeta/page.tsx`, `src/components/features/check-in/*`,
+  `src/components/ui/` (piezas nuevas: odómetro, shine-border, medalla),
+  `src/components/dashboard/MetricsCards.tsx` + `MiniSparkline.tsx`, y `src/app/globals.css`
+  (SOLO agregando keyframes/utilities/tokens al final; no toco los existentes).
+  ⚠️ **NO toco `DashboardSidebar.tsx`** — ya tiene dos pretendientes (`-08` con «Conexiones»,
+  commiteada en `ce5d249`, y `-86` con «Domicilios» desde `.worktrees/domicilios`).
+
 **Lo demás, nada en vuelo.** QR Studio y plantillas cerraron en `main`, **sin pushear**: lo decide el dueño.
 
 📌 **Esta sección es el TABLERO.** Anotá tu territorio ANTES de escribir y commiteá esa línea sola;

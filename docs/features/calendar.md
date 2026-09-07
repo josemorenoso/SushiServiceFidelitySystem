@@ -151,6 +151,11 @@ Diagnóstico de **solo lectura** con `node --env-file=.env.twilio scripts/verifi
 | Master — `evento_video_sushi_service_barra` | ❌ **rejected** por Meta (no pudo descargar el MP4 de muestra de gtv-videos-bucket). No hay envío de **video** en ninguna cuenta. |
 | **Sushi Fun** `AC0470…8e87` (cuenta propia) | ❌ **8 plantillas, todas `twilio/text`**: ninguna `twilio/media`. **Sushi Fun no puede enviar eventos con imagen** hasta crear la plantilla (`scripts/twilio-create-media-templates.mjs`) y esperar la aprobación de Meta. |
 
+**La estructura exacta de la plantilla aprobada** (cuerpo literal, samples con los que Meta la
+aprobó, URL de media y qué SID usar en cada cuenta) vive en `docs/PLANTILLAS.md` § "Plantilla 12",
+copiada de la Content API — no de memoria. Para revisar cualquier cuenta, incluida una marca nueva:
+`node --env-file=<env de esa cuenta> scripts/verificar-plantillas-evento.mjs`.
+
 **Lo único que queda por confirmar en el dashboard** (es dato, no código, y no se puede leer desde el
 repo porque `.env.local` no tiene credenciales): que `admin_settings.event_template_image_sid` del
 tenant tenga pegado el SID de la fila verde. Si está vacío, el drawer ya lo avisa en rojo y deshabilita

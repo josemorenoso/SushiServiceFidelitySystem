@@ -5,6 +5,7 @@ import {
   getEvent,
   updateEvent,
   cancelEvent,
+  normalizeEventLink,
   type UpdateEventInput,
 } from '@/services/calendar.service'
 
@@ -100,6 +101,17 @@ export async function PATCH(
         { error: 'blackout_days debe estar entre 0 y 30' },
         { status: 400 }
       )
+    }
+    // `null` es un valor legítimo acá: es como el admin BORRA el link del evento.
+    if (body.link_url !== undefined) {
+      try {
+        normalizeEventLink(body.link_url)
+      } catch (err) {
+        return NextResponse.json(
+          { error: err instanceof Error ? err.message : 'link_url inválido' },
+          { status: 400 }
+        )
+      }
     }
 
     const tenantId = await requireTenantId()

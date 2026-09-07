@@ -1,7 +1,7 @@
 # Feature: Verificación Cliente-Mesero con QR Dinámico
 
-> **Estado:** ✅ COMPLETADO · **§19 (el aparato es del local) implementado el 2026-09-05**.
-> La `00046` **está aplicada** en producción (ver `ESTADO.md` §1).
+> **Estado:** ✅ COMPLETADO · **§19 (el aparato es del local) implementado el 2026-09-05 y
+> DESPLEGADO a producción el 2026-09-06.** La `00046` **está aplicada** (`ESTADO.md` §1).
 > **Prioridad:** URGENTE
 > **Última actualización:** 2026-09-06 — el alta de un mesero la gobierna el ROL, y no lleva PIN
 > **Spec de §19:** `docs/superpowers/specs/2026-09-05-staff-scanner-19-design.md`
@@ -77,7 +77,7 @@ NO pide PIN; solo la redención** (decisión del dueño: regalarle tu premio a o
 la del aparato. 8 nombres se buscan; 40 no. **La sede vive en la FILA y se relee en cada petición, nunca en
 el JWT.**
 
-**Schema — migración `00046`, se escribe y se deja SIN aplicar:**
+**Schema — migración `00046` (aplicada en producción, ver la cabecera):**
 
 | Cambio | Por qué |
 |---|---|
@@ -967,7 +967,29 @@ leían `staff_user_id`).
 ## §19 — El aparato es del local (2026-09-05)
 
 > Spec completo: `docs/superpowers/specs/2026-09-05-staff-scanner-19-design.md`.
-> Migración `00046`: **escrita y SIN aplicar.** Aplicarla en producción lo decide el dueño.
+>
+> **Migración `00046`: aplicada en producción.** Lo estuvo en duda medio día —el commit de merge
+> `5badf79` decía que sí y cuatro documentos decían que no, y la auditoría post-deploy no tuvo
+> acceso a Supabase para zanjarlo—. Lo resolvió `ESTADO.md` §1: aplicadas hasta la `00046`. Las
+> queries de abajo quedan escritas para volver a comprobarlo en treinta segundos si reaparece
+> la duda.
+>
+> **Qué se rompe si NO está aplicada:** el check-in normal de un mesero con teléfono **no** —esas
+> rutas usan columnas de la `00044`—. Lo que falla, en silencio, es el **alta de un mesero sin
+> teléfono**: el `INSERT` con `phone: null` da `23502`, que el `catch` no maneja, y sale un 500
+> genérico. Es decir, se rompe justo la función estrella de §19.
+>
+> **Cómo confirmarlo** (SQL Editor de Supabase, solo lectura):
+>
+> ```sql
+> select is_nullable from information_schema.columns
+>  where table_name = 'staff_users' and column_name = 'phone';
+> select conname  from pg_constraint where conname  = 'staff_users_identidad_minima';
+> select indexname from pg_indexes   where indexname = 'staff_users_nombre_sede_key';
+> ```
+>
+> Si falta cualquiera de las tres, aplicar `supabase/migrations/00046_escaner_meseros.sql` (es
+> idempotente, con guardas `IF NOT EXISTS`) y corregir este recuadro en el mismo commit.
 
 ### Los tres flujos
 

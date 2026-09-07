@@ -9,10 +9,80 @@ export const REACTIVATION_AGGRESSIVE_DAYS = 25
 /** Mínimo de días entre mensajes de marketing por cliente (aplica a todos los canales) */
 export const FREQUENCY_CAP_DAYS = 7
 
+/** Días que la Recovery Zone abre ANTES del toque suave.
+ *
+ *  El margen existe porque el cron corre una vez al día: sin él, un cliente que
+ *  cae en el día del toque suave podría recibir una campaña manual esa misma
+ *  mañana y el toque suave por la tarde. Tres días de colchón lo evitan. */
+export const RECOVERY_ZONE_LEAD_DAYS = 3
+
 /** Zona de recuperación: clientes en este rango están reservados para el cron de reactivación.
- *  Las campañas manuales los excluyen automáticamente para no interrumpir el flujo personalizado. */
+ *  Las campañas manuales los excluyen automáticamente para no interrumpir el flujo personalizado.
+ *
+ *  Se DERIVA de los días de reactivación configurados por tenant en `admin_settings`
+ *  (`reactivation_soft_days` / `reactivation_aggressive_days`) vía `deriveRecoveryZone()`.
+ *  Si el tenant baja el toque suave a 15, la zona baja con él — si no, los días 15-17
+ *  quedarían desprotegidos y una campaña manual pisaría el mensaje del cron.
+ *
+ *  Estas dos constantes son solo el FALLBACK con los defaults (21 / 25). No se usan
+ *  para decidir a quién se le manda: para eso está `getRecoveryZoneConfig(tenantId)`. */
 export const RECOVERY_ZONE_START_DAYS = 18
 export const RECOVERY_ZONE_END_DAYS = 25
+
+export interface RecoveryZone {
+  startDays: number
+  endDays: number
+}
+
+/** La zona por defecto, para llamadas sin tenant a mano. */
+export const DEFAULT_RECOVERY_ZONE: RecoveryZone = {
+  startDays: RECOVERY_ZONE_START_DAYS,
+  endDays: RECOVERY_ZONE_END_DAYS,
+}
+
+/**
+ * Deriva la ventana reservada al cron a partir de los días de reactivación del tenant.
+ *
+ * Con los defaults (21 / 25) devuelve exactamente 18-25: la derivación no cambia
+ * el comportamiento de ningún tenant que no haya tocado sus días.
+ *
+ * `startDays` nunca baja de `FREQUENCY_CAP_DAYS`: por debajo del cap el cliente ya
+ * está protegido por otra regla y la "ventana manual" desaparecería.
+ * `endDays` nunca queda por debajo de `startDays` (zona vacía).
+ */
+/**
+ * Normaliza los valores crudos de `admin_settings` a los días efectivos.
+ *
+ * Vive acá y no en `settings.service.ts` porque la tarjeta del ciclo de
+ * recuperación (cliente) tiene que llegar al MISMO número que el cron
+ * (servidor). Con dos copias de la regla, la pantalla terminaría anunciando un
+ * día distinto del que se envía.
+ */
+export function normalizeReactivationDays(
+  rawSoft: string | number | undefined | null,
+  rawAggressive: string | number | undefined | null
+): { softDays: number; aggressiveDays: number } {
+  const parsePositive = (value: string | number | undefined | null, fallback: number): number => {
+    const n = Number(value)
+    return Number.isInteger(n) && n > 0 ? n : fallback
+  }
+
+  const softDays = parsePositive(rawSoft, REACTIVATION_DAYS)
+  let aggressiveDays = parsePositive(rawAggressive, REACTIVATION_AGGRESSIVE_DAYS)
+
+  // La agresiva siempre debe ser posterior a la suave.
+  if (aggressiveDays <= softDays) {
+    aggressiveDays = softDays + 4
+  }
+
+  return { softDays, aggressiveDays }
+}
+
+export function deriveRecoveryZone(softDays: number, aggressiveDays: number): RecoveryZone {
+  const startDays = Math.max(FREQUENCY_CAP_DAYS, softDays - RECOVERY_ZONE_LEAD_DAYS)
+  const endDays = Math.max(aggressiveDays, startDays)
+  return { startDays, endDays }
+}
 
 /** Máximo de mensajes de marketing que puede recibir un cliente en el mes en curso.
  *  Cuenta: manual + calendar + reactivation.

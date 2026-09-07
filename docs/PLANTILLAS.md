@@ -435,6 +435,17 @@ _Responde SALIR para no recibir más mensajes._
 **Categoría Meta:** `MARKETING`
 **Variables:** `{{1}}`=Nombre · `{{2}}`=Restaurante · `{{3}}`=Título evento · `{{4}}`=Fecha · `{{5}}`=CTA · `{{6}}`=**path del archivo dentro del bucket `event-media`** (NO la URL completa)
 
+> **El contrato de 6 variables NO se amplía.** El enlace opcional del evento (`link_url`, 00050) se
+> compone **dentro de `{{5}}`** (`"<CTA> 👉 <link>"`), no en un `{{7}}`: agregar una variable obliga a
+> crear y re-aprobar una plantilla en las 25 cuentas, 24-72h cada una. Y `{{5}}` no puede llevar saltos
+> de línea — Twilio los rechaza con **21656** y eso tumba el envío de la audiencia entera.
+
+> **Antes de pegar un SID acá, verificalo:** `node --env-file=<env de la cuenta> scripts/verificar-plantillas-evento.mjs`
+> (solo lectura, no envía nada). Comprueba las tres condiciones que hacen daño en silencio si fallan:
+> que sea `twilio/media`, que la media tenga `{{6}}` **dinámico** (una media fija manda la imagen de
+> muestra a todos) y que esté **approved**. Estado verificado el 2026-09-06 en
+> `docs/features/calendar.md` § "Verificación del envío con imagen".
+
 ### Media dinámica — cómo funciona (v2.4.5)
 
 Twilio solo admite variables en la URL de media **después del dominio**. Por eso la plantilla se aprueba con el dominio del bucket como parte **fija** y `{{6}}` como el **path** del archivo:

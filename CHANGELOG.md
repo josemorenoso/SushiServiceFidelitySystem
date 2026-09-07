@@ -8,6 +8,54 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [2026-09-06] - Los 3 amarillos del calendario: hora de Bogota, goteo por cola y reclamo sin doble disparo
+
+**Tipo:** fix · **Rama:** `fix/amarillos-calendario` · **Origen:** `docs/AUDITORIA-POST-DEPLOY-2026-09-06.md`
+
+- **Hora de Bogota en el picker.** `EventCreateDialog` convertia un `datetime-local` con
+  `new Date(...)`, que lo interpreta en la zona del NAVEGADOR: desde fuera de Colombia el cron
+  disparaba a una hora que nadie decidio. La conversion vive ahora en un solo sitio,
+  `src/lib/timezone.ts`. El drawer muestra "(hora Colombia)". El servidor nunca estuvo mal.
+- **`calendar_event` gotea por `send_queue`.** `executeAutoEvent()` envia lo que cabe en el
+  presupuesto de linea del dia y encola el resto (P1, `expiresAt` = fin del dia del evento). Antes
+  lo que excedia el cupo se marcaba `failed` y se perdia. La campana sigue `running` mientras gotee.
+  `calendar_event` queda exento del frequency cap al drenar, para que la mitad encolada no se
+  comporte distinto de la mitad que salio al instante.
+- **El reclamo del despacho no miraba las filas afectadas.** Un UPDATE que toca 0 filas no da error,
+  asi que dos corridas concurrentes creian haber ganado y despachaban el evento dos veces.
+  `claimScheduledEvent()` cuenta las filas; `tests/db/calendar-claim.test.ts` lo reproduce con 8
+  reclamos simultaneos contra Postgres real (falla contra el codigo viejo, verificado).
+- **Docs:** `calendar.md`, `send-governance.md` y `staff-qr-scan.md` corregidos.
+  `ESTADO-REQUERIMIENTOS.md` y `04-deployment.md` siguen stale, anotado en ESTADO.md §3.6.
+- **Tests nuevos:** `tests/db/calendar-claim.test.ts` (la carrera, contra Postgres real) y
+  `tests/unit/timezone.test.ts`, que fija el anclaje a Bogota **independiente de la zona de la
+  maquina** — y que de paso destapo que `2026-02-31` rodaba en silencio a marzo 3 en vez de
+  rechazarse; corregido en `appLocalInputToISO()`.
+- Sin migraciones. `tsc` limpio, eslint en su linea base (7 errores preexistentes),
+  24 archivos / 400 tests en verde.
+
+---
+
+## [2026-09-06] - El evento del calendario puede llevar un enlace, y el envio con imagen queda verificado contra Twilio
+
+**Enlace del evento (`restaurant_events.link_url`, migracion 00050).** La carta, la reserva o la
+boleteria viajan DENTRO de la invitacion. No ocupa una variable nueva: el contrato `{{1}}..{{6}}` de
+la plantilla `twilio/media` esta aprobado por Meta y un `{{7}}` obligaria a crear y re-aprobar una
+plantilla **por cada una de las 25 marcas** (24-72h cada una). El link se compone dentro de `{{5}}`
+al enviar y WhatsApp lo vuelve clicleable igual. `buildEventCta()` y `normalizeEventLink()` son puras.
+**El saneo del link es estricto a proposito.** `{{5}}` es una variable de plantilla y Twilio rechaza
+con **21656** las que llevan salto de linea: eso no lo paga un cliente, tumba la invitacion de la
+**audiencia entera**. Se valida en el formulario, en la ruta (400 con motivo) y en el CHECK de la 00050.
+**Verificacion del envio con imagen** (`scripts/verificar-plantillas-evento.mjs`, solo lectura, no
+envia nada): en la cuenta master `HXf30219…a689` esta **approved**, es `twilio/media`, con `{{6}}`
+dinamico y el dominio del bucket correcto → **el envio con imagen funciona**. Otras tres plantillas
+aprobadas tienen media **FIJA** (no usar) y la de video sigue **rejected**. **Sushi Fun, con cuenta
+Twilio propia, no tiene ninguna plantilla `twilio/media`: alli el evento con imagen NO sale.**
+**Verificacion:** 13 archivos / **234 tests** unitarios en verde (+12: `tests/unit/evento-link.test.ts`).
+Las pruebas de base no se pudieron correr (otra sesion tenia tomado el Postgres embebido).
+
+---
+
 ## [2026-09-06] - fix(D2): el dominio cruzado se cierra en las DOS direcciones (00051)
 
 **Qué:** la 00041 dejó el guardarraíl de dominio a medias — solo impedía que una SEDE tomara el
@@ -47,6 +95,7 @@ Postgres real. **No se backfillean:** NULL es "sede desconocida", no "la princip
 `/api/dashboard/staff` no se tocó; la columna `pin` sigue existiendo para supervisores.
 **Verificación:** `tsc` limpio · eslint 7 errores preexistentes (sin relación) · 19 archivos / **341
 tests**, ninguno perdido.
+
 
 ## [2026-09-06] - Sushi Fun absorbido, todo mergeado a main y la numeracion de migraciones deja de adivinarse
 

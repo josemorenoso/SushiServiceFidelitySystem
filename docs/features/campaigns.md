@@ -23,6 +23,8 @@
   (`source_channels`) y el envío manual excluye opt-outs en la query (antes se contaban como fallidos).
 - **Ciclo de recuperación del cliente**: strip visual de 5 etapas en Campañas → Automáticas
   (Visita → Protegido 1-7d → Ventana manual 7-17d → Recuperación automática 18-25d → Rescate 26+d).
+  Desde el 2026-09-06 las bandas se derivan de los días configurados por el tenant: los números de
+  arriba son los que salen con los defaults (21 / 25).
 
 ---
 
@@ -83,13 +85,24 @@ Coordinar el envío de mensajes entre campañas automáticas (cumpleaños, react
 
 ### Regla 2 — Jerarquía de Mensajes / Zona de Recuperación
 
-**Principio:** Los clientes que llevan entre `RECOVERY_ZONE_START_DAYS` (18) y `RECOVERY_ZONE_END_DAYS` (25) días sin visitar están en el radar del cron de reactivación (que dispara al día 21). Las campañas manuales los excluyen automáticamente para no interrumpir ese flujo personalizado de mayor conversión.
+**Principio:** Los clientes dentro de la ventana de recuperación están en el radar del cron de reactivación. Las campañas manuales los excluyen automáticamente para no interrumpir ese flujo personalizado de mayor conversión.
 
-**Zona de Recuperación:** `last_visit_at < now - 18d AND last_visit_at >= now - 25d`
+**La ventana NO es fija (desde 2026-09-06).** Se DERIVA por tenant de los días de reactivación que el dueño configuró en Ajustes, vía `getRecoveryZoneConfig(tenantId)` → `deriveRecoveryZone(soft, aggressive)`:
 
-**Implementación:**
+```
+startDays = max(FREQUENCY_CAP_DAYS, soft - RECOVERY_ZONE_LEAD_DAYS)   // lead = 3
+endDays   = max(aggressive, startDays)
+```
+
+Con los defaults (21 / 25) da exactamente **18-25**, los mismos valores fijos de antes: ningún tenant que no haya tocado sus días cambia de comportamiento. Pero si baja el toque suave a 15, la zona baja a **12-20** con él. Antes no se movía, y los días 15-17 quedaban sin proteger: una campaña manual podía pisarle el mensaje al cron el mismo día del toque.
+
+**Zona de Recuperación:** `last_visit_at < now - startDays AND last_visit_at >= now - endDays`
+
+**Implementación** (los cuatro sitios leen la MISMA ventana del tenant; si divergen, el panel miente sobre lo que se envía):
 - `manual/route.ts` excluye clientes en la zona de recuperación y reporta `totalSkippedRecoveryZone`
 - `estimate/route.ts` aplica el mismo filtro para que el estimado sea exacto
+- `queue-drain/route.ts` la re-evalúa al momento del envío (el cliente pudo volver mientras esperaba en la cola)
+- `segments/route.ts` la usa para los conteos del radar de segmentos
 - Los crons automáticos NO aplican esta restricción (ellos son la razón de la zona)
 
 ---
@@ -144,7 +157,8 @@ Fetch clientes con filtros (ciudad, visitas, edad, canal)
 
 Post-filtro en JS:
   1. Frequency Cap: excluir si last_campaign_at < 7 días atrás
-  2. Recovery Zone: excluir si last_visit_at entre 18 y 25 días atrás
+  2. Recovery Zone: excluir si last_visit_at cae en la ventana del tenant
+     (derivada de sus días de reactivación; 18-25 con los defaults)
 
 sendTemplateMessage() en batches de 10
   → bulk update last_campaign_at para enviados
@@ -168,8 +182,9 @@ Definidas en `src/constants/rewards.ts` (fallbacks):
 | `REACTIVATION_DAYS` | 21 | Fallback: días para reactivación suave |
 | `REACTIVATION_AGGRESSIVE_DAYS` | 25 | Fallback: días para reactivación agresiva |
 | `FREQUENCY_CAP_DAYS` | 7 | Mínimo de días entre mensajes por cliente |
-| `RECOVERY_ZONE_START_DAYS` | 18 | Inicio zona de recuperación (días sin visita) |
-| `RECOVERY_ZONE_END_DAYS` | 25 | Fin zona de recuperación (días sin visita) |
+| `RECOVERY_ZONE_START_DAYS` | 18 | Fallback: inicio zona de recuperación (la real se deriva por tenant) |
+| `RECOVERY_ZONE_END_DAYS` | 25 | Fallback: fin zona de recuperación (la real se deriva por tenant) |
+| `RECOVERY_ZONE_LEAD_DAYS` | 3 | Días que la zona abre antes del toque suave |
 
 > `rewards.ts` también aloja las constantes del pop-up de reseñas (`DEFAULT_REVIEW_REWARD_WINDOW_DAYS`,
 > `REVIEW_SHOWN_DEDUPE_HOURS`): pertenecen a **[review-flow.md](review-flow.md)**, no a este doc.
@@ -188,6 +203,15 @@ Reglas de validación:
 - Ambos deben ser enteros positivos; si no, se usa el fallback.
 - La agresiva debe ser > suave; si no, el backend la fuerza a `suave + 4` y la UI bloquea el guardado.
 - `findInactiveCustomers(reactivationDays)` ahora acepta el valor como parámetro (default `REACTIVATION_DAYS`).
+- La normalización (parseo, fallbacks, `agresiva > suave`) vive en `normalizeReactivationDays()` en
+  `src/constants/rewards.ts`, no en el service: la tarjeta del ciclo de recuperación corre en el
+  navegador y tiene que llegar al mismo número que el cron. Con dos copias de la regla, la pantalla
+  anunciaría un día distinto del que se envía.
+
+**Lo que arrastran estos dos valores (2026-09-06):** la Recovery Zone se deriva de ellos
+(`deriveRecoveryZone()`, ver Regla 2) y las cinco bandas del "Ciclo de recuperación del cliente" en
+Campañas → Automáticas se calculan con esa derivación. Cambiar los días en Ajustes ahora mueve
+las tres cosas a la vez: el mensaje del cron, la ventana protegida y lo que muestra el panel.
 
 ### Rediseño UI del Módulo de Campañas (v1.4.0 — Req 5)
 
@@ -196,6 +220,8 @@ Reglas de validación:
 - **Badge de estado real** por campaña automática: `Activa` (verde, plantilla configurada) o `Sin plantilla` (rojo) según `admin_settings`.
 - **Preview real del mensaje**: muestra el body de la plantilla Twilio configurada (fetch a `/api/dashboard/templates`), también en el dialog de confirmación antes de ejecutar.
 - **Días dinámicos**: la descripción de Reactivación muestra los días configurados (no hardcoded).
+  Desde el 2026-09-06 también las bandas del "Ciclo de recuperación del cliente": antes salían de
+  `RECOVERY_ZONE_START_DAYS`/`END_DAYS` fijas y no se movían al cambiar las fechas en Ajustes.
 - **Botón "Ejecutar Ahora" deshabilitado** si no hay plantilla configurada.
 - **Historial traducido**: estados en español (Finalizada/En curso/Borrador/Fallida).
 - Separación explícita Automáticas / Manuales / Historial vía tabs (ya existía, se mantiene).
@@ -223,9 +249,9 @@ Reglas de validación:
 
 | Situación del cliente | Cron Reactivación | Cron Cumpleaños | Campaña Manual |
 |-----------------------|:-----------------:|:---------------:|:--------------:|
-| Visitó hace < 18 días | ❌ no inactivo | según cumpleaños | ✅ elegible |
-| Visitó hace 18-25 días (Recovery Zone) | ✅ elegible* | según cumpleaños | ❌ excluido |
-| Visitó hace > 25 días | ✅ elegible* | según cumpleaños | ✅ elegible |
+| Antes de la zona (< 18 días con los defaults) | ❌ no inactivo | según cumpleaños | ✅ elegible |
+| Dentro de la zona (18-25 con los defaults) | ✅ elegible* | según cumpleaños | ❌ excluido |
+| Pasada la zona (> 25 días con los defaults) | ✅ elegible* | según cumpleaños | ✅ elegible |
 | Recibió mensaje hace < 7 días | ❌ excluido | ❌ excluido** | ❌ excluido |
 | `accepts_marketing = false` | ❌ excluido | ❌ excluido | ❌ excluido |
 

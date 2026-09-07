@@ -6,8 +6,8 @@ import {
   FREQUENCY_CAP_DAYS,
   MONTHLY_CAP_SOURCES,
   MONTHLY_MARKETING_CAP,
-  RECOVERY_ZONE_START_DAYS,
-  RECOVERY_ZONE_END_DAYS,
+  DEFAULT_RECOVERY_ZONE,
+  type RecoveryZone,
 } from '@/constants/rewards'
 
 function getServiceClient() {
@@ -343,20 +343,25 @@ export function passesFrequencyCap(
 }
 
 /**
- * Recovery Zone: los clientes entre RECOVERY_ZONE_START_DAYS y
- * RECOVERY_ZONE_END_DAYS sin visitar están reservados para el cron de
+ * Recovery Zone: los clientes dentro de la ventana reservada al cron de
  * reactivación personalizado; las campañas manuales no los tocan.
+ *
+ * La ventana NO es fija: se deriva de los días de reactivación que el tenant
+ * configuró en Ajustes (`getRecoveryZoneConfig(tenantId)`). Quien filtra por
+ * tenant DEBE pasarla — el default de `DEFAULT_RECOVERY_ZONE` (18-25) es solo
+ * para llamadas sin tenant a mano, y protege de más pero no de menos.
  *
  * Un cliente sin `last_visit_at` NO está en la zona (mismo criterio que
  * campaigns/manual, que lo deja pasar).
  */
 export function isInRecoveryZone(
   lastVisitAt: string | null | undefined,
+  zone: RecoveryZone = DEFAULT_RECOVERY_ZONE,
   now: Date = new Date()
 ): boolean {
   if (!lastVisitAt) return false
-  const cerca = new Date(now.getTime() - RECOVERY_ZONE_START_DAYS * 24 * 60 * 60 * 1000).toISOString()
-  const lejos = new Date(now.getTime() - RECOVERY_ZONE_END_DAYS * 24 * 60 * 60 * 1000).toISOString()
+  const cerca = new Date(now.getTime() - zone.startDays * 24 * 60 * 60 * 1000).toISOString()
+  const lejos = new Date(now.getTime() - zone.endDays * 24 * 60 * 60 * 1000).toISOString()
   return lastVisitAt < cerca && lastVisitAt >= lejos
 }
 

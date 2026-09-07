@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { MediaUploader } from './MediaUploader'
+import { appLocalInputToISO } from '@/lib/timezone'
 import { CalendarPlus, Loader2 } from 'lucide-react'
 
 interface EventCreateDialogProps {
@@ -41,6 +42,7 @@ export function EventCreateDialog({
 }: EventCreateDialogProps) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
+  const [linkUrl, setLinkUrl] = useState('')
   const [eventDate, setEventDate] = useState(defaultDate ?? '')
   const [eventTime, setEventTime] = useState('')
   const [eventType, setEventType] = useState<EventType>('festival')
@@ -85,6 +87,7 @@ export function EventCreateDialog({
   function reset() {
     setTitle('')
     setDescription('')
+    setLinkUrl('')
     setEventDate('')
     setEventTime('')
     setEventType('festival')
@@ -128,10 +131,33 @@ export function EventCreateDialog({
       return
     }
 
+    // Mismas reglas que `normalizeEventLink()` en el servidor, adelantadas al
+    // formulario: el link viaja dentro de una variable de plantilla y un espacio
+    // ahí rompe el envío de TODA la audiencia, no el de un cliente.
+    const link = linkUrl.trim()
+    if (link && !/^https?:\/\//i.test(link)) {
+      setError('El enlace debe empezar con http:// o https:// (ej. https://tucarta.com/festival)')
+      return
+    }
+    if (/\s/.test(link)) {
+      setError('El enlace no puede llevar espacios')
+      return
+    }
+
     const filters: Record<string, unknown> = {}
     if (filterCity.trim()) filters.city = filterCity.trim()
     if (filterMinVisits) filters.minVisits = parseInt(filterMinVisits)
     if (filterMaxVisits) filters.maxVisits = parseInt(filterMaxVisits)
+
+    // La hora se ancla a Bogotá, no a la zona del navegador: ver appLocalInputToISO().
+    let scheduledSendAtISO: string | null = null
+    if (sendMode === 'auto' && scheduledSendAt) {
+      scheduledSendAtISO = appLocalInputToISO(scheduledSendAt)
+      if (!scheduledSendAtISO) {
+        setError('La fecha de envío no es válida')
+        return
+      }
+    }
 
     const body = {
       title: title.trim(),
@@ -140,12 +166,11 @@ export function EventCreateDialog({
       event_time: eventTime || null,
       event_type: eventType,
       send_mode: sendMode,
-      scheduled_send_at: sendMode === 'auto' && scheduledSendAt
-        ? new Date(scheduledSendAt).toISOString()
-        : null,
+      scheduled_send_at: scheduledSendAtISO,
       filters,
       media_url: media?.url ?? null,
       media_type: media?.type ?? null,
+      link_url: link || null,
       blackout_days: parseInt(blackoutDays) || 5,
     }
 
@@ -210,6 +235,32 @@ export function EventCreateDialog({
               rows={3}
               className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
+          </div>
+
+          {/* Link */}
+          <div className="space-y-2">
+            <Label htmlFor="link_url">Enlace (opcional)</Label>
+            <Input
+              id="link_url"
+              type="url"
+              inputMode="url"
+              placeholder="https://tucarta.com/festival"
+              value={linkUrl}
+              onChange={(e) => setLinkUrl(e.target.value)}
+              maxLength={500}
+            />
+            <p className="text-xs text-muted-foreground">
+              La carta, la reserva, la boletería o el post. Va al final del mensaje y WhatsApp
+              lo muestra clicleable. Sin espacios y empezando por <code>https://</code>.
+            </p>
+            {linkUrl.trim() && (
+              <p className="rounded-md bg-muted/50 border px-3 py-2 text-xs">
+                <span className="text-muted-foreground">Así se verá el cierre del mensaje: </span>
+                <span className="font-medium">
+                  {(description.trim() || '¡Te esperamos!')} 👉 {linkUrl.trim()}
+                </span>
+              </p>
+            )}
           </div>
 
           {/* Fecha + hora + tipo */}
@@ -288,7 +339,8 @@ export function EventCreateDialog({
                 onChange={(e) => setScheduledSendAt(e.target.value)}
               />
               <p className="text-xs text-muted-foreground">
-                Debe ser igual o anterior a la fecha del evento.
+                Debe ser igual o anterior a la fecha del evento. La hora se interpreta
+                siempre en hora de Colombia (UTC-5), sin importar desde dónde abras el panel.
               </p>
             </div>
           )}

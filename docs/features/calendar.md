@@ -2,7 +2,161 @@
 
 > Estado: 🟢 Operativo. Plantilla de imagen **aprobada por Meta** en la cuenta master.
 > Migración: `supabase/migrations/00012_calendar_events_and_media.sql`
-> Última actualización: 2026-09-02 (los 5 crons quedan declarados en `vercel.json`; el disparo sigue en n8n hasta el despliegue con Pro)
+> Migración del enlace: `supabase/migrations/00050_evento_link.sql` (**sin aplicar**)
+> Última actualización: 2026-09-06 (los 3 AMARILLO de la auditoría: hora de Bogotá, goteo por
+> `send_queue`, y el reclamo del despacho por conteo de filas)
+
+## Los 3 AMARILLO de la auditoría post-deploy (2026-09-06)
+
+Los tres salen de `docs/AUDITORIA-POST-DEPLOY-2026-09-06.md`. Ninguno necesitó migración.
+
+### 1. La hora del picker se interpretaba en la zona del navegador
+
+`EventCreateDialog` construía el instante con `new Date(scheduledSendAt).toISOString()` sobre el
+valor de un `<input type="datetime-local">`, **que no lleva huso**. Mientras el admin abriera el
+panel desde Bogotá coincidía por casualidad; desde otra zona, ese "2:30 pm" se guardaba como otro
+instante y el cron disparaba a una hora que nadie decidió. El servidor no lo puede reparar: cuando
+recibe el ISO, la hora local ya se perdió.
+
+La conversión vive ahora en **un solo sitio**, `src/lib/timezone.ts`:
+
+| Helper | Para qué |
+|---|---|
+| `APP_UTC_OFFSET` | `-05:00`. Colombia no tiene DST desde 1993, así que el offset fijo es seguro |
+| `appLocalInputToISO()` | `datetime-local` → instante absoluto anclado a Bogotá. `null` si no parsea |
+| `appEndOfDay()` | Fin del día calendario en Bogotá (reemplaza el literal `T23:59:59-05:00`) |
+| `formatInAppTz()` | `toLocaleString('es-CO', …)` con el `timeZone` ya puesto |
+
+El drawer muestra la hora con `(hora Colombia)` explícito: es la hora a la que el cron dispara de
+verdad, y es la que el admin compara con la que escribió.
+
+**El servidor siempre estuvo bien.** `restaurant_events.scheduled_send_at` es `timestamptz` y
+`findDueAutoEvents()` compara instantes absolutos. El defecto era de entrada y de presentación.
+
+> Horario real de los crons diarios en `vercel.json`, verificado: `birthday` `0 18 * * *` y
+> `reactivation` `0 20 * * *` (13:00 y 15:00 Bogotá), que es lo que hacía n8n. **`reward-reminder`
+> sigue en `0 16 * * *` = 11:00 Bogotá**; la auditoría estimó que su hora real era ≈`0 21` (16:00
+> Bogotá) pero no pudo confirmarlo por retención de logs. Queda como decisión del dueño.
+
+### 2. `calendar_event` no goteaba: ahora pasa por `send_queue`
+
+`executeAutoEvent()` recorría la audiencia entera. Lo que excedía el presupuesto de campaña del día
+se marcaba `failed` y **se perdía**: un festival con audiencia grande dejaba gente sin invitación,
+en silencio, si el cupo del día ya estaba consumido.
+
+Ahora hace el mismo reparto que una campaña manual:
+
+1. `getLineBudget()` decide cuántos caben hoy. Línea `frozen` → **todo** a la cola.
+2. Lo que cabe se envía al instante.
+3. Lo que no cabe **y lo que se intentó y no salió** va a `enqueueSendBatch()` con
+   `messageType: 'calendar_event'`, y gotea en `queue-drain` cada 15 min.
+4. La campaña sigue `running` mientras quede cola; la cierra el drenador recalculando `total_sent`
+   desde `campaign_messages`. `finalizeCampaign()` solo se llama si no se encoló nada.
+
+Detalles que no son cosméticos:
+
+- **`expiresAt` = fin del día del evento en Bogotá.** `calendar_event` es P1 en `MESSAGE_CLASS_MAP`
+  («entregarla tarde no sirve de nada»). Una invitación que llegaría el día después del festival no
+  se manda: pasa a `expired` y deja rastro en `send_queue`, en vez de llegar como una burla.
+- **Un fallo de envío ya no es `failed` inmediato.** `sendTemplateMessage()` devuelve `null` para
+  *todos* sus modos de fallo, incluido «el cupo se agotó entre que leí el presupuesto y que envié».
+  Marcarlos `failed` ahí perdía justo a quien la cola existe para salvar. Ahora se encolan y el
+  drenador se rinde a los 3 intentos, dejando el motivo en `send_queue.last_error`.
+- **`calendar_event` quedó exento del frequency cap en `queue-drain`**, junto a `birthday` y
+  `reward_reminder` — pero por otra razón: el camino inmediato de `executeAutoEvent()` **nunca** lo
+  aplicó. Si el drenador lo aplicara, la mitad encolada de un mismo evento se comportaría distinto
+  de la mitad que salió al instante, y quedaría sin invitación justo quien cayó de último en la lista.
+- **`locationId`**: se pasa `event.location_id` tal cual. ⚠️ En `restaurant_events` un NULL significa
+  «evento de toda la marca» (`audience_scope='brand'`), no «sede desconocida» — es la excepción del
+  modelo (00043). En `send_queue` NULL sí es «sede desconocida», que para un evento de marca es
+  exactamente lo correcto: no hay una sede que atribuir.
+- **Límite honesto:** las `variables` se congelan al encolar (con `{{6}}` solo para Twilio). Un
+  tenant que **migre de proveedor a mitad del goteo** verá fallar lo que le quede en cola. El
+  drenador sí reconstruye las *opciones* según el proveedor actual, pero no puede reconstruir las
+  variables. Es visible (`last_error`), no silencioso.
+
+`ExecuteAutoEventResult` gana `queued`, que viaja al cron, al endpoint de disparo manual y al drawer.
+
+### 3. El reclamo del despacho no miraba cuántas filas tocó
+
+```ts
+// ANTES — las dos corridas creían haber ganado
+const { error: claimError } = await supabase
+  .from('restaurant_events').update({ status: 'sent' })
+  .eq('id', eventId).eq('status', 'scheduled')
+if (claimError) throw ...
+```
+
+El `UPDATE` es atómico, así que de dos llamadas concurrentes solo una toca la fila. Pero la otra
+**tampoco da error**: para Postgres, actualizar cero filas es un éxito perfecto. Las dos seguían y
+el evento se despachaba dos veces — cada cliente recibía la invitación repetida. `calendar-dispatch`
+corre cada 15 min y no tolera el doble disparo, a diferencia de `queue-drain`
+(ver `send-governance.md`).
+
+El reclamo vive ahora en `claimScheduledEvent()`, que hace `.select('id')` y devuelve si esta llamada
+fue la ganadora. **El conteo de filas es la única señal que distingue al ganador.**
+
+Dos cosas de forma que importan:
+
+- El reclamo va **fuera del `try`** de `executeAutoEvent()`. Si estuviera dentro, la corrida
+  perdedora dispararía el rollback a `'failed'` y le rompería el evento a la que sí está enviando.
+- `claimScheduledEvent()` recibe un `EventClaimClient` —una interfaz estructural mínima— en vez de
+  un `SupabaseClient` entero. Existe para que la prueba pueda ejecutar **la función real** contra un
+  Postgres real: `tests/db/calendar-claim.test.ts` lanza 8 reclamos simultáneos y exige que gane
+  exactamente uno y que **ninguno lance**, que es justo lo que hacía indistinguible perder de ganar.
+
+---
+
+## Enlace del evento (00050, 2026-09-06)
+
+Un evento puede llevar un **enlace opcional** (`restaurant_events.link_url`): la carta, la reserva,
+la boletería, el post de Instagram. Se escribe en el dialog de crear evento y se edita desde el drawer.
+
+**No ocupa una variable nueva de la plantilla.** El contrato `{{1}}..{{6}}` de la plantilla
+`twilio/media` está **aprobado por Meta**; agregar un `{{7}}` obliga a crear una plantilla nueva y
+esperar 24-72h de aprobación **por cada una de las 25 marcas**. En vez de eso, el link se compone
+dentro de `{{5}}` (el CTA) al enviar:
+
+```
+{{5}} = `${descripción || '¡Te esperamos!'} 👉 ${link_url}`
+```
+
+WhatsApp lo vuelve clicleable igual, porque es texto del cuerpo del mensaje. Cero plantillas nuevas,
+cero re-aprobación, y funciona hoy con la plantilla que ya está viva.
+
+`buildEventCta()` y `normalizeEventLink()` son **puras** y viven en `calendar.service.ts`;
+`tests/unit/evento-link.test.ts` fija su comportamiento.
+
+**Por qué el saneo del link es estricto (espacios y saltos de línea rechazados):** `{{5}}` es una
+variable de plantilla, y Twilio rechaza con **21656** las variables con saltos de línea. Ese rechazo
+no se lo come un cliente: tumba la invitación de la **audiencia entera** del evento. Se valida en tres
+sitios a propósito — el formulario (mensaje inmediato), la ruta (400 con el motivo) y el CHECK de la
+00050 (última línea de defensa).
+
+> ⚠️ **La 00050 se aplica en Supabase ANTES de desplegar este código.** Al revés, `createEvent()`
+> inserta una columna que no existe → PostgREST 42703 → **crear un evento falla entero** (la misma
+> trampa de la 00044/00045).
+
+---
+
+## Verificación del envío con imagen (2026-09-06, contra Twilio en vivo)
+
+Diagnóstico de **solo lectura** con `node --env-file=.env.twilio scripts/verificar-plantillas-evento.mjs`
+(el script no envía nada; hace los mismos tres chequeos que `assertEventTemplateUsable()` hace en caliente):
+
+| Cuenta Twilio | Resultado |
+|---|---|
+| Master `ACa5e3…dd7d` (Sushi Service y las marcas sin subcuenta) | ✅ `HXf30219c2b31c3ac1c6eb751d2b4ea689` — `twilio/media`, media **dinámica** `{{6}}`, **approved** por Meta, dominio del bucket correcto. **El envío con imagen funciona.** |
+| Master — `combomundial`, `dia_del_sushi`, `evento_imagen_sushi_service_barra` (v1) | ⚠️ approved pero **media FIJA**: si se pegan en `event_template_image_sid`, todos los clientes reciben la imagen de muestra. **No usar.** |
+| Master — `evento_video_sushi_service_barra` | ❌ **rejected** por Meta (no pudo descargar el MP4 de muestra de gtv-videos-bucket). No hay envío de **video** en ninguna cuenta. |
+| **Sushi Fun** `AC0470…8e87` (cuenta propia) | ❌ **8 plantillas, todas `twilio/text`**: ninguna `twilio/media`. **Sushi Fun no puede enviar eventos con imagen** hasta crear la plantilla (`scripts/twilio-create-media-templates.mjs`) y esperar la aprobación de Meta. |
+
+**Lo único que queda por confirmar en el dashboard** (es dato, no código, y no se puede leer desde el
+repo porque `.env.local` no tiene credenciales): que `admin_settings.event_template_image_sid` del
+tenant tenga pegado el SID de la fila verde. Si está vacío, el drawer ya lo avisa en rojo y deshabilita
+"Enviar ahora" — no envía nada equivocado.
+
+---
 
 ## Fixes v2.8.3 (2026-08-21) — por qué el calendario "no hacía nada"
 
@@ -175,7 +329,7 @@ Público (lectura anónima requerida por Twilio/Meta para descargar el asset al 
 
 Esto se suma a las protecciones existentes (no las reemplaza):
 - Cap de 7 días (`FREQUENCY_CAP_DAYS`) sigue activo
-- Recovery Zone (18-25 días) sigue activa para reservar clientes al cron de reactivación
+- Recovery Zone (18-25 días con los días por defecto; se deriva de los del tenant) sigue activa para reservar clientes al cron de reactivación
 
 ### ¿Por qué birthday queda fuera?
 

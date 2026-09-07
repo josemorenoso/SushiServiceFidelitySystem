@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireTenantId } from '@/lib/tenant'
-import { createEvent, listEvents, type CreateEventInput } from '@/services/calendar.service'
+import {
+  createEvent,
+  listEvents,
+  normalizeEventLink,
+  type CreateEventInput,
+} from '@/services/calendar.service'
 
 /**
  * GET /api/dashboard/calendar/events?from=YYYY-MM-DD&to=YYYY-MM-DD
@@ -94,6 +99,16 @@ export async function POST(request: NextRequest) {
     if (typeof body.blackout_days === 'number' && (body.blackout_days < 0 || body.blackout_days > 30)) {
       return NextResponse.json(
         { error: 'blackout_days debe estar entre 0 y 30' },
+        { status: 400 }
+      )
+    }
+    // El link se valida acá para responder 400 con el motivo legible. El servicio
+    // lo vuelve a normalizar (es el que escribe), pero desde ahí saldría un 500.
+    try {
+      normalizeEventLink(body.link_url)
+    } catch (err) {
+      return NextResponse.json(
+        { error: err instanceof Error ? err.message : 'link_url inválido' },
         { status: 400 }
       )
     }

@@ -30,7 +30,10 @@ import {
   filterByMonthlyCap,
 } from '@/services/campaign.service'
 import { sendTemplateMessage } from '@/services/whatsapp.service'
+import { getLineBudget } from '@/services/line-budget.service'
+import { enqueueSendBatch, type EnqueueItem } from '@/services/send-queue.service'
 import { getTenantById } from '@/lib/tenant'
+import { appEndOfDay } from '@/lib/timezone'
 import { EVENT_MEDIA_BUCKET, eventMediaPathFromPublicUrl, getEventMediaBaseUrl } from '@/lib/twilio/media'
 import { listZernioTemplates } from '@/lib/zernio/messaging'
 
@@ -65,7 +68,63 @@ export interface CreateEventInput {
   filters?: EventFilters
   media_url?: string | null
   media_type?: EventMediaType | null
+  /** Enlace opcional que se agrega al final del CTA de la invitación (00050). */
+  link_url?: string | null
   blackout_days?: number
+}
+
+/** Tope de la columna `restaurant_events.link_url` (CHECK de la 00050). */
+const MAX_LINK_LENGTH = 500
+
+/**
+ * Valida y normaliza el enlace opcional del evento. PURA: no toca red ni base.
+ *
+ * Devuelve `null` para "sin link" (cadena vacía incluida) y lanza con un mensaje
+ * que el admin pueda leer si el valor no sirve.
+ *
+ * POR QUÉ ES TAN ESTRICTA CON LOS ESPACIOS
+ * ────────────────────────────────────────
+ * El link no viaja solo: se compone dentro de `{{5}}`, que es una VARIABLE de la
+ * plantilla aprobada. Twilio rechaza con 21656 las variables con saltos de línea,
+ * y ese rechazo no es de un cliente: la invitación sale rota (o no sale) para la
+ * audiencia ENTERA del evento. Un `trim()` silencioso tampoco alcanza — un espacio
+ * en el medio parte la URL y el cliente recibe un link muerto. Mejor fallar acá,
+ * con el evento todavía en el dashboard y un humano mirando.
+ */
+export function normalizeEventLink(raw: string | null | undefined): string | null {
+  if (raw === null || raw === undefined) return null
+  const link = raw.trim()
+  if (link.length === 0) return null
+
+  if (!/^https?:\/\//i.test(link)) {
+    throw new Error('El enlace debe empezar con http:// o https:// (ej. https://tucarta.com/festival)')
+  }
+  if (/\s/.test(link)) {
+    throw new Error('El enlace no puede llevar espacios ni saltos de línea')
+  }
+  if (link.length > MAX_LINK_LENGTH) {
+    throw new Error(`El enlace no puede pasar de ${MAX_LINK_LENGTH} caracteres`)
+  }
+  return link
+}
+
+/**
+ * Arma el CTA que viaja en `{{5}}` de la plantilla del evento.
+ *
+ * El link se ANEXA al texto en vez de ocupar una variable propia: el contrato
+ * {{1}}..{{6}} está aprobado por Meta y un {{7}} obligaría a crear y re-aprobar
+ * una plantilla por cada una de las 25 marcas (24-72h cada una). WhatsApp
+ * clicquea igual una URL que va en el cuerpo del mensaje.
+ *
+ * Exportada y pura para poder probar el texto exacto sin enviar nada.
+ */
+export function buildEventCta(
+  description: string | null | undefined,
+  linkUrl: string | null | undefined
+): string {
+  const texto = description?.trim() || '¡Te esperamos!'
+  const link = linkUrl?.trim()
+  return link ? `${texto} 👉 ${link}` : texto
 }
 
 export interface UpdateEventInput {
@@ -79,6 +138,7 @@ export interface UpdateEventInput {
   filters?: EventFilters
   media_url?: string | null
   media_type?: EventMediaType | null
+  link_url?: string | null
   blackout_days?: number
   status?: EventStatus
 }
@@ -98,7 +158,7 @@ export async function createEvent(input: CreateEventInput, tenantId: string): Pr
     const sendAt = new Date(input.scheduled_send_at)
     // Fin del día del evento en hora Colombia (UTC-5), no UTC: con 23:59:59Z un envío
     // programado el mismo día del evento después de las 6:59pm local se rechazaba.
-    const eventDate = new Date(`${input.event_date}T23:59:59-05:00`)
+    const eventDate = appEndOfDay(input.event_date)
     if (sendAt.getTime() > eventDate.getTime()) {
       throw new Error('scheduled_send_at no puede ser posterior a event_date')
     }
@@ -106,6 +166,7 @@ export async function createEvent(input: CreateEventInput, tenantId: string): Pr
   if (input.media_url && !input.media_type) {
     throw new Error('media_type es obligatorio cuando se provee media_url')
   }
+  const linkUrl = normalizeEventLink(input.link_url)
 
   const initialStatus: EventStatus = input.send_mode === 'auto' && input.scheduled_send_at
     ? 'scheduled'
@@ -124,6 +185,7 @@ export async function createEvent(input: CreateEventInput, tenantId: string): Pr
       filters: (input.filters ?? {}) as Record<string, unknown>,
       media_url: input.media_url ?? null,
       media_type: input.media_type ?? null,
+      link_url: linkUrl,
       content_sid: null,
       blackout_days: input.blackout_days ?? 5,
       status: initialStatus,
@@ -178,6 +240,11 @@ export async function updateEvent(
   const updatePayload: Record<string, unknown> = { ...patch }
   if (patch.filters !== undefined) {
     updatePayload.filters = patch.filters as Record<string, unknown>
+  }
+  // Mismo saneo que al crear: un link con espacios no se guarda, porque el que
+  // lo pagaría es el envío entero (ver normalizeEventLink).
+  if (patch.link_url !== undefined) {
+    updatePayload.link_url = normalizeEventLink(patch.link_url)
   }
 
   // Realineación de status. La invariante es simple: un evento está 'scheduled'
@@ -326,8 +393,65 @@ function formatEventDate(dateStr: string): string {
 export interface ExecuteAutoEventResult {
   sent: number
   failed: number
+  /** Encolados en `send_queue` para gotear en los próximos días (Bloque 2). */
+  queued: number
   excluded_monthly_cap: number
   campaign_id: string | null
+}
+
+/**
+ * Lo mínimo de supabase-js que necesita `claimScheduledEvent()`.
+ *
+ * Se declara aparte —en vez de pedir un `SupabaseClient` entero— para que la prueba de
+ * carrera pueda ejecutar ESTA MISMA función contra un Postgres real, con conexiones de
+ * verdad peleando por la fila (`tests/db/calendar-claim.test.ts`). Un mock probaría el mock.
+ */
+export interface EventClaimClient {
+  from(table: string): {
+    update(patch: { status: string }): {
+      eq(column: string, value: string): {
+        eq(column: string, value: string): {
+          select(columns: string): PromiseLike<{
+            data: Array<{ id: string }> | null
+            error: { message: string } | null
+          }>
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Reclama un evento para despacharlo: lo pasa de 'scheduled' a 'sent' y responde si
+ * ESTA llamada fue la que ganó.
+ *
+ * POR QUÉ NO ALCANZA CON MIRAR `error`
+ * ────────────────────────────────────
+ * El `UPDATE … WHERE id=$1 AND status='scheduled'` es atómico, así que de dos llamadas
+ * concurrentes solo UNA toca una fila. Pero la otra **tampoco da error**: Postgres
+ * considera un éxito perfecto actualizar cero filas. Hasta hoy el código solo revisaba
+ * `error`, así que las dos seguían adelante y **el evento se despachaba dos veces** —
+ * cada cliente recibía la invitación por duplicado.
+ *
+ * El conteo de filas es la ÚNICA señal que distingue al ganador. `calendar-dispatch`
+ * corre cada 15 minutos y no tolera el doble disparo (a diferencia de `queue-drain`,
+ * que sí, vía `FOR UPDATE SKIP LOCKED` — ver docs/features/send-governance.md).
+ *
+ * Devuelve `false` si otra corrida se lo llevó. Lanza solo si la base falló de verdad.
+ */
+export async function claimScheduledEvent(
+  supabase: EventClaimClient,
+  eventId: string
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('restaurant_events')
+    .update({ status: 'sent' })
+    .eq('id', eventId)
+    .eq('status', 'scheduled')
+    .select('id')
+
+  if (error) throw new Error(`No se pudo reclamar evento ${eventId}: ${error.message}`)
+  return (data?.length ?? 0) === 1
 }
 
 /**
@@ -441,13 +565,19 @@ async function assertEventTemplateUsable(
 }
 
 /**
- * Executes a scheduled auto-event: resolves template, filters audience,
- * sends messages, records campaign, and marks event as sent/failed.
+ * Despacha un evento programado: resuelve la plantilla, arma la audiencia, envía lo que
+ * cabe en el presupuesto de hoy, **encola el resto**, y deja el evento en sent/failed.
  *
- * Idempotent: marks event as 'sent' before sending to prevent double-dispatch.
- * If the send phase fails, status is rolled back to 'failed'.
+ * Idempotente: reclama el evento (`scheduled` → `sent`) ANTES de trabajar, y el reclamo
+ * se decide por el CONTEO DE FILAS, no por la ausencia de error — ver
+ * `claimScheduledEvent()`. Si la fase de envío falla, el estado vuelve a 'failed'.
  *
- * Requires admin_settings keys: event_template_image_sid | event_template_video_sid
+ * NO envía la audiencia entera de golpe: lo que excede el presupuesto de campaña del día
+ * va a `send_queue` con prioridad P1 y gotea en `queue-drain`, igual que una campaña
+ * manual. Por eso el resultado trae `queued` además de `sent`/`failed`, y la campaña
+ * sigue `running` mientras quede cola.
+ *
+ * Requiere las claves de admin_settings: event_template_image_sid | event_template_video_sid
  */
 export async function executeAutoEvent(eventId: string): Promise<ExecuteAutoEventResult> {
   const supabase = getServiceClient()
@@ -461,13 +591,17 @@ export async function executeAutoEvent(eventId: string): Promise<ExecuteAutoEven
   const tenant = await getTenantById(event.tenant_id)
   if (!tenant) throw new Error(`Tenant ${event.tenant_id} no encontrado para evento ${eventId}`)
 
-  // Idempotency: claim the event before doing any work
-  const { error: claimError } = await supabase
-    .from('restaurant_events')
-    .update({ status: 'sent' })
-    .eq('id', eventId)
-    .eq('status', 'scheduled') // guard against race condition
-  if (claimError) throw new Error(`No se pudo reclamar evento ${eventId}: ${claimError.message}`)
+  // Idempotencia: reclamar el evento ANTES de hacer cualquier trabajo. Perder el reclamo
+  // no es un fallo del evento —otra corrida lo está despachando ahora mismo—, así que se
+  // sale sin tocar nada. Este bloque va FUERA del try de abajo a propósito: si estuviera
+  // dentro, la corrida PERDEDORA dispararía el rollback a 'failed' y le rompería el
+  // evento a la que sí está enviando.
+  const ganado = await claimScheduledEvent(supabase, eventId)
+  if (!ganado) {
+    throw new Error(
+      `Evento ${eventId} ya fue reclamado por otra ejecución concurrente: no se despacha dos veces`
+    )
+  }
 
   try {
     // Resolve template SID from admin_settings
@@ -528,7 +662,7 @@ export async function executeAutoEvent(eventId: string): Promise<ExecuteAutoEven
 
     const brandName = tenant.config?.brand_name ?? 'El Restaurante'
     const eventDate = formatEventDate(event.event_date)
-    const cta = event.description?.trim() || '¡Te esperamos!'
+    const cta = buildEventCta(event.description, event.link_url)
 
     // Zernio: la media viaja en `options.headerMediaUrl` con la URL pública
     // COMPLETA (no el path suelto que exige la plantilla twilio/media). Twilio
@@ -536,11 +670,9 @@ export async function executeAutoEvent(eventId: string): Promise<ExecuteAutoEven
     const isZernio = tenant.messaging_provider === 'zernio'
     const zernioHeaderMediaUrl = `${getEventMediaBaseUrl()}/${mediaPath}`
 
-    let sent = 0
-    let failed = 0
-    const sentCustomerIds: string[] = []
-
-    for (const customer of eligible) {
+    /** Las variables de la plantilla para un cliente. Se arma en UN solo sitio para que
+     *  el envío inmediato y el encolado no puedan divergir. */
+    const variablesPara = (customer: Customer): Record<string, string> => {
       const variables: Record<string, string> = {
         '1': customer.name,
         '2': brandName,
@@ -551,7 +683,47 @@ export async function executeAutoEvent(eventId: string): Promise<ExecuteAutoEven
       if (!isZernio) {
         variables['6'] = mediaPath
       }
+      return variables
+    }
 
+    // ── Cuánto cabe HOY y cuánto gotea ──
+    // Antes se intentaba enviar la audiencia entera y los que excedían el presupuesto de
+    // campaña del día se marcaban `failed`: se PERDÍAN. Con 25 marcas, un festival con
+    // audiencia grande dejaba gente sin invitación en silencio. Mismo reparto que la
+    // campaña manual (`/api/dashboard/campaigns/manual`).
+    let cabenHoy = eligible
+    let aLaCola: Customer[] = []
+    try {
+      const linea = await getLineBudget(tenant.id)
+      if (linea.lineStatus === 'frozen') {
+        // Línea congelada por calidad: no sale ninguna campaña. Nada se pierde — espera a
+        // que un humano la reactive (spec §3.5: no hay descongelamiento automático).
+        cabenHoy = []
+        aLaCola = eligible
+      } else if (
+        linea.enforced &&
+        linea.campaignAvailable !== null &&
+        eligible.length > linea.campaignAvailable
+      ) {
+        cabenHoy = eligible.slice(0, linea.campaignAvailable)
+        aLaCola = eligible.slice(linea.campaignAvailable)
+      }
+      // `enforced: false` (tenants anteriores a 00037, sin límite conocido): se intenta
+      // todo, como siempre. Un tope inventado les cortaría envíos que hoy salen bien.
+    } catch (err) {
+      // Sin presupuesto legible se sigue con el comportamiento de antes (intentarlo todo):
+      // el choke-point vuelve a mirar el cupo en CADA envío y falla cerrado, así que por
+      // esta rama no se puede pasar del límite.
+      console.error(`[Calendar] No se pudo leer el presupuesto de línea de ${tenant.slug}:`, err)
+    }
+
+    let sent = 0
+    let failed = 0
+    const sentCustomerIds: string[] = []
+    /** Los que se intentaron y no salieron. NO se dan por perdidos: van a la cola. */
+    const reintentar: Customer[] = []
+
+    for (const customer of cabenHoy) {
       // `keepAllVariables`: el reintento por 21665 suelta la variable más alta
       // primero — aquí {{6}} = el path del flyer. Sin ella la plantilla media
       // sale rota para toda la audiencia; mejor fallar con el error visible.
@@ -559,35 +731,99 @@ export async function executeAutoEvent(eventId: string): Promise<ExecuteAutoEven
       const result = await sendTemplateMessage(
         customer.phone,
         templateSid,
-        variables,
+        variablesPara(customer),
         tenant,
         { customerId: customer.id, messageType: 'calendar_event' },
         isZernio
           ? { headerMediaUrl: zernioHeaderMediaUrl, headerMediaType: event.media_type ?? 'image' }
           : { keepAllVariables: true }
       )
-      await recordCampaignMessage({
-        campaignId: campaign.id,
-        customerId: customer.id,
-        status: result ? 'sent' : 'failed',
-        tenantId: tenant.id,
-        twilioSid: result?.sid ?? null,
-        // F2 (post-review): texto neutral de proveedor — desde v2.10.0 este envío
-        // puede ser Zernio, no solo Twilio (el detalle real del proveedor ya queda
-        // registrado en message_logs por sendTemplateMessage()).
-        errorMessage: result ? null : 'Envío fallido o número no configurado (detalle del proveedor en message_logs)',
-      })
 
       if (result) {
+        await recordCampaignMessage({
+          campaignId: campaign.id,
+          customerId: customer.id,
+          status: 'sent',
+          tenantId: tenant.id,
+          twilioSid: result.sid,
+          errorMessage: null,
+        })
         sent++
         sentCustomerIds.push(customer.id)
       } else {
-        failed++
+        // NO se marca `failed` todavía. `sendTemplateMessage()` devuelve `null` para TODOS
+        // sus modos de fallo, y uno de ellos es que el cupo se agotó entre que se leyó el
+        // presupuesto y que salió este envío (una bienvenida o un check-in pueden habérselo
+        // comido). El drenador lo reintenta con backoff y se rinde a los 3 intentos, así
+        // que un número realmente malo termina igual en `failed`, solo que unas horas más
+        // tarde y dejando rastro en `send_queue`.
+        reintentar.push(customer)
       }
     }
 
-    await finalizeCampaign(campaign.id, sent)
     await updateCustomerLastCampaignAt(sentCustomerIds)
+
+    // ── El resto gotea por la misma cola que cualquier campaña ──
+    // `expiresAt` = fin del día del evento en hora de Colombia: `calendar_event` es P1
+    // («entregarla tarde no sirve de nada» — MESSAGE_CLASS_MAP). Una invitación que llega
+    // el día después del festival no se manda: pasa a `expired` y queda el rastro.
+    const aEncolar = [...aLaCola, ...reintentar]
+    let queued = 0
+
+    if (aEncolar.length > 0) {
+      try {
+        const items: EnqueueItem[] = aEncolar.map((customer) => ({
+          tenantId: tenant.id,
+          phone: customer.phone,
+          customerId: customer.id,
+          campaignId: campaign.id,
+          messageType: 'calendar_event',
+          templateSid,
+          // Provider-aware, igual que el envío inmediato: para Twilio {{6}} es el PATH
+          // dentro del bucket; para Zernio la media viaja aparte y {{6}} no existe. El
+          // drenador reconstruye las OPCIONES según el proveedor actual del tenant
+          // (`construirOpciones()`), pero las variables quedan congeladas aquí: un tenant
+          // que migre de proveedor a mitad del goteo verá fallar lo que le quede en cola,
+          // con el motivo en `send_queue.last_error`.
+          variables: variablesPara(customer),
+          // URL pública COMPLETA: es lo que el drenador le pasa a Zernio como
+          // `headerMediaUrl`, y para Twilio solo necesita ser no-nula.
+          mediaUrl: zernioHeaderMediaUrl,
+          mediaType: event.media_type ?? 'image',
+          expiresAt: appEndOfDay(event.event_date),
+          // ⚠️ En `restaurant_events` un `location_id` NULL significa «evento de toda la
+          // marca» (audience_scope='brand'), no «sede desconocida» — es la excepción del
+          // modelo (00043). En `send_queue` NULL sí es «sede desconocida», y para un evento
+          // de marca eso es exactamente lo correcto: no hay una sede que atribuir.
+          locationId: event.location_id,
+        }))
+        queued = (await enqueueSendBatch(items)).enqueued
+      } catch (err) {
+        // El encolado falló: estos clientes no reciben nada y nadie los va a reintentar.
+        // Se registran como `failed` con el motivo real — perderlos en silencio mientras
+        // la respuesta promete «se envían solos» es el peor desenlace posible.
+        const motivo = err instanceof Error ? err.message : 'Error desconocido al encolar'
+        console.error(`[Calendar] No se pudo encolar el resto del evento ${eventId}:`, err)
+        for (const customer of aEncolar) {
+          failed++
+          await recordCampaignMessage({
+            campaignId: campaign.id,
+            customerId: customer.id,
+            status: 'failed',
+            tenantId: tenant.id,
+            twilioSid: null,
+            errorMessage: `No se pudo encolar: ${motivo}`,
+          })
+        }
+      }
+    }
+
+    // Una campaña con cola pendiente sigue `running`: marcarla `completed` mientras gotea
+    // le miente al operador (spec §3.4). La cierra `queue-drain` cuando su cola queda
+    // vacía, recalculando `total_sent` desde `campaign_messages`.
+    if (queued === 0) {
+      await finalizeCampaign(campaign.id, sent)
+    }
 
     // Link campaign to event. Best-effort: los mensajes YA salieron, así que esto no
     // puede tumbar la respuesta — pero hasta hoy un fallo aquí dejaba el evento sin su
@@ -605,7 +841,7 @@ export async function executeAutoEvent(eventId: string): Promise<ExecuteAutoEven
       })
     }
 
-    return { sent, failed, excluded_monthly_cap: excluded.length, campaign_id: campaign.id }
+    return { sent, failed, queued, excluded_monthly_cap: excluded.length, campaign_id: campaign.id }
   } catch (err) {
     // Roll back to 'failed' so admin can inspect and retry. Si ESTE update también
     // falla, el evento queda 'sent' sin haber enviado nada y sin forma de reintentarlo

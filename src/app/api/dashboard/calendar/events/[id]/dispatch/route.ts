@@ -68,6 +68,7 @@ export async function POST(
       ok: true,
       sent: result.sent,
       failed: result.failed,
+      queued: result.queued,
       excluded_monthly_cap: result.excluded_monthly_cap,
       campaign_id: result.campaign_id,
     })

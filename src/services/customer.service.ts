@@ -155,42 +155,105 @@ function normalizeToTenDigits(phone: string): string {
 }
 
 /**
+ * Lo que devuelve un escritor de opt-out. **`matched` es el punto de todo esto.**
+ *
+ * Un `UPDATE ... WHERE phone = $1 AND tenant_id = $2` que no encuentra a nadie es
+ * un éxito para Postgres: cero filas, `error = null`. Devolver `void` hacía que el
+ * llamador no pudiera distinguir "lo marqué" de "no había a quién marcar", y el
+ * webhook loguease `opt-out persistido` en los dos casos. Ese log **mentía**: el
+ * dueño lo leía en Vercel, iba al panel y no encontraba nada — porque de verdad no
+ * había nada. Tres cosas distintas que ahora se distinguen:
+ *
+ *   · `{ ok: false }`            → la base falló. El cliente SIGUE recibiendo.
+ *   · `{ ok: true, matched: 0 }` → ese teléfono no tiene ficha en ESTE tenant.
+ *                                  Nada que marcar y nada que va a salir en el panel.
+ *   · `{ ok: true, matched: n }` → n filas marcadas. Esto sí se ve en el panel.
+ *
+ * El caso `matched: 0` no es raro en multi-tenant: el número escribió a la línea de
+ * la marca A y su ficha vive en la marca B. `matched` es lo que lo delata.
+ *
+ * Ref: `docs/features/twilio-opt-out.md` § "El log que mentía"
+ */
+export type OptOutWriteResult =
+  | { ok: true; matched: number }
+  | { ok: false; error: string }
+
+/**
  * Marca al cliente como opt-out de WhatsApp (respondió SALIR/STOP/BAJA o
  * Twilio lo rechazó por 21610/63016). También apaga accepts_marketing para
- * que las campañas dejen de incluirlo. Best-effort: no lanza.
+ * que las campañas dejen de incluirlo. Best-effort: **no lanza nunca** — el
+ * fallo viaja en el valor de retorno, no en una excepción.
  * Auditoría 12-Julio (tarea 8).
  */
-export async function setWhatsappOptOut(phone: string, tenantId: string): Promise<void> {
+export async function setWhatsappOptOut(phone: string, tenantId: string): Promise<OptOutWriteResult> {
   try {
     const supabase = getServiceClient()
     const normalized = normalizeToTenDigits(phone)
-    const { error } = await supabase
+    // `.select('id')` no es decoración: sin él supabase-js manda `Prefer: return=minimal`
+    // y la respuesta no trae forma de saber cuántas filas cambiaron. Con él, `data.length`
+    // ES el número de filas actualizadas.
+    const { data, error } = await supabase
       .from('customers')
       .update({ whatsapp_opt_out_at: new Date().toISOString(), accepts_marketing: false })
       .eq('phone', normalized)
       .eq('tenant_id', tenantId)
-    if (error) console.error('[OptOut] No se pudo marcar opt-out:', error.message)
+      .select('id')
+    if (error) {
+      logDbFailure({
+        scope: 'OptOut',
+        reason: 'set_opt_out_error',
+        error,
+        context: { tenant_id: tenantId },
+      })
+      return { ok: false, error: error.message }
+    }
+    return { ok: true, matched: data?.length ?? 0 }
   } catch (err) {
-    console.error('[OptOut] Excepción marcando opt-out:', err instanceof Error ? err.message : err)
+    const message = err instanceof Error ? err.message : String(err)
+    logDbFailure({
+      scope: 'OptOut',
+      reason: 'set_opt_out_exception',
+      error: { message },
+      context: { tenant_id: tenantId },
+    })
+    return { ok: false, error: message }
   }
 }
 
 /**
  * Limpia el opt-out de WhatsApp (cliente respondió ALTA/START/ACEPTO) y
- * reactiva accepts_marketing. Best-effort: no lanza.
+ * reactiva accepts_marketing. Best-effort: no lanza. Mismo contrato de
+ * `matched` que `setWhatsappOptOut()` — ver `OptOutWriteResult`.
  */
-export async function clearWhatsappOptOut(phone: string, tenantId: string): Promise<void> {
+export async function clearWhatsappOptOut(phone: string, tenantId: string): Promise<OptOutWriteResult> {
   try {
     const supabase = getServiceClient()
     const normalized = normalizeToTenDigits(phone)
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('customers')
       .update({ whatsapp_opt_out_at: null, accepts_marketing: true })
       .eq('phone', normalized)
       .eq('tenant_id', tenantId)
-    if (error) console.error('[OptOut] No se pudo limpiar opt-out:', error.message)
+      .select('id')
+    if (error) {
+      logDbFailure({
+        scope: 'OptOut',
+        reason: 'clear_opt_out_error',
+        error,
+        context: { tenant_id: tenantId },
+      })
+      return { ok: false, error: error.message }
+    }
+    return { ok: true, matched: data?.length ?? 0 }
   } catch (err) {
-    console.error('[OptOut] Excepción limpiando opt-out:', err instanceof Error ? err.message : err)
+    const message = err instanceof Error ? err.message : String(err)
+    logDbFailure({
+      scope: 'OptOut',
+      reason: 'clear_opt_out_exception',
+      error: { message },
+      context: { tenant_id: tenantId },
+    })
+    return { ok: false, error: message }
   }
 }
 

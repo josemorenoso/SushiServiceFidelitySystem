@@ -14,6 +14,7 @@ import { canSendBulk } from '@/services/wallet.service'
 import { getLineBudget } from '@/services/line-budget.service'
 import { enqueueSendBatch, type EnqueueItem } from '@/services/send-queue.service'
 import { isDbFailure, logDbFailure } from '@/lib/db-failure'
+import { getRecoveryZoneConfig } from '@/services/settings.service'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -157,9 +158,12 @@ export async function POST(request: NextRequest) {
     const afterFrequencyCap = (customers ?? []).filter((c) => passesFrequencyCap(c.last_campaign_at))
     const skipped = (customers?.length ?? 0) - afterFrequencyCap.length
 
-    // Recovery Zone: excluir clientes entre RECOVERY_ZONE_START_DAYS y RECOVERY_ZONE_END_DAYS días
-    // sin visitar — están reservados para el cron de reactivación personalizado.
-    const afterRecoveryZone = afterFrequencyCap.filter((c) => !isInRecoveryZone(c.last_visit_at))
+    // Recovery Zone: excluir clientes dentro de la ventana reservada al cron de
+    // reactivación personalizado. La ventana se DERIVA de los días que este tenant
+    // configuró en Ajustes: si bajó el toque suave a 15, la zona baja con él y los
+    // días 15-17 quedan protegidos (con 18-25 fijo, no lo estaban).
+    const recoveryZone = await getRecoveryZoneConfig(tenantId)
+    const afterRecoveryZone = afterFrequencyCap.filter((c) => !isInRecoveryZone(c.last_visit_at, recoveryZone))
     const skippedRecoveryZone = afterFrequencyCap.length - afterRecoveryZone.length
 
     // Pre-event blackout: hoy solo informativo — la exclusión real la hacen el

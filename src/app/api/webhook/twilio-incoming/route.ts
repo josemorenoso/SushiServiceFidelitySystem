@@ -323,7 +323,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         .maybeSingle()
 
       if (authError) {
-        logDeliveryIntakeFailure({
+        await logDeliveryIntakeFailure({
           tenant,
           operatorPhone: phone,
           reason: 'remitente_no_verificable',

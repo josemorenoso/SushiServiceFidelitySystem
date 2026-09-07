@@ -158,6 +158,7 @@ erDiagram
 | 21 | [point_transactions](#point_transactions) | Movimientos de puntos (el libro mayor del motor de puntos) | SI | Admin: SELECT; Service: SELECT/INSERT |
 | 22 | [tenant_wallet_transactions](#tenant_wallet_transactions) | Billetera prepagada COP por tenant: recargas, ajustes y débitos | SI | Super admin: ALL |
 | 23 | [template_versions](#template_versions) | Versiones de cada plantilla del catálogo: la vigente, la pendiente de Meta y el historial | SI | Admin: CRUD (vía service role, filtrado por tenant en código) |
+| 24 | [delivery_intake_failures](#delivery_intake_failures) | El domicilio que NO llegó a la base, con su motivo real (00053, §24-B) | SI | SELECT por marca; UPDATE/DELETE revocados |
 
 ---
 
@@ -1184,6 +1185,43 @@ CREATE POLICY "tenant_all_template_versions" ON template_versions FOR ALL
 
 **Índices:** `idx_consent_events_lookup (tenant_id, phone, occurred_at DESC)`, `idx_consent_events_location_id (tenant_id, location_id) WHERE location_id IS NOT NULL` (00043).
 
+### delivery_intake_failures
+
+> Un pedido de domicilio que **no llegó a la base**, con su motivo real (migración 00053, §24-B).
+> Lo escribe `logDeliveryIntakeFailure()` de `src/services/delivery.service.ts` y **nadie más**: si
+> aparece un segundo escritor, el embudo dejó de ser uno. Ver `docs/features/delivery-webhook.md`.
+>
+> **Por qué existe:** sin ella, «llegaron tres pedidos y se perdieron los tres» y «hoy no pidió
+> nadie» son EL MISMO dato — cero filas en `visits` — y ningún semáforo puede pintarlos distinto.
+> Era el ROJO 3 de la auditoría del 2026-09-06.
+
+| Columna | Tipo | Nullable | Default | Descripción |
+|---------|------|----------|---------|-------------|
+| `id` | `uuid` | NO | `gen_random_uuid()` | PK |
+| `tenant_id` | `uuid` | NO | **ninguno** | FK → tenants(id) ON DELETE CASCADE. **Sin el DEFAULT puente de la 00028**: acá un INSERT que lo olvide FALLA en vez de irse a Sushi Service |
+| `operator_phone` | `text` | SI | `NULL` | Celular del operador que reenvió el cuadro. NULL = no se pudo saber |
+| `reason` | `text` | NO | - | `DeliveryIntakeReason` de `delivery.service.ts`. **Sin CHECK a propósito**: un motivo nuevo no puede costar una migración, y perder el motivo es peor que no validarlo |
+| `detail` | `text` | NO | - | El detalle técnico, recortado a 2000 |
+| `raw_message` | `text` | NO | - | El cuadro del pedido tal cual. **Contiene datos personales del comensal**: es lo que permite reprocesarlo a mano. Nunca sale hacia el AIOS |
+| `created_at` | `timestamptz` | NO | `now()` | - |
+
+**Sin `location_id`, y es una decisión:** el fallo más traicionero (`remitente_no_verificable`) ocurre
+justo cuando la consulta a `authorized_numbers` falló, así que ahí la sede es inconocible por
+definición. Una columna que nace casi siempre NULL es la deuda D13 otra vez.
+
+**Foreign Keys:**
+
+| Columna | Referencia | On Delete |
+|---------|------------|-----------|
+| `tenant_id` | `tenants(id)` | CASCADE |
+
+**Índices:** `idx_delivery_failures_tenant_fecha (tenant_id, created_at DESC)`.
+
+**RLS:** `tenant_read_delivery_failures` — SELECT donde `tenant_id = current_tenant_id() OR
+is_super_admin()`. `UPDATE` y `DELETE` revocados para `anon` y `authenticated`: el que puede maquillar
+el registro de fallos no tiene un registro.
+
+---
 ---
 ## Storage Buckets
 

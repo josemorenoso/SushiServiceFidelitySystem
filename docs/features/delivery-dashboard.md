@@ -213,12 +213,13 @@ fallo de verdad y no se disfraza de «falta la migración»**.
 
 ## Dependencia: la migración 00053
 
-`delivery_intake_failures` la crea la **00053** (`supabase/migrations/00053_salud_por_cliente.sql`,
-rama `feat/salud-aios`). Al escribirse esta pantalla, esa rama **no estaba mergeada en
-`main`** y la migración **no estaba aplicada** en producción.
+`delivery_intake_failures` la crea la **00053** (`supabase/migrations/00053_salud_por_cliente.sql`).
+Esta pantalla se escribió cuando esa migración vivía en otra rama; para cuando se cerró el bloque,
+`feat/salud-aios` ya estaba en `main` y esta rama la trae mergeada. **Pero sigue SIN APLICARSE en
+producción**, y eso es lo que importa: que el archivo exista en el repo no crea la tabla.
 
-Por eso el Bloque 3.a se construyó contra su forma exacta y **degrada solo**. No hace falta
-tocar esta pantalla cuando la 00053 corra: empieza a listar fallos y ya.
+Por eso el Bloque 3.a se construyó contra su forma exacta y **degrada solo**. No hace falta tocar
+esta pantalla cuando la 00053 corra: empieza a listar fallos y ya.
 
 ```
 delivery_intake_failures(id, tenant_id NOT NULL, operator_phone, reason,

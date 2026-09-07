@@ -149,10 +149,10 @@ del local (el dueño lo aceptó) · **D19** un mesero sin teléfono en dos sedes
   Y **17.b**: "quién es Black" difiere entre la tarjeta (`black-tier.ts`) y el panel (`POWER_RANKS`).
 - **El rastro del domicilio perdido está ESCRITO pero no aplicado**: `delivery_intake_failures`
   (00053) todavía no corrió en producción, así que hasta que corra sigue habiendo cero registro.
-- **Los webhooks de Conexiones no se han visto llegar**: el header real de la firma HMAC de Zernio
-  no está confirmado (si es otro, todos rebotan en 401) y `registerWebhook()` es idempotente POR
-  URL, así que los 6 eventos nuevos no se aplican solos sobre un webhook ya creado. Por eso el
-  estado del alta también se puede avanzar a mano. → `conexiones.md`.
+- **Los webhooks de Conexiones no se han visto llegar.** El header **SÍ está confirmado** desde el
+  2026-09-07: es `X-Zernio-Signature` y `verifyZernioSignature()` ya lo lee. Faltan las otras dos —
+  que `ZERNIO_WEBHOOK_SECRET` COINCIDA con la Secret Key del panel (hoy el «Send test» recibe
+  NUESTRO 401) y suscribir los 6 `whatsapp.number.*` (`registerWebhook()` es idempotente POR URL).
 - **Ningún tenant tiene `owner_email`**: `aios_provision_tenant` lo acepta pero es opcional, así
   que hoy Conexiones solo la opera el super-admin. Fail-closed y la pantalla lo dice, pero es una
   llamada por cada alta hasta que el AIOS lo mande.

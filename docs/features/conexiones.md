@@ -171,9 +171,13 @@ los pedidos de todos los tenants Zernio).
 
 ## Antes de que esto se mueva solo — prerequisitos abiertos
 
-1. 🔴 **El nombre real del header de la firma HMAC de Zernio no está confirmado.** El
-   contrato se contradice consigo mismo. Si es otro, **todos** sus webhooks rebotan en 401 y
-   la pantalla nunca se mueve sola. Por eso el estado también se puede avanzar a mano.
+1. 🔴 **`ZERNIO_WEBHOOK_SECRET` tiene que COINCIDIR con la *Secret Key* del panel.** El header
+   ya NO es el riesgo: quedó **CONFIRMADO el 2026-09-07 como `X-Zernio-Signature`** — lo dice el
+   propio panel de Zernio debajo del campo, y `verifyZernioSignature()` ya lo lee tal cual, sin
+   tocar una línea de código (diseño §9.1). Lo que sigue abierto es el secreto: el «Send test»
+   del panel recibe hoy **nuestro 401**, y eso solo puede ser la variable sin configurar en
+   Vercel o distinta de la del panel. ⚠️ Las variables de entorno solo toman efecto en un
+   despliegue NUEVO. Por eso el estado también se puede avanzar a mano.
 2. 🔴 **`registerWebhook()` es idempotente POR URL**: los seis eventos nuevos no se aplican
    solos sobre un webhook ya creado. Hay que borrarlo y volver a registrarlo.
 3. 🔴 **Aplicar la 00054 en Supabase ANTES de desplegar su código.** Si no, PostgREST

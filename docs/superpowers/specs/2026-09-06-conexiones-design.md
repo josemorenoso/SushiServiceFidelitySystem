@@ -630,11 +630,26 @@ y el AIOS ya sabe leer del producto (`product-db.ts`, rol `aios_constelarys`).
 
 ## 9. Antes de escribir una línea de código
 
-1. 🔴 **El header de la firma HMAC de los webhooks de Zernio.** El contrato se contradice consigo
-   mismo (§5 dice VERIFICADO, sus propias notas finales dicen que no se confirmó), y
-   `zernio-messaging.md` afirma un alias `X-Late-Signature` que no está en el contrato. **Si el
-   nombre real es otro, todos los webhooks rebotan en 401** y esta pantalla nunca se mueve sola: el
-   cliente queda mirando «esperando a Meta» para siempre. **Es el prerequisito número uno.**
+1. ✅ **El header de la firma HMAC: CONFIRMADO el 2026-09-07, y es `X-Zernio-Signature`.** Lo dice
+   el propio panel de Zernio debajo del campo *Secret Key*: «*Used to generate HMAC signature in
+   X-Zernio-Signature header*». **Coincide exactamente con `verifyZernioSignature()`: no hay que
+   tocar una línea de código.** Queda cerrado el riesgo que este documento traía como prerequisito
+   número uno, y queda resuelta de paso la contradicción del §5 del contrato contra sus propias
+   notas finales. El alias `X-Late-Signature` que afirma `zernio-messaging.md` **no aparece en el
+   panel**: es la quinta mentira de ese doc (§9 del parte de coexistencia).
+
+   ⚠️ **Lo que sí falta es que el secreto COINCIDA.** Verificado contra producción el 2026-09-07:
+   `GET https://hooks.constelarys.com/api/webhook/zernio` → **405** (la ruta existe y solo acepta
+   POST, correcto) y `POST` sin firma → **401**. O sea que el endpoint está vivo y bien desplegado:
+   cuando el «Send test» del panel falla, es **nuestro 401**, y solo puede ser una de dos cosas —
+   `ZERNIO_WEBHOOK_SECRET` sin configurar en Vercel, o distinta de la *Secret Key* del panel. Las
+   variables de entorno **solo toman efecto en un despliegue nuevo**.
+
+   ⚠️ **Y falta suscribir los eventos que esta pantalla necesita.** El webhook tiene hoy **5**:
+   `Message.Received/Delivered/Read/Failed` y `Whatsapp.Template.Status`. **Ninguno de los
+   `whatsapp.number.*`**, que son los que mueven Conexiones — sobre todo
+   `verification_required` y `activated`. Sin ellos la pantalla no se entera de nada sola. Se
+   marcan en la lista *Events* del propio panel (hay que bajar: arriba están los de Posts).
 2. 🔴 **La prueba E2E de Zernio** con la cuenta ya limpia (ESTADO §3.3). Nada de coexistencia se ha
    ejercido contra la API real.
 3. ✅ **`select-phone-number` (§3.b.3): NO se implementa** (decisión del dueño, 2026-09-06). El

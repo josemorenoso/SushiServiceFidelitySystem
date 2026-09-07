@@ -25,7 +25,25 @@
 
 ## 2. En vuelo ahora mismo
 
-**Nada en vuelo.** QR Studio y plantillas cerraron los dos en `main`, que quedó **sin pushear**: lo decide el dueño.
+- **Domicilios — el apartado del dashboard (§18.d + §24.3-B)** · rama `feat/domicilios`, salida de
+  `main` · worktree `.worktrees/domicilios` · **SIN MIGRACIÓN**. Territorio, todo NUEVO:
+  `src/app/(dashboard)/dashboard/domicilios/`, `src/app/api/dashboard/domicilios/`,
+  `src/components/dashboard/domicilios/`, `src/services/delivery-dashboard.service.ts`,
+  `src/lib/delivery-reasons.ts`, `src/lib/delivery-silence.ts` y sus tests.
+  **SOLO LECTURA** sobre `visits`, `customers`, `tenants` y `delivery_intake_failures` (00053).
+  **No toca** `delivery.service.ts`, `webhook/twilio-incoming`, `webhook/zernio`,
+  `webhook/delivery`, `tenants`, gobernanza ni el AIOS. §18.c y §18.e quedan FUERA de alcance.
+  ⚠️ **UN cruce declarado: `DashboardSidebar.tsx`** — 1 línea de nav. `feat/conexiones` agrega
+  otra ahí mismo; son líneas distintas del mismo array y el merge se resuelve a mano en
+  segundos. Nada más compartido.
+  ⚠️ **La 00053 NO está mergeada en `main`** (vive en `feat/salud-aios`). El Bloque 3 se
+  construye contra su forma exacta y **degrada solo** si la tabla no existe: la pantalla dice
+  «falta la 00053» en vez de pintar cero fallos, que sería mentir.
+
+**También en vuelo, en otra rama:** `feat/conexiones` (signup de WhatsApp del cliente, 00052).
+Su territorio completo está en su propia rama; acá solo se anota el cruce del sidebar.
+
+QR Studio y plantillas cerraron los dos en `main`, que quedó **sin pushear**: lo decide el dueño.
 
 📌 **Esta sección es el TABLERO.** Toda sesión anota acá su territorio (qué toca, en qué rama)
 **antes** de escribir, y lo commitea solo; si se cruza con uno ya anotado, **espera y va después**.

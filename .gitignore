@@ -62,3 +62,6 @@ Level 2.0/
 
 # Grafo de conocimiento (generado por graphify; se reconstruye con `graphify extract`)
 graphify-out/
+
+# Worktrees de sesiones en paralelo (ver CLAUDE.md)
+.worktrees/

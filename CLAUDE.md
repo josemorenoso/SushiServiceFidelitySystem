@@ -25,6 +25,25 @@ un dato de la marca A jamás se ve ni se atribuye a la marca B.**
   reservada para F9, y se saltó la 00047. Un hueco es barato; dos archivos con el mismo número, no.
 - Lo repetitivo (auditorías, inventarios, barridos) va a subagentes Sonnet o Haiku, nunca al modelo caro.
 
+## Trabajar en paralelo sin pisarse (regla del 2026-09-06)
+
+El 06 se perdió trabajo dos veces y aparecieron seis carpetas `wt-*` en Descargas. La causa no
+fue el paralelismo: fue **varias sesiones escribiendo en el MISMO árbol**. Git no avisa, porque
+el árbol solo tiene una rama activa y el índice es uno solo.
+
+- **Una sesión = un árbol.** Antes de escribir: `git worktree add ../wt-<rama> -b fix/<rama> main`.
+  Los worktrees viven **dentro del repo** (`.worktrees/`), nunca sueltos en Descargas.
+- **Al terminar el bloque, el worktree se cierra**: `git worktree remove` + `git branch -d`.
+  Un worktree que sobrevive a su rama es la carpeta huérfana de la próxima vez.
+- ❌ **`git stash` y `git reset --hard` están PROHIBIDOS con otra sesión viva.** Se llevan el
+  trabajo ajeno sin preguntar y sin dejar rastro. La red es commitear temprano, no el stash.
+- **Antes de `git add -A`, mirá qué estás por commitear.** Un árbol compartido te muestra como
+  "modificado" un archivo que en realidad está ATRASADO: commitearlo REVIERTE lo del otro. Se
+  detecta con `git diff <commit-del-otro>^ -- <archivo>`; si sale vacío, estás revirtiendo.
+- **Tests en paralelo:** el globalSetup de vitest fija `TEST_PG_PORT=55432`. Dos corridas a la vez
+  se pisan el Postgres y la segunda dice "No test files found", que despista muchísimo.
+- **Nada se queda commiteado y sin pushear.** Lo local no es respaldo: `main` a `origin` al cerrar.
+
 ## Guardrails del dominio (romperlos cuesta datos reales)
 - **Todo INSERT lleva `tenant_id` explícito.** La 00030 nunca se aplicó: 18 tablas conservan el DEFAULT puente de la 00028 → un INSERT que lo olvide se va **calladito a Sushi Service**, sin error.
 - **Toda columna de sede es NULLABLE y lleva FK COMPUESTA `(location_id, tenant_id)` ON DELETE RESTRICT.** Una FK simple deja atribuir un hecho de la marca A a una sede de la marca B y el motor no se queja.

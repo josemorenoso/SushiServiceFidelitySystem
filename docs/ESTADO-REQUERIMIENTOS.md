@@ -28,13 +28,22 @@
 | 15 | Campañas — usabilidad | **PARCIAL** | Burbujas movidas y presets fantasma ocultos (`f1a7921`); el rediseño de §15.1 sin empezar, 15.b sin decidir | NO |
 | 16 | Fatiga y pipeline del recorrido | **NO EMPEZADO** | Cero código; solo documentado. Preguntas 16.a–e abiertas | NO |
 | 17 | Clientes Black / VIP | **PARCIAL** | Mudanza y tarjeta hechas (`f1a7921`); beneficio permanente (17.3) y umbral configurable (17.4) sin implementar. Ojo con la **17.b** ya conocida | NO |
-| 18 | **Domicilios bajo coexistencia** | **NO EMPEZADO** | No existe apartado de Domicilios en el dashboard ni canal alternativo para el "cuadro" | **NO para el deploy — SÍ para el onboarding** (ver abajo) |
+| 18 | **Domicilios bajo coexistencia** | **PARCIAL** | 18.a y 18.b **RESUELTAS** (por los hechos y por el código; cero líneas). **18.d HECHA** el 2026-09-07 en `feat/domicilios`, sin desplegar: `/dashboard/domicilios` — `docs/features/delivery-dashboard.md`. Quedan **18.c** (plantilla de fallo de Zernio) y **18.e** (interruptor de la auto-respuesta) | **NO para el deploy — 18.c/18.e siguen pesando en el onboarding** |
 | 19 | **Escáner QR de meseros** | ✅ **HECHO**, en `main` y desplegado | Migración `00046` **aplicada** (`ESTADO.md` §1). ⚠️ Los meseros existentes tienen `location_id` NULL: **no salen en ningún escáner** hasta que se les asigne sede (`SQL-PARA-CORRER/meseros-sin-sede/`). Ver ficha abajo | NO |
 | 20 | Decisiones D-7 a D-10 | **PARCIAL** | Solo documentadas (`060ac01`, docs-only). Sin divisor de bloques Golden Bullet, sin `accepts_marketing:false` explícito en importación, `consent_events` sin referenciar en `src/` | NO |
 | 21 | Panel del AIOS | ✅ **HECHO** | AIOS v1.3.0: `client_locations.platform/.messaging`, `clients.billing_mode` | NO |
 | 22 | Franquicias | ⏸️ **DIFERIDO A PROPÓSITO** | El doc dice explícitamente "NO es v1"; se dejó la puerta abierta sin construir | NO |
 
 §1, §2, §11 son contexto/arquitectura ya resueltos. §23/§24/§25 están en [ESTADO.md](../ESTADO.md).
+
+> **§24 — al 2026-09-07, en dos mitades, ninguna desplegada.** **§24-A** (que alguien se entere sin
+> abrir el panel) es el tablero de salud del AIOS. **§24-B** (el rastro del domicilio perdido, y el
+> apartado que lo muestra) está completo entre dos ramas: la tabla `delivery_intake_failures` y el
+> `INSERT` dentro de `logDeliveryIntakeFailure()` en la **00053** (`feat/salud-aios`), y la pantalla
+> que la lee — con la **alarma de silencio de §24.3-B, cuyo umbral sale del historial de cada
+> marca** — en `feat/domicilios` (`docs/features/delivery-dashboard.md`). Mientras la 00053 no se
+> aplique, la pantalla **lo dice** en vez de pintar cero fallos. De §24-B sigue abierta la
+> **alerta**, no la vista.
 
 ---
 
@@ -144,6 +153,22 @@ Preguntas 18.a–d marcadas *"bloqueantes, ninguna asumible"*: por dónde entra 
 `authorized_numbers` basta para distinguirlo, qué se le responde al operador en Zernio, y qué debe
 contener el apartado nuevo de Domicilios.
 
+### Estado de las cinco, al 2026-09-07
+
+Las cinco están desarrolladas una por una en `docs/DECISION-18-DOMICILIOS-COEXISTENCIA.md`.
+
+| # | Pregunta | Estado |
+|---|---|---|
+| 18.a | ¿Por dónde entra el cuadro? | ✅ **RESUELTA por los hechos.** Sigue entrando por WhatsApp a la línea principal: Sushi Fun ya entró así, con su cuenta propia y sin comprar ninguna línea. **Cero código** |
+| 18.b | ¿`authorized_numbers` basta? | ✅ **RESUELTA por el código.** Sí basta, y desde el fix de la firma de Twilio (`34b30a6`) por fin es alcanzable. **Cero código** |
+| 18.c | ¿Qué se le responde al operador en Zernio? | 🟡 **Abierta, ya no bloquea.** Plantilla solo si falla, para someter a Meta cuando se agende el primer alta por el wizard. Sushi Fun es Twilio y ya recibe la confirmación completa |
+| 18.d | ¿Qué lleva el apartado de Domicilios? | ✅ **HECHA** (2026-09-07, `feat/domicilios`, **sin desplegar**). `/dashboard/domicilios`: el flujo en 4 pasos, **a qué número manda el operador el cuadro** (bajo coexistencia es distinto en cada marca), la lista de los que entraron, la de los que **no** entraron y la alarma de silencio. Reusa `/dashboard/authorized-numbers` tal cual. → `docs/features/delivery-dashboard.md` |
+| 18.e | ¿La auto-respuesta se queda? | 🔴 **Abierta y VIVA hoy.** Apagarla por tenant. Toca `webhook/twilio-incoming`; **fuera del alcance de `feat/domicilios`** |
+
+**Lo que la 18.d resolvió y no estaba en la pregunta original:** que «cero domicilios» y «tres
+domicilios perdidos» dejen de ser el mismo dato en pantalla. Ese era el ROJO 3 de la auditoría del
+2026-09-06, y es §24-B — ver la nota de §24 más arriba.
+
 ---
 
 ## Preguntas abiertas al dueño, sin responder
@@ -152,7 +177,9 @@ Ninguna bloquea el deploy. Todas bloquean el trabajo que venga después.
 
 | Tema | Pregunta |
 |---|---|
-| §18.a–d | Domicilios bajo coexistencia — **las más urgentes para vender a los 25** |
+| ~~§18.a–b~~ | ~~¿Por dónde entra el cuadro? ¿`authorized_numbers` basta?~~ → **resueltas por los hechos y por el código**, cero líneas |
+| ~~§18.d~~ | ~~¿Qué lleva el apartado de Domicilios?~~ → **respondida construéndolo** el 2026-09-07: `/dashboard/domicilios` |
+| §18.c · §18.e | Lo que queda vivo de Domicilios: la plantilla de fallo de Zernio, y **apagar la auto-respuesta** en quien traiga su línea — esta última le está contestando HOY a los clientes de Sushi Fun |
 | §16.a–e | Etapas y días del pipeline de recorrido/fatiga |
 | §17.a–d | Qué es el "beneficio permanente" Black, con qué umbral, y si Black es el tier máximo |
 | ~~§3~~ | ~~La queja de "QR muy básico", ¿es sobre el QR Studio (mesa) o el de la tarjeta?~~ → **se resolvió haciendo las dos**: el Studio persiste su config y el QR de la tarjeta lleva color de marca y logo |

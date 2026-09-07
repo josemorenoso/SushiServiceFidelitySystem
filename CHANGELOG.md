@@ -8,6 +8,33 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [2026-09-07] - Domicilios: el apartado que separa "no pidio nadie" de "se perdieron"
+
+**Tipo:** feat · **Rama:** `feat/domicilios` · **Origen:** §18.d + §24.3-B
+
+- **El hueco.** El dashboard tenia 14 secciones y ninguna de domicilios, asi que el flujo se
+  explicaba de memoria por WhatsApp. Y con coexistencia eso dejo de escalar: cada marca recibe el
+  cuadro del pedido en SU numero, y nadie se acuerda de 25.
+- **Lo que de verdad estaba roto.** Sin esta pantalla, "llegaron tres pedidos y se perdieron los
+  tres" y "hoy no pidio nadie" eran el MISMO dato: cero filas en `visits`. Es el ROJO 3 de la
+  auditoria del 06.
+- **`/dashboard/domicilios`, tres bloques.** El flujo en 4 pasos con el numero receptor de ESA
+  marca y boton de copiar (sale de la fila del tenant, no se guarda nada nuevo) y enlace a
+  `/dashboard/authorized-numbers`, que se reusa tal cual. La lista de los que entraron, con
+  NUEVO/RECURRENTE calculado exacto y `location_id` NULL visible como "Sin sede". Y los que NO
+  entraron, con el motivo traducido del mapa de `delivery-ai-parsing.md`.
+- **Tres estados donde antes habia uno.** "No hubo fallos", "no pudimos leer" y "todavia no se
+  esta guardando" (falta la 00053) se pintan distinto. Un cero solo aparece cuando es cierto.
+- **La alarma de silencio deriva su umbral del historial de CADA marca**: 3 dias sin pedidos
+  alarman a Sushi Service y no dicen nada de una barberia. Solo se pinta; no manda nada.
+- **SOLO LECTURA y sin migracion.** No se toco `delivery.service.ts` ni ninguno de los 3 webhooks.
+  Sin formulario de carga manual (alcance del dueno) y sin reintentar (re-cobra OpenAI).
+- **Archivos:** `dashboard/domicilios/`, `api/dashboard/domicilios/{,resumen,fallos}`,
+  `delivery-dashboard.service.ts`, `delivery-reasons.ts`, `delivery-silence.ts`, +24 tests.
+  → `docs/features/delivery-dashboard.md`
+
+---
+
 ## [2026-09-07] - El domicilio perdido deja rastro, y el AIOS puede ver la salud de cada cliente
 
 **Tipo:** feat · **Rama:** `feat/salud-aios` · **Origen:** pedido del dueno (§24-A) · **Migracion:** 00053

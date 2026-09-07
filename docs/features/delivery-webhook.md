@@ -66,9 +66,22 @@ Tablas involucradas:
 > desplegarla a los 25 clientes** — es el ahorro principal de esta fase.
 
 ### Casos de error — ninguno silencioso
-Todo pedido que no llega a la base pasa por `logDeliveryIntakeFailure()`, que deja una línea
-`[Delivery][FALLO]` con el tenant, el operador, el **motivo real** y el mensaje original. En
-Twilio, además, el operador recibe un texto que distingue *"escribe mejor el pedido"* de
+Todo pedido que no llega a la base pasa por `logDeliveryIntakeFailure()`, que lo deja en **dos
+sitios** (2026-09-07, migración 00053):
+
+1. El log de Vercel, con el prefijo estable `[Delivery][FALLO]` — el tenant, el operador, el
+   **motivo real** y el mensaje original.
+2. La tabla **`delivery_intake_failures`** (§24-B), que es lo que hace posible el semáforo de
+   domicilios del AIOS. Sin esa fila, *"llegaron tres pedidos y se perdieron los tres"* y *"hoy no
+   pidió nadie"* son el mismo dato — cero visitas — y ningún panel honesto los pinta distinto.
+
+El `INSERT` vive **dentro de esa función y en ningún otro sitio**. La función es `async` desde
+entonces y **hay que esperarla**: una promesa flotante en una función serverless se puede cortar
+cuando la respuesta ya salió, que es justo el pedido que se intenta no perder. Si el `INSERT` falla,
+queda una segunda línea `[Delivery][FALLO][no-persistido]` y la ruta sigue: registrar el problema no
+puede convertirse en un problema.
+
+En Twilio, además, el operador recibe un texto que distingue *"escribe mejor el pedido"* de
 *"avisa al administrador"*. La tabla completa de motivos está en
 `docs/features/delivery-ai-parsing.md`, y desde el 2026-09-07 **el dueño la ve traducida en
 `/dashboard/domicilios`** (`docs/features/delivery-dashboard.md`).

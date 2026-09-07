@@ -525,28 +525,64 @@ export type DeliveryIntakeResult =
  * EL ÚNICO EMBUDO POR EL QUE SE PIERDE UN DOMICILIO.
  *
  * Todo pedido que no llega a la base pasa por aquí con su motivo REAL, el tenant, el
- * operador y el mensaje original recortado. Hoy el destino es el log de Vercel — que es
- * la superficie de observabilidad que dejó la Fase 1 (§25.6) — y **no** una tabla:
- * `§24-B` («apartado de domicilios» + alarma de silencio) es trabajo aparte y lleva su
- * propia migración. Cuando esa tabla exista, el `INSERT` va aquí dentro y en ningún otro
- * sitio: por eso esto es una función y no un `console.error` suelto en cada `catch`.
+ * operador y el mensaje original recortado. Va a DOS destinos, y los dos importan:
  *
- * El prefijo `[Delivery][FALLO]` es estable a propósito: es sobre lo que se monta una
- * alerta de log en Vercel sin tocar código.
+ *   1. El log de Vercel, con el prefijo `[Delivery][FALLO]`, que es estable a propósito:
+ *      es sobre lo que se monta una alerta de log sin tocar código.
+ *   2. `delivery_intake_failures` (migración 00053, §24-B), que es lo que hace posible el
+ *      semáforo de domicilios del AIOS. Sin esa fila, «llegaron tres pedidos y se
+ *      perdieron los tres» y «hoy no pidió nadie» son el mismo dato — cero visitas — y
+ *      ningún panel honesto puede pintarlos distinto.
+ *
+ * El `INSERT` vive aquí dentro y en ningún otro sitio: por eso esto es una función y no un
+ * `console.error` suelto en cada `catch`. Si aparece un segundo escritor de esa tabla, el
+ * embudo dejó de ser uno.
+ *
+ * ⚠️ **Es `async` y hay que esperarla.** Antes devolvía `void` y se llamaba suelta. Ahora
+ * escribe en la base, y una promesa flotante en una función serverless se puede cortar
+ * cuando la respuesta ya salió: justo el pedido que estamos intentando no perder.
+ *
+ * **Nunca lanza.** Si el `INSERT` falla, el fallo del fallo también queda en el log y la
+ * ruta sigue su camino: registrar el problema no puede convertirse en un problema.
  *
  * Se exporta para que las dos rutas de webhook reporten por aquí el único fallo que ocurre
  * ANTES de llamar a `processDeliveryMessage()`: `remitente_no_verificable`.
  */
-export function logDeliveryIntakeFailure(args: {
+export async function logDeliveryIntakeFailure(args: {
   tenant: Tenant
   operatorPhone: string | null
   reason: DeliveryIntakeReason
   detail: string
   rawMessage: string
-}): void {
+}): Promise<void> {
   console.error(
     `[Delivery][FALLO] reason=${args.reason} tenant=${args.tenant.slug} operador=${args.operatorPhone ?? 'desconocido'} detalle="${args.detail}" mensaje="${args.rawMessage.slice(0, 300)}"`
   )
+
+  try {
+    const supabase = getServiceClient()
+    // `tenant_id` explícito, como todo INSERT de este archivo: la 00030 nunca se aplicó.
+    // La tabla de la 00053 nace SIN el DEFAULT puente, así que omitirlo aquí sería un
+    // error ruidoso en vez de un fallo atribuido a Sushi Service — pero no se omite.
+    const { error } = await supabase.from('delivery_intake_failures').insert({
+      tenant_id: args.tenant.id,
+      operator_phone: args.operatorPhone,
+      reason: args.reason,
+      detail: args.detail.slice(0, 2000),
+      raw_message: args.rawMessage.slice(0, 2000),
+    })
+    if (error) {
+      // supabase-js no lanza: sin leer `error`, un fallo de escritura se vería igual que
+      // un éxito y el panel diría «cero fallos» con los pedidos perdiéndose.
+      console.error(
+        `[Delivery][FALLO][no-persistido] code=${error.code ?? 'n/a'} detalle="${error.message}" — el motivo de arriba NO quedó en delivery_intake_failures`
+      )
+    }
+  } catch (err) {
+    console.error(
+      `[Delivery][FALLO][no-persistido] detalle="${err instanceof Error ? err.message : String(err)}" — el motivo de arriba NO quedó en delivery_intake_failures`
+    )
+  }
 }
 
 export interface ProcessDeliveryMessageInput {
@@ -582,8 +618,13 @@ export async function processDeliveryMessage({
   operatorLocationId,
   complete,
 }: ProcessDeliveryMessageInput): Promise<DeliveryIntakeResult> {
-  const fallar = (reason: DeliveryIntakeReason, detail: string): DeliveryIntakeResult => {
-    logDeliveryIntakeFailure({ tenant, operatorPhone, reason, detail, rawMessage })
+  // Se espera el embudo antes de devolver: escribe en `delivery_intake_failures` y una
+  // promesa suelta se puede cortar cuando la respuesta ya salió.
+  const fallar = async (
+    reason: DeliveryIntakeReason,
+    detail: string
+  ): Promise<DeliveryIntakeResult> => {
+    await logDeliveryIntakeFailure({ tenant, operatorPhone, reason, detail, rawMessage })
     return { ok: false, reason, detail }
   }
 
@@ -596,9 +637,9 @@ export async function processDeliveryMessage({
     })
   } catch (err) {
     if (err instanceof DeliveryExtractionError) {
-      return fallar(err.reason, err.detail)
+      return await fallar(err.reason, err.detail)
     }
-    return fallar('ia_error', err instanceof Error ? err.message : String(err))
+    return await fallar('ia_error', err instanceof Error ? err.message : String(err))
   }
 
   // La sede ya viene resuelta cuando la ruta consultó `authorized_numbers` (que es
@@ -621,11 +662,11 @@ export async function processDeliveryMessage({
     return { ok: true, order, registration }
   } catch (err) {
     if (err instanceof DeliveryRegistrationError) {
-      return fallar(
+      return await fallar(
         'celular_invalido_registro',
         `El celular "${err.celular}" pasó la IA pero no validatePhone()`
       )
     }
-    return fallar('registro_fallido', err instanceof Error ? err.message : String(err))
+    return await fallar('registro_fallido', err instanceof Error ? err.message : String(err))
   }
 }

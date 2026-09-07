@@ -35,6 +35,29 @@
 
 ---
 
+## [2026-09-07] - El domicilio perdido deja rastro, y el AIOS puede ver la salud de cada cliente
+
+**Tipo:** feat · **Rama:** `feat/salud-aios` · **Origen:** pedido del dueno (§24-A) · **Migracion:** 00053
+
+- **El hueco.** No existia ninguna senal de que un cliente se hubiera roto: nos enterabamos
+  cuando llamaba. Y el semaforo era imposible de construir honestamente, porque un domicilio
+  perdido solo dejaba un `console.error` en Vercel (ROJO 3): sin esa fila, "llegaron tres
+  pedidos y se perdieron los tres" y "hoy no pidio nadie" son EL MISMO dato — cero visitas.
+- **`delivery_intake_failures`.** El INSERT va dentro de `logDeliveryIntakeFailure()` y en
+  ningun otro sitio; la funcion pasa a `async` y las dos rutas de webhook la esperan (una
+  promesa flotante en serverless se corta cuando la respuesta ya salio). La tabla nace SIN el
+  DEFAULT puente de la 00028: olvidar el `tenant_id` falla en vez de irse a Sushi Service.
+- **`aios_health(p_slug)`**, SECURITY DEFINER, mismo patron que `aios_line_health()`. El rol
+  `aios_constelarys` NO recibe ni un GRANT nuevo sobre una tabla: sigue sin poder leer un solo
+  telefono de un comensal. Devuelve HECHOS y ni un umbral — los colores los decide el AIOS,
+  porque afinar un umbral no puede costar una migracion sobre datos reales. Las senales de los
+  crons van GLOBALES: corren una vez para las 25 marcas.
+- **Verificacion:** tsc limpio · 26 archivos / 428 tests (10 nuevos: aislamiento entre marcas,
+  "cero es cero, no es NULL", las ventanas, y que la cola futura no cuente como atasco).
+- ⚠️ **La 00053 se corre en Supabase ANTES de desplegar el AIOS v1.5.0 que la usa.**
+
+---
+
 ## [2026-09-07] - Plantillas: enviar el texto tal cual o editarlo, sin 13 ediciones a mano
 
 **Tipo:** feat · **Rama:** `feat/plantillas-enviar-o-editar` · **Origen:** reporte del dueno

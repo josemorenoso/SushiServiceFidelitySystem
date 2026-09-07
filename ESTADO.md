@@ -96,8 +96,7 @@ todo en `tenants.config` y en cómo se guardan credenciales de terceros).
 - **La Recovery Zone se deriva de los días del tenant** (2026-09-06): era fija 18–25 aunque los días
   de reactivación son configurables; bajar el suave a 15 dejaba 15–17 sin proteger.
 - **D2 cerrada — el dominio cruzado va en las DOS direcciones** (2026-09-06, `00051`): faltaba el
-  trigger simétrico sobre `tenants`, sin el cual una marca nueva podía tomar el subdominio de la sede
-  de OTRA marca y `resolveHostContext()` quedaba con dos dueños del mismo host.
+  trigger simétrico sobre `tenants`; sin él una marca podía tomar el subdominio de la sede de OTRA.
 - **El alta de un mesero la gobierna el ROL** (2026-09-06): pedía Celular y PIN aunque eligieras
   "Mesero", un modelo que §19 ya había borrado. Ahora `waiter` = Nombre + Sede; `supervisor`/`admin`
   = además Celular y PIN. El panel MARCA a los que no tienen sede: no salen en ningún escáner.
@@ -133,8 +132,8 @@ quién activó un aparato solo queda en `device_name` y `trusted_at`.
 - **00048 y 00049 están RESERVADAS**, no libres: son de multi-sede (`…/2026-09-02-multisede-design.md`
   §6.3 y §7.2) y las dos dependen de una decisión del dueño. El número se saca con el script.
 - **Choques de migración en ramas muertas**: `sushi-sync` (00015) y `port/sushi-fun-2.8` (00028).
-- **Catálogo de producto sin empezar**: referidos, push, fatiga, §8, §18. No es deuda técnica: es
-  catálogo. Ver `docs/ESTADO-REQUERIMIENTOS.md`.
+- **Catálogo de producto sin empezar** (referidos, push, fatiga, §7, §8, §18): no es deuda técnica.
+  Ver `docs/ESTADO-REQUERIMIENTOS.md`.
 
 ## 7. Reglas de esta casa
 

@@ -34,6 +34,12 @@
 Al cerrar, borra su línea. `stash` y `reset --hard` con otra sesión viva están **prohibidos**: hoy
 barrieron 12 archivos. Regla completa en `CLAUDE.md` § "Trabajar en paralelo".
 
+- **QR Studio → sede + SVG** (D-QR-3 y D-QR-4) · rama `feat/qr-svg-por-sede`.
+  **Toca:** `dashboard/qr/page.tsx` (reescrito), NUEVO `api/dashboard/qr-locations/route.ts`,
+  NUEVO `lib/utils/qr-svg.ts`, `docs/features/qr-studio.md`.
+  **NO toca:** `qr-poster.ts` (congelado, no borrado), `tenant-config-paths.ts`, `location-scope*`,
+  `/api/dashboard/location`, `CheckInForm`, `/mesero/confirm`, migraciones (ninguna).
+
 **Repo del AIOS**: `fix/coexistencia` (v1.4.0) subida, pero **su `main` NO se pusheó** — pushearlo
 despliega el AIOS y es decisión del dueño. Parte en `…/docs/PARTE-COEXISTENCIA-2026-09-06.md`.
 

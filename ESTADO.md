@@ -17,7 +17,7 @@
 | Código | **`main` está 3 commits ADELANTE de `origin/main`** (plantillas, 2026-09-07): mergeado local, **sin pushear ni desplegar** (decisión del dueño). Lo del 05/06, incluido QR Studio, sí está en producción |
 | Verificación | ✅ `tsc` limpio · eslint 7 errores preexistentes (React hooks, sin relación) · **vitest 25 archivos / 418 tests en verde** |
 | Marcas vivas | **5**: sushi-service (542 clientes), demo-ventas (412), sushi-fun (251), don-alirio (244), cafe-frangal (8) |
-| Base de datos de producción | Aplicadas hasta la **00046**. 🔴 **La `00047` (identidad visual) está SIN APLICAR y su código YA ESTÁ DESPLEGADO** — ver §3.1. La 00030 NUNCA aplicada (a propósito). La 00015 NO se aplica (reabre fuga) |
+| Base de datos de producción | Aplicadas hasta la **00046**. 🔴 **La `00047` (identidad visual) está SIN APLICAR y su código YA ESTÁ DESPLEGADO** — ver §3.1. Detrás van la **00050** (enlace del evento) y la **00053** (salud), ambas escritas y sin aplicar, con su código sin desplegar. La 00030 NUNCA aplicada (a propósito). La 00015 NO se aplica (reabre fuga) |
 | Crons | Los 5 en `vercel.json`, corriendo. `birthday` 18:00 y `reactivation` 20:00 UTC (= 13:00/15:00 Bogotá), verificado. ⚠️ **`reward-reminder` sigue en 16:00 UTC (11:00 Bogotá)**: de los 3 del ROJO 1 se corrigieron 2. Su hora real no se pudo confirmar por retención de logs; la auditoría la estimó ≈21:00 UTC. **Decisión del dueño** |
 | n8n | Apagado. `domicilios_whatsapp_v4.json` sigue en el VPS pero ya no dispara |
 | Grafo | Al día sobre `918dadd` (2026-09-07): 4.640 nodos, 7.981 aristas, 416 comunidades |
@@ -35,32 +35,27 @@
   ⚠️ **La migración pasa de 00052 a 00054**: `scripts/proxima-migracion.mjs` ve la 00053 ya creada
   por salud-aios y la 00052 reservada en los docs, y manda usar la **00054**. Obedezco al script.
 
-- **Salud por cliente en el AIOS (§24-A)** · rama `feat/salud-aios` en `.worktrees/salud` · **00053** ·
-  semáforo de domicilios, envío, línea y crons. En ESTE repo toca **2 archivos y nada más**:
-  `supabase/migrations/00053_*.sql` (tabla de fallos de intake §24-B + `aios_health()`, ambos NUEVOS)
-  y `src/services/delivery.service.ts` (el INSERT dentro de `logDeliveryIntakeFailure()`). **Lee**
-  `tenants`, `visits`, `message_logs`, `send_queue`, **no escribe en ninguna**. El grueso del trabajo
-  vive en el **repo del AIOS**, que este repo ignora. **No toca la 00052, envío, gobernanza ni
-  multi-sede.** ⚠️ **Cruce declarado con conexiones, de UNA PALABRA:** el embudo pasa a `async`, así
-  que `webhook/zernio/route.ts:244` y `twilio-incoming/route.ts:326` ganan un `await` delante de
-  `logDeliveryIntakeFailure(`. Nada más de esas dos rutas se toca.
-
 **Lo demás, nada en vuelo.** QR Studio y plantillas cerraron en `main`, **sin pushear**: lo decide el dueño.
 
 📌 **Esta sección es el TABLERO.** Anotá tu territorio ANTES de escribir y commiteá esa línea sola;
 si se cruza con una ya anotada, esperá. Al cerrar, borrala. Regla completa (incluido por qué `stash`
 y `reset --hard` están prohibidos con otra sesión viva) en `CLAUDE.md` § "Trabajar en paralelo".
 
-**Repo del AIOS**: `fix/coexistencia` (v1.4.0) subida, pero **su `main` NO se pusheó** — pushearlo
-despliega el AIOS y es decisión del dueño. Parte en `…/docs/PARTE-COEXISTENCIA-2026-09-06.md`.
+**Repo del AIOS**: `fix/coexistencia` (v1.4.0) subida y ahora **`feat/salud` (v1.5.0)** con el
+tablero de salud, **sin mergear ni pushear**. Su `main` tampoco se pusheó — pushearlo despliega el
+AIOS y es decisión del dueño. Parte en `…/docs/PARTE-COEXISTENCIA-2026-09-06.md`.
+En ESTE repo, el trabajo del producto que lo alimenta vive en **`feat/salud-aios`** (la 00053),
+también sin mergear: va detrás de `feat/conexiones`, que estaba antes.
 
 ## 3. Siguiente, en orden
 
 1. 🔴 **Correr la `00047` en Supabase producción.** Es lo único urgente. Su código ya está vivo:
    sin ella, guardar en `/dashboard/marca` y subir el logo fallan. **Nada de lo anterior se rompe**
    —`--brand-primary` tiene su literal en `:root`— pero la feature nueva no funciona.
-   Archivo: `supabase/migrations/00047_identidad_visual.sql`. Detrás va la **`00050`** (enlace del
-   evento), que **debe aplicarse ANTES** de desplegar su código: si no, crear un evento da 42703.
+   Archivo: `supabase/migrations/00047_identidad_visual.sql`. Detrás van la **`00050`** (enlace del
+   evento), que **debe aplicarse ANTES** de desplegar su código —si no, crear un evento da 42703—
+   y la **`00053`** (salud), que va antes de desplegar el AIOS v1.5.0: sin ella el tablero sale
+   entero en gris. Las dos están en la rama `feat/salud-aios` / `feat/conexiones`, sin mergear.
 2. **Asignarle sede a los meseros que ya existen.** Todos tienen `location_id` NULL, así que **no
    aparecen en ningún escáner**: es lo que más se nota en la operación diaria. El trabajo está
    preparado en `SQL-PARA-CORRER/meseros-sin-sede/`; falta la DECISIÓN, persona por persona.
@@ -70,10 +65,11 @@ despliega el AIOS y es decisión del dueño. Parte en `…/docs/PARTE-COEXISTENC
    acepta JPEG/PNG). Sin ella las 2 de calendario salen bloqueadas, con el motivo escrito.
 4. **Responder §18.a–d** (`docs/DECISION-18-DOMICILIOS-COEXISTENCIA.md`): las últimas preguntas que
    bloquean el onboarding.
-5. **De `docs/AUDITORIA-POST-DEPLOY-2026-09-06.md` quedan vivos: ROJO 3** (un domicilio perdido no
-   deja rastro: `logDeliveryIntakeFailure()` solo va a `console.error`) y el AMARILLO de
-   `reward-reminder` (fila de Crons). Los 3 AMARILLO del calendario, cerrados (§5). Siguen stale:
-   `docs/ESTADO-REQUERIMIENTOS.md` y `docs/04-deployment.md`.
+5. **De `docs/AUDITORIA-POST-DEPLOY-2026-09-06.md` queda vivo el AMARILLO de `reward-reminder`**
+   (fila de Crons). El **ROJO 3** (un domicilio perdido solo dejaba un `console.error`) está
+   **escrito y sin desplegar**: lo cierra la 00053 con `delivery_intake_failures`. Los 3 AMARILLO
+   del calendario, cerrados (§5). Siguen stale: `docs/ESTADO-REQUERIMIENTOS.md` y
+   `docs/04-deployment.md`.
 6. **Aplicar la 00030** en ventana tranquila (cierra el riesgo del DEFAULT puente).
 7. **Onboarding de los 25**: wildcard DNS ya resuelto y probado con Sushi Fun.
 
@@ -101,6 +97,16 @@ todo en `tenants.config` y en cómo se guardan credenciales de terceros).
 
 ## 5. Hecho reciente
 
+- **Salud por cliente en el AIOS** (2026-09-07, §24-A, **sin desplegar**): no existía ninguna señal
+  de que un cliente se hubiera roto — nos enterábamos cuando llamaba. `/salud` pone las sedes con
+  cuatro bombillos (domicilios, mensajes, WhatsApp, local), ordenadas por gravedad. Tres decisiones:
+  **gris no es verde** (no se pudo leer tiene su color y su motivo), **el umbral del silencio sale
+  del historial de CADA marca** (un fijo le miente a Frangal y deja ciego a Sushi Service), y **los
+  crons van aparte** porque corren una vez para las 25. Los umbrales viven en el AIOS, no en el
+  producto: afinar uno no puede costar una migración. → `README.md` del AIOS, §"El semáforo".
+- **Un domicilio perdido deja rastro** (2026-09-07, ROJO 3, **sin desplegar**): `delivery_intake_
+  failures` (00053). El INSERT va dentro de `logDeliveryIntakeFailure()`, que pasa a `async`. Sin
+  esa tabla, "llegaron tres pedidos y se perdieron" y "hoy no pidió nadie" eran el mismo dato.
 - **Plantillas: enviar tal cual o editar** (2026-09-07): un alta nueva dejaba las 13 vacías y el único
   camino masivo solo se abría al CAMBIAR de estilo — con el default `calido`, 13 ediciones a mano. Cada
   fila tiene ya «Enviar a Meta» (texto del catálogo, sin casilla: no lo escribió el dueño) y «Editar».

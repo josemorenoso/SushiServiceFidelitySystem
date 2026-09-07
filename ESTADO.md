@@ -35,8 +35,10 @@
   `supabase/migrations/00053_*.sql` (tabla de fallos de intake §24-B + `aios_health()`, ambos NUEVOS)
   y `src/services/delivery.service.ts` (el INSERT dentro de `logDeliveryIntakeFailure()`). **Lee**
   `tenants`, `visits`, `message_logs`, `send_queue`, **no escribe en ninguna**. El grueso del trabajo
-  vive en el **repo del AIOS**, que este repo ignora. **No toca conexiones, la 00052, `webhook/zernio`,
-  envío, gobernanza ni multi-sede.**
+  vive en el **repo del AIOS**, que este repo ignora. **No toca la 00052, envío, gobernanza ni
+  multi-sede.** ⚠️ **Cruce declarado con conexiones, de UNA PALABRA:** el embudo pasa a `async`, así
+  que `webhook/zernio/route.ts:244` y `twilio-incoming/route.ts:326` ganan un `await` delante de
+  `logDeliveryIntakeFailure(`. Nada más de esas dos rutas se toca.
 
 **Lo demás, nada en vuelo.** QR Studio y plantillas cerraron en `main`, **sin pushear**: lo decide el dueño.
 

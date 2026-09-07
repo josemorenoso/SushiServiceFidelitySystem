@@ -126,7 +126,7 @@ quién activó un aparato solo queda en `device_name` y `trusted_at`.
 
 **Fuera de multi-sede:**
 - **00030 sin aplicar**: DEFAULT puente → un INSERT sin `tenant_id` se va calladito a Sushi Service.
-- **17.b**: "quién es Black" difiere entre la tarjeta (`black-tier.ts`) y el panel (`POWER_RANKS`).
+  Y **17.b**: "quién es Black" difiere entre la tarjeta (`black-tier.ts`) y el panel (`POWER_RANKS`).
 - **Domicilios perdidos sin rastro** (ROJO 3): `logDeliveryIntakeFailure()` solo va a `console.error`,
   la tabla de §24-B no existe y no hay alerta. Con n8n apagado es el único registro.
 - **00048 y 00049 están RESERVADAS**, no libres: son de multi-sede (`…/2026-09-02-multisede-design.md`

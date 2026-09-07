@@ -1,6 +1,6 @@
 # ESTADO — RestaurantQR / Cada1
 
-> **Última actualización:** 2026-09-06, 19:30 (sesión "orden: todo a `main` y a producción", Opus 5)
+> **Última actualización:** 2026-09-07, 00:05 (sesión "plantillas: enviar tal cual o editar", Opus 5)
 > Toda sesión lo lee PRIMERO. Toda sesión que cierra un bloque lo ACTUALIZA al final. Límite: 150 líneas.
 > Lo obsoleto se **saca**, no se tacha: un ítem tachado sigue costando tokens cada vez que alguien lee esto.
 >
@@ -25,13 +25,7 @@
 
 ## 2. En vuelo ahora mismo
 
-- **Plantillas: enviar tal cual o editar** (alta de negocio nuevo) · rama `feat/plantillas-enviar-o-editar`
-  · worktree `.worktrees/plantillas`.
-  **Toca:** `components/dashboard/templates/{TemplateCatalogEditor,TemplateEditorDialog}.tsx`,
-  NUEVO `api/dashboard/templates/catalog/[key]/submit/route.ts`, `services/template.service.ts`
-  (una función nueva), `.env.example`, `docs/features/whatsapp-templates.md`.
-  **NO toca:** `docs/PLANTILLAS.md` ni `docs/features/calendar.md` (los tiene QR Studio),
-  `template-catalog.ts`, `template-texts.ts`, el gestor Twilio, `promoteVersion()`, migraciones.
+**Nada en vuelo de esta sesión.** `feat/qr-svg-por-sede` sigue viva y **fuera de `main`**: es de otra.
 
 📌 **Esta sección es el TABLERO.** Toda sesión anota acá su territorio (qué toca, en qué rama)
 **antes** de escribir, y lo commitea solo; si se cruza con uno ya anotado, **espera y va después**.
@@ -52,6 +46,9 @@ despliega el AIOS y es decisión del dueño. Parte en `…/docs/PARTE-COEXISTENC
    aparecen en ningún escáner**: es lo que más se nota en la operación diaria. El trabajo está
    preparado en `SQL-PARA-CORRER/meseros-sin-sede/`; falta la DECISIÓN, persona por persona.
 3. **Zernio E2E** con la cuenta ya limpia → desbloquea al primer cliente nuevo bajo coexistencia.
+   Con él va **`ZERNIO_TEMPLATE_SAMPLE_IMAGE_URL`** = `…/event-media/5103017800669793459.jpg` en
+   Vercel (la muestra que Meta YA aprobó en Twilio; el HEIC del bucket **no sirve**, Meta solo
+   acepta JPEG/PNG). Sin ella las 2 de calendario salen bloqueadas, con el motivo escrito.
 4. **Responder §18.a–d** (`docs/DECISION-18-DOMICILIOS-COEXISTENCIA.md`): las últimas preguntas que
    bloquean el onboarding.
 5. **De `docs/AUDITORIA-POST-DEPLOY-2026-09-06.md` quedan vivos: ROJO 3** (un domicilio perdido no
@@ -85,20 +82,21 @@ todo en `tenants.config` y en cómo se guardan credenciales de terceros).
 
 ## 5. Hecho reciente
 
+- **Plantillas: enviar tal cual o editar** (2026-09-07): un alta nueva dejaba las 13 vacías y el único
+  camino masivo solo se abría al CAMBIAR de estilo — con el default `calido`, 13 ediciones a mano. Cada
+  fila tiene ya «Enviar a Meta» (texto del catálogo, sin casilla: no lo escribió el dueño) y «Editar».
 - **El `SALIR` se ve y se contesta** (2026-09-06): `setWhatsappOptOut()` devolvía `void`, así que
   "marqué a un cliente" y "no había a quién marcar" (cero filas, un éxito para Postgres) llegaban
   idénticos: el log decía "persistido" con el panel en cero y las dos eran ciertas. Ahora devuelve
   `matched`, y al cliente se le contesta por TwiML. → `docs/features/twilio-opt-out.md`.
 - **Los 3 AMARILLO del calendario** (2026-09-06): **(1)** la hora del picker se leía en la zona del
-  navegador; la conversión vive ahora solo en `src/lib/timezone.ts` (el servidor siempre estuvo bien).
-  **(2)** `calendar_event` **ya gotea por `send_queue`**: antes lo que excedía el cupo se perdía como
-  `failed`. **(3)** el reclamo del despacho no contaba filas afectadas y dos corridas creían ganar;
-  lo cierra `claimScheduledEvent()`, con 8 reclamos simultáneos en `tests/db/calendar-claim.test.ts`.
-- **Enlace del evento + plantillas verificadas** (2026-09-06): `link_url` (00050, **sin aplicar**)
-  viaja dentro de `{{5}}` para no re-aprobar en las 25 marcas. La de imagen de la master está
-  **approved**; **Sushi Fun no tiene ninguna `twilio/media` y ahí NO sale**; video **rejected**.
-- **La Recovery Zone se deriva de los días del tenant** (2026-09-06): era fija 18–25 aunque los días
-  de reactivación son configurables; bajar el suave a 15 dejaba 15–17 sin proteger.
+  navegador; la conversión vive ya solo en `src/lib/timezone.ts`. **(2)** `calendar_event` **gotea por
+  `send_queue`**: antes lo que excedía el cupo se perdía como `failed`. **(3)** el reclamo no contaba
+  filas y dos corridas creían ganar; lo cierra `claimScheduledEvent()` (`calendar-claim.test.ts`).
+- **Enlace del evento** (2026-09-06): `link_url` (00050, **sin aplicar**) va dentro de `{{5}}` para no
+  re-aprobar en las 25. Imagen de la master **approved**; **Sushi Fun no la tiene**; video **rejected**.
+- **La Recovery Zone se deriva de los días del tenant** (2026-09-06): era fija 18–25 con días de
+  reactivación configurables; bajar el suave a 15 dejaba 15–17 sin proteger.
 - **D2 cerrada — el dominio cruzado va en las DOS direcciones** (2026-09-06, `00051`): faltaba el
   trigger simétrico sobre `tenants`; sin él una marca podía tomar el subdominio de la sede de OTRA.
 - **El alta de un mesero la gobierna el ROL** (2026-09-06): pedía Celular y PIN aunque eligieras
@@ -106,9 +104,6 @@ todo en `tenants.config` y en cómo se guardan credenciales de terceros).
   = además Celular y PIN. El panel MARCA a los que no tienen sede: no salen en ningún escáner.
 - **Sushi Fun absorbido como tenant** (2026-09-06): 1.421 filas, cero cruces, las otras 4 intactas.
   Conserva **su cuenta de Twilio**. Pendientes: su Supabase y su Vercel (§4).
-- **Firma de Twilio por tenant** (2026-09-06): se validaba con el token master → **todo entrante de
-  un tenant con cuenta propia daba 403** y los `SALIR` se perdían.
-
 - Lo anterior a esto (§19, F7/F4/F3, identidad visual) está desplegado y vive en `CHANGELOG.md`.
 
 ## 6. Deudas y límites conocidos

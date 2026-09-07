@@ -8,6 +8,36 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [2026-09-07] - Plantillas: enviar el texto tal cual o editarlo, sin 13 ediciones a mano
+
+**Tipo:** feat · **Rama:** `feat/plantillas-enviar-o-editar` · **Origen:** reporte del dueno
+
+- **El hueco.** Un negocio nuevo nace con las 13 plantillas vacias (`aios_provision_tenant` no
+  siembra ningun `*_template_sid`). El unico camino que las creaba en bloque era
+  `applyStyleToCatalog()`, y `StyleSelector` solo lo ofrece al ELEGIR UN ESTILO DISTINTO al actual:
+  con el default `calido` no habia boton y la unica salida eran 13 ediciones a mano.
+- **Dos salidas por fila.** "Enviar a Meta" manda el texto del catalogo tal cual; "Editar" sigue
+  abriendo el editor con las variables protegidas. El badge dice "Pendiente de enviar" en vez de
+  "Sin configurar", y la fila muestra el texto que se va a mandar. En el editor, un mensaje que
+  nunca se envio dice "Enviar a Meta", no "Guardar cambios".
+- **"Enviar a Meta" no pide la advertencia**, a proposito: la decision 3 es sobre el texto que
+  ESCRIBE el dueno y aca el texto es el nuestro. `disclaimer_accepted_at` queda NULL en vez de
+  estampar una aceptacion que no ocurrio; `edited_by` guarda quien apreto. El body no viaja desde
+  el cliente: lo resuelve el servidor con el estilo del tenant.
+- **Las 2 de evento** entran igual, pero Meta DESCARGA su media de muestra. Sin
+  `ZERNIO_TEMPLATE_SAMPLE_*_URL` el catalogo devuelve `blockedReason` y la pantalla deshabilita los
+  botones con el motivo escrito. Las dos vars estaban en el doc pero NO en `.env.example`: ya estan,
+  con lo que Meta exige (JPEG/PNG, publica sin firma; **el HEIC no le sirve**).
+- **Archivos:** NUEVO `api/dashboard/templates/catalog/[key]/submit/route.ts` ·
+  `template.service.ts` (`submitSuggestedTemplate()` + el tronco `submitTemplateBody()`) ·
+  `TemplateCatalogEditor.tsx` · `TemplateEditorDialog.tsx` · `template.types.ts` · `.env.example` ·
+  `whatsapp-templates.md` · `API_DOCS.md`. `promoteVersion()` sigue siendo el unico que mueve el
+  puntero. El gestor Twilio no se toco.
+- **Verificado:** `tsc` limpio, eslint limpio sobre los 5 archivos, `template-catalog.test.ts` 26/26.
+  **Sin credenciales de Zernio no se pudo probar de punta a punta** (ESTADO §3.3).
+
+---
+
 ## [2026-09-06] - Los 3 amarillos del calendario: hora de Bogota, goteo por cola y reclamo sin doble disparo
 
 **Tipo:** fix · **Rama:** `fix/amarillos-calendario` · **Origen:** `docs/AUDITORIA-POST-DEPLOY-2026-09-06.md`

@@ -27,8 +27,13 @@
 
 - **Conexiones — signup de WhatsApp del CLIENTE** · rama `feat/conexiones` · **00052** · territorio
   exacto en **§10.bis** de `docs/superpowers/specs/2026-09-06-conexiones-design.md`. Compartidos que
-  toca, los únicos 3: `DashboardSidebar.tsx` (1 línea), `webhook/zernio/route.ts` (**aditivo**) y
-  `zernio/webhooks.ts`. **No toca envío, `tenants`, gobernanza, multi-sede, 00048/00049 ni el AIOS.**
+  toca, los únicos 4: `DashboardSidebar.tsx` (1 línea), `webhook/zernio/route.ts` (**aditivo**),
+  `zernio/webhooks.ts` y `webhook/twilio-incoming/route.ts` (**aditivo**: un `if` justo antes del
+  cooldown de la auto-respuesta, §18.e — el interruptor tiene que APAGAR algo o miente). Ese `if`
+  va cerca de la **línea 361**, no de la 326 que declaró salud-aios: no se cruzan.
+  **No toca envío, `tenants`, gobernanza, multi-sede, 00048/00049 ni el AIOS.**
+  ⚠️ **La migración pasa de 00052 a 00054**: `scripts/proxima-migracion.mjs` ve la 00053 ya creada
+  por salud-aios y la 00052 reservada en los docs, y manda usar la **00054**. Obedezco al script.
 
 - **Salud por cliente en el AIOS (§24-A)** · rama `feat/salud-aios` en `.worktrees/salud` · **00053** ·
   semáforo de domicilios, envío, línea y crons. En ESTE repo toca **2 archivos y nada más**:

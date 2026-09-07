@@ -95,8 +95,7 @@ todo en `tenants.config` y en cómo se guardan credenciales de terceros).
   está **approved** y dinámica; **Sushi Fun no tiene ninguna `twilio/media` y ahí NO sale**; video
   **rejected**. → `scripts/verificar-plantillas-evento.mjs`.
 - **La Recovery Zone se deriva de los días del tenant** (2026-09-06): era fija 18–25 aunque los días
-  de reactivación son configurables — bajar el toque suave a 15 dejaba 15–17 sin proteger. Con los
-  defaults sigue dando 18–25.
+  de reactivación son configurables; bajar el suave a 15 dejaba 15–17 sin proteger.
 - **D2 cerrada — el dominio cruzado va en las DOS direcciones** (2026-09-06, `00051`): faltaba el
   trigger simétrico sobre `tenants`, sin el cual una marca nueva podía tomar el subdominio de la sede
   de OTRA marca y `resolveHostContext()` quedaba con dos dueños del mismo host.
@@ -105,8 +104,8 @@ todo en `tenants.config` y en cómo se guardan credenciales de terceros).
   = además Celular y PIN. El panel MARCA a los que no tienen sede: no salen en ningún escáner.
 - **Sushi Fun absorbido como tenant** (2026-09-06): 1.421 filas, cero cruces, las otras 4 intactas.
   Conserva **su cuenta de Twilio**. Pendientes: su Supabase y su Vercel (§4).
-- **Firma de Twilio por tenant** (2026-09-06): se validaba con el token master, pero Twilio firma con
-  el de la cuenta dueña del número → **todo entrante de un tenant con cuenta propia daba 403**.
+- **Firma de Twilio por tenant** (2026-09-06): se validaba con el token master → **todo entrante de
+  un tenant con cuenta propia daba 403** y los `SALIR` se perdían.
 
 - Lo anterior a esto (§19, F7/F4/F3, identidad visual) está desplegado y vive en `CHANGELOG.md`.
 
@@ -132,8 +131,9 @@ quién activó un aparato solo queda en `device_name` y `trusted_at`.
 - **17.b**: "quién es Black" difiere entre la tarjeta (`black-tier.ts`) y el panel (`POWER_RANKS`).
 - **Domicilios perdidos sin rastro**: `logDeliveryIntakeFailure()` solo va a `console.error`, la tabla
   de §24-B no existe y no hay alerta. Con n8n apagado es el único registro. Es el ROJO 3 de la auditoría.
-- **Choques de número de migración en ramas muertas**: `sushi-sync` (00015) y `port/sushi-fun-2.8`
-  (00028) chocan con `main`. No se mergean sin renumerar.
+- **00048 y 00049 están RESERVADAS**, no libres: son de multi-sede (`…/2026-09-02-multisede-design.md`
+  §6.3 y §7.2) y las dos dependen de una decisión del dueño. El número se saca con el script.
+- **Choques de migración en ramas muertas**: `sushi-sync` (00015) y `port/sushi-fun-2.8` (00028).
 - **Catálogo de producto sin empezar**: referidos, push, fatiga, §8, §18. No es deuda técnica: es
   catálogo. Ver `docs/ESTADO-REQUERIMIENTOS.md`.
 

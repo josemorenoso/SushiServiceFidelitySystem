@@ -9,6 +9,7 @@ import {
   processDeliveryMessage,
   type DeliveryIntakeResult,
 } from '@/services/delivery.service'
+import { isAutoReplyEnabled } from '@/services/connection.service'
 
 // Keywords de opt-out/in alineados con el Messaging Service de Twilio
 // (ver docs/features/twilio-opt-out.md).
@@ -154,6 +155,20 @@ function twimlResponse(message: string): NextResponse {
     .replace(/>/g, '&gt;')
   const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Message>${escaped}</Message>\n</Response>`
   return new NextResponse(xml, {
+    status: 200,
+    headers: { 'Content-Type': 'text/xml' },
+  })
+}
+
+/**
+ * 200 con TwiML VACIO: Twilio queda conforme y al remitente no le llega nada.
+ *
+ * Es la forma correcta de callarse. Un 204 o un cuerpo vacio hacen que Twilio marque el
+ * webhook como fallido, y a los suficientes fallos deja de entregarnos los entrantes — o
+ * sea que tambien perderiamos los `SALIR` y los pedidos de domicilio.
+ */
+function silentResponse(): NextResponse {
+  return new NextResponse('<?xml version="1.0" encoding="UTF-8"?><Response></Response>', {
     status: 200,
     headers: { 'Content-Type': 'text/xml' },
   })
@@ -356,6 +371,32 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       console.error(`[Delivery][FALLO] reason=cliente_supabase tenant=${tenant.slug} operador=${phone} detalle="${err instanceof Error ? err.message : String(err)}"`)
       return twimlResponse('❌ Error procesando el pedido. Intenta de nuevo en un momento.')
     }
+  }
+
+  // §18.e — el interruptor de la auto-respuesta, que el dueño maneja desde Conexiones.
+  //
+  // A quien no es operador autorizado, este webhook le contesta «este número de MARCA es
+  // exclusivo para mensajes automáticos». Eso era cierto cuando el número era una línea de
+  // sistema. **Bajo coexistencia es la línea por la que el restaurante atiende**, y el
+  // sistema le está diciendo a un cliente real que ahí no lo atienden y que se vaya a otro
+  // lado — una sola vez cada 4 horas, o sea justo en el PRIMER contacto.
+  //
+  // Va ANTES del cooldown a propósito: apagado, no se toca `auto_reply_cooldown`, así que
+  // un tenant silenciado no le consume la ventana de 4 horas a nadie (esa tabla no tiene
+  // `tenant_id` — defecto conocido, `2026-09-03-default-puente-tenant.md:158`).
+  //
+  // Ante un fallo de base se contesta IGUAL. Es deliberado: el default es «prendida», y un
+  // timeout del pooler no puede convertirse en un silencio nuevo para todos los clientes de
+  // un restaurante. El fallo se registra; el comportamiento no cambia.
+  try {
+    if (!(await isAutoReplyEnabled(tenant.id))) {
+      console.log(`[twilio-incoming] auto-respuesta apagada (tenant=${tenant.slug}) — silencio`)
+      return silentResponse()
+    }
+  } catch (err) {
+    console.error(
+      `[twilio-incoming][FALLO] reason=auto_reply_flag_error tenant=${tenant.slug} detalle="${err instanceof Error ? err.message : String(err)}"`
+    )
   }
 
   // Cooldown de 4 horas: evita spam de auto-replies al mismo número

@@ -21,6 +21,7 @@ import {
   PackageOpen,
   Wallet,
   Bike,
+  PlugZap,
 } from 'lucide-react'
 import { useBranding } from '@/lib/branding-context'
 
@@ -48,6 +49,9 @@ export function DashboardSidebar({ isSuperAdmin = false }: { isSuperAdmin?: bool
     { href: '/dashboard/authorized-numbers', label: 'Autorizados Domicilio', icon: ShieldCheck },
     // Solo super-admin (operador de Cada1): billeteras de todos los tenants.
     ...(isSuperAdmin ? [{ href: '/dashboard/admin/wallets', label: 'Billeteras', icon: Wallet }] : []),
+    // Conexiones va JUSTO encima de Ajustes: es donde el negocio ve por qué
+    // número sale su WhatsApp, y mañana conecta Google y Meta (diseño §3).
+    { href: '/dashboard/conexiones', label: 'Conexiones', icon: PlugZap },
     { href: '/dashboard/settings', label: 'Ajustes', icon: Settings },
   ]
 

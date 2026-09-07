@@ -20,7 +20,7 @@
 | Base de datos de producción | Aplicadas hasta la **00046**. 🔴 **La `00047` (identidad visual) está SIN APLICAR y su código YA ESTÁ DESPLEGADO** — ver §3.1. Detrás van la **00050** (enlace del evento), la **00053** (salud) y la **00054** (Conexiones), las tres escritas y sin aplicar, con su código sin desplegar. La 00030 NUNCA aplicada (a propósito). La 00015 NO se aplica (reabre fuga) |
 | Crons | Los 5 en `vercel.json`, corriendo. `birthday` 18:00 y `reactivation` 20:00 UTC (= 13:00/15:00 Bogotá), verificado. ⚠️ **`reward-reminder` sigue en 16:00 UTC (11:00 Bogotá)**: de los 3 del ROJO 1 se corrigieron 2. Su hora real no se pudo confirmar por retención de logs; la auditoría la estimó ≈21:00 UTC. **Decisión del dueño** |
 | n8n | Apagado. `domicilios_whatsapp_v4.json` sigue en el VPS pero ya no dispara |
-| Grafo | Al día sobre `918dadd` (2026-09-07): 4.640 nodos, 7.981 aristas, 416 comunidades |
+| Grafo | Al día sobre `7d5257c` (2026-09-07): 4.799 nodos, 8.365 aristas, 441 comunidades. ⚠️ Las comunidades cambiaron: los nombres se refrescan con `graphify label` (cuesta LLM) |
 | Deadline | ~2026-09-10 — onboarding de los 25 clientes de Zernio |
 
 ## 2. En vuelo ahora mismo

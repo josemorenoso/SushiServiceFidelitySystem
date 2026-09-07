@@ -49,6 +49,12 @@
 
 **Lo demás, nada en vuelo.** QR Studio y plantillas cerraron en `main`, **sin pushear**: lo decide el dueño.
 
+**C1 de Conexiones está listo y ESPERANDO, y `main` NO se movió** (decisión del dueño, 2026-09-07):
+`ce5d249` verificado — `tsc` limpio, lint sin errores nuevos, **27 archivos / 435 tests en verde**. No se
+mergea porque la **00054 no está aplicada en Supabase**: su código en `main` daría 42703 → **403**, que
+parece permisos y no lo es. El cierre (CHANGELOG + `docs/features/conexiones.md` + `graphify update .`)
+lo hace la sesión que está en C2, no otra.
+
 📌 **Esta sección es el TABLERO.** Anotá tu territorio ANTES de escribir y commiteá esa línea sola;
 si se cruza con una ya anotada, esperá. Al cerrar, borrala. Regla completa (incluido por qué `stash`
 y `reset --hard` están prohibidos con otra sesión viva) en `CLAUDE.md` § "Trabajar en paralelo".

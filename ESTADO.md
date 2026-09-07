@@ -40,10 +40,18 @@ a usar worktrees: `npm ci` en la raíz apenas quites uno, antes de creer en un `
 Al cerrar, borra su línea. `stash` y `reset --hard` con otra sesión viva están **prohibidos**.
 Regla completa en `CLAUDE.md` § "Trabajar en paralelo".
 
-**Repo del AIOS**: ✅ **`main` PUSHEADO el 2026-09-07 en `9bc3167` (v1.5.0), por orden del dueño** —
-lleva el tablero de salud y, detrás, la coexistencia (v1.4.0) y el arreglo de la sede sin
-coordenadas. **El AIOS está desplegado.** ⚠️ **`/salud` sale ENTERO EN GRIS hasta que se corra la
-`00053`** — no rompe nada del resto del panel, pero no sirve.
+**Repo del AIOS**: ✅ **`main` PUSHEADO el 2026-09-07 en `80c820f` (v1.5.1), por orden del dueño** —
+lleva el arreglo del alta y, detrás, el tablero de salud (v1.5.0), la coexistencia (v1.4.0) y el
+arreglo de la sede sin coordenadas. **El AIOS está desplegado.** ⚠️ **`/salud` sale ENTERO EN GRIS
+hasta que se corra la `00053`** — no rompe nada del resto del panel, pero no sirve.
+
+⚠️ **Lo que destapó la v1.5.1 y es del PRODUCTO, no del AIOS**: un subdominio de
+`constelarys.com` sin tenant detrás responde **HTTP 200 con la marca de Sushi Service**.
+`getBrandingForHost()` (`src/lib/branding-server.ts`) cae a `DEFAULT_BRANDING`, que sale de
+`NEXT_PUBLIC_BRAND_*`, o sea la cuenta maestra. No hay fuga de datos —sin tenant no hay clientes
+ni visitas— pero un cliente que abre su enlace antes de que le creen el tenant ve el nombre de
+otra marca. Comprobado en vivo el 2026-09-07 con `pedacitodeamorclub.constelarys.com`.
+**Qué mostrar ahí (404, página neutra de Constelarys) es decisión del dueño: sin decidir.**
 
 ## 3. Siguiente, en orden
 

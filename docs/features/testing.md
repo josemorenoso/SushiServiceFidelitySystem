@@ -91,8 +91,8 @@ desde PG 13), `pg_cron`, `pg_net`, `vault`, `realtime`, ni el rol `service_role`
 | `tests/unit/tenant-config-paths.test.ts` | La whitelist de `tenants.config`: que no deje pasar `brand_name` ni `integrations.*`, las validaciones por tipo, y el espejo de ids de tema/tamaño con `qr-poster.ts`. |
 | `tests/db/identidad-visual.test.ts` | `merge_tenant_config_deep()` (00047): que guardar un color no borre el logo ni las integraciones, que escribir la marca de un tenant no toque la del otro, y **el control negativo** — la misma escritura con el merge plano sí borra el logo. |
 
-> Esta tabla no lista los 18 archivos: `npx vitest run` es la fuente de verdad del número
-> (hoy **18 archivos / 332 tests**). Acá van los que fijan una decisión que cuesta caro revertir.
+> Esta tabla no lista los 25 archivos: `npx vitest run` es la fuente de verdad del número
+> (hoy **25 archivos / 418 tests**). Acá van los que fijan una decisión que cuesta caro revertir.
 
 ### El control negativo
 

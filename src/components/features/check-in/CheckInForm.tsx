@@ -154,6 +154,12 @@ export function CheckInForm({
   //   }
   // }
 
+  // ─── `?mesa=N`: COMPATIBILIDAD, no una feature viva ───
+  // El QR Studio ya no genera un QR por mesa: la mesa la elige el mesero al
+  // escanear (D-QR-4, `docs/DECISIONES-QR-Y-SEDE-2026-09-06.md`). Esto se queda
+  // porque hay carteles POR MESA ya impresos y pegados en mesas reales, y
+  // mientras existan siguen trayendo su número. **No es código muerto: no se
+  // borra.** El día que se retire el último cartel viejo, se va con él.
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)

@@ -15,7 +15,7 @@
 | Qué | Estado |
 |-----|--------|
 | Código | **`main` = `origin/main` = producción.** Todo lo de 2026-09-05/06 está mergeado, pusheado y desplegado. No queda nada en ramas salvo `respaldo/*` (código de mayo que ya no compila) |
-| Verificación | ✅ `tsc` limpio · eslint 7 errores preexistentes (React hooks, sin relación) · **vitest 24 archivos / 406 tests en verde** |
+| Verificación | ✅ `tsc` limpio · eslint 7 errores preexistentes (React hooks, sin relación) · **vitest 25 archivos / 418 tests en verde** |
 | Marcas vivas | **5**: sushi-service (542 clientes), demo-ventas (412), sushi-fun (251), don-alirio (244), cafe-frangal (8) |
 | Base de datos de producción | Aplicadas hasta la **00046**. 🔴 **La `00047` (identidad visual) está SIN APLICAR y su código YA ESTÁ DESPLEGADO** — ver §3.1. La 00030 NUNCA aplicada (a propósito). La 00015 NO se aplica (reabre fuga) |
 | Crons | Los 5 en `vercel.json`, corriendo. `birthday` 18:00 y `reactivation` 20:00 UTC (= 13:00/15:00 Bogotá), verificado. ⚠️ **`reward-reminder` sigue en 16:00 UTC (11:00 Bogotá)**: de los 3 del ROJO 1 se corrigieron 2. Su hora real no se pudo confirmar por retención de logs; la auditoría la estimó ≈21:00 UTC. **Decisión del dueño** |
@@ -33,12 +33,6 @@
 **antes** de escribir, y lo commitea solo; si se cruza con uno ya anotado, **espera y va después**.
 Al cerrar, borra su línea. `stash` y `reset --hard` con otra sesión viva están **prohibidos**: hoy
 barrieron 12 archivos. Regla completa en `CLAUDE.md` § "Trabajar en paralelo".
-
-- **QR Studio → sede + SVG** (D-QR-3 y D-QR-4) · rama `feat/qr-svg-por-sede`.
-  **Toca:** `dashboard/qr/page.tsx` (reescrito), NUEVO `api/dashboard/qr-locations/route.ts`,
-  NUEVO `lib/utils/qr-svg.ts`, `docs/features/qr-studio.md`.
-  **NO toca:** `qr-poster.ts` (congelado, no borrado), `tenant-config-paths.ts`, `location-scope*`,
-  `/api/dashboard/location`, `CheckInForm`, `/mesero/confirm`, migraciones (ninguna).
 
 **Repo del AIOS**: `fix/coexistencia` (v1.4.0) subida, pero **su `main` NO se pusheó** — pushearlo
 despliega el AIOS y es decisión del dueño. Parte en `…/docs/PARTE-COEXISTENCIA-2026-09-06.md`.

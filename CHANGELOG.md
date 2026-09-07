@@ -8,6 +8,29 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [2026-09-06] - QR Studio: una sede, un QR en SVG. Las mesas se van; los disenos, a la nevera
+
+**Tipo:** feat · **Rama:** `feat/qr-svg-por-sede` · **Decisiones:** `docs/DECISIONES-QR-Y-SEDE-2026-09-06.md` D-QR-1/3/4
+
+- **El Studio hace una sola cosa: elegis una sede y bajas su QR en SVG.** Un vector no tiene
+  resolucion, asi que el mismo archivo sirve para un sticker de 5 cm y para una pancarta de 3 m.
+  PNG de 2000 px como respaldo, para la imprenta que no acepta vectores. 583 -> 300 lineas.
+- **Un QR por SEDE, sobre su subdominio.** La sede se resuelve del HOST, nunca de un parametro: no
+  existe ni va a existir `?sede=`. Una sede **sin subdominio queda deshabilitada** con su aviso, no
+  con un boton que baja un cartel roto: con 2+ sedes el dominio raiz responde **409** al registrar,
+  o sea un QR que no registra a nadie y que nadie descubre hasta tenerlo pegado en la pared.
+- **Los disenos (8 temas, 5 tamanos, textos, acento) se OCULTAN, no se borran.** `qr-poster.ts`
+  queda intacto y las rutas `qr_studio.*` siguen en la whitelist y guardadas en `tenants.config`.
+  Es una pausa: volver a encenderlas es revertir este commit.
+- **Las mesas salen del QR.** No se pierde el dato: la mesa la elige el mesero al escanear
+  (`/mesero/confirm`, ya vivo) y sigue llenando `visits.table_number`. `CheckInForm` **conserva** el
+  lector de `?mesa=N` por los carteles ya pegados, ahora comentado para que nadie lo borre.
+- **Nuevo:** `src/lib/utils/qr-svg.ts` (puro), `GET /api/dashboard/qr-locations` (sedes con
+  `domain`; ruta propia para no mover `LocationOption`, que es el hub del selector de todo el panel).
+- **Migraciones: ninguna.** Docs: `qr-studio.md` reescrito, `API_DOCS.md`. Tests: +12 (`qr-svg`).
+
+---
+
 ## [2026-09-06] - Los 3 amarillos del calendario: hora de Bogota, goteo por cola y reclamo sin doble disparo
 
 **Tipo:** fix · **Rama:** `fix/amarillos-calendario` · **Origen:** `docs/AUDITORIA-POST-DEPLOY-2026-09-06.md`

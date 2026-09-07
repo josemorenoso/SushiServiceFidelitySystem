@@ -119,6 +119,7 @@ Webhooks validan origen por número autorizado o `x-webhook-secret`. Cron jobs v
 | GET | /api/dashboard/analytics | Analytics completos del dashboard — retorno partido en `{ brand, location }` **(sede)** | Admin Cookie |
 | GET | /api/dashboard/metrics | Métricas resumidas — retorno partido en `{ brand, location }` **(sede)**. ⚠️ Ningún componente del panel la consume hoy | Admin Cookie |
 | GET | /api/dashboard/location-scope | Rol, selección y sedes visibles del usuario — alimenta el selector del panel (F7) | Admin Cookie |
+| GET | /api/dashboard/qr-locations | Sedes activas **con su `domain`** — lo que el QR Studio necesita para imprimir un QR por sede (D-QR-1) | Admin Cookie |
 | GET | /api/dashboard/authorized-numbers | Listar números autorizados de domicilio **(sede — no-op hoy, D9/deuda pendiente)** | Admin Cookie |
 | POST | /api/dashboard/authorized-numbers | Autorizar un número de domicilio | Admin Cookie |
 | PATCH | /api/dashboard/authorized-numbers/:id | Activar/desactivar un número autorizado **(sede)** | Admin Cookie |
@@ -1909,6 +1910,34 @@ nadie movió del mostrador. Hay que reasignar o desvincular esos dispositivos pr
 
 ⚠️ Borrar un mesero **borra sus dispositivos de confianza**:
 `staff_devices_staff_user_id_fkey` es `ON DELETE CASCADE` (00018:31).
+
+---
+
+### GET /api/dashboard/qr-locations
+
+Las sedes activas de la marca **con su subdominio**. La consume una sola pantalla: el QR Studio
+(`docs/features/qr-studio.md`).
+
+**Auth:** cookie de admin. El tenant sale del JWT (`requireTenantId()`), **no del host**.
+
+**`GET`** → lista `[{ id, name, slug, domain, is_primary }]`, ordenada igual que
+`getActiveLocations()` (`is_primary` DESC → `sort_order` ASC → `name` ASC). Lista vacía si la marca
+no tiene sedes activas. **401** sin sesión o sin `tenant_id`; **500** si falla la lectura.
+
+**Por qué existe, habiendo ya dos rutas de sede.** El QR de una sede apunta a **su subdominio**
+porque la sede se resuelve del host y nunca de un parámetro (D-QR-1), así que hace falta el campo
+`domain` — y no lo da ninguna de las dos:
+
+- **`/api/dashboard/location`** devuelve un **objeto plano** con la sede principal y su contrato
+  está congelado: devolver una lista rompe `dashboard/settings/page.tsx` en silencio.
+- **`/api/dashboard/location-scope`** sí devuelve la lista, pero su `LocationOption`
+  (`src/lib/location-scope-shared.ts`) alimenta el selector de **todo** el panel: agregarle `domain`
+  mueve un hub por una pantalla sola.
+
+⚠️ **Devuelve TODAS las sedes activas, también las que no tienen `domain`**, y eso es a propósito:
+quien imprime el material de una sede necesita ver cuáles todavía no pueden imprimirse. Filtrar por
+`LocationScope` (§8.4) escondería justo ese caso. El `tenant_id` sí se filtra siempre — la ruta usa
+`service_role` y se salta el RLS.
 
 ---
 

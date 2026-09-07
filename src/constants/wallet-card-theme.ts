@@ -186,8 +186,14 @@ export function brandWalletCardTheme(branding: Branding): WalletCardTheme {
   }
 }
 
-const GOLD = '#D4AF37'
-const GOLD_BRIGHT = '#F2D479'
+/**
+ * El par de dorados del sistema. Se exportan porque la Golden Box (§ mystery
+ * box) tiene que usar EXACTAMENTE estos: dos dorados parecidos pero distintos en
+ * dos pantallas del mismo producto es justo lo que hace que algo se vea armado a
+ * pedazos.
+ */
+export const GOLD = '#D4AF37'
+export const GOLD_BRIGHT = '#F2D479'
 
 /** Tema Black: negro y dorado, con distintivo. §17.2. */
 export const BLACK_WALLET_CARD_THEME: WalletCardTheme = {

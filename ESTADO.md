@@ -83,17 +83,16 @@ todo en `tenants.config` y en cómo se guardan credenciales de terceros).
 
 - **El `SALIR` se ve y se contesta** (2026-09-06): `setWhatsappOptOut()` devolvía `void`, así que
   "marqué a un cliente" y "no había a quién marcar" (cero filas, un éxito para Postgres) llegaban
-  idénticos — el log decía "persistido" con el panel en cero y las dos cosas eran ciertas. Ahora
-  devuelve `matched`, y al cliente se le contesta por TwiML. → `docs/features/twilio-opt-out.md`.
+  idénticos: el log decía "persistido" con el panel en cero y las dos eran ciertas. Ahora devuelve
+  `matched`, y al cliente se le contesta por TwiML. → `docs/features/twilio-opt-out.md`.
 - **Los 3 AMARILLO del calendario** (2026-09-06): **(1)** la hora del picker se leía en la zona del
   navegador; la conversión vive ahora solo en `src/lib/timezone.ts` (el servidor siempre estuvo bien).
   **(2)** `calendar_event` **ya gotea por `send_queue`**: antes lo que excedía el cupo se perdía como
   `failed`. **(3)** el reclamo del despacho no contaba filas afectadas y dos corridas creían ganar;
   lo cierra `claimScheduledEvent()`, con 8 reclamos simultáneos en `tests/db/calendar-claim.test.ts`.
 - **Enlace del evento + plantillas verificadas** (2026-09-06): `link_url` (00050, **sin aplicar**)
-  viaja dentro de `{{5}}` para no re-aprobar en las 25 marcas. La plantilla de imagen de la master
-  está **approved** y dinámica; **Sushi Fun no tiene ninguna `twilio/media` y ahí NO sale**; video
-  **rejected**. → `scripts/verificar-plantillas-evento.mjs`.
+  viaja dentro de `{{5}}` para no re-aprobar en las 25 marcas. La de imagen de la master está
+  **approved**; **Sushi Fun no tiene ninguna `twilio/media` y ahí NO sale**; video **rejected**.
 - **La Recovery Zone se deriva de los días del tenant** (2026-09-06): era fija 18–25 aunque los días
   de reactivación son configurables; bajar el suave a 15 dejaba 15–17 sin proteger.
 - **D2 cerrada — el dominio cruzado va en las DOS direcciones** (2026-09-06, `00051`): faltaba el
@@ -129,8 +128,8 @@ quién activó un aparato solo queda en `device_name` y `trusted_at`.
 **Fuera de multi-sede:**
 - **00030 sin aplicar**: DEFAULT puente → un INSERT sin `tenant_id` se va calladito a Sushi Service.
 - **17.b**: "quién es Black" difiere entre la tarjeta (`black-tier.ts`) y el panel (`POWER_RANKS`).
-- **Domicilios perdidos sin rastro**: `logDeliveryIntakeFailure()` solo va a `console.error`, la tabla
-  de §24-B no existe y no hay alerta. Con n8n apagado es el único registro. Es el ROJO 3 de la auditoría.
+- **Domicilios perdidos sin rastro** (ROJO 3): `logDeliveryIntakeFailure()` solo va a `console.error`,
+  la tabla de §24-B no existe y no hay alerta. Con n8n apagado es el único registro.
 - **00048 y 00049 están RESERVADAS**, no libres: son de multi-sede (`…/2026-09-02-multisede-design.md`
   §6.3 y §7.2) y las dos dependen de una decisión del dueño. El número se saca con el script.
 - **Choques de migración en ramas muertas**: `sushi-sync` (00015) y `port/sushi-fun-2.8` (00028).

@@ -25,9 +25,13 @@
 
 ## 2. En vuelo ahora mismo
 
-**Nada en vuelo en este repo.** Todo el trabajo del 05/06 está mergeado a `main` y `main` está
-**pusheado a `origin`**, que es lo que despliega en Vercel. El árbol principal vuelve a estar en
-`main` y limpio, y las ramas ya mergeadas se borraron.
+- **Plantillas: enviar tal cual o editar** (alta de negocio nuevo) · rama `feat/plantillas-enviar-o-editar`
+  · worktree `.worktrees/plantillas`.
+  **Toca:** `components/dashboard/templates/{TemplateCatalogEditor,TemplateEditorDialog}.tsx`,
+  NUEVO `api/dashboard/templates/catalog/[key]/submit/route.ts`, `services/template.service.ts`
+  (una función nueva), `.env.example`, `docs/features/whatsapp-templates.md`.
+  **NO toca:** `docs/PLANTILLAS.md` ni `docs/features/calendar.md` (los tiene QR Studio),
+  `template-catalog.ts`, `template-texts.ts`, el gestor Twilio, `promoteVersion()`, migraciones.
 
 📌 **Esta sección es el TABLERO.** Toda sesión anota acá su territorio (qué toca, en qué rama)
 **antes** de escribir, y lo commitea solo; si se cruza con uno ya anotado, **espera y va después**.

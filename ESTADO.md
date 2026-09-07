@@ -25,17 +25,18 @@
 
 ## 2. En vuelo ahora mismo
 
-- **Capa visual — la tarjeta del cliente y el panel** · rama `feat/visual` · worktree `.worktrees/visual`
-  (rama propia porque el árbol compartido está en `feat/conexiones`). Sale del `Kit Visual Cada1`
-  (artifact del dueño, 2026-09-07) e investigación en 21st.dev. **Solo pinta: ni una regla de negocio,
-  ni una migración, ni un endpoint.** Territorio exacto:
-  `src/components/features/wallet/*`, `src/constants/wallet-card-theme.ts`,
-  `src/app/(public)/tarjeta/page.tsx`, `src/components/features/check-in/*`,
-  `src/components/ui/` (piezas nuevas: odómetro, shine-border, medalla),
-  `src/components/dashboard/MetricsCards.tsx` + `MiniSparkline.tsx`, y `src/app/globals.css`
-  (SOLO agregando keyframes/utilities/tokens al final; no toco los existentes).
-  ⚠️ **NO toco `DashboardSidebar.tsx`** — ya tiene dos pretendientes (`-08` con «Conexiones»,
-  commiteada en `ce5d249`, y `-86` con «Domicilios» desde `.worktrees/domicilios`).
+**Capa visual v3 CERRADA en `feat/visual`** (worktree `.worktrees/visual`), **sin mergear ni
+pushear** (2026-09-07 03:00): `e33daaa` · `54327f4` · `549168b` · `99508d2` · `0fed8f0` · `b75b198`.
+Sale del `Kit Visual Cada1` del dueño (21st.dev). **Solo pinta: ni una regla de negocio, ni una
+migración, ni un endpoint.** `tsc` limpio · build OK (76 páginas) · vitest 25/418 (los de `main`;
+no incluye los tuyos) · eslint con sus 7 errores preexistentes.
+Tocó: `features/wallet/*`, `features/check-in/*`, `ui/` (odómetro, shine-border, confeti, medalla),
+`dashboard/MetricsCards.tsx` + `MiniSparkline.tsx`, `constants/wallet-card-theme.ts` +
+`tier-medal-theme.ts`, `app/(public)/{tarjeta,check-in}` y `globals.css` **solo agregando al final**.
+✅ **`DashboardSidebar.tsx` quedó intacto**, como estaba anotado: es de `-08` y `-86`.
+⚠️ Al mergear, **§2 de este archivo choca**: las ramas del 07 metieron su línea en el mismo sitio.
+Es conflicto de tablero, no de código. Y el grafo de `feat/visual` no está indexado (`graphify-out/`
+vive en este checkout, que está en `feat/conexiones`): se corre al mergear.
 
 **Lo demás, nada en vuelo.** QR Studio y plantillas cerraron en `main`, **sin pushear**: lo decide el dueño.
 

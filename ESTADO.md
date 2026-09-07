@@ -30,6 +30,14 @@
   toca, los únicos 3: `DashboardSidebar.tsx` (1 línea), `webhook/zernio/route.ts` (**aditivo**) y
   `zernio/webhooks.ts`. **No toca envío, `tenants`, gobernanza, multi-sede, 00048/00049 ni el AIOS.**
 
+- **Salud por cliente en el AIOS (§24-A)** · rama `feat/salud-aios` en `.worktrees/salud` · **00053** ·
+  semáforo de domicilios, envío, línea y crons. En ESTE repo toca **2 archivos y nada más**:
+  `supabase/migrations/00053_*.sql` (tabla de fallos de intake §24-B + `aios_health()`, ambos NUEVOS)
+  y `src/services/delivery.service.ts` (el INSERT dentro de `logDeliveryIntakeFailure()`). **Lee**
+  `tenants`, `visits`, `message_logs`, `send_queue`, **no escribe en ninguna**. El grueso del trabajo
+  vive en el **repo del AIOS**, que este repo ignora. **No toca conexiones, la 00052, `webhook/zernio`,
+  envío, gobernanza ni multi-sede.**
+
 **Lo demás, nada en vuelo.** QR Studio y plantillas cerraron en `main`, **sin pushear**: lo decide el dueño.
 
 📌 **Esta sección es el TABLERO.** Anotá tu territorio ANTES de escribir y commiteá esa línea sola;

@@ -15,7 +15,13 @@ import {
   ToggleRight,
 } from 'lucide-react'
 import { LineHealth } from './LineHealth'
-import type { ConnectionPermissions, LineBudgetResponse, WhatsappConnection } from './types'
+import { AltaFlow } from './AltaFlow'
+import type {
+  ConnectionPermissions,
+  LineBudgetResponse,
+  TenantConnectionView,
+  WhatsappConnection,
+} from './types'
 
 /**
  * La tarjeta de WhatsApp — la única que hoy tiene contenido real.
@@ -44,15 +50,19 @@ function formatPhone(raw: string | null): string {
 export function WhatsappCard({
   whatsapp,
   permissions,
+  connection,
   budget,
   budgetLoading,
   onToggleAutoReply,
+  onConnectionChanged,
 }: {
   whatsapp: WhatsappConnection
   permissions: ConnectionPermissions
+  connection: TenantConnectionView | null
   budget: LineBudgetResponse | null
   budgetLoading: boolean
   onToggleAutoReply: (enabled: boolean) => Promise<void>
+  onConnectionChanged: () => void
 }) {
   const [saving, setSaving] = useState(false)
   const isZernio = whatsapp.provider === 'zernio'
@@ -96,7 +106,16 @@ export function WhatsappCard({
           )}
         </div>
 
-        {!whatsapp.configured && (
+        {/* Sin línea lista, la tarjeta ES EL FLUJO (§3 del diseño): un paso a la vez,
+            nunca cinco en gris. Salvo para un tenant Twilio, que trae su propia cuenta y
+            no tiene ningún alta que hacer aquí. */}
+        {!whatsapp.configured && !whatsapp.readOnly && (
+          <div className="space-y-3 border-t pt-4" style={{ borderColor: 'rgba(0,0,0,0.06)' }}>
+            <AltaFlow connection={connection} permissions={permissions} onChanged={onConnectionChanged} />
+          </div>
+        )}
+
+        {!whatsapp.configured && whatsapp.readOnly && (
           <p
             className="flex items-start gap-2 rounded-xl p-3 text-sm"
             style={{ background: 'rgba(0,0,0,0.03)', color: 'var(--brand-ink-soft)' }}

@@ -144,8 +144,61 @@ export interface ZernioWebhookPayloadTemplateStatus {
   timestamp: string
 }
 
+/**
+ * Los SEIS eventos `whatsapp.number.*` que el parte de coexistencia agregó y que hasta
+ * hoy no tenían dónde aterrizar (§5 del diseño de Conexiones).
+ *
+ * El más importante es `whatsapp.number.verification_required`: en coexistencia Meta le
+ * pide al negocio confirmar por SMS o llamada el número que YA usa, y hoy ese evento llega
+ * al webhook, se loguea y **nadie lo mira** — el alta se queda callada esperando algo que
+ * el cliente nunca ve. Es el estado donde el alta se traba en silencio, y en coexistencia
+ * es el más probable de todos.
+ *
+ * ⚠️ **`registerWebhook()` es idempotente POR URL.** Estos seis eventos NO se aplican
+ * solos sobre un webhook ya creado: hay que borrarlo y volver a registrarlo (§7 del
+ * parte). Sin eso, `verification_required` sigue sin llegar y la pantalla se queda muda
+ * igual que hoy — por eso el estado también se puede avanzar a mano.
+ */
+export type ZernioNumberEvent =
+  | 'whatsapp.number.kyc_submitted'
+  | 'whatsapp.number.verification_required'
+  | 'whatsapp.number.activated'
+  | 'whatsapp.number.suspended'
+  | 'whatsapp.number.reactivated'
+  | 'whatsapp.number.released'
+
+export const ZERNIO_NUMBER_EVENTS: readonly ZernioNumberEvent[] = [
+  'whatsapp.number.kyc_submitted',
+  'whatsapp.number.verification_required',
+  'whatsapp.number.activated',
+  'whatsapp.number.suspended',
+  'whatsapp.number.reactivated',
+  'whatsapp.number.released',
+] as const
+
+export function isZernioNumberEvent(event: string): event is ZernioNumberEvent {
+  return (ZERNIO_NUMBER_EVENTS as readonly string[]).includes(event)
+}
+
+/**
+ * Payload de los eventos de número.
+ *
+ * `account` se trata como opaco por la misma razón que en los demás eventos: el contrato
+ * lo describe como `{ accountId, profileId, ... }` para plantillas y números, pero la doc
+ * pública no lo cierra. `phoneNumber` y `reason` pueden faltar según el evento.
+ */
+export interface ZernioWebhookPayloadNumber {
+  id: string
+  event: ZernioNumberEvent
+  account: Record<string, unknown>
+  phoneNumber?: string | null
+  reason?: string | null
+  timestamp: string
+}
+
 export type ZernioWebhookPayload =
   | ZernioWebhookPayloadMessage
   | ZernioWebhookPayloadDeliveryStatus
   | ZernioWebhookPayloadTest
   | ZernioWebhookPayloadTemplateStatus
+  | ZernioWebhookPayloadNumber

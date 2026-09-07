@@ -21,12 +21,13 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { verifyZernioSignature } from '@/lib/zernio/webhooks'
+import { verifyZernioSignature, isZernioNumberEvent } from '@/lib/zernio/webhooks'
 import type {
   ZernioWebhookPayload,
   ZernioWebhookPayloadMessage,
   ZernioWebhookPayloadDeliveryStatus,
   ZernioWebhookPayloadTemplateStatus,
+  ZernioWebhookPayloadNumber,
 } from '@/lib/zernio/webhooks'
 import type { ZernioTemplateStatus } from '@/lib/zernio/templates'
 import { getTenantByZernioAccountId } from '@/lib/tenant'
@@ -400,6 +401,172 @@ async function handleTemplateStatusUpdated(
   return new NextResponse(null, { status: 200 })
 }
 
+/**
+ * Los SEIS eventos `whatsapp.number.*`, aterrizados en `tenant_connections` (00054).
+ *
+ * ADITIVO Y NADA MÁS. No toca `handleMessageReceived()`, ni el opt-out, ni los domicilios,
+ * ni el dedup, ni el «200 siempre». Es un caso nuevo en el switch de abajo.
+ *
+ * POR QUÉ ESTO IMPORTA
+ * ────────────────────
+ * `whatsapp.number.verification_required` es **el estado donde hoy se traba el alta en
+ * silencio**: en coexistencia Meta le pide al negocio confirmar por SMS o llamada el
+ * número que ya usa, el evento llega, se loguea, y nadie lo mira. El cliente se queda
+ * esperando algo que nunca ve.
+ *
+ * ⚠️ **Que estos eventos LLEGUEN no está garantizado todavía.** Dos motivos, los dos
+ * conocidos: (1) `registerWebhook()` es idempotente POR URL, así que los seis eventos
+ * nuevos no se aplican solos sobre un webhook ya creado — hay que borrarlo y volver a
+ * registrarlo; (2) el nombre real del header de la firma HMAC no está confirmado, y si es
+ * otro, TODOS los webhooks rebotan en 401. Por eso el alta también se puede terminar a
+ * mano desde la pantalla: esto acelera, no habilita.
+ *
+ * SIGUE DEVOLVIENDO 200 SIEMPRE. Un 5xx hace que Zernio desactive el webhook a los 10
+ * fallos, y eso costaría los pedidos de domicilio de TODOS los tenants Zernio.
+ */
+async function handleNumberEvent(payload: ZernioWebhookPayloadNumber): Promise<NextResponse> {
+  try {
+    if (payload.id && (await isDuplicateZernioEvent(payload.id))) {
+      console.log(`[webhook/zernio] ${payload.event} duplicado (${payload.id}) — ignorado`)
+      return new NextResponse(null, { status: 200 })
+    }
+
+    const accountId = extractAccountId(payload.account ?? {})
+    const profileId = (payload.account as { profileId?: unknown } | undefined)?.profileId
+    const profile = typeof profileId === 'string' && profileId ? profileId : null
+
+    const db = getServiceClient()
+
+    // Resolución de la conexión, en el orden que va de lo más específico a lo menos:
+    //   1. por `zernio_account_id` (índice único global de la 00054),
+    //   2. por `zernio_profile_id`, para el alta que todavía no tiene cuenta,
+    //   3. por el match ACTUAL contra `tenants.zernio_account_id`, que se conserva a
+    //      propósito: es como se resuelven hoy los demás eventos y no se rompe.
+    let row: { id: string; tenant_id: string; phone_e164: string | null; zernio_profile_id: string | null } | null =
+      null
+
+    if (accountId) {
+      const { data, error } = await db
+        .from('tenant_connections')
+        .select('id, tenant_id, phone_e164, zernio_profile_id')
+        .eq('zernio_account_id', accountId)
+        .maybeSingle()
+      if (error) console.error('[webhook/zernio] lookup por account falló:', error.message)
+      row = data ?? null
+    }
+
+    if (!row && profile) {
+      const { data, error } = await db
+        .from('tenant_connections')
+        .select('id, tenant_id, phone_e164, zernio_profile_id')
+        .eq('zernio_profile_id', profile)
+        .eq('is_primary', true)
+        .maybeSingle()
+      if (error) console.error('[webhook/zernio] lookup por profile falló:', error.message)
+      row = data ?? null
+    }
+
+    if (!row && accountId) {
+      const tenant = await getTenantByZernioAccountId(accountId)
+      if (tenant) {
+        const { data } = await db
+          .from('tenant_connections')
+          .select('id, tenant_id, phone_e164, zernio_profile_id')
+          .eq('tenant_id', tenant.id)
+          .eq('is_primary', true)
+          .maybeSingle()
+        row = data ?? null
+      }
+    }
+
+    if (!row) {
+      // No es un fallo: puede ser un número del operador que todavía no es de nadie. Se
+      // registra con el dato que permite encontrarlo a mano, y se contesta 200.
+      console.warn(
+        `[webhook/zernio] ${payload.event} sin conexión que lo reciba (account=${accountId ?? '—'} profile=${profile ?? '—'})`
+      )
+      return new NextResponse(null, { status: 200 })
+    }
+
+    const phone = payload.phoneNumber ?? row.phone_e164 ?? null
+    const patch: Record<string, unknown> = {
+      last_event: payload.event,
+      last_event_at: new Date().toISOString(),
+    }
+    if (payload.reason) patch.last_error = payload.reason
+    if (accountId) patch.zernio_account_id = accountId
+    if (phone) patch.phone_e164 = phone
+
+    switch (payload.event) {
+      case 'whatsapp.number.kyc_submitted':
+        // Solo camino C. No cierra nada: cuenta la espera de un regulador, que es
+        // justamente lo que hoy no se ve (§6.2).
+        patch.status = 'kyc_pendiente'
+        break
+
+      case 'whatsapp.number.verification_required':
+        patch.status = 'verificacion_pendiente'
+        break
+
+      case 'whatsapp.number.activated':
+      case 'whatsapp.number.reactivated':
+        // `activa` exige cuenta Y número: es la misma invariante que corta
+        // `sendViaZernio()` con `zernio_not_configured`. Con una sola, se queda en
+        // `conectada` — decir «activa» dejaría al cliente creyendo que ya envía.
+        patch.status = accountId && phone ? 'activa' : 'conectada'
+        patch.last_error = null
+        break
+
+      case 'whatsapp.number.suspended':
+        patch.status = 'suspendida'
+        break
+
+      case 'whatsapp.number.released':
+        // Un número liberado NO vuelve. Se deja dicho, con el motivo real de Zernio.
+        patch.status = 'liberada'
+        break
+    }
+
+    const { error: updateError } = await db
+      .from('tenant_connections')
+      .update(patch)
+      .eq('id', row.id)
+      .eq('tenant_id', row.tenant_id)
+
+    if (updateError) {
+      console.error(`[webhook/zernio] no se pudo aterrizar ${payload.event}:`, updateError.message)
+      return new NextResponse(null, { status: 200 })
+    }
+
+    // Cuando queda ACTIVA de verdad, se pasa por el cuerpo único para que
+    // `tenants.messaging_provider` y los tres `zernio_*` queden en la MISMA transacción.
+    // Escribir esas columnas acá a mano es exactamente cómo se separan las invariantes y
+    // un tenant termina con provider 'zernio' y sin account.
+    if (patch.status === 'activa' && accountId && phone) {
+      const { error: rpcError } = await db.rpc('connection_apply_whatsapp', {
+        p_tenant_id: row.tenant_id,
+        p_profile_id: profile ?? row.zernio_profile_id,
+        p_account_id: accountId,
+        p_phone: phone,
+      })
+      if (rpcError) {
+        console.error('[webhook/zernio] connection_apply_whatsapp falló:', rpcError.message)
+      }
+    }
+
+    console.log(
+      `[webhook/zernio] ${payload.event} → ${patch.status ?? 'sin cambio de estado'} (tenant=${row.tenant_id})`
+    )
+  } catch (err) {
+    // Cualquier cosa que salga mal acá se traga y se contesta 200. Perder la actualización
+    // de una pantalla es barato; que Zernio desactive el webhook es perder los domicilios
+    // de todas las marcas.
+    console.error('[webhook/zernio] Error procesando whatsapp.number.*:', err)
+  }
+
+  return new NextResponse(null, { status: 200 })
+}
+
 export async function POST(req: NextRequest): Promise<NextResponse> {
   // F7 (post-review): los payloads documentados de Zernio son de pocos KB — se
   // corta ANTES de leer el body si el header dice que excede el límite, para no
@@ -439,6 +606,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   if (payload.event === 'whatsapp.template.status_updated') {
     return handleTemplateStatusUpdated(payload)
+  }
+
+  // Los seis eventos de NUMERO (Conexiones C2). Aditivo: ningun camino anterior
+  // cambia de comportamiento por esta rama.
+  if (isZernioNumberEvent(payload.event)) {
+    return handleNumberEvent(payload as ZernioWebhookPayloadNumber)
   }
 
   // Zernio puede agregar eventos nuevos sin avisar (16 plataformas, no solo

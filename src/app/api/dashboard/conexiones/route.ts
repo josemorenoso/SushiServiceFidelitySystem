@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getTenantIdFromJwt } from '@/lib/tenant'
 import { isTenantOwner, ownerDenialMessage } from '@/lib/tenant-owner'
-import { getConnectionsView } from '@/services/connection.service'
+import { getConnectionsView, getPrimaryConnection } from '@/services/connection.service'
 
 /**
  * GET /api/dashboard/conexiones — el estado de todas las tarjetas del apartado.
@@ -43,7 +43,18 @@ export async function GET() {
   }
 
   try {
-    const [view, owner] = await Promise.all([getConnectionsView(tenantId), isTenantOwner(tenantId)])
+    const [view, owner, connection] = await Promise.all([
+      getConnectionsView(tenantId),
+      isTenantOwner(tenantId),
+      // C2: el estado del ALTA. `null` = todavía no empezó, y la tarjeta muestra los tres
+      // caminos. Falla BLANDO: si la 00054 no está aplicada, PostgREST devuelve 42703 y
+      // esta pantalla respondería 403 —que parece permisos y no lo es—; degradar a `null`
+      // deja viva la mitad de C1, que no necesita la tabla para nada.
+      getPrimaryConnection(tenantId).catch((err) => {
+        console.error('[Conexiones] estado del alta no disponible:', err instanceof Error ? err.message : err)
+        return null
+      }),
+    ])
 
     return NextResponse.json({
       available: true,
@@ -55,6 +66,7 @@ export async function GET() {
         denialMessage: owner.canAct ? null : ownerDenialMessage(owner.reason),
       },
       whatsapp: view.whatsapp,
+      connection,
       // Las dos del norte de ESTADO.md §3. Se declaran acá para que la pantalla no las
       // invente: el día que existan, cambia el `available` y nada más.
       google: { available: false },

@@ -16,6 +16,36 @@ export interface WhatsappConnection {
   autoReplyApplies: boolean
 }
 
+/**
+ * El estado del ALTA (`tenant_connections`, 00054). `null` = todavía no empezó, o la
+ * migración no está aplicada — la pantalla degrada a la parte de C1, que no la necesita.
+ *
+ * ⚠️ `signup_nonce` NO está acá y no puede estarlo: es lo único que impide que un `code`
+ * de otra pestaña conecte la WABA equivocada. Si viajara al navegador dejaría de ser un
+ * secreto y dejaría de servir para nada.
+ */
+export interface TenantConnectionView {
+  id: string
+  route: 'coexistence' | 'byo_cloud_api' | 'zernio_number' | null
+  status:
+    | 'sin_empezar'
+    | 'camino_elegido'
+    | 'kyc_pendiente'
+    | 'numero_declarado'
+    | 'numero_comprado'
+    | 'signup_abierto'
+    | 'verificacion_pendiente'
+    | 'conectada'
+    | 'activa'
+    | 'fallida'
+    | 'suspendida'
+    | 'liberada'
+  phone_e164: string | null
+  label: string | null
+  purchase_allowed: boolean
+  last_error: string | null
+}
+
 export interface ConnectionPermissions {
   canAct: boolean
   isSuperAdmin: boolean
@@ -29,6 +59,7 @@ export interface ConnectionsResponse {
   available: boolean
   permissions?: ConnectionPermissions
   whatsapp?: WhatsappConnection
+  connection?: TenantConnectionView | null
   google?: { available: boolean }
   meta?: { available: boolean }
   error?: string

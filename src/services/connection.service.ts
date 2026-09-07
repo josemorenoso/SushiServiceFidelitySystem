@@ -231,3 +231,298 @@ export async function getConnectionsView(tenantId: string): Promise<ConnectionsV
     whatsapp: projectWhatsappConnection(data, await isAutoReplyEnabled(tenantId)),
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FASE C2 — el alta. A partir de acá se lee y escribe `tenant_connections`
+// (migración 00054) y se habla con Zernio.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Los tres caminos del §2 del diseño. Se manda SIEMPRE explícito a Zernio. */
+export type ConnectionRoute = 'coexistence' | 'byo_cloud_api' | 'zernio_number'
+
+export type ConnectionStatus =
+  | 'sin_empezar'
+  | 'camino_elegido'
+  | 'kyc_pendiente'
+  | 'numero_declarado'
+  | 'numero_comprado'
+  | 'signup_abierto'
+  | 'verificacion_pendiente'
+  | 'conectada'
+  | 'activa'
+  | 'fallida'
+  | 'suspendida'
+  | 'liberada'
+
+export interface TenantConnection {
+  id: string
+  tenant_id: string
+  provider: string
+  label: string | null
+  route: ConnectionRoute | null
+  status: ConnectionStatus
+  phone_e164: string | null
+  zernio_profile_id: string | null
+  zernio_account_id: string | null
+  waba_id: string | null
+  phone_number_id: string | null
+  signup_opened_at: string | null
+  is_primary: boolean
+  purchase_allowed: boolean
+  monthly_price_cop: number | null
+  last_event: string | null
+  last_event_at: string | null
+  last_error: string | null
+}
+
+/**
+ * Las columnas que salen hacia el navegador.
+ *
+ * ⚠️ `signup_nonce` **NO está en esta lista, y es la razón por la que la lista existe.**
+ * Un `select('*')` lo mandaría al cliente, y el nonce es justo lo que impide que un `code`
+ * de otra pestaña conecte la WABA equivocada. Si viaja, deja de ser un secreto y deja de
+ * servir para nada.
+ */
+const CONNECTION_COLUMNS =
+  'id, tenant_id, provider, label, route, status, phone_e164, zernio_profile_id, ' +
+  'zernio_account_id, waba_id, phone_number_id, signup_opened_at, is_primary, ' +
+  'purchase_allowed, monthly_price_cop, last_event, last_event_at, last_error'
+
+/** `route` → los dos campos que Zernio quiere, derivados del MISMO dato (§2). */
+export function onboardingForRoute(route: ConnectionRoute): {
+  onboarding: 'api' | 'business_app'
+  isCoexistence: boolean
+} {
+  // No pueden contradecirse porque no son dos decisiones: son una sola, proyectada.
+  // Es exactamente como quedó en el AIOS.
+  return route === 'coexistence'
+    ? { onboarding: 'business_app', isCoexistence: true }
+    : { onboarding: 'api', isCoexistence: false }
+}
+
+/** E.164 con '+', el mismo patrón que el CHECK de la 00054 y el de la 00036. */
+export function isValidE164(phone: string): boolean {
+  return /^\+[0-9]{7,15}$/.test(phone)
+}
+
+/**
+ * La línea principal de la marca, si existe. `null` = todavía no empezó el alta.
+ *
+ * NUNCA se busca por un id que venga del cliente: se busca por el `tenantId` de la sesión.
+ */
+export async function getPrimaryConnection(tenantId: string): Promise<TenantConnection | null> {
+  const supabase = getServiceClient()
+  const { data, error } = await supabase
+    .from('tenant_connections')
+    .select(CONNECTION_COLUMNS)
+    .eq('tenant_id', tenantId)
+    .eq('provider', 'whatsapp_zernio')
+    .eq('is_primary', true)
+    .maybeSingle<TenantConnection>()
+
+  if (isDbFailure(error)) {
+    logDbFailure({
+      scope: 'Conexiones',
+      reason: 'connection_read_error',
+      error,
+      context: { tenant_id: tenantId },
+    })
+    throw new Error(`No se pudo leer la conexión: ${error.message}`)
+  }
+  return data ?? null
+}
+
+/**
+ * La línea principal, creándola si todavía no existe.
+ *
+ * El INSERT lleva `tenant_id` EXPLÍCITO. La 00030 no está aplicada: un INSERT que lo
+ * olvide se va calladito a Sushi Service, sin error.
+ */
+export async function ensurePrimaryConnection(tenantId: string): Promise<TenantConnection> {
+  const existing = await getPrimaryConnection(tenantId)
+  if (existing) return existing
+
+  const supabase = getServiceClient()
+  const { data, error } = await supabase
+    .from('tenant_connections')
+    .insert({
+      tenant_id: tenantId,
+      provider: 'whatsapp_zernio',
+      label: 'Línea principal',
+      status: 'sin_empezar',
+      is_primary: true,
+    })
+    .select(CONNECTION_COLUMNS)
+    .single<TenantConnection>()
+
+  if (error || !data) {
+    logDbFailure({
+      scope: 'Conexiones',
+      reason: 'connection_create_error',
+      error,
+      context: { tenant_id: tenantId },
+    })
+    throw new Error(`No se pudo crear la conexión: ${error?.message ?? 'sin datos'}`)
+  }
+  return data
+}
+
+/**
+ * Un UPDATE acotado a (id, tenant_id).
+ *
+ * El `AND tenant_id` no es decorativo: sin él, un id filtrado dejaría escribir sobre la
+ * conexión de otra marca. Es la misma regla que el `AND tenant_id` de
+ * `connection_apply_whatsapp()` en la 00054.
+ */
+async function updateConnection(
+  tenantId: string,
+  connectionId: string,
+  patch: Record<string, unknown>,
+  reason: string
+): Promise<TenantConnection> {
+  const supabase = getServiceClient()
+  const { data, error } = await supabase
+    .from('tenant_connections')
+    .update({ ...patch, last_event: reason, last_event_at: new Date().toISOString() })
+    .eq('id', connectionId)
+    .eq('tenant_id', tenantId)
+    .select(CONNECTION_COLUMNS)
+    .maybeSingle<TenantConnection>()
+
+  if (isDbFailure(error)) {
+    logDbFailure({
+      scope: 'Conexiones',
+      reason: `connection_update_${reason}`,
+      error,
+      context: { tenant_id: tenantId, connection_id: connectionId },
+    })
+    // `camino_congelado` y `conexion_de_otra_marca` son EXCEPCIONES del motor: llegan acá
+    // como error de PostgREST y se propagan con su nombre para que la ruta pueda
+    // convertirlas en un 409 con causa, y no en un 500 mudo.
+    throw new Error(error.message)
+  }
+  if (!data) {
+    // Cero filas sin error = el id no es de esta marca. Es el intento de escribir sobre
+    // otra marca, y se trata como tal.
+    throw new Error('conexion_de_otra_marca')
+  }
+  return data
+}
+
+/** Fija el camino. El trigger de la 00054 lo CONGELA si ya hay número o signup abierto. */
+export async function setConnectionRoute(
+  tenantId: string,
+  route: ConnectionRoute
+): Promise<TenantConnection> {
+  const conn = await ensurePrimaryConnection(tenantId)
+  return updateConnection(
+    tenantId,
+    conn.id,
+    { route, status: conn.status === 'sin_empezar' ? 'camino_elegido' : conn.status },
+    'camino_elegido'
+  )
+}
+
+/** Declara el número propio (caminos A y B). */
+export async function setConnectionPhone(
+  tenantId: string,
+  phone: string
+): Promise<TenantConnection> {
+  const conn = await ensurePrimaryConnection(tenantId)
+  return updateConnection(
+    tenantId,
+    conn.id,
+    { phone_e164: phone, status: 'numero_declarado' },
+    'numero_declarado'
+  )
+}
+
+/** Guarda el nonce propio y marca el signup como abierto. */
+export async function openSignup(
+  tenantId: string,
+  connectionId: string,
+  nonce: string
+): Promise<TenantConnection> {
+  return updateConnection(
+    tenantId,
+    connectionId,
+    {
+      signup_nonce: nonce,
+      signup_opened_at: new Date().toISOString(),
+      status: 'signup_abierto',
+      last_error: null,
+    },
+    'signup_abierto'
+  )
+}
+
+/**
+ * Resuelve una conexión POR NONCE. Es la puerta de vuelta del Embedded Signup.
+ *
+ * Devuelve `null` si el nonce no existe — y el llamador contesta **409 sin cerrar nada**.
+ * No se acepta ningún otro identificador para esto: ni el `state` de Zernio, ni un
+ * `connectionId` del cliente, ni el `profileId`. Los tres son adivinables o falsificables
+ * desde otra pestaña; el nonce, no.
+ */
+export async function findConnectionByNonce(nonce: string): Promise<TenantConnection | null> {
+  // Un nonce corto no se consulta siquiera: `newSignupNonce()` produce 43 caracteres, así
+  // que cualquier cosa más corta es basura o un intento, no una vuelta legítima.
+  if (!nonce || nonce.length < 16) return null
+
+  const supabase = getServiceClient()
+  const { data, error } = await supabase
+    .from('tenant_connections')
+    .select(CONNECTION_COLUMNS)
+    .eq('signup_nonce', nonce)
+    .maybeSingle<TenantConnection>()
+
+  if (isDbFailure(error)) {
+    logDbFailure({ scope: 'Conexiones', reason: 'nonce_lookup_error', error, context: {} })
+    // Fail-closed: si no se puede comprobar el nonce, NO se cierra la conexión.
+    throw new Error(`No se pudo verificar el nonce: ${error.message}`)
+  }
+  return data ?? null
+}
+
+/** Marca la conexión como fallida, con el motivo REAL a la vista del cliente. */
+export async function failConnection(
+  tenantId: string,
+  connectionId: string,
+  detail: string
+): Promise<void> {
+  await updateConnection(tenantId, connectionId, { status: 'fallida', last_error: detail }, 'fallida')
+}
+
+/**
+ * Cierra la conexión: activa Zernio para la marca en UNA transacción.
+ *
+ * Delega en `connection_apply_whatsapp()` (00054) y **no escribe `tenants` por su cuenta**.
+ * Ese es el punto entero de «un cuerpo, dos puertas»: si Conexiones tuviera su propia
+ * validación, un día un tenant quedaría con `messaging_provider='zernio'` y sin
+ * `account_id` — el caso exacto que `sendViaZernio()` corta con `zernio_not_configured`.
+ */
+export async function applyWhatsappConnection(args: {
+  tenantId: string
+  profileId: string | null
+  accountId: string
+  phone: string
+}): Promise<string> {
+  const supabase = getServiceClient()
+  const { data, error } = await supabase.rpc('connection_apply_whatsapp', {
+    p_tenant_id: args.tenantId,
+    p_profile_id: args.profileId,
+    p_account_id: args.accountId,
+    p_phone: args.phone,
+  })
+
+  if (error) {
+    logDbFailure({
+      scope: 'Conexiones',
+      reason: 'apply_whatsapp_error',
+      error,
+      context: { tenant_id: args.tenantId, account_id: args.accountId },
+    })
+    throw new Error(error.message)
+  }
+  return data as string
+}

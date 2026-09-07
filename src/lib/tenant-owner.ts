@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { getTenantIdFromJwt } from '@/lib/tenant'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { isDbFailure, logDbFailure } from '@/lib/db-failure'
 
@@ -139,4 +140,54 @@ export function ownerDenialMessage(reason: TenantOwnerCheck['reason']): string {
     default:
       return 'No autorizado'
   }
+}
+
+/**
+ * El guardia común de las rutas que CAMBIAN algo en Conexiones.
+ *
+ * Las cinco acciones (`camino`, `numero`, `signup`, `code`, `auto-respuesta`) repiten
+ * exactamente la misma puerta, y repetirla a mano en cinco archivos es la forma conocida
+ * de que un día una de ellas se olvide de cerrarla. Devuelve el `tenantId` de la SESIÓN —
+ * jamás de un parámetro — o el `NextResponse` de rechazo ya armado.
+ */
+export interface ConnectionActor {
+  ok: boolean
+  tenantId: string
+  owner: TenantOwnerCheck
+  /** El rechazo listo para devolver. `null` cuando `ok` es true. */
+  denial: { status: number; error: string } | null
+}
+
+export async function requireConnectionActor(): Promise<ConnectionActor> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  const empty: TenantOwnerCheck = {
+    canAct: false,
+    isSuperAdmin: false,
+    isOwner: false,
+    ownerRegistered: false,
+    reason: 'sin_sesion',
+  }
+
+  if (!user) {
+    return { ok: false, tenantId: '', owner: empty, denial: { status: 401, error: 'No autorizado' } }
+  }
+
+  const tenantId = await getTenantIdFromJwt()
+  if (!tenantId) {
+    return {
+      ok: false,
+      tenantId: '',
+      owner: empty,
+      denial: { status: 403, error: 'Esta sesión no está asociada a ninguna marca.' },
+    }
+  }
+
+  const owner = await isTenantOwner(tenantId)
+  if (!owner.canAct) {
+    return { ok: false, tenantId, owner, denial: { status: 403, error: ownerDenialMessage(owner.reason) } }
+  }
+
+  return { ok: true, tenantId, owner, denial: null }
 }

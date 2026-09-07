@@ -117,9 +117,11 @@ export function ConexionesPanel() {
       <WhatsappCard
         whatsapp={data.whatsapp}
         permissions={data.permissions}
+        connection={data.connection ?? null}
         budget={budget}
         budgetLoading={budgetLoading}
         onToggleAutoReply={toggleAutoReply}
+        onConnectionChanged={fetchConnections}
       />
 
       <ProximamenteCard

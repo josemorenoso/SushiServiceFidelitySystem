@@ -1,6 +1,7 @@
 # ESTADO DE LOS REQUERIMIENTOS — §1 a §25, auditado contra el código
 
-> **Auditado:** 2026-09-04. Fuente: `docs/requerimientos/REQUERIMIENTOS_AGOSTO_2026.md`,
+> **Auditado:** 2026-09-04 · **revisado el 2026-09-06** contra `main` desplegado (`f90282f`).
+> Fuente: `docs/requerimientos/REQUERIMIENTOS_AGOSTO_2026.md`,
 > verificado **contra el código**, no contra lo que dice el requerimiento.
 > **Complementa** a [ESTADO.md](../ESTADO.md) — ese lleva multi-sede, §25 y el camino a producción; este
 > lleva el resto del encargo de producto.
@@ -13,11 +14,11 @@
 
 | § | Tema | Estado | Evidencia | ¿Bloquea el deploy de mañana? |
 |---|------|--------|-----------|---|
-| 3 | Personalización del QR | ✅ **HECHO** (rama `feat/tarjeta-visual`) | La config del QR Studio vive en `tenants.config.qr_studio` (migración `00047`, **sin aplicar**); el QR de `CustomerCard.tsx` lleva color de marca + logo con `level="H"`. Ver `docs/features/identidad-visual.md` | NO |
+| 3 | Personalización del QR | ✅ **HECHO**, en `main` y desplegado | La config del QR Studio vive en `tenants.config.qr_studio` (migración `00047`, **sin aplicar**); el QR de `CustomerCard.tsx` lleva color de marca + logo con `level="H"`. Ver `docs/features/identidad-visual.md` | NO |
 | 4 | Programa de referidos | **NO EMPEZADO** | Solo `docs/features/referral-program.md`, marcado "PLAN — NO IMPLEMENTADO". Sin schema, sin endpoints | NO |
-| 5 | Personalización pantalla teléfono + tarjeta | ✅ **HECHO** (rama `feat/tarjeta-visual`) | Los hex de `CheckInForm.tsx` y de las clases premium pasan a variables `--brand-*` sustituibles por tenant; `EDITABLE_KEYS` pasa a ser una whitelist **por ruta** (`src/lib/tenant-config-paths.ts`) | NO |
-| 6 | Branding + wizard de plantillas | **PARCIAL** | Tono/estilo ya resuelto vía §12. **Logo y paleta HECHOS** (`/dashboard/marca`, con vista previa en vivo, rama `feat/tarjeta-visual`). Falta el wizard de alta de tenant | NO |
-| 7 | Calendario — mensaje hardcodeado | **NO EMPEZADO** | `TEMPLATE_BODY` fijo en `scripts/twilio-create-media-templates.mjs:132`; `event_type` nunca se lee para elegir plantilla | NO |
+| 5 | Personalización pantalla teléfono + tarjeta | ✅ **HECHO**, en `main` y desplegado | Los hex de `CheckInForm.tsx` y de las clases premium pasan a variables `--brand-*` sustituibles por tenant; `EDITABLE_KEYS` pasa a ser una whitelist **por ruta** (`src/lib/tenant-config-paths.ts`) | NO |
+| 6 | Branding + wizard de plantillas | **PARCIAL** | Tono/estilo ya resuelto vía §12. **Logo y paleta HECHOS** (`/dashboard/marca`, con vista previa en vivo, desplegado). Falta el wizard de alta de tenant | NO |
+| 7 | Calendario — mensaje hardcodeado | **NO EMPEZADO** | `TEMPLATE_BODY` fijo en `scripts/twilio-create-media-templates.mjs:132`; `event_type` nunca se lee para elegir plantilla. Lo que SÍ se hizo (2026-09-06): enlace del evento en `{{5}}`, goteo por `send_queue` y hora de Bogotá | NO |
 | 8 | Puntos al superar el tier máximo | **NO EMPEZADO** | Fallback `?? 150` intacto en `src/services/points.service.ts:187` | NO |
 | 9 | Notificaciones Push (FCM) | **NO EMPEZADO** | Cero infraestructura (sin firebase/vapid/fcm en `src/`) | NO |
 | 10 | Housekeeping | ✅ **HECHO** | CHANGELOG v2.8.2/v2.8.3/v2.9.1; `Level 2.0/` versionada; gitlink eliminado (`4e88cf2`) | NO |
@@ -28,7 +29,7 @@
 | 16 | Fatiga y pipeline del recorrido | **NO EMPEZADO** | Cero código; solo documentado. Preguntas 16.a–e abiertas | NO |
 | 17 | Clientes Black / VIP | **PARCIAL** | Mudanza y tarjeta hechas (`f1a7921`); beneficio permanente (17.3) y umbral configurable (17.4) sin implementar. Ojo con la **17.b** ya conocida | NO |
 | 18 | **Domicilios bajo coexistencia** | **NO EMPEZADO** | No existe apartado de Domicilios en el dashboard ni canal alternativo para el "cuadro" | **NO para el deploy — SÍ para el onboarding** (ver abajo) |
-| 19 | **Escáner QR de meseros** | ✅ **HECHO** (rama `feat/staff-scanner-19`) | Migración `00046` escrita y **SIN aplicar**. Ver ficha abajo | NO |
+| 19 | **Escáner QR de meseros** | ✅ **HECHO**, en `main` y desplegado | Migración `00046` **aplicada** (`ESTADO.md` §1). ⚠️ Los meseros existentes tienen `location_id` NULL: **no salen en ningún escáner** hasta que se les asigne sede (`SQL-PARA-CORRER/meseros-sin-sede/`). Ver ficha abajo | NO |
 | 20 | Decisiones D-7 a D-10 | **PARCIAL** | Solo documentadas (`060ac01`, docs-only). Sin divisor de bloques Golden Bullet, sin `accepts_marketing:false` explícito en importación, `consent_events` sin referenciar en `src/` | NO |
 | 21 | Panel del AIOS | ✅ **HECHO** | AIOS v1.3.0: `client_locations.platform/.messaging`, `clients.billing_mode` | NO |
 | 22 | Franquicias | ⏸️ **DIFERIDO A PROPÓSITO** | El doc dice explícitamente "NO es v1"; se dejó la puerta abierta sin construir | NO |

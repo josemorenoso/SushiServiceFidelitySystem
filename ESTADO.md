@@ -15,12 +15,12 @@
 | Qué | Estado |
 |-----|--------|
 | Código | **`main` = `origin/main` = producción.** Todo lo de 2026-09-05/06 está mergeado, pusheado y desplegado. No queda nada en ramas salvo `respaldo/*` (código de mayo que ya no compila) |
-| Verificación | ✅ `tsc` limpio · eslint 7 errores preexistentes (React hooks, sin relación) · **vitest 24 archivos / 400 tests en verde** |
+| Verificación | ✅ `tsc` limpio · eslint 7 errores preexistentes (React hooks, sin relación) · **vitest 24 archivos / 406 tests en verde** |
 | Marcas vivas | **5**: sushi-service (542 clientes), demo-ventas (412), sushi-fun (251), don-alirio (244), cafe-frangal (8) |
 | Base de datos de producción | Aplicadas hasta la **00046**. 🔴 **La `00047` (identidad visual) está SIN APLICAR y su código YA ESTÁ DESPLEGADO** — ver §3.1. La 00030 NUNCA aplicada (a propósito). La 00015 NO se aplica (reabre fuga) |
 | Crons | Los 5 en `vercel.json`, corriendo. `birthday` 18:00 y `reactivation` 20:00 UTC (= 13:00/15:00 Bogotá), verificado. ⚠️ **`reward-reminder` sigue en 16:00 UTC (11:00 Bogotá)**: de los 3 del ROJO 1 se corrigieron 2. Su hora real no se pudo confirmar por retención de logs; la auditoría la estimó ≈21:00 UTC. **Decisión del dueño** |
 | n8n | Apagado. `domicilios_whatsapp_v4.json` sigue en el VPS pero ya no dispara |
-| Grafo | Al día: `graphify update .` corrido el 2026-09-06 tras el commit del enlace (4.562 nodos, 7.855 aristas) |
+| Grafo | Al día sobre `f90282f` (2026-09-06): 4.585 nodos, 7.877 aristas, 418 comunidades |
 | Deadline | ~2026-09-10 — onboarding de los 25 clientes de Zernio |
 
 ## 2. En vuelo ahora mismo

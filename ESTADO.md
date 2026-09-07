@@ -25,12 +25,16 @@
 
 ## 2. En vuelo ahora mismo
 
-**Nada en vuelo.** QR Studio y plantillas cerraron los dos en `main`, que quedó **sin pushear**: lo decide el dueño.
+- **Conexiones — signup de WhatsApp del CLIENTE** · rama `feat/conexiones` · **00052** · territorio
+  exacto en **§10.bis** de `docs/superpowers/specs/2026-09-06-conexiones-design.md`. Compartidos que
+  toca, los únicos 3: `DashboardSidebar.tsx` (1 línea), `webhook/zernio/route.ts` (**aditivo**) y
+  `zernio/webhooks.ts`. **No toca envío, `tenants`, gobernanza, multi-sede, 00048/00049 ni el AIOS.**
 
-📌 **Esta sección es el TABLERO.** Toda sesión anota acá su territorio (qué toca, en qué rama)
-**antes** de escribir, y lo commitea solo; si se cruza con uno ya anotado, **espera y va después**.
-Al cerrar, borra su línea. `stash` y `reset --hard` con otra sesión viva están **prohibidos**: hoy
-barrieron 12 archivos. Regla completa en `CLAUDE.md` § "Trabajar en paralelo".
+**Lo demás, nada en vuelo.** QR Studio y plantillas cerraron en `main`, **sin pushear**: lo decide el dueño.
+
+📌 **Esta sección es el TABLERO.** Anotá tu territorio ANTES de escribir y commiteá esa línea sola;
+si se cruza con una ya anotada, esperá. Al cerrar, borrala. Regla completa (incluido por qué `stash`
+y `reset --hard` están prohibidos con otra sesión viva) en `CLAUDE.md` § "Trabajar en paralelo".
 
 **Repo del AIOS**: `fix/coexistencia` (v1.4.0) subida, pero **su `main` NO se pusheó** — pushearlo
 despliega el AIOS y es decisión del dueño. Parte en `…/docs/PARTE-COEXISTENCIA-2026-09-06.md`.

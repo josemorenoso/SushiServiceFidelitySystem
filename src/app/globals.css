@@ -361,3 +361,210 @@
   box-shadow: 0 0 0 3px rgba(var(--brand-primary-rgb), 0.12) !important;
   outline: none !important;
 }
+/* ─── Capa visual v3 — el movimiento de la tarjeta (2026-09-07) ────────────
+ *
+ * Origen: el "Kit Visual Cada1" del dueño (investigación sobre 21st.dev,
+ * 2026-09-07). Las cuatro reglas que ordenan todo lo de abajo:
+ *
+ *   01 · Una sola cosa brilla por pantalla. En `/tarjeta` es el marco.
+ *   02 · Toda animación CONFIRMA algo que hizo el cliente (el sello que se
+ *        gana, los puntos que suben). Si se mueve sola y no confirma nada, sobra.
+ *   03 · Profundidad por luz: sombra TEÑIDA del color del objeto + borde
+ *        interior claro de 1px. Nunca una sombra gris genérica.
+ *   04 · Los números son tipografía: `tabular-nums`, peso 700, escala grande.
+ *
+ * ⚠️ Acá NO hay ni un color. A propósito: los de la tarjeta viven en
+ * `src/constants/wallet-card-theme.ts` (y salen de la marca del tenant), y
+ * llegan por `style`. Esto es solo geometría y tiempo. Un hex acá volvería a ser
+ * un color que ninguna marca puede cambiar — lo que §5 vino a resolver.
+ */
+
+/* El ángulo del gradiente cónico. Sin `@property` el navegador no sabe
+ * interpolar un <angle> y el borde vivo no gira: salta. */
+@property --shine-ang {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes shine-spin {
+  to { --shine-ang: 360deg; }
+}
+
+/* Barrido de luz que cruza la barra de progreso. */
+@keyframes bar-sweep {
+  0%        { transform: translateX(-100%); }
+  60%, 100% { transform: translateX(100%); }
+}
+
+/* Onda que sale del sello recién ganado. El color lo pone quien la usa en
+ * `--stamp-ring-color`; el blanco es solo el fallback del tema de siempre. */
+@keyframes stamp-ring {
+  from { box-shadow: 0 0 0 0 var(--stamp-ring-color, rgba(255, 255, 255, 0.6)); }
+  to   { box-shadow: 0 0 0 16px transparent; }
+}
+
+/* El ✓ del sello se DIBUJA trazo a trazo en vez de aparecer de golpe. */
+@keyframes draw-check {
+  to { stroke-dashoffset: 0; }
+}
+
+@utility animate-shine-spin {
+  animation: shine-spin 6s linear infinite;
+}
+
+@utility animate-bar-sweep {
+  animation: bar-sweep 2.6s ease-in-out infinite;
+}
+
+@utility animate-stamp-ring {
+  animation: stamp-ring 0.75s ease-out both;
+}
+
+@utility animate-draw-check {
+  animation: draw-check 0.42s ease 0.12s both;
+}
+
+/* Accesibilidad: quien pidió menos movimiento ve la tarjeta en su estado final,
+ * no a medio dibujar. El ✓ necesita el `stroke-dashoffset` explícito porque su
+ * estado "terminado" lo pone la animación, no el CSS base. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-shine-spin,
+  .animate-bar-sweep,
+  .animate-stamp-ring,
+  .animate-stamp-pop,
+  .animate-fade-in-up,
+  .animate-float,
+  .animate-bubble-pop,
+  .animate-draw-check {
+    animation: none !important;
+  }
+  .animate-draw-check {
+    stroke-dashoffset: 0 !important;
+  }
+}
+
+/* La línea que barre el marco del QR: le dice al mesero "acá se escanea" sin
+ * que tenga que leer nada. Va en % para no depender del tamaño del QR. */
+@keyframes qr-scan {
+  0%, 100% { top: 6%; }
+  50%      { top: 94%; }
+}
+
+@utility animate-qr-scan {
+  animation: qr-scan 2.6s cubic-bezier(0.6, 0, 0.4, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-qr-scan {
+    animation: none !important;
+    display: none !important;
+  }
+}
+
+/* ─── Capa visual v3 — pantalla de entrada (check-in) ──────────────────────
+ *
+ * Dos cosas y ninguna suma un color: los halos de marca que ya estaban ahora se
+ * MUEVEN (aurora), y el CTA primario recibe un destello que lo cruza.
+ *
+ * El destello vive en `.btn-premium` a propósito, y no en un componente nuevo:
+ * así lo heredan de una todos los CTA del producto en vez de quedar solo en la
+ * pantalla que uno se acordó de tocar.
+ */
+
+@keyframes aurora-drift-a {
+  0%, 100% { transform: translate(0, 0); }
+  50%      { transform: translate(34px, 26px); }
+}
+
+@keyframes aurora-drift-b {
+  0%, 100% { transform: translate(0, 0); }
+  50%      { transform: translate(-30px, -22px); }
+}
+
+@utility animate-aurora-a {
+  animation: aurora-drift-a 15s ease-in-out infinite;
+}
+
+@utility animate-aurora-b {
+  animation: aurora-drift-b 19s ease-in-out infinite;
+}
+
+/* Destello que cruza el botón primario cada ~3.4s. */
+@keyframes btn-shimmer {
+  0%        { transform: skewX(-18deg) translateX(-260%); }
+  55%, 100% { transform: skewX(-18deg) translateX(360%); }
+}
+
+.btn-premium {
+  position: relative;
+  overflow: hidden;
+}
+
+/* Sin `z-index`: el destello tiene que pasar POR ENCIMA del gradiente del botón
+ * (y del texto, que es blanco translúcido y no se molesta). Mandarlo atrás con
+ * `z-index:-1` lo esconde detrás del propio fondo del botón y no se ve nada. */
+.btn-premium::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 45%;
+  pointer-events: none;
+  background: linear-gradient(
+    100deg,
+    transparent,
+    rgba(255, 255, 255, 0.45),
+    transparent
+  );
+  animation: btn-shimmer 3.4s ease-in-out infinite;
+}
+
+/* Un botón apagado no promete nada: sin destello. */
+.btn-premium:disabled::after {
+  animation: none;
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-aurora-a,
+  .animate-aurora-b {
+    animation: none !important;
+  }
+  .btn-premium::after {
+    animation: none !important;
+    opacity: 0;
+  }
+}
+
+/* ─── Capa visual v3 — jerarquía en el panel ───────────────────────────────
+ *
+ * El panel abría con SIETE tarjetas idénticas, del mismo tamaño, con el mismo
+ * borde y siete colores distintos. Todo pesaba igual, entonces nada pesaba: el
+ * dueño abría el panel y no sabía en tres segundos si el mes iba bien.
+ *
+ * La tarjeta HÉROE es la respuesta a esa pregunta y por eso es la única oscura y
+ * grande. Las otras seis siguen ahí — no se saca información — pero en su lugar,
+ * claras y chicas.
+ *
+ * El segundo tono del ink va como variable y no horneado acá: la regla de §5
+ * vale igual en el panel. Un tenant que cambie su `--brand-ink` se lleva las dos.
+ */
+:root {
+  /* Superficie oscura elevada, un paso arriba de `--brand-ink`. */
+  --brand-ink-raised: #262a2d;
+}
+
+.metric-card-hero {
+  background: linear-gradient(150deg, var(--brand-ink-raised) 0%, var(--brand-ink) 100%) !important;
+  border: none !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.16) !important;
+  transition: transform 300ms cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 300ms cubic-bezier(0.4, 0, 0.2, 1) !important;
+  cursor: default;
+}
+
+.metric-card-hero:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 24px 46px rgba(0, 0, 0, 0.24) !important;
+}

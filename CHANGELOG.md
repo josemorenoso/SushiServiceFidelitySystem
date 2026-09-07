@@ -8,6 +8,35 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [2026-09-07] - Capa visual v3: la tarjeta, la pantalla de entrada y el panel
+
+**Tipo:** feat · **Rama:** `feat/visual` · **Origen:** pedido del dueno + su "Kit Visual Cada1" (21st.dev)
+
+- **Solo pinta.** Ni un punto, ni un nivel, ni un envio, ni una consulta cambia de comportamiento.
+  Ninguna migracion. La tarjeta que ve el cliente y el panel que ve el dueno se veian como un
+  formulario; el encargo era que se vean caros.
+- **Tarjeta** (`/tarjeta` y la del check-in, que ahora comparten tema): marco con borde vivo — lo
+  unico que brilla —, puntos que ruedan (`Odometer`), el ✓ del sello dibujado trazo a trazo con una
+  onda en el ultimo sello ganado, y la barra con barrido sobre lo GANADO, no sobre la pista vacia.
+- **Los emojis del sistema se van** (🥉🥈🥇💎 ✅ 🔒 🎲): los dibuja el sistema operativo y salen
+  distintos en cada telefono. Los reemplaza `TierMedal`. Los emojis de PREMIOS se quedan: los
+  configura el restaurante.
+- **QR**: marco de escaner + reloj real, que lee el `exp` del propio JWT en vez de estimar 30 min.
+- **Panel**: "Visitas Hoy" pasa a tarjeta heroe (oscura, doble columna). Ninguna metrica se fue —
+  sacar metricas es decision del dueno. El arcoiris de 7 colores decorativos, si.
+- **Fuga de §5 cerrada de paso:** salieron ~20 hex horneados en pantalla publica (verdes, ambares,
+  violetas, rosas). Todo sale ahora de `Branding` o de `--brand-*`.
+- **Archivos:** NUEVOS `ui/odometer.tsx`, `ui/shine-border.tsx`, `ui/confetti.tsx`,
+  `wallet/TierMedal.tsx`, `check-in/QrCountdown.tsx`, `constants/tier-medal-theme.ts` ·
+  `globals.css` (solo agrega al final) · `wallet-card-theme.ts` · `WalletCard` · `StampsGrid` ·
+  `CustomerCard` · `TiersRoadmap` · `RewardsPreview` · `RewardChoice` · `MysteryBoxResult` ·
+  `MetricsCards` · `MiniSparkline` · `check-in/page.tsx`. **`DashboardSidebar.tsx` NO se toco**.
+- **Verificado:** `tsc` limpio · build ok (76 paginas) · `vitest` 25 archivos / 418 tests ·
+  eslint con sus 7 errores preexistentes, ninguno en estos archivos. **Sin probar en un telefono
+  real**: falta la pasada visual del dueno.
+
+---
+
 ## [2026-09-07] - Conexiones: el cliente conecta su propio WhatsApp
 
 **Tipo:** feat · **Rama:** `feat/conexiones` · **Migracion:** `00054` (SIN APLICAR) · **Origen:** el dueno

@@ -5,8 +5,12 @@ import { Crown } from 'lucide-react'
 import { useBranding } from '@/lib/branding-context'
 import { isBlackMember } from '@/lib/black-tier'
 import { BLACK_WALLET_CARD_THEME, brandWalletCardTheme } from '@/constants/wallet-card-theme'
+import { walletMedalPalette } from '@/constants/tier-medal-theme'
 import { BrandMark } from '@/components/features/branding'
+import { Odometer } from '@/components/ui/odometer'
+import { ShineBorder } from '@/components/ui/shine-border'
 import { StampsGrid } from './StampsGrid'
+import { TierMedal } from './TierMedal'
 
 interface TierItem {
   tier_name: string
@@ -30,6 +34,14 @@ interface WalletCardProps {
  * y dorado, con distintivo claro. Quién es Black lo decide `isBlackMember()`
  * (`src/lib/black-tier.ts`); los colores viven en `wallet-card-theme.ts`. Aquí
  * solo se arma el layout (Mandamiento II).
+ *
+ * CAPA VISUAL v3 (2026-09-07). Cuatro piezas nuevas, todas de presentación:
+ *   - `ShineBorder` en el marco — lo ÚNICO que brilla en la pantalla (regla 01);
+ *   - `Odometer` en los puntos — el héroe de la tarjeta llega rodando (regla 04);
+ *   - barrido de luz sobre el relleno de la barra;
+ *   - `TierMedal` en la escalera, en vez de los emojis ✅/🔒.
+ * Ni una decisión de negocio cambió: los mismos puntos, los mismos niveles y el
+ * mismo `isBlackMember()`.
  */
 export function WalletCard({ name, totalPoints, totalVisits, tiers }: WalletCardProps) {
   const branding = useBranding()
@@ -43,6 +55,7 @@ export function WalletCard({ name, totalPoints, totalVisits, tiers }: WalletCard
 
   const isBlack = isBlackMember(tiers, totalPoints)
   const theme = isBlack ? BLACK_WALLET_CARD_THEME : brandWalletCardTheme(branding)
+  const medals = walletMedalPalette(theme)
 
   const [barWidth, setBarWidth] = useState(0)
   useEffect(() => {
@@ -55,17 +68,21 @@ export function WalletCard({ name, totalPoints, totalVisits, tiers }: WalletCard
       className="min-h-screen flex flex-col items-center justify-start py-8 px-4"
       style={{ background: theme.pageBg }}
     >
-      <div
+      <ShineBorder
+        gradient={theme.shine}
+        radius={32}
         className="w-full max-w-sm animate-fade-in-up"
-        style={{
-          background: theme.cardBg,
-          borderRadius: '2rem',
-          border: theme.cardBorder,
-          boxShadow: theme.cardShadow,
-          overflow: 'hidden',
-        }}
+        style={{ boxShadow: theme.cardShadow }}
       >
-        <div className="px-5 pt-7 pb-8 flex flex-col items-center">
+        <div
+          className="px-5 pt-7 pb-8 flex flex-col items-center"
+          style={{
+            background: theme.cardBg,
+            borderRadius: 'inherit',
+            border: theme.cardBorder,
+            overflow: 'hidden',
+          }}
+        >
           {/* Logo del restaurante (§6). Sin logo subido no dibuja nada y la
               tarjeta arranca en el nombre de la marca, como siempre. */}
           <BrandMark variant="onColor" size={56} className="mb-3" />
@@ -105,11 +122,14 @@ export function WalletCard({ name, totalPoints, totalVisits, tiers }: WalletCard
             {name}
           </h1>
 
-          {/* Points */}
+          {/* Puntos — el héroe de la tarjeta: ruedan al entrar (regla 04). */}
           <div className="mt-3 flex items-end justify-center gap-2">
-            <span className="text-6xl font-bold leading-none" style={{ color: theme.points }}>
-              {totalPoints}
-            </span>
+            <Odometer
+              value={totalPoints}
+              ariaLabel={`${totalPoints} puntos`}
+              className="text-6xl font-bold"
+              style={{ color: theme.points, textShadow: theme.pointsShadow }}
+            />
             <span className="text-2xl mb-1" style={{ color: theme.pointsUnit }}>pts</span>
           </div>
 
@@ -125,9 +145,22 @@ export function WalletCard({ name, totalPoints, totalVisits, tiers }: WalletCard
               style={{ background: theme.barTrack }}
             >
               <div
-                className="absolute inset-y-0 left-0 rounded-full transition-all duration-1000 ease-out"
-                style={{ width: `${barWidth}%`, background: theme.barFill }}
-              />
+                className="absolute inset-y-0 left-0 rounded-full overflow-hidden transition-all duration-1000 ease-out"
+                style={{
+                  width: `${barWidth}%`,
+                  background: theme.barFill,
+                  boxShadow: theme.barFillGlow,
+                }}
+              >
+                {/* El barrido va DENTRO del relleno: recorre lo ganado, no la
+                    pista vacía. Si recorriera la pista entera prometería un
+                    progreso que el cliente todavía no tiene. */}
+                <span
+                  aria-hidden
+                  className="absolute inset-y-0 left-0 w-full animate-bar-sweep"
+                  style={{ background: theme.barSweep }}
+                />
+              </div>
               <div className="absolute inset-0 flex items-center justify-center">
                 <span
                   className="text-xs font-bold"
@@ -169,7 +202,7 @@ export function WalletCard({ name, totalPoints, totalVisits, tiers }: WalletCard
               >
                 Tu camino de recompensas
               </p>
-              {sorted.map((tier) => {
+              {sorted.map((tier, index) => {
                 const reached = totalPoints >= tier.point_threshold
                 return (
                   <div
@@ -180,7 +213,12 @@ export function WalletCard({ name, totalPoints, totalVisits, tiers }: WalletCard
                       border: reached ? theme.tierReachedBorder : theme.tierLockedBorder,
                     }}
                   >
-                    <span className="text-lg shrink-0">{reached ? '✅' : '🔒'}</span>
+                    <TierMedal
+                      reached={reached}
+                      isBlack={tier.is_black}
+                      rank={index + 1}
+                      palette={medals}
+                    />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold" style={{ color: theme.tierName }}>
                         {tier.tier_name}
@@ -217,7 +255,7 @@ export function WalletCard({ name, totalPoints, totalVisits, tiers }: WalletCard
             {branding.name} · Programa de Fidelidad
           </p>
         </div>
-      </div>
+      </ShineBorder>
     </div>
   )
 }

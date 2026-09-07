@@ -48,7 +48,7 @@ formulario ahora lo avisa antes de que el admin lo intente.
 |-----------|----------------|
 | `DashboardLayout` | Sidebar + header + protección + DemoProvider |
 | `DashboardSidebar` | Navegación lateral (Sushi Service branding) |
-| `MetricsCards` | 7 tarjetas de métricas reales |
+| `MetricsCards` | 7 métricas reales, con jerarquía desde la capa visual v3 (2026-09-07): **"Visitas Hoy" es la tarjeta héroe** (oscura, doble columna, sparkline a lo ancho) y las otras 6 quedan claras y chicas. **Ninguna métrica se sacó**: el kit sugería dejar "1 héroe + 4 secundarias", pero quitar métricas del panel es decisión del dueño, no de quien lo pinta. El arcoíris de 7 colores decorativos sí se fue — no eran una escala ni codificaban un estado |
 | `VisitsChart` | Gráfica de área: visitas QR vs Domicilios |
 | `GrowthChart` | Gráfica compuesta: nuevos clientes + acumulado |
 | `CustomerTiers` | Barras de niveles de poder |

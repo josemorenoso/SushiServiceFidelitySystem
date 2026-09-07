@@ -47,9 +47,14 @@ cycleNumber  = (totalVisits > 0) ? floor((totalVisits - 1) / STAMPS_COUNT) + 1 :
 
 Ejemplos: 0 visitas → 0/10 #1 · 7 visitas → 7/10 #1 · 10 visitas → 10/10 #1 · 11 visitas → 1/10 #2 · 20 visitas → 10/10 #2
 
-- **Círculo lleno**: fondo blanco, check `✓` en el color de la marca (`branding.stampCheck`; sin
-  marca propia es el `#C1121F` de siempre), sombra
+- **Círculo lleno**: fondo blanco, check en el color de la marca (`branding.stampCheck`; sin
+  marca propia es el `#C1121F` de siempre), sombra. Desde la capa visual v3 el ✓ **no es el
+  carácter `✓`**: es un `<path>` SVG que se DIBUJA trazo a trazo (`pathLength={1}` +
+  `animate-draw-check`). Un carácter lo dibuja la fuente del teléfono y no se puede animar
 - **Círculo vacío**: fondo blanco/20, borde blanco/40
+- **El último sello ganado** emite una onda (`animate-stamp-ring`), y solo ese: la animación
+  confirma lo que el cliente acaba de hacer, no los nueve sellos anteriores. La onda vive en una
+  capa aparte porque un mismo elemento no puede correr el rebote y la onda a la vez
 
 ⚠️ `CustomerCard` llamaba a `StampsGrid` **sin tema**, así que el ✓ del check-in se quedaba en el rojo
 del sistema aunque el tenant tuviera otro color. Corregido en §5: ahora le pasa
@@ -58,6 +63,40 @@ del sistema aunque el tenant tuviera otro color. Corregido en §5: ahora le pasa
 ### WalletCard (`src/components/features/wallet/WalletCard.tsx`)
 
 Tarjeta visual pura para la ruta `/tarjeta`. Vista de solo lectura (sin QR de check-in).
+
+### Capa visual v3 (2026-09-07) — qué se ve distinto
+
+Origen: el **"Kit Visual Cada1"** del dueño (investigación sobre 21st.dev). Es **solo presentación**:
+los mismos puntos, los mismos niveles, el mismo `isBlackMember()`. Cuatro reglas la ordenan y están
+citadas enteras en el bloque nuevo de `globals.css`:
+
+| Regla | Cómo se aplica acá |
+|---|---|
+| 01 · una sola cosa brilla | El `ShineBorder` del marco. Si mañana otra pieza necesita brillar, esta se apaga primero |
+| 02 · el movimiento confirma | El ✓ que se dibuja, la onda del último sello, el odómetro. Nada se mueve solo "de adorno" |
+| 03 · profundidad por luz | Sombra teñida del color del objeto + borde interior de 1px. Ninguna sombra gris genérica |
+| 04 · los números son tipografía | `Odometer`: los puntos ruedan como el odómetro de un carro |
+
+**Piezas nuevas, las tres sin un solo color adentro** — los colores llegan por props desde
+`wallet-card-theme.ts`, que los saca de la marca del tenant:
+
+| Pieza | Qué hace |
+|---|---|
+| `src/components/ui/odometer.tsx` | Los puntos ruedan. El lector de pantalla lee el número entero (`sr-only`); las columnas van `aria-hidden` |
+| `src/components/ui/shine-border.tsx` | Gradiente cónico girando, recortado a la franja del borde con dos máscaras compuestas por exclusión |
+| `src/components/features/wallet/TierMedal.tsx` | Medalla metálica de un nivel. Reemplaza a ✅/🔒 y a 🥉🥈🥇💎 |
+
+⚠️ **Por qué se fueron los emojis y no fue capricho:** un emoji lo dibuja el SISTEMA OPERATIVO, así
+que el mismo nivel se veía distinto en un iPhone, en un Samsung y en un navegador de escritorio. Los
+emojis de los **premios** (`MysteryPrizeDisplay.emoji`, `prizeEmoji`) **se quedan**: esos los
+configura el restaurante y son su contenido, no nuestra interfaz.
+
+**`--shine-ang` necesita `@property`.** Sin registrar el ángulo como `<angle>`, el navegador no sabe
+interpolarlo y el borde vivo salta en vez de girar.
+
+**Todo respeta `prefers-reduced-motion`**: quien pidió menos movimiento ve la tarjeta en su estado
+final, no a medio dibujar (el ✓ lleva su `stroke-dashoffset: 0` explícito, porque su estado
+terminado lo pone la animación y no el CSS base).
 
 **Layout:**
 0. Logo de la marca (`BrandMark`, §6). Sin logo subido no dibuja nada y la tarjeta arranca en el punto 1

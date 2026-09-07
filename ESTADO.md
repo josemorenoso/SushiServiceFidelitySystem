@@ -29,9 +29,10 @@
 **pusheado a `origin`**, que es lo que despliega en Vercel. El árbol principal vuelve a estar en
 `main` y limpio, y las ramas ya mergeadas se borraron.
 
-⚠️ **Una sesión = un árbol propio.** `git worktree add .worktrees/<rama> -b fix/<rama> main`, y se
-cierra al terminar el bloque. `stash` y `reset --hard` con otra sesión viva están **prohibidos**:
-hoy barrieron 12 archivos. La regla completa está en `CLAUDE.md` § "Trabajar en paralelo".
+📌 **Esta sección es el TABLERO.** Toda sesión anota acá su territorio (qué toca, en qué rama)
+**antes** de escribir, y lo commitea solo; si se cruza con uno ya anotado, **espera y va después**.
+Al cerrar, borra su línea. `stash` y `reset --hard` con otra sesión viva están **prohibidos**: hoy
+barrieron 12 archivos. Regla completa en `CLAUDE.md` § "Trabajar en paralelo".
 
 **Repo del AIOS**: `fix/coexistencia` (v1.4.0) subida, pero **su `main` NO se pusheó** — pushearlo
 despliega el AIOS y es decisión del dueño. Parte en `…/docs/PARTE-COEXISTENCIA-2026-09-06.md`.
@@ -142,7 +143,7 @@ quién activó un aparato solo queda en `device_name` y `trusted_at`.
   muestra tu rama. Se saca con `node scripts/proxima-migracion.mjs`. La 00048 chocó por saltarse esto.
 - **La migración se aplica ANTES de desplegar el código que la usa.** Con la 00047 se hizo al revés
   y salió barato de casualidad; con la 00044 habría dado 403 a todos los meseros.
-- **Paralelo solo con territorios disjuntos**, cada uno en su worktree y declarados en §2.
+- **Paralelo sí, a ciegas no**: el territorio se declara en §2 antes de escribir; si se cruza, va en fila.
 - **Cerrar las sesiones viejas.** Cada mensaje re-factura todo el historial.
 - **El grafo antes que el grep**: `graphify query` cuesta 1-2 k tokens; leer "los relevantes", 30-80 k.
 - **Modelo por defecto para implementar: Sonnet.** Opus solo para diseño, merges delicados o la

@@ -417,6 +417,30 @@ que `resolveHostContext()` usa para llegar a la marca: quien solo necesita la ma
 consulta menos, y los dos caminos no pueden divergir. `getTenantByDomain()` conserva su firma
 y sus llamadores.
 
+### 3.sexies — El AIOS no podía LEER las sedes (`00057`, 2026-09-08)
+
+La `00056` le dio al rol `aios_constelarys` un `GRANT SELECT` por columnas sobre
+`restaurant_locations` y su propia policy `USING (true)`. Aun así, leer la tabla devolvía
+**`42501: permission denied for schema auth`**.
+
+No faltaba el GRANT: fallaba **evaluar las otras policies**. Las de la `00026` se crearon
+**sin cláusula `TO`**, así que aplican a `PUBLIC` —el rol del AIOS incluido— y su `USING`
+llama a `current_tenant_id()` (`00024:32`), que es `LANGUAGE sql STABLE`, **no**
+`SECURITY DEFINER`, y por dentro hace `auth.jwt()`. Sin `USAGE` sobre el esquema `auth`,
+Postgres revienta ahí y ni llega a mirar la policy permisiva del AIOS.
+
+La `00057` otorga **solo** `USAGE ON SCHEMA auth`: deja entrar al esquema para resolver el
+nombre de la función y **no da acceso a ninguna tabla de `auth`** — la propia migración
+aborta si detecta que el rol puede leer alguna.
+
+> **Que la lectura de `tenants` sí funcionara era suerte:** depende de que Postgres corte el
+> `OR` al evaluar primero la policy `USING (true)`, y ese orden no está garantizado. La
+> `00057` también le quita ese azar.
+>
+> La alternativa —volver `current_tenant_id()` `SECURITY DEFINER`— se descartó: esa función
+> la evalúa CADA policy del sistema, y cambiarle el modo de ejecución por un permiso del
+> AIOS es mover el suelo de todo el aislamiento por un problema de una esquina.
+
 ### Cómo se verifica
 
 - `tests/unit/location-resolver.test.ts` — la **decisión**: precedencia, sede única implícita,

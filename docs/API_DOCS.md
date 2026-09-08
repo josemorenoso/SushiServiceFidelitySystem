@@ -51,6 +51,12 @@ X-Device-Token: {device_fingerprint}
 ### Webhooks / Cron
 Webhooks validan origen por número autorizado o `x-webhook-secret`. Cron jobs validan `CRON_SECRET`.
 
+### AIOS (panel de altas)
+`/api/aios/*` valida el header **`x-aios-secret`** contra `AIOS_ADMIN_PROVISION_SECRET`, con
+comparación en tiempo constante. **Sin esa variable configurada la ruta responde 503 y no hace
+nada**: no existe un modo "abierta porque falta la env var". Es el único cruce del límite que
+impide al rol `aios_constelarys` tocar `auth.users` — ver `docs/features/alta-usuario-admin.md`.
+
 ---
 
 ## Índice de Endpoints
@@ -163,6 +169,7 @@ Webhooks validan origen por número autorizado o `x-webhook-secret`. Cron jobs v
 | POST | /api/staff/device/register | Activar dispositivo de confianza | Supervisor PIN |
 | POST | /api/staff/device/verify | Verificar device_token | NO |
 | GET | /api/staff/pending-rewards | Premios activos de clientes con check-in en las últimas 6h | Staff JWT / Device |
+| POST | /api/aios/tenant-admin | **Crear el usuario admin de una marca** desde el panel AIOS (`app_metadata.tenant_id`). Nunca otorga `super_admin` ni reatribuye un usuario de otra marca — ver `docs/features/alta-usuario-admin.md` | x-aios-secret |
 
 ---
 

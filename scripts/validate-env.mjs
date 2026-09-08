@@ -62,6 +62,7 @@ const OPTIONAL = [
   ['WEBHOOK_DELIVERY_SECRET',            'Secret webhook domicilios (n8n) — solo restaurantes'],
   ['NEXT_PUBLIC_GOOGLE_MAPS_REVIEW_URL', 'URL reseñas Google Maps'],
   ['N8N_BASE_URL',                       'URL base de tu instancia n8n'],
+  ['AIOS_ADMIN_PROVISION_SECRET',        'Secreto compartido con el AIOS — sin él, /api/aios/tenant-admin da 503'],
 ]
 
 const SENSITIVE = new Set(['SECRET', 'KEY', 'TOKEN', 'SID', 'ROLE'])

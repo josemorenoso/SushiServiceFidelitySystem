@@ -8,6 +8,25 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [2026-09-08] - El usuario con el que entra el cliente, desde el AIOS
+
+**Tipo:** feat · **Origen:** el dueno ("cree un cliente nuevo en el AIOS y al entrar no tengo usuario y contrasena") · **Sin migracion**
+
+- **`POST /api/aios/tenant-admin`**: crea el usuario admin de una marca (`app_metadata.tenant_id`) llamando a
+  la API oficial de GoTrue. Unica llave: el header `x-aios-secret` contra `AIOS_ADMIN_PROVISION_SECRET`,
+  comparado en tiempo constante. **Sin esa variable responde 503 y no crea nada** — no hay modo "abierta
+  porque falta la env var". Era un paso MANUAL (un UPDATE copiado del checklist del AIOS) x25 altas.
+- **Lo que nunca hace:** otorgar `super_admin` (el cuerpo no tiene campo `role`), reatribuir un usuario que ya
+  es admin de OTRA marca (409, y no toca nada) ni cambiar la contrasena de un usuario existente.
+- **La sede:** si la marca tiene 2+ sedes activas, crea tambien la fila `dashboard_user_locations` con
+  `role='brand'`. Sin ella `decideLocationScope()` le responde **403** el primer dia.
+- **El AIOS no lleva la service key del producto**, solo el secreto compartido: lo mas que se hace con el es
+  crear un admin de una marca. Del otro lado, la tarjeta "Usuario del panel" (AIOS v1.7.0).
+- `src/lib/aios-provision.ts` tiene las piezas puras (secreto y validacion), con 11 comprobaciones en
+  `tests/unit/aios-provision.test.ts`. → `docs/features/alta-usuario-admin.md`.
+
+---
+
 ## [2026-09-08] - Cambios pre-reunion: Tarjeta principal, Premios dentro de Campanas, Domicilios
 
 **Tipo:** feat · **Origen:** el dueno, la noche antes de la reunion con el dueno de 12 restaurantes · **Sin migracion**

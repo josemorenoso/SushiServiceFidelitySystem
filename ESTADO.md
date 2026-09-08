@@ -15,13 +15,13 @@
 | Qué | Estado |
 |-----|--------|
 | Código | **`main` = `origin/main` = `c96bce5`, pusheado el 2026-09-08 (noche) por orden del dueño.** Lleva los cuatro cambios pre-reunión (`596fb5b`, sin migración) desplegándose en Vercel. ⚠️ La carpeta sigue en `feat/multisede-aios` (= `main`); nadie cambia de rama con otra sesión viva. Sin mergear a propósito: `master`, `port/sushi-fun-2.8`, `sushi-sync` |
-| Verificación | ✅ Sobre `596fb5b` (2026-09-08): `tsc` limpio · **vitest 33 archivos / 532 tests** · eslint **7 errores preexistentes** (hooks y gráficas del panel, ninguno en lo tocado el 08). `build` no se corrió el 08 |
+| Verificación | ✅ 2026-09-08 (tarde): `tsc` limpio · **vitest 34 archivos / 543 tests, 1 rojo** · eslint **7 errores preexistentes** (hooks y gráficas del panel, ninguno en lo tocado). ⚠️ El rojo es `tests/db/aios-health.test.ts` «active_days_28d cuenta DÍAS»: el helper mete «dos pedidos hoy» con `now() - 1h` y `now() - 2h`, así que **entre medianoche y las 2 a.m. el segundo cae en el día anterior** y cuenta 4 días en vez de 3. Es del reloj, no del código, y NO lo tocó nadie: se corrige eligiendo horas que no crucen medianoche. `build` no se corrió |
 | Marcas vivas | **5**: sushi-service (542 clientes), demo-ventas (412), sushi-fun (251), don-alirio (244), cafe-frangal (8) |
 | Base de datos de producción | ✅ **Aplicadas hasta la `00056`** (dueño, 2026-09-08: `00047`, `00050`, `00051`, `00053`, `00054` y `00056`, todas). El esquema ya alcanza al código de `main`. La 00030 NUNCA aplicada (a propósito). La 00015 NO se aplica (reabre fuga). Huecos: `00048`, `00049`, `00052`, `00055` |
 | Migraciones: dónde están | El directorio muestra **solo la rama puesta**; el inventario real y el número de la próxima los da `node scripts/proxima-migracion.mjs`. **Desde el 07 la única reserva es la fila del tablero (§2)**: un número citado en cualquier otro doc no reserva nada. `00048`, `00049`, `00052` y `00055` son huecos: no se rellenan |
 | Crons | Los 5 en `vercel.json`, corriendo. `birthday` 18:00 y `reactivation` 20:00 UTC (= 13:00/15:00 Bogotá), verificado. ⚠️ **`reward-reminder` sigue en 16:00 UTC (11:00 Bogotá)**; la auditoría estimó ≈21:00 UTC. **Decisión del dueño** |
 | n8n | Apagado. `domicilios_whatsapp_v4.json` sigue en el VPS pero ya no dispara |
-| AIOS (`Level 2.0/aios-constelarys`) | `main` pusheado el 07 en `c962f27` (v1.5.2) y **desplegado**. ⚠️ `/salud` sale ENTERO EN GRIS hasta que corra la `00053` |
+| AIOS (`Level 2.0/aios-constelarys`) | `main` pusheado el 07 en `c962f27` (v1.5.2) y **desplegado**. En `feat/multisede-aios`, sin desplegar: v1.6.0 (sedes) y **v1.7.0** (tarjeta «Usuario del panel»). ⚠️ `/salud` sale ENTERO EN GRIS hasta que corra la `00053` |
 | Grafo | Hook post-commit instalado el 07 (`graphify hook status`): se actualiza solo en cada commit. ⚠️ 169 comunidades renombradas por su hub: `graphify label` las refresca (cuesta LLM, no se corrió) |
 | Deadline | ~2026-09-10 — onboarding de los 25 clientes de Zernio |
 
@@ -32,10 +32,14 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
-| Usuario admin del cliente desde el AIOS (2026-09-08, tarde) | Opus 5 | **Producto:** `src/app/api/aios/tenant-admin/route.ts` (nuevo) · `.env.example` · `docs/API_DOCS.md` · `docs/features/alta-usuario-admin.md` (nuevo) — **AIOS:** `src/lib/actions/tenant-admin.ts` (nuevo) · `src/components/clients/TenantAdminSection.tsx` (nuevo) · `src/app/(app)/clientes/[id]/page.tsx` · `src/lib/env.ts` · `.env.example` | ninguna | En curso |
+| _(vacío)_ | | | | |
 
 ## 3. Siguiente, en orden
 
+0. **`AIOS_ADMIN_PROVISION_SECRET` en los DOS Vercel**, la MISMA cadena (`randomBytes(32).toString('hex')`),
+   con el push del producto y el de la v1.7.0 del AIOS. Sin eso la tarjeta «Usuario del panel» se ve pero
+   dice que está apagada. **Pedacito de Amor espera ese usuario**; mientras tanto, el SQL de
+   `docs/features/alta-usuario-admin.md` §7.
 1. ✅ **Las seis migraciones (00047–00056) del producto y la `00007` del AIOS están aplicadas** (dueño, 2026-09-08).
    Del AIOS queda **desplegar la v1.6.0** (mergear `feat/multisede-aios` → `main` del AIOS), que lo está puliendo
    otra sesión del dueño el 08. Recién ahí se da de alta Tepuy y la sede 2 engancha.
@@ -82,6 +86,11 @@ reseñas y **Meta** para campañas. Ninguna decisión de hoy cierra esa puerta (
 
 ## 5. Hecho reciente
 
+- **El cliente ya nace con usuario** (2026-09-08, sin migración, **sin desplegar**): el AIOS dejaba la marca
+  completa y el cliente abría su enlace **sin con qué entrar**. Ahora `POST /api/aios/tenant-admin`
+  (llave: `x-aios-secret`, **503 sin la variable**) + tarjeta «Usuario del panel» del AIOS v1.7.0. Nunca da
+  `super_admin`, nunca reatribuye un usuario de otra marca (409), nunca cambia una contraseña existente; con
+  2+ sedes crea la fila `role='brand'` que evita el 403. → `docs/features/alta-usuario-admin.md`.
 - **Cambios pre-reunión** (2026-09-08, `596fb5b`, **en `main` y pusheado**, sin migración): "Identidad visual" pasa a
   **"Tarjeta principal"**; la tarjeta muestra símbolo del sello (20), decoración de contorno (6), redes, perfil de
   Google, descripción, contacto/horario y políticas, plegados (`CardExtras`/`CardMotif`/`StampIcon`; se guarda en

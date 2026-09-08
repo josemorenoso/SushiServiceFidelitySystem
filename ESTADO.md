@@ -32,7 +32,8 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
-| _(vacío)_ | | | | |
+| Plantillas con imagen fija habilitadas para campañas (Opus 5, 2026-09-08) | Opus 5 | src/app/api/dashboard/templates/route.ts · src/components/dashboard/AtRiskBubbles.tsx · src/components/dashboard/ManualCampaigns.tsx · docs/API_DOCS.md | — | En curso |
+| Sedes: la superficie PÚBLICA resolvía solo por `tenants.domain` (2026-09-08) | Opus 5 | **Producto:** `src/lib/tenant.ts` · `src/lib/branding-server.ts` · `src/app/(public)/tarjeta/page.tsx` · `src/app/api/check-in/status/route.ts` · `src/app/api/mystery-box/resolve/route.ts` · `src/app/api/public/{customer-card,points-range,reward-tiers}/route.ts` — **AIOS:** `src/lib/actions/provisioning.ts` (solo `siteVerifyDomain`) | ninguna | En curso |
 
 ## 3. Siguiente, en orden
 

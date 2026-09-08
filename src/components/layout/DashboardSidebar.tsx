@@ -57,7 +57,7 @@ export function DashboardSidebar({ isSuperAdmin = false }: { isSuperAdmin?: bool
 
   return (
     <aside className="glass-sidebar hidden md:flex md:w-60 md:flex-col">
-      <div className="flex h-14 items-center gap-2 px-5" style={{ borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
+      <div className="flex h-14 shrink-0 items-center gap-2 px-5" style={{ borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
         <div
           className="flex h-7 w-7 items-center justify-center rounded-lg"
           style={{ background: 'linear-gradient(135deg, #FF4D6D 0%, #E63946 100%)' }}
@@ -68,7 +68,10 @@ export function DashboardSidebar({ isSuperAdmin = false }: { isSuperAdmin?: bool
           {branding.name}
         </span>
       </div>
-      <nav className="flex-1 space-y-0.5 p-3">
+      {/* min-h-0 + overflow-y-auto: sin esto la lista se recorta contra el
+          overflow-hidden del layout y los ultimos items (Conexiones, Ajustes)
+          quedan inalcanzables en pantallas bajas. */}
+      <nav className="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-3">
         {navItems.map((item) => {
           const isActive = pathname === item.href
           return (

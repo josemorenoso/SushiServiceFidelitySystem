@@ -18,46 +18,47 @@ un dato de la marca A jamás se ve ni se atribuye a la marca B.**
 - Si el pedido choca con la arquitectura documentada: parar, explicar el choque, esperar.
 - Un comentario o un doc que dejó de ser verdad se corrige en el MISMO commit.
 - Ningún servicio externo se dispara sin que el dueño sepa (Twilio, Zernio, OpenAI, Supabase de producción).
-- Cerrar sesión = `ESTADO.md` + entrada de `CHANGELOG.md` (≤15 líneas) + el doc de la feature si cambió el comportamiento + `graphify update .`.
 - **El número de una migración nueva NO se elige mirando `supabase/migrations/`.** Ese directorio solo
   muestra tu rama. Se saca con `node scripts/proxima-migracion.mjs`, que mira TODAS las ramas vivas y
-  las reservas escritas en los docs. Pasó el 2026-09-06: una rama tomó la 00048 que multi-sede tenía
-  reservada para F9, y se saltó la 00047. Un hueco es barato; dos archivos con el mismo número, no.
+  las reservas de `ESTADO.md` §2 (la fila del tablero es la ÚNICA reserva; un número citado en otro
+  doc no reserva nada). Un hueco es barato; dos archivos con el mismo número, no.
 - Lo repetitivo (auditorías, inventarios, barridos) va a subagentes Sonnet o Haiku, nunca al modelo caro.
 
-## Trabajar en paralelo sin pisarse (regla del dueño, 2026-09-06)
+## Cada sesión: al abrir y al cerrar (método §3.1 — es lo único que sale igual siempre)
 
-**Varias sesiones a la vez, SÍ. Pero ninguna escribe sin saber qué está tocando la otra.** El 06
-se perdió trabajo dos veces: no por trabajar en paralelo, sino porque nadie declaró su territorio
-y dos sesiones se descubrieron encima al final, cuando ya era caro.
+**Al abrir:** leé `ESTADO.md` entero → anotá tu fila en §2 (sesión, modelo, archivos, migración si hay)
+y **commiteála sola** antes de tocar nada → si tu territorio se cruza con una fila que ya está, NO
+arranques: esperá a que esa sesión cierre → `graphify query` antes de leer archivos.
 
-**El tablero es `ESTADO.md` §2 "En vuelo ahora mismo".** No es decorativo: es el único sitio donde
-una sesión se entera de la otra.
+**Al cerrar:** `npx tsc --noEmit` · `npm run lint` · los tests de lo tuyo → borrá tu fila del §2 y
+ajustá la foto y la cola → entrada del `CHANGELOG.md` (≤15 líneas) + doc de la feature si cambió el
+comportamiento → `graphify update .` → commit de TUS archivos por nombre → resumen en diez líneas.
 
-1. **Antes de escribir la primera línea**, leé §2 y anotá ahí una línea tuya: qué vas a tocar
-   (archivos o área) y en qué rama. Commiteála sola, de una: si vive en tu working tree, la otra
-   sesión no la ve y el tablero no sirve para nada.
-2. **Si tu territorio se cruza con uno ya anotado, NO arranques: van en fila.** Primero el que
-   ya estaba, después vos, sobre su trabajo ya commiteado. Un cruce declarado a tiempo cuesta una
-   espera; descubierto al final cuesta un merge a mano o trabajo perdido.
-3. **Territorios disjuntos, en paralelo y sin ceremonia.** Misma carpeta, sin worktrees. El
-   worktree es OPCIONAL: solo si dos sesiones necesitan ramas distintas a la vez, y va en
-   `.worktrees/` (dentro del repo, ignorada por git), **nunca suelto en Descargas**. Se borra al
-   cerrar el bloque: el worktree que sobrevive a su rama es la carpeta huérfana de la próxima vez.
-4. **Al terminar, borrá tu línea de §2 y commiteá.** El tablero solo sirve si dice la verdad.
+## Varias sesiones a la vez: el modo simple (dueño, 2026-09-07; método §6.1)
 
-❌ **`git stash` y `git reset --hard` están PROHIBIDOS con otra sesión viva.** Se llevan el trabajo
-ajeno sin preguntar y sin dejar rastro. La red es commitear temprano, no el stash.
+**Todas en esta carpeta, todas en la misma rama, cuatro reglas y ninguna más.** El 06 se perdió trabajo
+dos veces y el 07 `main` divergió: no por trabajar en paralelo, sino por ramas por sesión, un
+worktree suelto y un `stash`.
 
-⚠️ **Antes de `git add -A`, mirá QUÉ vas a commitear.** En un árbol compartido, un archivo
-ATRASADO se te muestra igual que uno modificado por vos — y commitearlo REVIERTE lo del otro en
-silencio. Se comprueba con `git diff <commit-del-otro>^ -- <archivo>`: si sale vacío, estás
-revirtiendo, no aportando. Pasó el 06 con los dos archivos del opt-out.
+1. **El planificador reparte territorios por ARCHIVO** y los escribe en §2 antes de que nadie toque
+   nada. Si hay migración, su número (del script) va en la fila: esa fila es la reserva.
+2. **Cada sesión commitea solo sus archivos, por nombre, y temprano.** Un commit local no necesita
+   permiso. Nunca `git add -A` ni `git add .` con otra sesión viva: un archivo ajeno a medias, o uno
+   ATRASADO respecto al commit del otro, se te muestra igual que uno tuyo y commitearlo lo REVIERTE.
+3. **Nadie cambia de rama, nadie hace `stash`, nadie hace `reset --hard`.** Un `checkout` le cambia la
+   rama a TODAS las sesiones de la carpeta (pasó el 07, en medio de otra sesión). Con otra sesión
+   viva, esas tres cosas destruyen trabajo ajeno sin dejar rastro.
+4. **Al cierre, UNA sola sesión corre tsc, lint y vitest sobre todo junto** y cierra `ESTADO.md` y
+   `CHANGELOG.md`. No hay merges porque no hay ramas: solo verificación. **Una corrida de tests a la
+   vez**: el globalSetup de vitest fija `TEST_PG_PORT=55432`; dos corridas se pisan el Postgres y la
+   segunda dice "No test files found", que despista muchísimo.
 
-⚠️ **Tests en paralelo:** el globalSetup de vitest fija `TEST_PG_PORT=55432`. Dos corridas a la vez
-se pisan el Postgres y la segunda dice "No test files found", que despista muchísimo.
+**Worktrees: solo la excepción** (un arreglo urgente sobre producción con una feature a medias en la
+carpeta), en `.worktrees/` dentro del repo, con su propio `npm ci` (nunca `node_modules` enlazado: al
+quitarlo se lleva el de la raíz), declarado en §2, y borrado el mismo día. Nunca al lado del repo.
 
-**Nada se queda commiteado y sin pushear.** Lo local no es respaldo: `main` va a `origin` al cerrar.
+**Push y deploy son del dueño.** Un push de `main` DESPLIEGA (Vercel), así que va después de aplicar
+las migraciones en Supabase, y lo ordena él. La sesión de cierre se lo pide en una línea, con el hash.
 
 ## Guardrails del dominio (romperlos cuesta datos reales)
 - **Todo INSERT lleva `tenant_id` explícito.** La 00030 nunca se aplicó: 18 tablas conservan el DEFAULT puente de la 00028 → un INSERT que lo olvide se va **calladito a Sushi Service**, sin error.

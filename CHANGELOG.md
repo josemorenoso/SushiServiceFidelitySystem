@@ -8,6 +8,26 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [2026-09-07] - Metodo v3.1: modo simple para trabajar en paralelo, y el ritual de cada sesion
+
+**Tipo:** docs/chore · **Origen:** el dueno ("los desarrollos se chocan entre si; migraciones con huecos; commits sin pushear; carpetas nuevas en el PC")
+
+- **Diagnostico.** Los huecos `00048/49/52/55` los fabricaba el propio `proxima-migracion.mjs`: leia
+  CUALQUIER numero citado en CUALQUIER doc como reserva, asi que citar un numero lo quemaba. Las carpetas
+  sueltas las mandaba el metodo (`git worktree add ../wt-…`). `main` divergio por dos sesiones commiteando
+  en `main` a la vez, y un `checkout` de otra sesion cambio la rama de la carpeta en medio de esta.
+- **Modo simple** (metodo § 6.1, `CLAUDE.md`): todas las sesiones en la misma carpeta y la misma rama;
+  territorios por ARCHIVO en `ESTADO.md` § 2; commit solo de lo propio, por nombre; nadie cambia de rama,
+  nadie hace `stash` ni `reset --hard`; una sola sesion verifica todo al cierre. Worktrees solo como excepcion.
+- **Ritual de cada sesion** (metodo § 3.1): que hacer al abrir, durante y al cerrar, igual siempre. Tres
+  plantillas nuevas en § 9: planificar el dia, arrancar, cerrar el dia.
+- **El script solo lee reservas del § 2** (la fila del tablero). Un numero en otro doc ya no reserva.
+- **Grafo siempre al dia:** `graphify hook install` corrido (post-commit y post-checkout, en `.git/`).
+- `ESTADO.md` vuelve a 150 lineas con el § 2 como tabla. `.worktrees/` (vacia) eliminada.
+- **Verificado:** el script da `00057` con `00056` en vuelo; `node --check` limpio. **NO verificado:** nada de codigo cambio.
+
+---
+
 ## [2026-09-07] - Consolidacion: las cuatro ramas del 07 entran a `main`
 
 **Tipo:** chore · **Rama:** `main` · **Origen:** pedido del dueno ("varias sesiones a la vez, hace falta commitear todo")

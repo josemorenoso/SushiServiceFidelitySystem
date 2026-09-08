@@ -15,5 +15,7 @@ Este archivo no repite nada: apunta.
 - **Qué falta del encargo de producto** (§1–§25) está en `docs/ESTADO-REQUERIMIENTOS.md`.
 
 Lo mínimo si solo vas a leer una cosa: solo lo pedido · nada destructivo sin confirmar · secretos en `.env` ·
-todo INSERT lleva `tenant_id` explícito · validar con `npx tsc --noEmit && npm run lint && npx vitest run` ·
-al cerrar, `ESTADO.md` + `CHANGELOG.md`.
+todo INSERT lleva `tenant_id` explícito · al abrir, tu fila en `ESTADO.md` §2 (commiteada sola) ·
+solo tus archivos, por nombre; sin cambiar de rama, sin `stash`, sin `reset --hard` ·
+validar con `npx tsc --noEmit && npm run lint && npx vitest run` ·
+al cerrar, `ESTADO.md` (tu fila borrada) + `CHANGELOG.md` + `graphify update .`.

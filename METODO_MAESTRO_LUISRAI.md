@@ -1,6 +1,6 @@
 # MÉTODO MAESTRO LUISRAI
 
-> **Versión:** 3.0 · **Fecha:** 2026-09-04 · **Sucede a:** Método AInnovate v2.1
+> **Versión:** 3.1 · **Fecha:** 2026-09-07 · **Sucede a:** Método AInnovate v2.1 (la 3.0 es del 2026-09-04; la 3.1 agrega el ritual de cada sesión y el modo simple para trabajar en paralelo)
 > **Para:** cualquier proyecto que se construya con una IA de código (Claude Code primero; sirve para Cursor, Codex, Windsurf, Gemini CLI).
 > **Cómo se usa:** este archivo se copia **tal cual** a la raíz de cada proyecto, nuevo o viejo. No se adapta: lo que es
 > específico del proyecto va en `CLAUDE.md` y en `ESTADO.md`, nunca acá. Todo lo que hace falta para arrancar está adentro:
@@ -16,8 +16,9 @@
 4. **Un solo archivo de reglas: `CLAUDE.md`.** Corto. Solo guardrails del dominio y trampas verificadas. Nada de "cómo programar".
 5. **Skills: solo las que pasan las 3R.** Cada seis meses, o con cada modelo nuevo, ablación: se sacan todas y se devuelven una por una las que hacen falta.
 6. **Modelo caro para pensar, barato para barrer.** Fable/Opus diseña y revisa. Sonnet implementa. Haiku audita, inventaría y construye el grafo.
+7. **Toda sesión abre y cierra igual** (sección 3.1): al abrir, lee `ESTADO.md` y anota su territorio en el tablero; al cerrar, deja `ESTADO.md`, `CHANGELOG.md` y el grafo al día. Varias sesiones a la vez: **misma carpeta, misma rama, territorios por archivo** (sección 6).
 
-Todo lo demás en este documento es el detalle de esas seis líneas.
+Todo lo demás en este documento es el detalle de esas siete líneas.
 
 **Para arrancar un proyecto nuevo:** copiar este archivo a la raíz y pegarle a la IA el prompt de la sección 10.
 **Para migrar uno viejo:** lo mismo, con el segundo prompt de la sección 10.
@@ -163,9 +164,10 @@ ANTHROPIC_API_KEY=... graphify extract . --backend claude --model claude-haiku-4
 #   --force              → re-extraer todo, ignorando la caché
 
 # ── Mantenerlo al día ────────────────────────────────────────────────────────
-graphify update .                # después de cada commit: AST solo, sin LLM, segundos
+graphify hook install            # UNA VEZ por repo: post-commit que corre `graphify update .` solo, en cada commit
+graphify hook status             # para comprobar que está puesto (el hook vive en .git/, no viaja con el repo: se instala en cada máquina)
+graphify update .                # la red: si el hook no está o falló, se corre a mano al cerrar la sesión
 graphify extract . ...           # después de una ola: re-extrae solo los docs que cambiaron
-graphify hook install            # opcional: post-commit que corre el update solo
 
 # ── Consultarlo (esto es lo que la IA usa en vez de leer medio repo) ─────────
 graphify query "qué conecta el bot de Telegram con la máquina de estados"
@@ -184,7 +186,9 @@ graphify global add <repo>/graphify-out/graph.json --as <tag>
 
 Cómo lo usa la IA, en tres líneas de `CLAUDE.md`:
 
-> Antes de leer archivos para entender algo, `graphify query`. Antes de tocar un hub, `graphify affected`. Después de commitear, `graphify update .`.
+> Antes de leer archivos para entender algo, `graphify query`. Antes de tocar un hub, `graphify affected`. Al cerrar, `graphify update .` (el hook post-commit ya lo hizo en cada commit; la línea es la red).
+
+**El grafo se actualiza siempre.** Un grafo viejo miente igual que un doc viejo: la sesión siguiente pregunta y recibe un mapa de la semana pasada. Por eso el hook post-commit no es opcional en un repo vivo, y por eso el cierre de sesión (3.1) lo repite a mano.
 
 Lo que **no** se instala: el hook *always-on* (`graphify claude install`) que intercepta cada lectura de archivo para empujar al grafo. Es un paso disfrazado de ayuda. Las tres líneas de arriba alcanzan.
 
@@ -212,6 +216,34 @@ Tres reglas:
 - **Lo obsoleto se saca, no se tacha.** Un ítem tachado sigue costando tokens cada vez que alguien lee el archivo.
 - **La cola la ordena el dueño.** La IA propone; el orden de la sección "Siguiente" es una decisión de negocio.
 - **"Verificado" significa que alguien lo vio funcionar.** Si solo pasaron los tests, dice "tests en verde, no visto en el navegador".
+
+### 3.1 El ritual de toda sesión: al abrir, durante y al cerrar
+
+Es lo único del método que sí es una lista de pasos, porque es lo único que tiene que salir **igual** todas las veces. Vale para una sesión sola y para cinco a la vez.
+
+**Al abrir**
+
+1. Leer `ESTADO.md` entero. Es la única lectura obligatoria.
+2. Anotar una fila propia en `ESTADO.md` § 2 "En vuelo": sesión, modelo, área y archivos que va a tocar, migración si la hay. **Commitear esa fila sola, de una.** Si el territorio se cruza con una fila que ya está, no arrancar: esperar a que esa sesión cierre.
+3. `graphify query` antes de leer archivos para entender algo; `graphify affected` antes de tocar un hub. Abrir solo los docs que el mapa de `CLAUDE.md` o el grafo señalan.
+
+**Durante**
+
+- Commitear temprano y seguido, **solo los archivos propios, por nombre**. Nunca `git add -A` ni `git add .` con otra sesión viva: se lleva lo ajeno a medias.
+- No cambiar de rama, no hacer `stash`, no hacer `reset --hard`. Con otra sesión en la misma carpeta, esas tres cosas destruyen trabajo ajeno sin dejar rastro.
+- Si el pedido choca con un guardrail o con la arquitectura documentada: parar, explicar, esperar.
+
+**Al cerrar (cada sesión)**
+
+1. `typecheck` · `lint` · los tests de lo propio. Si algo queda sin verificar en el flujo real, decirlo: "NO verificado: X".
+2. `ESTADO.md`: borrar la fila propia del § 2; ajustar la foto, la cola y "hecho reciente" si cambiaron. El archivo sigue cabiendo en 150 líneas.
+3. `CHANGELOG.md`: una entrada de ≤ 15 líneas. El doc de la feature, si cambió el comportamiento.
+4. `graphify update .` (aunque el hook ya lo haya hecho: es gratis y confirma).
+5. Commit de los archivos propios, por nombre. Resumen final en diez líneas: qué, cómo se verifica, qué falta.
+
+**Al cerrar el día (una sola sesión, cuando hubo varias)**
+
+Una sesión, y solo una, corre `typecheck` · `lint` · **todos** los tests sobre el árbol completo, deja `ESTADO.md` § 2 vacío o con lo que de verdad sigue abierto, y pide al dueño el `push` en una línea. Push y deploy son del dueño (sección 4).
 
 ---
 
@@ -252,7 +284,26 @@ Un trabajo está terminado cuando se cumplen las cinco cosas. Si falta una, no e
 | **Ola** (varias features, varias sesiones) | Un área entera, una reorganización | Un plan en `docs/plans/` con las piezas y su orden; un mockup navegable si hay interfaz (el dueño aprueba con los ojos, no con texto) | **Revisión final con dos lentes** sobre el diff completo: un revisor busca bugs de lógica, otro busca lo que contradice los docs. Lo que ninguna revisión por pieza vio, esta lo ve |
 | **Proyecto nuevo** | Día uno | FASE 0 (sección 10) | — |
 
-**Trabajo en paralelo.** Dos sesiones sobre el mismo repo solo con territorios disjuntos, cada una en su worktree (`git worktree add ../wt-<nombre> -b feat/<nombre>`) y declaradas en `ESTADO.md` § En vuelo. Nunca dos sesiones sobre el mismo archivo.
+### 6.1 Varias sesiones a la vez: el modo simple
+
+Varias sesiones sobre el mismo repo, **sí**. Todas en la **misma carpeta** y en la **misma rama**, con cuatro reglas y ninguna más. (Decidido el 2026-09-07 después de perder trabajo dos veces por lo contrario: ramas por sesión, worktrees sueltos y un `stash`.)
+
+1. **El planificador reparte territorios por archivos** y los escribe en `ESTADO.md` § 2 antes de que nadie toque nada. Un territorio es una lista de archivos o una carpeta, no un tema: "el webhook de domicilios" se cruza con todo; `src/app/api/webhook/delivery/*` no. Si hay migración, el planificador le pone el número (sale del script del proyecto) y lo escribe en la fila: esa fila es la reserva, y no hay otra.
+2. **Cada sesión commitea solo sus archivos, por nombre, y temprano.** Un commit local no necesita permiso. Un archivo a medias que no es tuyo no se toca ni se agrega.
+3. **Nadie cambia de rama, nadie hace `stash`, nadie hace `reset --hard`.** Una carpeta tiene una sola rama puesta: el `checkout` de una sesión le cambia la rama a todas las demás debajo de los pies. Con otra sesión viva, esas tres cosas destruyen trabajo ajeno sin dejar rastro.
+4. **Al cierre, una sola sesión corre `typecheck`, `lint` y los tests sobre todo junto**, y cierra `ESTADO.md` y `CHANGELOG.md`. No hay merges porque no hay ramas: solo verificación. Los tests comparten puerto y base: **una corrida a la vez**.
+
+Por qué funciona: el conflicto que git resuelve mal (dos ramas, mismo archivo, merge al final) se cambia por el que las personas resuelven bien (dos sesiones, archivos distintos, declarados antes). Lo que se pierde es la posibilidad de que dos sesiones compilen limpio a la vez mientras una tiene un archivo roto; se acepta, porque cuesta un minuto y la alternativa costó días.
+
+**Los tres roles de un día con varias sesiones** (las plantillas están en la sección 9):
+
+| Rol | Modelo | Cuántas | Qué hace |
+|---|---|---|---|
+| **Planificador** | Fable / Opus | 1, al empezar | Lee `ESTADO.md`, parte el trabajo en territorios disjuntos por archivo, asigna migraciones, escribe el § 2, lo commitea, y entrega un prompt listo por obrero |
+| **Obrero** | Sonnet | N, en paralelo | Su territorio y nada más. Cierra con el ritual de 3.1 |
+| **Cierre** | Opus (o el último obrero) | 1, al terminar | Verifica todo junto, deja el § 2 limpio, pide el `push`. Si fue una ola, la revisión de dos lentes |
+
+**El worktree es la excepción, no el modo.** Sirve para un solo caso: un arreglo urgente sobre producción mientras una feature grande está a medias en la carpeta. Si se usa, va en `.worktrees/` **dentro del repo** (ignorado por git), nunca al lado del repo ni en Descargas; con su propio `npm ci` (nunca `node_modules` enlazado: quitar el worktree se lleva el de la raíz por el enlace); declarado en el § 2 como cualquier territorio; y se borra el mismo día. Un worktree que sobrevive a su rama es la carpeta huérfana de la próxima vez.
 
 **Cuándo escalar a más de un agente.** Si la tarea se parte en pedazos independientes (auditar 35 docs, migrar 40 archivos, revisar un diff desde tres ángulos), se usa un *workflow* multi-agente con modelos baratos. Si la tarea se repite en el tiempo (revisar el deploy cada mañana, borrar código muerto cada semana), se usa un *loop* local o una *routine* en la nube. Si es una sola tarea difícil, se le da a un solo agente con un buen criterio de término y se lo deja correr.
 
@@ -351,10 +402,30 @@ Copiar, llenar los corchetes, borrar lo que no aplica.
 
 **Arrancar una sesión**
 ```
-Leé ESTADO.md. Después:
+Leé ESTADO.md y seguí el ritual de METODO_MAESTRO_LUISRAI.md § 3.1: anotá tu territorio en el § 2 y commitealo solo antes de tocar nada.
 ## TAREA  [ … ]
-## GUARDRAILS  [ … ]
-## CRITERIO DE TÉRMINO  [ … ]  + ESTADO.md y CHANGELOG al día.
+## GUARDRAILS  [ … ]  Solo tus archivos, por nombre. Sin cambiar de rama, sin stash, sin reset --hard.
+## CRITERIO DE TÉRMINO  [ … ]  + el cierre del § 3.1: ESTADO.md (tu fila borrada), CHANGELOG, graphify update.
+```
+
+**Planificar un día con varias sesiones** (Fable / Opus, una sola vez, al empezar)
+```
+Leé ESTADO.md. Sos el PLANIFICADOR del día (METODO_MAESTRO_LUISRAI.md § 6.1).
+## TAREA  Partí esto en territorios disjuntos por ARCHIVO para N sesiones en paralelo: [la lista de trabajo del día, o "la cola del § 3"].
+## GUARDRAILS  Misma carpeta, misma rama: nada de ramas ni worktrees. Dos territorios no comparten archivo.
+              Si algo necesita migración, el número sale de [el script del proyecto] y va en la fila del § 2. No implementes nada.
+## CRITERIO DE TÉRMINO  El § 2 de ESTADO.md tiene una fila por sesión (sesión, modelo, archivos, migración), commiteado solo;
+                        y me das N prompts listos para pegar, cada uno con TAREA · GUARDRAILS · TÉRMINO y su territorio por nombre.
+```
+
+**Cerrar el día** (una sola sesión, después de que cerraron todas)
+```
+Leé ESTADO.md. Sos la sesión de CIERRE (METODO_MAESTRO_LUISRAI.md § 6.1).
+## TAREA  Verificá el árbol completo y dejá el tablero limpio.
+## GUARDRAILS  No arregles lo que no sea tuyo: si algo falla, anotalo en ESTADO.md § 2 con el archivo y el error, y decímelo. Nada de push.
+## CRITERIO DE TÉRMINO  typecheck · lint · todos los tests en verde (o la lista de lo que falla, con archivo);
+                        ESTADO.md ≤ 150 líneas con el § 2 vacío o solo con lo que sigue abierto; graphify update corrido;
+                        y una línea que me pida el push con el hash.
 ```
 
 **Una feature**
@@ -389,8 +460,9 @@ Antes de codear, escribí docs/features/<x>.md en ≤ 30 líneas y mostrámelo.
 
 **Cerrar una sesión**
 ```
-Actualizá ESTADO.md (foto, en vuelo, cola, bloqueado, hecho reciente), la entrada del CHANGELOG
-(≤ 15 líneas) y corré `graphify update .`. Resumen final en diez líneas: qué, cómo se verifica, qué falta.
+Cerrá con el ritual de METODO_MAESTRO_LUISRAI.md § 3.1: typecheck · lint · tests de lo tuyo; ESTADO.md (borrá tu fila del § 2,
+ajustá foto, cola y hecho reciente); CHANGELOG (≤ 15 líneas); doc de la feature si cambió el comportamiento; `graphify update .`;
+commit de tus archivos por nombre. Resumen final en diez líneas: qué, cómo se verifica, qué falta.
 ```
 
 ---
@@ -441,7 +513,7 @@ proyecto/
 └── graphify-out/               ← lo genera graphify
 ```
 
-Después, con la máquina configurada (Apéndice G): construir el grafo completo (sección 2.2) y sumarlo al global.
+Después, con la máquina configurada (Apéndice G): construir el grafo completo (sección 2.2), instalar el hook (`graphify hook install`) y sumarlo al global.
 
 ### Migrar un proyecto AInnovate (o cualquier proyecto viejo): el prompt
 
@@ -471,7 +543,7 @@ Los ocho pasos, para seguirlos con los ojos:
 3. Reescribir `CLAUDE.md` con el Apéndice B: guardrails del dominio, trampas, comandos, mapa. Guardar el viejo en `docs/archive/`.
 4. Borrar `.cursorrules`, `.windsurfrules`, `.clinerules`, `.aider.conf.yml`, `.github/copilot-instructions.md`. Dejar `AGENTS.md` apuntando a `CLAUDE.md`.
 5. Archivar el registro de skills del proyecto viejo, si existe (p. ej. `docs/SKILLS.md`), después de mover sus trampas verificadas a `CLAUDE.md`.
-6. `.graphifyignore`, `graphify extract`, y el grafo global si hay más de un repo.
+6. `.graphifyignore`, `graphify extract`, `graphify hook install`, y el grafo global si hay más de un repo.
 7. Auditar las skills con las 3R y archivar las que no pasan.
 8. Una entrada en el CHANGELOG que cuente la migración, y el primer `ESTADO.md` cerrado.
 
@@ -494,7 +566,12 @@ Los ocho pasos, para seguirlos con los ojos:
 | Grafo | construido el <fecha> (`graphify update .` al commitear) |
 
 ## 2. En vuelo ahora mismo
-[Qué está a medio hacer y quién: sesión, rama, worktree. "Nada" también es una respuesta.]
+> Es el TABLERO. Una fila por sesión viva, anotada y commiteada sola ANTES de tocar nada; se borra al cerrar.
+> Dos filas no comparten archivo. La migración escrita acá es su única reserva. "Nada" también es una respuesta.
+
+| Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
+|---|---|---|---|---|
+| … | … | … | — | en curso · lista para cerrar · bloqueada: … |
 
 ## 3. Siguiente, en orden
 [La cola en el orden que decidió el dueño. Un ítem por línea, con su tamaño: micro / feature / ola.]
@@ -533,7 +610,8 @@ Los ocho pasos, para seguirlos con los ojos:
 - Si el pedido choca con la arquitectura documentada, parar y explicar el choque antes de tocar nada.
 - Un comentario o un doc que dejó de ser verdad se corrige en el mismo commit.
 - Ningún servicio externo se dispara sin que el dueño sepa. Verificar en vivo es válido; publicar dos veces no.
-- Una sesión no se cierra sin `ESTADO.md`, la entrada del `CHANGELOG.md` (≤ 15 líneas), el doc de la feature si cambió el comportamiento, y `graphify update .`.
+- Toda sesión abre anotando su territorio en `ESTADO.md` § 2 (commiteado solo) y cierra con `ESTADO.md`, la entrada del `CHANGELOG.md` (≤ 15 líneas), el doc de la feature si cambió el comportamiento, y `graphify update .`. Ritual completo: método § 3.1.
+- Varias sesiones a la vez: misma carpeta, misma rama, territorios por archivo. Se commitea solo lo propio, por nombre. Nadie cambia de rama, nadie hace `stash` ni `reset --hard`. Método § 6.1.
 - Lo repetitivo (auditorías, inventarios, barridos) va a subagentes Sonnet o Haiku, nunca al modelo caro.
 
 ## Guardrails del dominio (no negociables)
@@ -583,7 +661,8 @@ Este archivo no repite nada: apunta.
 - **El grafo del proyecto** está en `graphify-out/`: `graphify query "…"` antes de leer medio repo.
 
 Lo mínimo si solo vas a leer una cosa: solo lo pedido · nada destructivo sin confirmar · secretos en `.env` ·
-validar con [typecheck && lint && test] · al cerrar, `ESTADO.md` + `CHANGELOG.md`.
+al abrir, tu territorio en `ESTADO.md` § 2 · solo tus archivos, por nombre; sin cambiar de rama, sin stash ·
+validar con [typecheck && lint && test] · al cerrar, `ESTADO.md` + `CHANGELOG.md` + `graphify update .`.
 ```
 
 Si el framework ya escribe su propio bloque en `AGENTS.md` (Next.js 16 lo hace), se deja arriba y este contenido va debajo.
@@ -754,4 +833,4 @@ No un porcentaje. Tres cosas, con el número que ya se midió en AIOS el día de
 - **Menos contexto perdido entre sesiones:** `ESTADO.md` es el mismo archivo para toda IA y toda sesión, y cabe en una pantalla (80 líneas el primer día).
 - **Menos trabajo rehecho:** el criterio de término y la revisión de dos lentes convierten "parece terminado" en "está terminado o dice qué falta". La primera revisión de este mismo método encontró un guardrail que se había vuelto falso al comprimirlo.
 
-*Método Maestro LuisRAI v3.0 · 2026-09-04. Se revisa con cada modelo nuevo, por ablación. Lo que no se extraña, no vuelve.*
+*Método Maestro LuisRAI v3.1 · 2026-09-07 (v3.0: 2026-09-04). Se revisa con cada modelo nuevo, por ablación. Lo que no se extraña, no vuelve.*

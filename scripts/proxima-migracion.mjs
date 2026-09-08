@@ -17,6 +17,19 @@
  * Una rama cuyos commits ya están enteros en `main` es historia, no trabajo vivo:
  * sus números viejos no se reportan como choque, porque `main` ya los resolvió.
  *
+ * QUÉ ES UNA RESERVA (cambiado el 2026-09-07)
+ * ────────────────────────────────────────────
+ * Hasta el 07 este script leía CUALQUIER `000NN` citado en CUALQUIER doc como
+ * reserva. Eso fabricaba huecos solo: Conexiones pidió número, obtuvo 00052, lo
+ * escribió en su spec, y al crear el archivo el script vio "00052 reservada" y le
+ * dio 00054. Después ESTADO explicó el hueco citándolo, y quedó reservado para
+ * siempre. Lo mismo con la 00055: ESTADO la citó como "la que diría el script" y
+ * F8 terminó siendo la 00056.
+ *
+ * Ahora la ÚNICA reserva es la que está en el tablero: ESTADO.md § 2 "En vuelo".
+ * Un número citado ahí, en la fila de una sesión viva, está tomado. Un número
+ * citado en cualquier otro sitio es historia o conversación, no reserva.
+ *
  * USO
  *   node scripts/proxima-migracion.mjs
  */
@@ -48,16 +61,19 @@ for (const ref of vivas) {
   }
 }
 
-// ── 3. Las RESERVADAS en docs: un número citado para algo que aún no existe ──
+// ── 3. Las RESERVADAS: solo las del tablero (ESTADO.md § 2 "En vuelo") ──────
 const reservas = new Map()
-for (const f of sh('git ls-files docs/ ESTADO.md CLAUDE.md').split('\n').filter((x) => x.endsWith('.md'))) {
-  let txt
-  try { txt = fs.readFileSync(f, 'utf8') } catch { continue }
-  for (const linea of txt.split('\n')) {
+{
+  let txt = ''
+  try { txt = fs.readFileSync('ESTADO.md', 'utf8') } catch { /* sin ESTADO no hay reservas */ }
+  const ini = txt.search(/^## 2\./m)
+  const fin = txt.search(/^## 3\./m)
+  const tablero = ini >= 0 ? txt.slice(ini, fin > ini ? fin : undefined) : ''
+  for (const linea of tablero.split('\n')) {
     for (const m of linea.matchAll(/\b(000\d\d)\b/g)) {
       const n = parseInt(m[1], 10)
       if (existen.has(n)) continue // ya existe: es historia, no reserva
-      if (!reservas.has(n)) reservas.set(n, `${f}: ${linea.trim().slice(0, 88)}`)
+      if (!reservas.has(n)) reservas.set(n, `ESTADO.md § 2: ${linea.trim().slice(0, 88)}`)
     }
   }
 }
@@ -79,7 +95,7 @@ if (choques.length) {
 }
 
 if (reservas.size) {
-  console.log('\n  RESERVADAS en docs (no existen todavia — NO las tomes):')
+  console.log('\n  RESERVADAS en el tablero (ESTADO.md § 2; no existen todavia — NO las tomes):')
   for (const [n, d] of [...reservas.entries()].sort((a, b) => a[0] - b[0])) {
     console.log('    %s  %s', pad(n), d)
   }

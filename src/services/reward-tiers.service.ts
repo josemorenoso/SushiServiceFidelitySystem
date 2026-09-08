@@ -97,13 +97,18 @@ export async function getTierById(tierId: string): Promise<RewardTier | null> {
  *
  * Lógica: busca el tier con point_threshold más alto que el cliente
  * ha superado AHORA pero que NO había superado con sus puntos anteriores.
+ *
+ * `locationId` es OPCIONAL y su ausencia significa «los de la MARCA» (00058).
+ * Es lo que hace que este cambio sea compatible hacia atrás con sus llamadores:
+ * el que todavía no conoce su sede recibe exactamente lo de antes.
  */
 export async function evaluateNewTier(
   previousPoints: number,
   currentPoints: number,
-  tenantId: string
+  tenantId: string,
+  locationId?: string | null
 ): Promise<RewardTier | null> {
-  const tiers = await getAllTiers(tenantId)
+  const tiers = await getAllTiers(tenantId, locationId)
   if (tiers.length === 0) return null
 
   // Tiers cuyos umbrales cruza por primera vez
@@ -119,12 +124,20 @@ export async function evaluateNewTier(
 
 /**
  * Obtiene el próximo tier que el cliente debe alcanzar.
+ *
+ * `locationId` es OPCIONAL y su ausencia significa «los de la MARCA» (00058).
+ * Es lo que hace que este cambio sea compatible hacia atrás con sus llamadores:
+ * el que todavía no conoce su sede recibe exactamente lo de antes.
  */
-export async function getNextTier(currentPoints: number, tenantId: string): Promise<{
+export async function getNextTier(
+  currentPoints: number,
+  tenantId: string,
+  locationId?: string | null
+): Promise<{
   tier: RewardTier
   pointsRemaining: number
 } | null> {
-  const tiers = await getAllTiers(tenantId)
+  const tiers = await getAllTiers(tenantId, locationId)
   const next = tiers.find((t) => t.point_threshold > currentPoints)
 
   if (!next) return null
@@ -137,9 +150,17 @@ export async function getNextTier(currentPoints: number, tenantId: string): Prom
 
 /**
  * Obtiene el tier actual del cliente (el más alto que ya alcanzó).
+ *
+ * `locationId` es OPCIONAL y su ausencia significa «los de la MARCA» (00058).
+ * Es lo que hace que este cambio sea compatible hacia atrás con sus llamadores:
+ * el que todavía no conoce su sede recibe exactamente lo de antes.
  */
-export async function getCurrentTier(currentPoints: number, tenantId: string): Promise<RewardTier | null> {
-  const tiers = await getAllTiers(tenantId)
+export async function getCurrentTier(
+  currentPoints: number,
+  tenantId: string,
+  locationId?: string | null
+): Promise<RewardTier | null> {
+  const tiers = await getAllTiers(tenantId, locationId)
   const reached = tiers.filter((t) => currentPoints >= t.point_threshold)
 
   if (reached.length === 0) return null
@@ -154,9 +175,17 @@ export async function getCurrentTier(currentPoints: number, tenantId: string): P
  *   🥈 Plata (350 pts) → Postre gratis — te faltan 80 pts
  *   🥇 Oro (600 pts) → Plato fuerte gratis
  *   🖤 BLACK (1000 pts) → Experiencia Chef
+ *
+ * `locationId` es OPCIONAL y su ausencia significa «los de la MARCA» (00058).
+ * Es lo que hace que este cambio sea compatible hacia atrás con sus llamadores:
+ * el que todavía no conoce su sede recibe exactamente lo de antes.
  */
-export async function buildTiersRoadmap(currentPoints: number, tenantId: string): Promise<string> {
-  const tiers = await getAllTiers(tenantId)
+export async function buildTiersRoadmap(
+  currentPoints: number,
+  tenantId: string,
+  locationId?: string | null
+): Promise<string> {
+  const tiers = await getAllTiers(tenantId, locationId)
   if (tiers.length === 0) return '🌟 ¡Seguí sumando puntos para desbloquear premios!'
 
   const lines: string[] = []

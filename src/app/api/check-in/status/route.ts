@@ -6,7 +6,7 @@ import { getPendingReward } from '@/services/redemption.service'
 import { getActiveGrants } from '@/services/reward-grant.service'
 import { rateLimit } from '@/lib/rate-limit'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
-import { getTenantByHost } from '@/lib/tenant'
+import { resolveHostContext } from '@/lib/tenant'
 import { isDbFailure, logDbFailure } from '@/lib/db-failure'
 
 function getServiceClient() {
@@ -37,8 +37,11 @@ export async function GET(request: NextRequest) {
     }
 
     // ─── RESOLVER TENANT POR DOMINIO ───
+    // `resolveHostContext` trae además la SEDE del host. Este endpoint es el
+    // que el celular del cliente consulta mientras elige su premio, así que
+    // tiene que ofrecerle los niveles del local donde está — no los de la marca.
     const host = request.headers.get('host')
-    const tenant = await getTenantByHost(host)
+    const { tenant, locationId } = await resolveHostContext(host)
     if (!tenant) {
       return NextResponse.json(
         { error: 'Restaurante no reconocido' },
@@ -148,10 +151,10 @@ export async function GET(request: NextRequest) {
 
     // Evaluar tier
     const totalPoints = customer.total_points ?? 0
-    const nextTierInfo = await getNextTier(totalPoints, tenant.id)
+    const nextTierInfo = await getNextTier(totalPoints, tenant.id, locationId)
 
     // Obtener todos los tiers (activos, ordenados asc) para el roadmap
-    const allTiers = await getAllTiers(tenant.id)
+    const allTiers = await getAllTiers(tenant.id, locationId)
 
     // ─── Detectar tier desbloqueado NO reclamado ───
     // El cruce de tier ocurre en el request del mesero (POST /api/check-in), pero la

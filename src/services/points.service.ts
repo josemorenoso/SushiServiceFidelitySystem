@@ -181,8 +181,12 @@ export async function awardVisitPoints(
 
   const currentPoints = customer?.total_points ?? 0
 
-  // Encontrar el próximo umbral de tier
-  const tiers = await getAllTiers(tenantId)
+  // Encontrar el próximo umbral de tier — de la SEDE de esta visita (00058).
+  // `locationId` ya era un parámetro de esta función (se usaba solo para
+  // atribuir el movimiento de puntos): acá simplemente deja de ignorarse. Sin
+  // esto, un cliente en Laureles vería cuántos puntos le faltan para el
+  // siguiente nivel DE LA MARCA, no para el de la sede donde está comiendo.
+  const tiers = await getAllTiers(tenantId, locationId)
   const nextTier = tiers.find((t) => t.point_threshold > currentPoints)
   const nextThreshold = nextTier?.point_threshold ?? 150
 

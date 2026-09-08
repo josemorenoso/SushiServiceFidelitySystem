@@ -76,6 +76,13 @@ export async function POST(request: NextRequest) {
       pointsResult = { pointsAwarded: 0, newBalance: previousPoints }
     }
 
+    // ⚠️ SIN SEDE, A PROPÓSITO (00058). Este endpoint es una visita que un admin
+    // concede a mano desde el panel: no hay mesero, no hay QR y no hay host de
+    // sede, así que no existe una «sede del acto» que observar. Inventarla desde
+    // el cliente (`last_visit_location_id`) sería atribuir un hecho a una sede
+    // donde no ocurrió, que es justo lo que el proyecto no hace: `location_id`
+    // NULL significa «sede desconocida» y se muestra. Se queda con los niveles
+    // de la MARCA hasta que el override deje elegir sede (eso es F6).
     try {
       newTier = await evaluateNewTier(previousPoints, pointsResult.newBalance, tenantId)
       if (newTier) {

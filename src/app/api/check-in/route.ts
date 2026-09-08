@@ -504,7 +504,9 @@ export async function POST(request: NextRequest) {
         const welcomeSettings = await getMultipleSettings(['welcome_template_sid'], tenant.id)
         let tiersRoadmap = '🌟 ¡Seguí sumando puntos para desbloquear premios!'
         try {
-          tiersRoadmap = await buildTiersRoadmap(welcomePoints.newBalance, tenant.id)
+          // La sede de ESTA visita, no la de la marca: `resolveVisitLocation()`
+          // ya la decidió arriba con la precedencia mesero → aparato → host.
+          tiersRoadmap = await buildTiersRoadmap(welcomePoints.newBalance, tenant.id, regLocation.locationId)
         } catch (err) {
           console.error('[CheckIn] Error generando tiers roadmap:', err)
         }
@@ -536,7 +538,7 @@ export async function POST(request: NextRequest) {
 
       let allTiers: unknown[] = []
       try {
-        allTiers = await getAllTiers(tenant.id)
+        allTiers = await getAllTiers(tenant.id, regLocation.locationId)
       } catch (err) {
         console.error('[CheckIn] Error obteniendo tiers:', err)
       }
@@ -805,18 +807,18 @@ export async function POST(request: NextRequest) {
       let newTier = null
       let nextTierInfo = null
       try {
-        newTier = await evaluateNewTier(previousPoints, pointsResult.newBalance, tenant.id)
+        newTier = await evaluateNewTier(previousPoints, pointsResult.newBalance, tenant.id, visitLocation.locationId)
         if (newTier) {
           await updateCustomerTier(customer.id, newTier.tier_name)
         }
-        nextTierInfo = await getNextTier(pointsResult.newBalance, tenant.id)
+        nextTierInfo = await getNextTier(pointsResult.newBalance, tenant.id, visitLocation.locationId)
       } catch (err) {
         console.error('[CheckIn] ERROR evaluando tiers (se continúa sin tiers):', err)
       }
 
       let tiersRoadmapText = '🌟 ¡Seguí sumando puntos para desbloquear premios!'
       try {
-        tiersRoadmapText = await buildTiersRoadmap(pointsResult.newBalance, tenant.id)
+        tiersRoadmapText = await buildTiersRoadmap(pointsResult.newBalance, tenant.id, visitLocation.locationId)
       } catch (err) {
         console.error('[CheckIn] Error generando tiers roadmap:', err)
       }
@@ -927,7 +929,7 @@ export async function POST(request: NextRequest) {
         })
       }
 
-      const allTiersForResponse = await getAllTiers(tenant.id)
+      const allTiersForResponse = await getAllTiers(tenant.id, visitLocation.locationId)
       return NextResponse.json({
         message: 'points_earned',
         customer: {

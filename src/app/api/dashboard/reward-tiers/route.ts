@@ -3,6 +3,39 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { requireTenantId } from '@/lib/tenant'
 import { isDbFailure, logDbFailure } from '@/lib/db-failure'
+import { elegirFilasDeSede } from '@/services/reward-tiers.service'
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * La sede que pide esta petición, o `null` = «los de la MARCA».
+ *
+ * ⚠️ Esto NO es control de acceso: solo dice qué conjunto se mira. Quien decide
+ * si el usuario puede tocar esa sede es `requireLocationScope()`. Acá alcanza
+ * con el filtro por `tenant_id` de cada consulta, que es el aislamiento real
+ * (`service_role` se salta el RLS).
+ */
+function sedePedida(raw: string | null | undefined): string | null {
+  if (!raw || raw === 'brand' || raw === 'all') return null
+  return UUID_RE.test(raw) ? raw : null
+}
+
+/**
+ * El CUBO de un alcance: `location_id IS NULL` para la marca, `= <uuid>` para
+ * una sede. Es el espejo del índice `reward_tiers_threshold_tenant_sede_unique`,
+ * que resuelve lo mismo en SQL con `COALESCE(location_id, uuid cero)`.
+ *
+ * ⚠️ **Se escribe con un ternario sobre una VARIABLE, no con una función
+ * ayudante**, y no es estilo: cualquier helper genérico
+ * (`<T extends { eq(...): T }>`, o incluso con tipo `this`) obliga a TypeScript
+ * a unificar el builder de supabase-js —ya profundamente genérico— dentro de
+ * OTRO genérico, y acá revienta con **TS2589** ("Type instantiation is
+ * excessively deep and possibly infinite") en cuanto se encadena `.maybeSingle()`
+ * o `.order()`. Con una variable el tipo se infiere UNA vez y no hay problema.
+ * Es la misma trampa que documenta `LocationFilterable` en
+ * `src/lib/location-scope.ts`, con una salida distinta porque acá la de allá no
+ * alcanza.
+ */
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -11,14 +44,31 @@ function getServiceClient() {
   return createServiceClient(url, key)
 }
 
-/** GET — Lista todos los reward_tiers ordenados por sort_order (incluye inactivos para el dashboard). */
-export async function GET() {
+/**
+ * GET — Los reward_tiers que gobiernan en un alcance, por sort_order (incluye
+ * inactivos, que el dashboard necesita para poder reactivarlos).
+ *
+ * `?location_id=<uuid>` elige la sede; sin él, o con `brand`, son los de la
+ * MARCA. La regla de resolución es `elegirFilasDeSede()` y está escrita una sola
+ * vez: una sede con filas propias usa las suyas, una sin filas hereda las de la
+ * marca (00058 §3).
+ *
+ * ⚠️ **SIGUE DEVOLVIENDO UN ARRAY, y eso no es negociable.** Tiene DOS
+ * consumidores —`dashboard/rewards` y `dashboard/settings:226`, que hace
+ * `r.ok ? r.json() : []` y lo usa como lista— así que envolverlo en un objeto
+ * para poder mandar metadatos dejaría el selector de premios de Ajustes vacío
+ * **en silencio**. Es exactamente la trampa que `/api/dashboard/location` ya
+ * tiene documentada. Si el panel necesita saber si está heredando, lo deduce:
+ * pidió una sede y todo lo que volvió tiene `location_id === null`.
+ */
+export async function GET(request: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   try {
     const tenantId = await requireTenantId()
+    const sede = sedePedida(new URL(request.url).searchParams.get('location_id'))
     const db = getServiceClient()
     const { data, error } = await db
       .from('reward_tiers')
@@ -27,7 +77,7 @@ export async function GET() {
       .order('sort_order', { ascending: true })
 
     if (error) throw error
-    return NextResponse.json(data ?? [])
+    return NextResponse.json(elegirFilasDeSede(data ?? [], sede))
   } catch (error) {
     console.error('[RewardTiers] Error GET:', error)
     return NextResponse.json({ error: 'Error obteniendo tiers' }, { status: 500 })
@@ -65,18 +115,30 @@ export async function POST(request: NextRequest) {
     }
 
     const tenantId = await requireTenantId()
+    // La sede duena del nivel. `null` = de la MARCA, que es lo de siempre.
+    const sede = sedePedida(typeof body.location_id === 'string' ? body.location_id : null)
     const db = getServiceClient()
 
     // Verificar que no exista un tier con el mismo umbral. No hay UNIQUE en `point_threshold`
     // que sostenga esta regla: ante un fallo de base `existingThreshold` llegaba `null`, el
     // código concluía "no hay duplicado" y el INSERT de abajo creaba un tier duplicado real,
     // sin ningún constraint que lo impidiera.
-    const { data: existingThreshold, error: existingThresholdError } = await db
+    // El umbral es único DENTRO de su cubo: la marca tiene el suyo y cada sede
+    // el suyo. Sin acotar, Laureles no podría tener su propio «Oro a los 100»
+    // porque chocaría con el de la marca — que es justo lo que la 00058 vino a
+    // permitir.
+    let consultaUmbral = db
       .from('reward_tiers')
       .select('id')
       .eq('point_threshold', threshold)
       .eq('tenant_id', tenantId)
-      .maybeSingle()
+    consultaUmbral =
+      sede === null
+        ? consultaUmbral.is('location_id', null)
+        : consultaUmbral.eq('location_id', sede)
+
+    const { data: existingThreshold, error: existingThresholdError } =
+      await consultaUmbral.maybeSingle()
 
     if (isDbFailure(existingThresholdError)) {
       logDbFailure({
@@ -121,12 +183,20 @@ export async function POST(request: NextRequest) {
     // Calcular sort_order: siguiente disponible. Ante un fallo de base esto no debe
     // fundirse con "no hay tiers todavía" (que da nextOrder=1 legítimamente): un fallo
     // aquí puede colisionar el sort_order del tier nuevo con uno existente.
-    const { data: allTiers, error: allTiersError } = await db
+    // El sort_order también se cuenta POR CUBO: si no, una sede que estrena sus
+    // premios arrancaría numerando desde donde quedó la marca.
+    let consultaOrden = db
       .from('reward_tiers')
       .select('sort_order')
       .eq('tenant_id', tenantId)
       .order('sort_order', { ascending: false })
       .limit(1)
+    consultaOrden =
+      sede === null
+        ? consultaOrden.is('location_id', null)
+        : consultaOrden.eq('location_id', sede)
+
+    const { data: allTiers, error: allTiersError } = await consultaOrden
 
     if (isDbFailure(allTiersError)) {
       logDbFailure({
@@ -148,13 +218,20 @@ export async function POST(request: NextRequest) {
     // Si es BLACK, verificar que no exista ya uno activo. Sin backing UNIQUE: un fallo de
     // base en esta lectura dejaría crear un segundo tier BLACK activo en silencio.
     if (blackFlag) {
-      const { data: existingBlack, error: existingBlackError } = await db
+      // Por cubo, igual que el umbral: cada sede puede tener SU nivel Black, y
+      // dos Black activos dentro del MISMO cubo siguen prohibidos.
+      let consultaBlack = db
         .from('reward_tiers')
         .select('id')
         .eq('is_black', true)
         .eq('is_active', true)
         .eq('tenant_id', tenantId)
-        .maybeSingle()
+      consultaBlack =
+        sede === null
+          ? consultaBlack.is('location_id', null)
+          : consultaBlack.eq('location_id', sede)
+
+      const { data: existingBlack, error: existingBlackError } = await consultaBlack.maybeSingle()
 
       if (isDbFailure(existingBlackError)) {
         logDbFailure({
@@ -189,6 +266,10 @@ export async function POST(request: NextRequest) {
         sort_order: nextOrder,
         is_active: true,
         tenant_id: tenantId,
+        // `null` = de la MARCA. La FK compuesta (location_id, tenant_id) impide
+        // que esto apunte a una sede de otra marca aunque el uuid llegue del
+        // navegador: el motor lo rechaza, no este archivo.
+        location_id: sede,
       })
       .select()
       .single()

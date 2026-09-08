@@ -6,7 +6,7 @@ import { rateLimit } from '@/lib/rate-limit'
 import { WalletCard } from '@/components/features/wallet'
 import type { Branding } from '@/lib/branding'
 import { getBrandingForHost } from '@/lib/branding-server'
-import { getTenantByHost } from '@/lib/tenant'
+import { resolveHostContext } from '@/lib/tenant'
 
 export default async function TarjetaPage({
   searchParams,
@@ -34,7 +34,11 @@ export default async function TarjetaPage({
     return <TarjetaInput branding={branding} error="Número de celular inválido" />
   }
 
-  const tenant = await getTenantByHost(headersList.get('host'))
+  // `resolveHostContext` y no `getTenantByHost`: la tarjeta necesita la SEDE
+  // para saber de qué local son los premios (00058). Con el dominio raíz de una
+  // marca de varias sedes devuelve `locationId: null` y manda la marca, que es
+  // lo correcto: ahí no se sabe en cuál está parado el cliente.
+  const { tenant, locationId } = await resolveHostContext(headersList.get('host'))
   if (!tenant) {
     return <TarjetaInput branding={branding} error="Restaurante no reconocido" />
   }
@@ -45,7 +49,7 @@ export default async function TarjetaPage({
   try {
     ;[customer, tiers] = await Promise.all([
       findCustomerByPhone(cleaned, tenant.id),
-      getAllTiers(tenant.id),
+      getAllTiers(tenant.id, locationId),
     ])
   } catch {
     return <TarjetaInput branding={branding} error="Error cargando tu tarjeta. Intenta de nuevo." />

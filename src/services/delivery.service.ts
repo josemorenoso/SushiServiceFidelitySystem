@@ -396,18 +396,18 @@ export async function registerDeliveryOrder({
     }
 
     try {
-      newTier = await evaluateNewTier(previousPoints, pointsResult.newBalance, tenant.id)
+      newTier = await evaluateNewTier(previousPoints, pointsResult.newBalance, tenant.id, deliveryLocation.locationId)
       if (newTier) {
         await updateCustomerTier(customer.id, newTier.tier_name)
       }
-      nextTierInfo = await getNextTier(pointsResult.newBalance, tenant.id)
+      nextTierInfo = await getNextTier(pointsResult.newBalance, tenant.id, deliveryLocation.locationId)
     } catch (err) {
       console.error('[Delivery] ERROR evaluando tiers (se continúa sin tiers):', err)
     }
   }
 
   try {
-    tiersRoadmapText = await buildTiersRoadmap(pointsResult.newBalance, tenant.id)
+    tiersRoadmapText = await buildTiersRoadmap(pointsResult.newBalance, tenant.id, deliveryLocation.locationId)
   } catch (err) {
     console.error('[Delivery] Error generando tiers roadmap:', err)
   }

@@ -81,11 +81,21 @@ export default function RewardsPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
 
+  // ── Alcance: los premios de la MARCA, o los de UNA sede (00058) ──
+  //
+  // `'brand'` = los de la marca, y es el default. Una marca de un solo local
+  // nunca ve este selector: con una sede, «la marca» y «el local» son el mismo
+  // conjunto de filas y elegir no cambiaría nada.
+  const [alcance, setAlcance] = useState<string>('brand')
+  const [sedes, setSedes] = useState<{ id: string; name: string; is_active: boolean }[]>([])
+  const [multiSede, setMultiSede] = useState(false)
+  const [copiando, setCopiando] = useState(false)
+
   // ── Fetch ──
   const fetchTiers = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch('/api/dashboard/reward-tiers')
+      const res = await fetch(`/api/dashboard/reward-tiers?location_id=${encodeURIComponent(alcance)}`)
       const data = await res.json()
       setTiers(Array.isArray(data) ? data : [])
     } catch {
@@ -93,11 +103,53 @@ export default function RewardsPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [alcance])
 
   useEffect(() => {
     fetchTiers()
   }, [fetchTiers])
+
+  useEffect(() => {
+    // Las sedes se piden una sola vez: no dependen del alcance elegido.
+    fetch('/api/dashboard/locations')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!j) return
+        setSedes(j.locations ?? [])
+        setMultiSede(j.multiSede === true)
+      })
+      .catch(() => { /* sin sedes el panel se comporta como siempre */ })
+  }, [])
+
+  /**
+   * ¿Esta sede está HEREDANDO los premios de la marca?
+   *
+   * Se deduce en vez de pedirlo: el GET devuelve un array (su contrato tiene dos
+   * consumidores y envolverlo rompería Ajustes en silencio), así que la señal es
+   * que se pidió una sede y todo lo que volvió es de la marca.
+   */
+  const heredando = alcance !== 'brand' && tiers.length > 0 && tiers.every((t) => !t.location_id)
+
+  const darlePropios = async () => {
+    setCopiando(true)
+    try {
+      const res = await fetch('/api/dashboard/reward-tiers/copiar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ location_id: alcance }),
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        alert(err.error ?? 'No se pudieron copiar los premios')
+        return
+      }
+      fetchTiers()
+    } catch {
+      alert('No se pudieron copiar los premios')
+    } finally {
+      setCopiando(false)
+    }
+  }
 
   // ── Open dialog (create or edit) ──
   const openCreate = () => {
@@ -186,6 +238,8 @@ export default function RewardsPage() {
       mystery_box_enabled: formIsBlack ? false : formMysteryEnabled,
       mystery_prizes: prizes,
       is_black: formIsBlack,
+      // Solo en el POST importa: un PATCH edita una fila que ya sabe de quién es.
+      location_id: alcance === 'brand' ? null : alcance,
     }
 
     try {
@@ -243,11 +297,58 @@ export default function RewardsPage() {
           <Gift className="h-6 w-6" />
           Tiers de Recompensas
         </h1>
-        <Button onClick={openCreate} className="gap-2">
+        <Button onClick={openCreate} className="gap-2" disabled={heredando}>
           <Plus className="h-4 w-4" />
           Nuevo Tier
         </Button>
       </div>
+
+      {/*
+        El selector de alcance. Solo con dos o más sedes: con una sola, «la
+        marca» y «el local» son el mismo conjunto de filas y elegir no cambiaría
+        nada — es el mismo interruptor del §8.3 que apaga el selector del
+        encabezado.
+      */}
+      {multiSede && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm text-muted-foreground">Premios de:</span>
+          <select
+            value={alcance}
+            onChange={(e) => setAlcance(e.target.value)}
+            aria-label="Alcance de los premios"
+            className="h-9 rounded-md border border-input bg-transparent px-3 text-sm shadow-sm"
+          >
+            <option value="brand">La marca (todas las sedes)</option>
+            {sedes.filter((x) => x.is_active).map((x) => (
+              <option key={x.id} value={x.id}>{x.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {/*
+        La sede está heredando. Es el estado NORMAL de una sede recién abierta, no
+        un error, así que se explica en vez de avisar — y el botón evita el modo
+        de fallo caro: crear un premio suelto haría que la sede dejara de heredar
+        y se quedara con ESE SOLO, viendo desaparecer los otros tres sin haber
+        borrado nada. Por eso «Nuevo Tier» está apagado mientras hereda.
+      */}
+      {heredando && (
+        <Card className="border-dashed">
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+            <div>
+              <p className="text-sm font-medium">Esta sede usa los premios de la marca</p>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                Es lo normal. Si querés que este local tenga premios distintos, le hacemos una copia
+                de los de la marca y desde ahí los cambiás — así no arranca sin nada.
+              </p>
+            </div>
+            <Button variant="outline" onClick={darlePropios} disabled={copiando}>
+              {copiando ? 'Copiando…' : 'Darle premios propios'}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Tiers table */}
       <Card>

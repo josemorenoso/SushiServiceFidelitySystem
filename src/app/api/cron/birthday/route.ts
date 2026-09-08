@@ -56,6 +56,12 @@ async function processTenant(tenant: Tenant): Promise<TenantCronResult> {
     if (alreadySent) continue
 
     try {
+      // ⚠️ SIN SEDE, A PROPÓSITO (00058). Un cron de cumpleaños es un envío
+      // programado: no hay visita, ni QR, ni operador, ni host — no existe una
+      // «sede del acto». La única sede posible sería INFERIDA del cliente
+      // (`last_visit_location_id`), y esa cascada está diseñada y explícitamente
+      // aplazada a F6 (`whatsapp.service.ts` §6.1). Los niveles son los de la
+      // MARCA, que es el default de `buildTiersRoadmap` sin sede.
       const tiersRoadmap = await buildTiersRoadmap(customer.total_points ?? 0, tenant.id)
       const result = await sendTemplateMessage(customer.phone, templateSid, { '1': customer.name, '2': tiersRoadmap }, tenant, { customerId: customer.id, messageType: 'birthday' })
 

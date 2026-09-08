@@ -3,7 +3,7 @@ import { validatePhone } from '@/lib/validators/phone'
 import { findCustomerByPhone } from '@/services/customer.service'
 import { getNextTier, getAllTiers } from '@/services/reward-tiers.service'
 import { rateLimit, getClientIp } from '@/lib/rate-limit'
-import { getTenantByHost } from '@/lib/tenant'
+import { resolveHostContext } from '@/lib/tenant'
 
 export async function GET(request: NextRequest) {
   const ip = getClientIp(request)
@@ -27,7 +27,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Teléfono inválido' }, { status: 400 })
   }
 
-  const tenant = await getTenantByHost(request.headers.get('host'))
+    // `resolveHostContext` y no `getTenantByHost`: además de la marca devuelve la
+    // SEDE del host, que es lo que decide de qué local son los premios (00058).
+    // Cuesta una consulta más (las sedes activas de la marca) y con el dominio
+    // raíz de una marca de varias sedes devuelve `locationId: null` — o sea, los
+    // premios de la marca, que es lo correcto: ahí no se sabe en cuál está.
+  const { tenant, locationId } = await resolveHostContext(request.headers.get('host'))
   if (!tenant) {
     return NextResponse.json({ error: 'Restaurante no reconocido' }, { status: 404 })
   }
@@ -40,8 +45,11 @@ export async function GET(request: NextRequest) {
 
     const totalPoints = customer.total_points ?? 0
     const [tiers, nextTierInfo] = await Promise.all([
-      getAllTiers(tenant.id),
-      getNextTier(totalPoints, tenant.id),
+      getAllTiers(tenant.id, locationId),
+      // Las DOS con la misma sede: si `tiers` fuera de la sede y `next_tier` de
+      // la marca, la respuesta se contradiría a sí misma y la tarjeta mostraría
+      // un próximo nivel que no está en su propia lista.
+      getNextTier(totalPoints, tenant.id, locationId),
     ])
 
     const publicTiers = tiers.map(({ tier_name, point_threshold, safe_reward_title, mystery_box_enabled, is_black }) => ({

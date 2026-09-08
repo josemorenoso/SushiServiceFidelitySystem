@@ -117,7 +117,12 @@ export async function POST(request: NextRequest) {
       : null
 
     // Enviar WhatsApp con resultado
-    const roadmap = await buildTiersRoadmap(customer.total_points, tenant.id)
+    // La sede sale del NIVEL que se está canjeando, que es la señal más fuerte
+    // que hay acá: `tier.location_id` dice de qué local es ese premio (`null` =
+    // de la marca). No hace falta ninguna consulta extra — `getTierById()` ya
+    // trae la fila entera— y no depende del host, que en este endpoint es el del
+    // celular del cliente y puede no ser el de la sede.
+    const roadmap = await buildTiersRoadmap(customer.total_points, tenant.id, tier.location_id ?? null)
 
     const settings = await getMultipleSettings([
       'reward_safe_template_sid',

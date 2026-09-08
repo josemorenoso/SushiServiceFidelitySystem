@@ -1,6 +1,6 @@
 # ESTADO — RestaurantQR / Cada1
 
-> **Última actualización:** 2026-09-07, tarde (sesión "modo simple: misma carpeta, misma rama", Fable 5.1)
+> **Última actualización:** 2026-09-08 (apertura de la sesión de cambios pre-reunión, Fable 5.1)
 > Toda sesión lo lee PRIMERO. Toda sesión que cierra un bloque lo ACTUALIZA al final. Límite: 150 líneas.
 > Lo obsoleto se **saca**, no se tacha: un ítem tachado sigue costando tokens cada vez que alguien lee esto.
 >
@@ -17,7 +17,7 @@
 | Código | **`main` = `origin/main` = `c7d074e`, pusheado el 2026-09-07 (tarde) por orden del dueño.** Lleva F8 (00056 + test) y el método v3.1 por fast-forward desde `feat/multisede-aios` (también en `origin`); **nada de `src/` cambió** respecto al push anterior, así que ese push no desplegó código nuevo. ⚠️ **La carpeta sigue puesta en `feat/multisede-aios`** (= `main`): la próxima sesión trabaja ahí o el dueño la vuelve a `main`; nadie cambia de rama con otra sesión viva. Sin mergear a propósito: `master`, `port/sushi-fun-2.8`, `sushi-sync` |
 | Verificación | ✅ Sobre `main` `f003050`: `tsc` limpio · **vitest 31 archivos / 502 tests** · `build` OK (79 páginas, 121 rutas) · eslint **7 errores preexistentes** (hooks y gráficas del panel). Lo de F8 lo verifica F8 al cerrar |
 | Marcas vivas | **5**: sushi-service (542 clientes), demo-ventas (412), sushi-fun (251), don-alirio (244), cafe-frangal (8) |
-| Base de datos de producción | Aplicadas hasta la **00046**. 🔴🔴 **CINCO sin aplicar y su código YA ESTÁ EN `origin/main`**: `00047`, `00050`, `00051`, `00053`, `00054` → §3.1. **Cada minuto sin correrlas es una función rota en producción.** La 00030 NUNCA aplicada (a propósito). La 00015 NO se aplica (reabre fuga) |
+| Base de datos de producción | ✅ **Aplicadas hasta la `00056`** (dueño, 2026-09-08: `00047`, `00050`, `00051`, `00053`, `00054` y `00056`, todas). El esquema ya alcanza al código de `main`. La 00030 NUNCA aplicada (a propósito). La 00015 NO se aplica (reabre fuga). Huecos: `00048`, `00049`, `00052`, `00055` |
 | Migraciones: dónde están | El directorio muestra **solo la rama puesta**; el inventario real y el número de la próxima los da `node scripts/proxima-migracion.mjs`. **Desde el 07 la única reserva es la fila del tablero (§2)**: un número citado en cualquier otro doc no reserva nada. `00048`, `00049`, `00052` y `00055` son huecos: no se rellenan |
 | Crons | Los 5 en `vercel.json`, corriendo. `birthday` 18:00 y `reactivation` 20:00 UTC (= 13:00/15:00 Bogotá), verificado. ⚠️ **`reward-reminder` sigue en 16:00 UTC (11:00 Bogotá)**; la auditoría estimó ≈21:00 UTC. **Decisión del dueño** |
 | n8n | Apagado. `domicilios_whatsapp_v4.json` sigue en el VPS pero ya no dispara |
@@ -32,7 +32,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
-| _(vacío)_ | | | | |
+| Cambios pre-reunión (dueño, 2026-09-08): renombrar Identidad visual → Tarjeta principal · Premios de campaña dentro de Campañas · Domicilios con mensaje modelo copiable e instrucciones plegables · tarjeta enriquecida (sellos, redes, contacto, políticas) · prueba Zernio. Fable 5.1 | Fable 5.1 (Sonnet en subagentes) | `src/components/layout/DashboardSidebar.tsx` · `src/app/(dashboard)/dashboard/campaigns/**` · `src/app/(dashboard)/dashboard/campaign-rewards/**` · `src/components/dashboard/domicilios/**` · `src/app/(dashboard)/dashboard/marca/**` · `src/lib/tenant-config-paths.ts` · `src/lib/branding.ts` · `src/types/tenant.types.ts` · `src/components/features/wallet/**` · `src/components/features/check-in/CustomerCard.tsx` · `src/components/dashboard/BrandPreview.tsx` · `tests/unit/tenant-config-paths.test.ts` · `docs/features/identidad-visual.md` · `docs/features/delivery-dashboard.md` · `docs/features/campaigns.md` · `CHANGELOG.md` · `ESTADO.md`. **NO toca `Level 2.0/`** (otra sesión pule el AIOS) | ninguna | abierta |
 
 ## 3. Siguiente, en orden
 

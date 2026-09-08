@@ -26,8 +26,16 @@
 
 ## 2. En vuelo ahora mismo
 
-**NADA en vuelo. El tablero está vacío y el árbol limpio.** Las cuatro ramas del 07 cerraron y
-están dentro de `main` (§1). Las ramas siguen existiendo por si hace falta mirarlas; borrarlas es
+🔵 **EN VUELO — `feat/multisede-aios` (sesión "el AIOS entiende sedes", Opus 5, 2026-09-07).**
+Territorio, en los DOS repos:
+- **Producto**: migración **00055** (`aios_add_location` / `aios_set_location` + SELECT por columnas
+  sobre `restaurant_locations` al rol `aios_constelarys`) · `docs/features/multi-sede.md` (§2, F8,
+  deuda D17) · `ESTADO.md` · `CHANGELOG.md`. **No toco** `src/` del producto.
+- **AIOS** (`Level 2.0/aios-constelarys`, rama `feat/multisede-aios`): migración **00007**
+  (`clients.site_model`, `client_locations.product_location_id`) · `src/lib/actions/provisioning.ts`
+  · `src/lib/product-db.ts` · `src/lib/data/sites.ts` · `src/components/sites/*` · sus docs.
+
+Las cuatro ramas del 07 cerraron y están dentro de `main` (§1). Las ramas siguen existiendo por si hace falta mirarlas; borrarlas es
 decisión del dueño. **`.worktrees/` quedó vacío**: el de `feat/visual` se quitó al mergear.
 
 ⚠️ **Al quitar ese worktree se vació `node_modules` de la raíz** — el del worktree estaba enlazado
@@ -40,9 +48,10 @@ a usar worktrees: `npm ci` en la raíz apenas quites uno, antes de creer en un `
 Al cerrar, borra su línea. `stash` y `reset --hard` con otra sesión viva están **prohibidos**.
 Regla completa en `CLAUDE.md` § "Trabajar en paralelo".
 
-**Repo del AIOS**: ✅ **`main` PUSHEADO el 2026-09-07 en `80c820f` (v1.5.1), por orden del dueño** —
-lleva el arreglo del alta y, detrás, el tablero de salud (v1.5.0), la coexistencia (v1.4.0) y el
-arreglo de la sede sin coordenadas. **El AIOS está desplegado.** ⚠️ **`/salud` sale ENTERO EN GRIS
+**Repo del AIOS**: ✅ **`main` PUSHEADO el 2026-09-07 en `c962f27` (código en v1.5.2), por orden
+del dueño** — lleva los dos arreglos del alta (v1.5.1 y v1.5.2), el prompt de multi-sede y,
+detrás, el tablero de salud (v1.5.0), la coexistencia (v1.4.0) y el arreglo de la sede sin
+coordenadas. **El AIOS está desplegado.** ⚠️ **`/salud` sale ENTERO EN GRIS
 hasta que se corra la `00053`** — no rompe nada del resto del panel, pero no sirve.
 
 ⚠️ **Lo que destapó la v1.5.1 y es del PRODUCTO, no del AIOS**: un subdominio de
@@ -52,6 +61,24 @@ hasta que se corra la `00053`** — no rompe nada del resto del panel, pero no s
 ni visitas— pero un cliente que abre su enlace antes de que le creen el tenant ve el nombre de
 otra marca. Comprobado en vivo el 2026-09-07 con `pedacitodeamorclub.constelarys.com`.
 **Qué mostrar ahí (404, página neutra de Constelarys) es decisión del dueño: sin decidir.**
+
+🚧 **EL AIOS NO SABE LO QUE ES UNA SEDE — destapado el 2026-09-07 por Tepuy (dos locales).**
+El AIOS crea **un tenant por cada `client_locations`**, y eso choca de frente con el invariante:
+`tenants` es LA MARCA y `restaurant_locations` es LA SEDE. Un negocio con dos locales dado de alta
+así pierde las dos cosas que el dueño pidió: el **número compartido** (un tenant = un
+`zernio_account_id`, y `idx_tenants_zernio_account_id` rechaza el segundo — hace bien, el problema
+no es el índice) y **el recorrido del cliente entre sedes** (`customers_phone_tenant_key` lo
+garantiza gratis, pero **por marca**: con dos tenants la misma persona son dos clientes con puntos
+y tier separados).
+
+**Nada roto en producción**: las 5 marcas vivas son de una sola sede y para ese caso el AIOS hace
+lo correcto. Es la **F8** de `docs/features/multi-sede.md` (deuda #17), sin empezar. Tepuy llega
+**antes** de que haya datos que migrar, que es la única ventana barata: unir dos tenants después
+significa fusionar clientes, puntos y tiers a mano.
+
+El brief completo quedó escrito en el repo del AIOS:
+`docs/PROMPT-2026-09-07-multisede-aios.md`. ⚠️ **Tepuy no se da de alta hasta que esto esté**
+— decisión del dueño, 2026-09-07.
 
 ## 3. Siguiente, en orden
 
@@ -69,6 +96,15 @@ otra marca. Comprobado en vivo el 2026-09-07 con `pedacitodeamorclub.constelarys
    **`00054`** (sin ella Conexiones responde **403**, que parece permisos y no lo es).
    La `00051` y la `00054` traen autoverificación al final: si algo queda a medias abortan con
    `FALTA: …`. **Lo visual (tarjeta, check-in, panel) no depende de ninguna: eso salió sano.**
+1.bis 🔴 **Multi-sede en el AIOS (F8) — bloquea a Tepuy, que el dueño quiere vivo YA.** Un
+   negocio con varios locales tiene que quedar como **UN tenant con N `restaurant_locations`**, no
+   como N tenants. Falta de los dos lados: en el PRODUCTO una función `aios_add_location()`
+   `SECURITY DEFINER` (el rol `aios_constelarys` no puede escribir en `restaurant_locations` desde
+   la 00035 v2) — **su número sale de `node scripts/proxima-migracion.mjs`, hoy diría `00055`, y
+   NO es la `00047` que reserva el doc de multi-sede: ese número ya lo tomó `identidad_visual`**;
+   en el AIOS, `clients.site_model` (`single`/`multi`), `client_locations.product_location_id` y el
+   selector «una sede / varias» en el alta. Brief entero:
+   `Level 2.0/aios-constelarys/docs/PROMPT-2026-09-07-multisede-aios.md`.
 2. **Smoke test** del `docs/RUNBOOK-DEPLOY.md` §5 con Sushi Service real, apenas terminen las
    cinco: crear un evento con enlace, abrir Conexiones, y mirar la tarjeta en un celular.
 3. **Asignarle sede a los meseros que ya existen.** Todos tienen `location_id` NULL, así que **no

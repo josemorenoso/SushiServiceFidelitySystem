@@ -26,6 +26,11 @@
 
 ## 2. En vuelo ahora mismo
 
+🔵 **EN VUELO — método v3.1 (sesión "modo simple: misma carpeta, misma rama", Fable 5.1, 2026-09-07).**
+Territorio: `METODO_MAESTRO_LUISRAI.md` · `CLAUDE.md` (§ paralelo y ritual) · `AGENTS.md` ·
+`ESTADO.md` (estructura del §2 y recorte a 150 líneas; conservo la fila de F8) · `CHANGELOG.md` ·
+`scripts/proxima-migracion.mjs` · `.worktrees/`. **No toco** `src/`, `tests/` ni `supabase/`.
+
 🔵 **EN VUELO — `feat/multisede-aios` (sesión "el AIOS entiende sedes", Opus 5, 2026-09-07).**
 Territorio, en los DOS repos:
 - **Producto**: migración **00056** (`aios_add_location` / `aios_set_location` + SELECT por columnas

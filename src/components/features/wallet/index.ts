@@ -1,3 +1,6 @@
 export { StampsGrid } from './StampsGrid'
+export { StampIcon } from './StampIcon'
+export { CardMotif } from './CardMotif'
+export { CardExtras } from './CardExtras'
 export { TierMedal } from './TierMedal'
 export { WalletCard } from './WalletCard'

@@ -8,6 +8,23 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [2026-09-08] - Cambios pre-reunion: Tarjeta principal, Premios dentro de Campanas, Domicilios
+
+**Tipo:** feat · **Origen:** el dueno, la noche antes de la reunion con el dueno de 12 restaurantes · **Sin migracion**
+
+- **"Identidad visual" pasa a llamarse "Tarjeta principal"** (menu, encabezado, titulo) y la tarjeta muestra
+  lo que el dueno pidio: simbolo del sello (20 ids), decoracion de contorno (6), redes (Instagram, Facebook,
+  TikTok, WhatsApp, perfil de Google, web), descripcion, contacto y horario, y politicas, todo plegado dentro
+  de la tarjeta (`CardExtras`, `CardMotif`, `StampIcon`). Se guarda en `tenants.config.card.*` mas las
+  claves planas `instagram_url`/`whatsapp_link`, por la whitelist (listas cerradas para los dibujos: la
+  config es publica). Sin config no cambia nada. → `docs/features/identidad-visual.md`.
+- **Premios de campana vive dentro de Campanas** como pestana "Premios"; `/dashboard/campaign-rewards`
+  redirige. Sale del menu. → `docs/features/campaigns.md`.
+- **Domicilios**: cuadro de pedido MODELO con boton "Copiar modelo" (para guardarlo como respuesta rapida de
+  WhatsApp Business) siempre a la vista; los pasos de "como funciona" quedan plegados.
+  → `docs/features/delivery-dashboard.md`.
+- Migraciones 00047-00056 **aplicadas** por el dueno el 2026-09-08 (`ESTADO.md` §1).
+
 ## [2026-09-07] - F8: el AIOS entiende lo que es una sede (migracion 00056)
 
 **Tipo:** feat · **Origen:** el dueno (Tepuy, dos locales) + `Level 2.0/aios-constelarys/docs/PROMPT-2026-09-07-multisede-aios.md`

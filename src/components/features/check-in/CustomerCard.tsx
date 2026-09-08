@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { ArrowLeft, ScanLine, Loader2, PartyPopper } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { useBranding } from '@/lib/branding-context'
-import { StampsGrid } from '@/components/features/wallet'
+import { StampsGrid, CardMotif, CardExtras } from '@/components/features/wallet'
 import { BrandMark } from '@/components/features/branding'
 import { Odometer } from '@/components/ui/odometer'
 import { ShineBorder } from '@/components/ui/shine-border'
@@ -93,7 +93,7 @@ export function CustomerCard({
         style={{ boxShadow: theme.cardShadow }}
       >
         <div
-          className="px-5 pt-7 pb-8 flex flex-col items-center"
+          className="relative isolate px-5 pt-7 pb-8 flex flex-col items-center"
           style={{
             background: theme.cardBg,
             borderRadius: 'inherit',
@@ -101,6 +101,9 @@ export function CustomerCard({
             overflow: 'hidden',
           }}
         >
+          {/* Decoración de contorno (Tarjeta principal), debajo de todo. */}
+          <CardMotif id={branding.card.motif} />
+
           {/* Brand */}
           <BrandMark variant="onColor" size={52} className="mb-3" />
           <p className="text-xs font-bold tracking-[0.2em] uppercase text-white/50">
@@ -125,7 +128,7 @@ export function CustomerCard({
 
           {/* Stamps */}
           <div className="mt-5 w-full">
-            <StampsGrid totalVisits={totalVisits} theme={theme.stamps} />
+            <StampsGrid totalVisits={totalVisits} theme={theme.stamps} icon={branding.card.stampIcon} />
           </div>
 
           {/* Points progress bar */}
@@ -236,6 +239,17 @@ export function CustomerCard({
           )}
 
           <QrCountdown qrUrl={qrUrl} className="mt-3" />
+
+          {/* Redes, contacto y políticas — mismo bloque que la tarjeta de /tarjeta. */}
+          <div className="mt-5 w-full">
+            <CardExtras
+              extras={branding.card}
+              instagramUrl={branding.instagramUrl}
+              whatsappLink={branding.whatsappLink}
+              googleReviewUrl={branding.googleReviewUrl}
+              theme={theme}
+            />
+          </div>
 
           <button
             type="button"

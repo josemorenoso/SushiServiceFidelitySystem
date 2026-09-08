@@ -35,6 +35,14 @@
 
 import type { TenantConfig } from '@/types/tenant.types'
 import {
+  DEFAULT_CARD_MOTIF,
+  DEFAULT_STAMP_ICON,
+  isCardMotifId,
+  isStampIconId,
+  type CardMotifId,
+  type StampIconId,
+} from '@/constants/card-extras'
+import {
   INK,
   deriveCardGradient,
   deriveGradientEnd,
@@ -84,6 +92,45 @@ export interface Branding {
   stampCheck: string
   /** Versión del principal con contraste suficiente para dibujar un QR. */
   qrForeground: string
+
+  // ─── Tarjeta principal (dueño, 2026-09-08) ──────────────────────────────────
+  /** Lo que la tarjeta muestra además de puntos y sellos. Siempre presente; vacío = la tarjeta de siempre. */
+  card: CardExtras
+}
+
+/**
+ * Proyección pública de `tenants.config.card`. Todo es `null` cuando no está
+ * configurado, y la tarjeta no dibuja la sección. Instagram y WhatsApp siguen
+ * en `Branding.instagramUrl` / `Branding.whatsappLink` (claves planas).
+ */
+export interface CardExtras {
+  stampIcon: StampIconId
+  motif: CardMotifId
+  description: string | null
+  facebookUrl: string | null
+  tiktokUrl: string | null
+  websiteUrl: string | null
+  googleProfileUrl: string | null
+  contactPhone: string | null
+  contactEmail: string | null
+  address: string | null
+  hours: string | null
+  policies: string | null
+}
+
+export const EMPTY_CARD_EXTRAS: CardExtras = {
+  stampIcon: DEFAULT_STAMP_ICON,
+  motif: DEFAULT_CARD_MOTIF,
+  description: null,
+  facebookUrl: null,
+  tiktokUrl: null,
+  websiteUrl: null,
+  googleProfileUrl: null,
+  contactPhone: null,
+  contactEmail: null,
+  address: null,
+  hours: null,
+  policies: null,
 }
 
 // ─── Literales del sistema de diseño (docs/features/design-system.md) ────────
@@ -123,6 +170,7 @@ export const DEFAULT_BRANDING: Branding = {
   ink: INK,
   stampCheck: DESIGN_STAMP_CHECK,
   qrForeground: qrSafe(DESIGN_PRIMARY_END),
+  card: EMPTY_CARD_EXTRAS,
 }
 
 /** Trata la cadena vacía, `null` y `undefined` como "no configurado". */
@@ -182,5 +230,30 @@ export function resolveBranding(config?: TenantConfig | null): Branding {
     ink: normalizeHex(b?.ink) ?? DEFAULT_BRANDING.ink,
     stampCheck: primary ? deriveStampCheck(effPrimaryEnd) : DEFAULT_BRANDING.stampCheck,
     qrForeground: primary ? qrSafe(effPrimaryEnd) : DEFAULT_BRANDING.qrForeground,
+    card: resolveCardExtras(c),
+  }
+}
+
+/**
+ * Proyecta `config.card`. Un id de sello o de decoración que no esté en el
+ * catálogo cae al default en vez de romper la tarjeta: el catálogo puede
+ * encoger y la config guardada, no.
+ */
+function resolveCardExtras(c?: TenantConfig): CardExtras {
+  const k = c?.card
+  if (!k) return EMPTY_CARD_EXTRAS
+  return {
+    stampIcon: isStampIconId(k.stamp_icon) ? k.stamp_icon : DEFAULT_STAMP_ICON,
+    motif: isCardMotifId(k.motif) ? k.motif : DEFAULT_CARD_MOTIF,
+    description: text(k.description),
+    facebookUrl: text(k.facebook_url),
+    tiktokUrl: text(k.tiktok_url),
+    websiteUrl: text(k.website_url),
+    googleProfileUrl: text(k.google_profile_url),
+    contactPhone: text(k.contact_phone),
+    contactEmail: text(k.contact_email),
+    address: text(k.address),
+    hours: text(k.hours),
+    policies: text(k.policies),
   }
 }

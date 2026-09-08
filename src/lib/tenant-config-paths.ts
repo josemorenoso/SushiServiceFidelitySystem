@@ -21,6 +21,7 @@
  */
 
 import { isHexColor } from './brand-palette'
+import { CARD_MOTIF_IDS, STAMP_ICON_IDS } from '@/constants/card-extras'
 
 /** Resultado de validar un valor: o el texto ya normalizado, o el error a devolver. */
 export type PathValidation = { ok: true; value: string | number } | { ok: false; error: string }
@@ -90,6 +91,37 @@ function oneOf(allowed: readonly string[]) {
   }
 }
 
+/** Texto libre en varias líneas (horario, políticas). Conserva los saltos de línea. */
+function multilineText(maxLength: number) {
+  return (raw: unknown): PathValidation => {
+    if (typeof raw !== 'string') return { ok: false, error: 'debe ser texto' }
+    const v = raw.replace(/\r\n?/g, '\n').trim()
+    if (v.length > maxLength) return { ok: false, error: `no puede pasar de ${maxLength} caracteres` }
+    return { ok: true, value: v }
+  }
+}
+
+/** Un teléfono tal como se muestra en la tarjeta: dígitos, espacios, + y guiones. */
+function phoneText(raw: unknown): PathValidation {
+  if (typeof raw !== 'string') return { ok: false, error: 'debe ser texto' }
+  const v = raw.trim()
+  if (v === '') return { ok: true, value: '' }
+  if (!/^\+?[0-9][0-9 ()-]{5,24}$/.test(v)) {
+    return { ok: false, error: 'debe ser un teléfono (solo dígitos, espacios, + y guiones)' }
+  }
+  return { ok: true, value: v }
+}
+
+function emailText(raw: unknown): PathValidation {
+  if (typeof raw !== 'string') return { ok: false, error: 'debe ser texto' }
+  const v = raw.trim()
+  if (v === '') return { ok: true, value: '' }
+  if (v.length > 120 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) {
+    return { ok: false, error: 'debe ser un correo válido' }
+  }
+  return { ok: true, value: v.toLowerCase() }
+}
+
 function integerBetween(min: number, max: number) {
   return (raw: unknown): PathValidation => {
     const n = typeof raw === 'number' ? raw : Number(raw)
@@ -126,6 +158,24 @@ const EDITABLE_PATHS: readonly EditablePath[] = [
   { path: 'branding.ink', validate: hexColor },
   { path: 'branding.card_bg', validate: cssGradient },
   { path: 'branding.page_bg', validate: cssGradient },
+
+  // Tarjeta principal (dueño, 2026-09-08) — lo que la tarjeta muestra además
+  // de puntos y sellos. Instagram y WhatsApp son las claves planas de siempre:
+  // `resolveBranding()` ya las leía, solo que nadie podía editarlas.
+  { path: 'instagram_url', validate: httpUrl },
+  { path: 'whatsapp_link', validate: httpUrl },
+  { path: 'card.stamp_icon', validate: oneOf(STAMP_ICON_IDS) },
+  { path: 'card.motif', validate: oneOf(CARD_MOTIF_IDS) },
+  { path: 'card.description', validate: multilineText(400) },
+  { path: 'card.facebook_url', validate: httpUrl },
+  { path: 'card.tiktok_url', validate: httpUrl },
+  { path: 'card.website_url', validate: httpUrl },
+  { path: 'card.google_profile_url', validate: httpUrl },
+  { path: 'card.contact_phone', validate: phoneText },
+  { path: 'card.contact_email', validate: emailText },
+  { path: 'card.address', validate: freeText(160) },
+  { path: 'card.hours', validate: multilineText(300) },
+  { path: 'card.policies', validate: multilineText(2000) },
 
   // §3 — config del QR Studio, antes solo en localStorage.
   { path: 'qr_studio.theme', validate: oneOf(QR_THEME_IDS) },

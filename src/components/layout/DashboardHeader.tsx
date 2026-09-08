@@ -30,7 +30,7 @@ export function DashboardHeader() {
     // generador pelado y por eso nadie encontraba los temas, los tamaños de
     // imprenta ni el logo que ya existían (§3).
     { href: '/dashboard/qr', label: 'QR Studio', icon: QrCode },
-    { href: '/dashboard/marca', label: 'Identidad visual', icon: Palette },
+    { href: '/dashboard/marca', label: 'Tarjeta principal', icon: Palette },
     { href: '/dashboard/templates', label: 'Plantillas', icon: FileText },
     { href: '/dashboard/staff', label: `${branding.staffLabelPlural} QR`, icon: UserCog },
     { href: '/dashboard/authorized-numbers', label: 'Autorizados Domicilio', icon: ShieldCheck },

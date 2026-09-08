@@ -10,6 +10,8 @@ import { BrandMark } from '@/components/features/branding'
 import { Odometer } from '@/components/ui/odometer'
 import { ShineBorder } from '@/components/ui/shine-border'
 import { StampsGrid } from './StampsGrid'
+import { CardMotif } from './CardMotif'
+import { CardExtras } from './CardExtras'
 import { TierMedal } from './TierMedal'
 
 interface TierItem {
@@ -75,7 +77,7 @@ export function WalletCard({ name, totalPoints, totalVisits, tiers }: WalletCard
         style={{ boxShadow: theme.cardShadow }}
       >
         <div
-          className="px-5 pt-7 pb-8 flex flex-col items-center"
+          className="relative isolate px-5 pt-7 pb-8 flex flex-col items-center"
           style={{
             background: theme.cardBg,
             borderRadius: 'inherit',
@@ -83,6 +85,10 @@ export function WalletCard({ name, totalPoints, totalVisits, tiers }: WalletCard
             overflow: 'hidden',
           }}
         >
+          {/* Decoración de contorno (Tarjeta principal). Va DEBAJO de todo:
+              el contenedor aísla el apilamiento y la capa lleva -z-10. */}
+          <CardMotif id={branding.card.motif} color={isBlack ? theme.stamps.check : '#ffffff'} />
+
           {/* Logo del restaurante (§6). Sin logo subido no dibuja nada y la
               tarjeta arranca en el nombre de la marca, como siempre. */}
           <BrandMark variant="onColor" size={56} className="mb-3" />
@@ -135,7 +141,7 @@ export function WalletCard({ name, totalPoints, totalVisits, tiers }: WalletCard
 
           {/* Stamps */}
           <div className="mt-6 w-full">
-            <StampsGrid totalVisits={totalVisits} theme={theme.stamps} />
+            <StampsGrid totalVisits={totalVisits} theme={theme.stamps} icon={branding.card.stampIcon} />
           </div>
 
           {/* Points progress bar */}
@@ -238,6 +244,18 @@ export function WalletCard({ name, totalPoints, totalVisits, tiers }: WalletCard
               })}
             </div>
           )}
+
+          {/* Redes, contacto y políticas — plegados (Tarjeta principal, 2026-09-08).
+              Sin config no dibuja nada. */}
+          <div className="mt-6 w-full">
+            <CardExtras
+              extras={branding.card}
+              instagramUrl={branding.instagramUrl}
+              whatsappLink={branding.whatsappLink}
+              googleReviewUrl={branding.googleReviewUrl}
+              theme={theme}
+            />
+          </div>
 
           {/* CTA al check-in — toda la tarjeta es el área táctil, no solo el link */}
           <a

@@ -93,7 +93,7 @@ Detalle completo en [`API_DOCS.md`](../API_DOCS.md).
 | **Premios pendientes** | `/mesero/rewards` | Mesero |
 | Alerta de premio al escanear | `/mesero/confirm` | Mesero |
 | Banner "Disponible" con cuenta regresiva | `/check-in` (tarjeta del cliente) | Cliente |
-| **Catálogo de premios de campaña** | `/dashboard/campaign-rewards` | Admin |
+| **Catálogo de premios de campaña** | `/dashboard/campaigns?tab=premios` (pestaña Premios; `/dashboard/campaign-rewards` redirige ahí desde 2026-09-08) | Admin |
 | Métricas de otorgados/redimidos/vencidos | `/dashboard/redemptions` | Admin |
 | Config: premio de reactivación, ventana, recordatorio | `/dashboard/settings` | Admin |
 
@@ -148,7 +148,7 @@ plantilla agresiva de 4 variables sigue funcionando sin cambios.
 - [x] Banner "Disponible" en la tarjeta del cliente
 - [x] Cron de reactivación otorga el premio + `{{5}}` fecha límite
 - [x] Cron `/api/cron/reward-reminder` + workflow `n8n/cron_reward-reminder.json`
-- [x] Catálogo `/dashboard/campaign-rewards`
+- [x] Catálogo `/dashboard/campaigns?tab=premios` (antes página propia `/dashboard/campaign-rewards`, hoy redirige)
 - [x] Config en Ajustes + métricas en `/dashboard/redemptions`
 - [x] `DB_SCHEMA.md`, `API_DOCS.md`, `CHANGELOG.md` actualizados
 
@@ -163,7 +163,7 @@ plantilla agresiva de 4 variables sigue funcionando sin cambios.
 - [ ] **Desplegar `vercel.json` a producción con el plan Pro activo** y, en el **mismo movimiento**,
       apagar el Schedule Trigger de **"Cron Recordatorio de Premios"** en n8n. Ver «Disparo del cron de
       recordatorio» al final.
-- [ ] **Crear los premios del catálogo** en `/dashboard/campaign-rewards` y elegir uno en
+- [ ] **Crear los premios del catálogo** en `/dashboard/campaigns` (pestaña Premios) y elegir uno en
       Ajustes > Premio de Reactivación Agresiva.
 
 ## Deja listo para después

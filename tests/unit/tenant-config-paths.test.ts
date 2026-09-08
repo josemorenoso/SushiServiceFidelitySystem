@@ -21,6 +21,7 @@ import {
   projectEditablePaths,
 } from '@/lib/tenant-config-paths'
 import { QR_SIZES, QR_THEMES } from '@/lib/utils/qr-poster'
+import { CARD_MOTIF_IDS, STAMP_ICON_IDS } from '@/constants/card-extras'
 
 describe('lo que la lista deja pasar y lo que no', () => {
   it('deja pasar exactamente lo de §3/§5/§6 más el link de reseñas', () => {
@@ -135,6 +136,64 @@ describe('validación por tipo de campo', () => {
     expect(buildConfigPatch({ 'qr_studio.headline': 'x'.repeat(41) }).ok).toBe(false)
     expect(buildConfigPatch({ 'qr_studio.subline': 'x'.repeat(70) }).ok).toBe(true)
     expect(buildConfigPatch({ 'qr_studio.subline': 'x'.repeat(71) }).ok).toBe(false)
+  })
+})
+
+describe('Tarjeta principal — el espacio `card` y las redes planas (2026-09-08)', () => {
+  it('abre exactamente lo que la pantalla edita, y nada más del espacio', () => {
+    for (const path of [
+      'instagram_url', 'whatsapp_link',
+      'card.stamp_icon', 'card.motif', 'card.description', 'card.facebook_url', 'card.tiktok_url',
+      'card.website_url', 'card.google_profile_url', 'card.contact_phone', 'card.contact_email',
+      'card.address', 'card.hours', 'card.policies',
+    ]) {
+      expect(isEditablePath(path), path).toBe(true)
+    }
+    expect(isEditablePath('card')).toBe(false)
+    expect(isEditablePath('card.token')).toBe(false)
+  })
+
+  it('el símbolo del sello y la decoración son listas cerradas: un id inventado no se guarda', () => {
+    for (const id of STAMP_ICON_IDS) expect(buildConfigPatch({ 'card.stamp_icon': id }).ok, id).toBe(true)
+    for (const id of CARD_MOTIF_IDS) expect(buildConfigPatch({ 'card.motif': id }).ok, id).toBe(true)
+    expect(buildConfigPatch({ 'card.stamp_icon': '<svg onload=alert(1)>' }).ok).toBe(false)
+    expect(buildConfigPatch({ 'card.motif': 'https://evil.example/x.svg' }).ok).toBe(false)
+  })
+
+  it('las redes son URLs http(s); el vacío borra', () => {
+    expect(buildConfigPatch({ 'card.facebook_url': 'https://facebook.com/sushi' }).ok).toBe(true)
+    expect(buildConfigPatch({ 'card.facebook_url': '' }).ok).toBe(true)
+    expect(buildConfigPatch({ 'card.tiktok_url': 'javascript:alert(1)' }).ok).toBe(false)
+    expect(buildConfigPatch({ 'instagram_url': 'instagram.com/sushi' }).ok).toBe(false)
+  })
+
+  it('teléfono y correo se validan como lo que son', () => {
+    expect(buildConfigPatch({ 'card.contact_phone': '+57 300 123 4567' }).ok).toBe(true)
+    expect(buildConfigPatch({ 'card.contact_phone': 'llámame' }).ok).toBe(false)
+    const mail = buildConfigPatch({ 'card.contact_email': 'Hola@Sushi.CO' })
+    expect(mail.ok).toBe(true)
+    if (mail.ok) expect(mail.patch).toEqual({ card: { contact_email: 'hola@sushi.co' } })
+    expect(buildConfigPatch({ 'card.contact_email': 'sin-arroba' }).ok).toBe(false)
+  })
+
+  it('los textos largos conservan los saltos de línea y respetan su tope', () => {
+    const built = buildConfigPatch({ 'card.hours': 'Lun a Vie: 12-22\r\nSáb: 12-23' })
+    expect(built.ok).toBe(true)
+    if (built.ok) expect(built.patch).toEqual({ card: { hours: 'Lun a Vie: 12-22\nSáb: 12-23' } })
+    expect(buildConfigPatch({ 'card.policies': 'x'.repeat(2000) }).ok).toBe(true)
+    expect(buildConfigPatch({ 'card.policies': 'x'.repeat(2001) }).ok).toBe(false)
+    expect(buildConfigPatch({ 'card.description': 'x'.repeat(401) }).ok).toBe(false)
+  })
+
+  it('el GET proyecta el espacio card aplanado', () => {
+    const projected = projectEditablePaths({
+      card: { stamp_icon: 'star', motif: 'ondas', policies: 'Sin reservas' },
+      instagram_url: 'https://instagram.com/sushi',
+    })
+    expect(projected['card.stamp_icon']).toBe('star')
+    expect(projected['card.motif']).toBe('ondas')
+    expect(projected['card.policies']).toBe('Sin reservas')
+    expect(projected['instagram_url']).toBe('https://instagram.com/sushi')
   })
 })
 

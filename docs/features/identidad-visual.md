@@ -1,4 +1,4 @@
-# Identidad visual por marca — §5, §6 y §3
+# Tarjeta principal (antes "Identidad visual") — §5, §6, §3 y la tarjeta enriquecida
 
 > **Estado:** 🟢 Implementado (rama `feat/tarjeta-visual`)
 > **Migración:** `00047_identidad_visual.sql` — **escrita, SIN aplicar**
@@ -226,6 +226,35 @@ Vive en el bucket público `brand-assets`, en `<tenant_id>/logo-<ts>.png`.
 
 ---
 
+## La tarjeta enriquecida (dueño, 2026-09-08)
+
+La pantalla pasó a llamarse **Tarjeta principal** (menú, encabezado, título) porque es donde el
+restaurante arma SU tarjeta, y la tarjeta muestra desde ese día, además de puntos y sellos:
+
+| Qué | Dónde se guarda | Dónde se dibuja |
+|---|---|---|
+| Símbolo del sello (chulo, estrella, pizza, café… 20 ids) | `config.card.stamp_icon` | `StampIcon.tsx`, dentro de `StampsGrid` |
+| Decoración de contorno (ornamento, puntos, ondas, hojas, estrellas, geométrico) | `config.card.motif` | `CardMotif.tsx`, capa `-z-10` bajo el contenido (el contenedor lleva `isolate`) |
+| Instagram y WhatsApp | claves planas de siempre `instagram_url`, `whatsapp_link` (por fin editables) | fila de círculos en `CardExtras.tsx` |
+| Facebook, TikTok, perfil de Google, sitio web | `config.card.*_url` | idem |
+| Descripción breve · contacto y horario · políticas | `config.card.description / contact_* / address / hours / policies` | secciones plegadas de `CardExtras.tsx`, una abierta a la vez |
+
+**Las listas de símbolos y decoraciones son cerradas** (`src/constants/card-extras.ts`): un id no
+puede ejecutar nada, un SVG del dueño sí, y `config` es público. Un id que ya no exista en el
+catálogo cae al default en el resolver en vez de romper la tarjeta. Todo se pinta con los colores del
+tema de la tarjeta (blancos sobre el gradiente de marca, dorado sobre el Black): ni un hex nuevo.
+
+**Sin config no cambia nada.** `CardExtras` no dibuja ni una línea si no hay redes ni textos, el
+sello sigue siendo el ✓ dibujado de siempre y `motif = none` no pinta capa. Los cinco tenants vivos
+se ven igual hasta que su dueño entre a la pantalla.
+
+La tarjeta de `/tarjeta` (`WalletCard`) y la del check-in (`CustomerCard`) muestran el mismo
+bloque, y la vista previa del panel (`BrandPreview`) lo arma con el mismo `resolveBranding()` sobre
+lo que se está editando. El perfil de Google usa `card.google_profile_url` y, si no hay, el link de
+reseñas `google_maps_url`.
+
+---
+
 ## Lo que NO se hizo, y por qué
 
 | Idea | Decisión |
@@ -243,7 +272,7 @@ Vive en el bucket público `brand-assets`, en `<tenant_id>/logo-<ts>.png`.
 | Archivo | Qué fija |
 |---|---|
 | `tests/unit/brand-palette.test.ts` | Que un tenant sin color no cambie · que un color claro no rompa el CTA ni el QR · que basura en `config` caiga al default |
-| `tests/unit/tenant-config-paths.test.ts` | Que la whitelist no deje pasar `brand_name` ni `integrations.*` · las validaciones por tipo · el espejo de ids con `qr-poster.ts` |
+| `tests/unit/tenant-config-paths.test.ts` | Que la whitelist no deje pasar `brand_name` ni `integrations.*` · las validaciones por tipo · el espejo de ids con `qr-poster.ts` · que `card.stamp_icon` y `card.motif` sean listas cerradas y las redes URLs http(s) |
 | `tests/db/identidad-visual.test.ts` | El merge profundo · que guardar un color no borre el logo ni las integraciones · que escribir la marca de un tenant no toque la del otro · que el bucket exista y sea público |
 
 ---

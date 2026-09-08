@@ -21,7 +21,17 @@ import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Check, Copy, ShieldCheck, Smartphone, ExternalLink, AlertTriangle } from 'lucide-react'
+import {
+  Check,
+  Copy,
+  ShieldCheck,
+  Smartphone,
+  ExternalLink,
+  AlertTriangle,
+  ChevronDown,
+  ChevronRight,
+  ClipboardList,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import type { DeliveryChannel } from '@/services/delivery-dashboard.service'
@@ -51,8 +61,43 @@ const PASOS = [
 
 const EJEMPLO = 'pedido de Juan 3009876543 cra 43a #1-50 apto 302, paga con nequi, 45 mil'
 
+/**
+ * El cuadro modelo, en dos versiones:
+ * - `CUADRO_EJEMPLO` con datos ficticios, para que el dueño vea cómo queda relleno.
+ * - `CUADRO_MODELO` con los campos vacíos: es la que copia el botón, la que sirve para
+ *   guardar en WhatsApp Business como respuesta rápida (Ajustes → Herramientas para la
+ *   empresa → Respuestas rápidas) y reusar en cada pedido.
+ *
+ * Los campos siguen lo que `buildDeliveryExtractionPrompt()` (`src/constants/delivery-ai.ts`)
+ * le pide a la IA: nombre, celular (obligatorio, 10 dígitos, empieza por 3), dirección,
+ * método de pago y monto total. «Pedido» y «Notas» no los extrae el parser — quedan igual
+ * en el mensaje para que el operador y quien despacha sepan qué es y cómo entregarlo — y
+ * «Barrio» viaja como parte del texto libre de la dirección.
+ */
+const CUADRO_EJEMPLO = `🛵 PEDIDO A DOMICILIO
+Nombre: María Restrepo
+Celular: 3009876543
+Dirección: Cra 43A #5-12, apto 302
+Barrio: Manila
+Pedido: 2 Bandejas paisa, 1 Limonada de coco
+Total: $65.000
+Pago: Nequi
+Notas: sin cebolla, timbre dañado, llamar al llegar`
+
+const CUADRO_MODELO = `🛵 PEDIDO A DOMICILIO
+Nombre:
+Celular:
+Dirección:
+Barrio:
+Pedido:
+Total: $
+Pago: (efectivo / transferencia / nequi / daviplata / tarjeta)
+Notas:`
+
 export function ComoFuncionaCard({ channel }: { channel: DeliveryChannel | null }) {
   const [copiado, setCopiado] = useState(false)
+  const [modeloCopiado, setModeloCopiado] = useState(false)
+  const [instruccionesAbiertas, setInstruccionesAbiertas] = useState(false)
 
   const copiarNumero = async () => {
     if (!channel?.receivingNumber) return
@@ -66,6 +111,17 @@ export function ComoFuncionaCard({ channel }: { channel: DeliveryChannel | null 
     }
   }
 
+  const copiarModelo = async () => {
+    try {
+      await navigator.clipboard.writeText(CUADRO_MODELO)
+      setModeloCopiado(true)
+      toast.success('Modelo copiado')
+      setTimeout(() => setModeloCopiado(false), 2000)
+    } catch {
+      toast.error('No se pudo copiar. Seleccionalo y copialo a mano.')
+    }
+  }
+
   return (
     <Card className="premium-card">
       <CardHeader>
@@ -73,37 +129,13 @@ export function ComoFuncionaCard({ channel }: { channel: DeliveryChannel | null 
           Cómo funcionan los domicilios
         </CardTitle>
         <CardDescription style={{ color: 'var(--brand-ink-soft)' }}>
-          Cuatro pasos. Lo único que cambia respecto a hoy es que tu operador reenvía el pedido a un
-          número.
+          Lo único que cambia respecto a hoy es que tu operador reenvía el cuadro del pedido a un
+          número. El número, el cuadro modelo y el botón de copiar quedan siempre visibles acá
+          abajo; los pasos completos están plegados.
         </CardDescription>
       </CardHeader>
 
       <CardContent className="space-y-6">
-        {/* ── Los 4 pasos ── */}
-        <ol className="space-y-3">
-          {PASOS.map((paso, i) => (
-            <li key={paso.titulo} className="flex gap-3">
-              <span
-                className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold"
-                style={{
-                  background: 'linear-gradient(135deg, var(--brand-primary) 0%, var(--brand-primary-end) 100%)',
-                  color: 'var(--brand-on-primary)',
-                }}
-              >
-                {i + 1}
-              </span>
-              <div>
-                <p className="text-sm font-semibold" style={{ color: 'var(--brand-ink)' }}>
-                  {paso.titulo}
-                </p>
-                <p className="text-sm" style={{ color: 'var(--brand-ink-soft)' }}>
-                  {paso.detalle}
-                </p>
-              </div>
-            </li>
-          ))}
-        </ol>
-
         {/* ── A qué número se manda el cuadro ── */}
         <div className="rounded-2xl p-4" style={{ background: 'var(--brand-surface)' }}>
           <div className="flex items-center gap-2">
@@ -148,49 +180,147 @@ export function ComoFuncionaCard({ channel }: { channel: DeliveryChannel | null 
           )}
         </div>
 
-        {/* ── Lo único imprescindible ── */}
-        <div>
-          <p className="text-sm font-semibold" style={{ color: 'var(--brand-ink)' }}>
-            Lo único imprescindible: el celular del cliente
-          </p>
-          <p className="mt-1 text-sm" style={{ color: 'var(--brand-ink-soft)' }}>
-            Diez dígitos y empieza por 3. Todo lo demás —el nombre, la dirección, el pago, el
-            monto— lo saca el sistema solo, y si falta alguno el pedido igual entra. Si falta el
-            celular, no.
-          </p>
-          <div className="mt-3 rounded-2xl p-3" style={{ background: 'var(--brand-surface)' }}>
-            <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--brand-ink-muted)' }}>
-              Un ejemplo que funciona
-            </p>
-            <p className="mt-1 font-mono text-sm" style={{ color: 'var(--brand-ink)' }}>
-              {EJEMPLO}
-            </p>
-          </div>
-        </div>
-
-        {/* ── Quién puede mandarlo ── */}
+        {/* ── El cuadro modelo: siempre visible, es lo que se usa a diario ── */}
         <div className="rounded-2xl border p-4" style={{ borderColor: 'var(--brand-ink-faint)' }}>
           <div className="flex items-center gap-2">
-            <ShieldCheck className="h-4 w-4" strokeWidth={1.5} style={{ color: 'var(--brand-ink-soft)' }} />
+            <ClipboardList className="h-4 w-4" strokeWidth={1.5} style={{ color: 'var(--brand-ink-soft)' }} />
             <p className="text-sm font-semibold" style={{ color: 'var(--brand-ink)' }}>
-              Quién puede mandar pedidos
+              Un cuadro modelo, listo para copiar
             </p>
           </div>
           <p className="mt-1 text-sm" style={{ color: 'var(--brand-ink-soft)' }}>
-            Solo los celulares que tengas autorizados. Un pedido que llegue desde cualquier otro
-            número se trata como el mensaje de un cliente, no como un pedido — así es como el
-            sistema distingue una cosa de la otra.
+            Copiá este modelo y guardalo en WhatsApp Business como respuesta rápida (Ajustes →
+            Herramientas para la empresa → Respuestas rápidas). Después solo cambiás los datos de
+            cada pedido.
           </p>
-          {/* `Link` con las clases del botón, no `<Button asChild>`: este Button es
-              base-ui y no expone `asChild`. Así la navegación sigue siendo un <a> de
-              verdad — se puede abrir en otra pestaña — y se ve igual. */}
-          <Link
-            href="/dashboard/authorized-numbers"
-            className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'btn-secondary-premium mt-3')}
+
+          <p
+            className="mt-3 text-xs font-semibold uppercase tracking-wide"
+            style={{ color: 'var(--brand-ink-muted)' }}
           >
-            Gestionar números autorizados
-            <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.5} />
-          </Link>
+            Así queda relleno, a modo de ejemplo
+          </p>
+          <div
+            className="mt-1 max-w-md rounded-2xl rounded-tl-sm p-3 whitespace-pre-wrap font-mono text-sm"
+            style={{ background: 'var(--brand-surface)', color: 'var(--brand-ink)' }}
+          >
+            {CUADRO_EJEMPLO}
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Button size="sm" variant="outline" onClick={copiarModelo} className="btn-secondary-premium">
+              {modeloCopiado ? (
+                <Check className="h-3.5 w-3.5" strokeWidth={1.5} />
+              ) : (
+                <Copy className="h-3.5 w-3.5" strokeWidth={1.5} />
+              )}
+              {modeloCopiado ? 'Copiado' : 'Copiar modelo'}
+            </Button>
+          </div>
+          <p className="mt-2 text-xs" style={{ color: 'var(--brand-ink-muted)' }}>
+            El botón copia la versión con los campos vacíos —la de arriba es solo el ejemplo relleno—,
+            lista para guardarla como predeterminada y completarla en cada pedido nuevo.
+          </p>
+        </div>
+
+        {/* ── Instrucciones plegables: el número y el cuadro de arriba ya alcanzan para el
+            día a día; esto queda cerrado por defecto y se abre solo si hace falta más detalle. ── */}
+        <div>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="w-full justify-start gap-2 px-0 hover:bg-transparent"
+            aria-expanded={instruccionesAbiertas}
+            onClick={() => setInstruccionesAbiertas((v) => !v)}
+          >
+            {instruccionesAbiertas ? (
+              <ChevronDown className="h-4 w-4" strokeWidth={1.5} />
+            ) : (
+              <ChevronRight className="h-4 w-4" strokeWidth={1.5} />
+            )}
+            <span style={{ color: 'var(--brand-ink)' }}>
+              {instruccionesAbiertas ? 'Ocultar cómo funciona, paso a paso' : 'Ver cómo funciona, paso a paso'}
+            </span>
+          </Button>
+
+          {instruccionesAbiertas && (
+            <div className="mt-3 space-y-6">
+              {/* ── Los 4 pasos ── */}
+              <ol className="space-y-3">
+                {PASOS.map((paso, i) => (
+                  <li key={paso.titulo} className="flex gap-3">
+                    <span
+                      className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold"
+                      style={{
+                        background:
+                          'linear-gradient(135deg, var(--brand-primary) 0%, var(--brand-primary-end) 100%)',
+                        color: 'var(--brand-on-primary)',
+                      }}
+                    >
+                      {i + 1}
+                    </span>
+                    <div>
+                      <p className="text-sm font-semibold" style={{ color: 'var(--brand-ink)' }}>
+                        {paso.titulo}
+                      </p>
+                      <p className="text-sm" style={{ color: 'var(--brand-ink-soft)' }}>
+                        {paso.detalle}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+
+              {/* ── Lo único imprescindible ── */}
+              <div>
+                <p className="text-sm font-semibold" style={{ color: 'var(--brand-ink)' }}>
+                  Lo único imprescindible: el celular del cliente
+                </p>
+                <p className="mt-1 text-sm" style={{ color: 'var(--brand-ink-soft)' }}>
+                  Diez dígitos y empieza por 3. Todo lo demás —el nombre, la dirección, el pago, el
+                  monto— lo saca el sistema solo, y si falta alguno el pedido igual entra. Si falta
+                  el celular, no. Tampoco hace falta usar el cuadro modelo: el texto libre también
+                  funciona, por ejemplo:
+                </p>
+                <div className="mt-3 rounded-2xl p-3" style={{ background: 'var(--brand-surface)' }}>
+                  <p
+                    className="text-xs font-semibold uppercase tracking-wide"
+                    style={{ color: 'var(--brand-ink-muted)' }}
+                  >
+                    Un ejemplo que funciona
+                  </p>
+                  <p className="mt-1 font-mono text-sm" style={{ color: 'var(--brand-ink)' }}>
+                    {EJEMPLO}
+                  </p>
+                </div>
+              </div>
+
+              {/* ── Quién puede mandarlo ── */}
+              <div className="rounded-2xl border p-4" style={{ borderColor: 'var(--brand-ink-faint)' }}>
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="h-4 w-4" strokeWidth={1.5} style={{ color: 'var(--brand-ink-soft)' }} />
+                  <p className="text-sm font-semibold" style={{ color: 'var(--brand-ink)' }}>
+                    Quién puede mandar pedidos
+                  </p>
+                </div>
+                <p className="mt-1 text-sm" style={{ color: 'var(--brand-ink-soft)' }}>
+                  Solo los celulares que tengas autorizados. Un pedido que llegue desde cualquier
+                  otro número se trata como el mensaje de un cliente, no como un pedido — así es
+                  como el sistema distingue una cosa de la otra.
+                </p>
+                {/* `Link` con las clases del botón, no `<Button asChild>`: este Button es
+                    base-ui y no expone `asChild`. Así la navegación sigue siendo un <a> de
+                    verdad — se puede abrir en otra pestaña — y se ve igual. */}
+                <Link
+                  href="/dashboard/authorized-numbers"
+                  className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'btn-secondary-premium mt-3')}
+                >
+                  Gestionar números autorizados
+                  <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.5} />
+                </Link>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ── El webhook apagado: se DICE, no se esconde la pantalla ── */}

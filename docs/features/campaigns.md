@@ -1,8 +1,20 @@
 # Feature: Campañas — Control de Tráfico Centralizado
 
-**Última actualización:** 2026-08-10 (v2.8.0 — filtro por días sin venir, envío real desde burbujas, run-auto)
+**Última actualización:** 2026-09-08 (v2.9.0 — pestaña Premios)
 
 ---
+
+## Novedades v2.9.0 (2026-09-08)
+
+- **Pestaña "Premios"** en `/dashboard/campaigns`: el catálogo de premios de campaña (crear,
+  listar, retirar/reactivar) que antes vivía en la página propia `/dashboard/campaign-rewards`
+  ahora es una pestaña más, junto a Automáticas / Manuales / Historial. El componente se extrajo a
+  `src/components/dashboard/CampaignRewardsCatalog.tsx` (mismo comportamiento, misma API
+  `/api/dashboard/campaign-rewards`). `/dashboard/campaign-rewards` sigue existiendo pero ahora solo
+  redirige a `/dashboard/campaigns?tab=premios` (`redirect()` de `next/navigation`), así que
+  cualquier enlace viejo guardado sigue funcionando. La pestaña se preselecciona leyendo
+  `window.location.search` en un `useEffect` — no `useSearchParams()`, que fuerza el CSR bailout en
+  esta versión de Next.
 
 ## Novedades v2.8.0 (2026-08-10)
 
@@ -238,7 +250,9 @@ las tres cosas a la vez: el mensaje del cron, la ventana protegida y lo que mues
 | `src/services/settings.service.ts` | `getReactivationDaysConfig()` — días configurables |
 | `src/app/api/cron/reactivation/route.ts` | Cron reactivación (días configurables) |
 | `src/app/(dashboard)/dashboard/settings/page.tsx` | UI de configuración de días |
-| `src/app/(dashboard)/dashboard/campaigns/page.tsx` | UI rediseñada del módulo |
+| `src/app/(dashboard)/dashboard/campaigns/page.tsx` | UI rediseñada del módulo (incluye la pestaña Premios) |
+| `src/components/dashboard/CampaignRewardsCatalog.tsx` | Catálogo de premios de campaña (pestaña Premios) |
+| `src/app/(dashboard)/dashboard/campaign-rewards/page.tsx` | Ruta vieja: redirige a `campaigns?tab=premios` |
 | `src/app/api/cron/birthday/route.ts` | Cron cumpleaños |
 | `src/app/api/dashboard/campaigns/manual/route.ts` | Campañas manuales |
 | `src/app/api/dashboard/campaigns/estimate/route.ts` | Estimado de audiencia |

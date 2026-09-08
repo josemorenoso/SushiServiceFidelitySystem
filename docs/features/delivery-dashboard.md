@@ -76,6 +76,22 @@ sección habría sido una decisión del dueño, no nuestra. Y la clave **ausente
 `true`**: los tenants que ya reciben domicilios no la tienen puesta, y decirles «no está
 activo» sería mentirles sobre algo que funciona.
 
+> **Actualizado 2026-09-08 — cuadro modelo para copiar, e instrucciones plegables.** El
+> dueño lo pidió textual: *«un cuadro de ejemplo que al tocar copiar les traiga un mensaje
+> plantilla que puedan usar para guardar predeterminado en WhatsApp»*. `ComoFuncionaCard.tsx`
+> ahora muestra, siempre visible junto al número, un cuadro modelo con burbuja de WhatsApp
+> (`CUADRO_EJEMPLO`, con datos ficticios: nombre, celular, dirección, barrio, pedido con
+> cantidades, total y forma de pago) y un botón **«Copiar modelo»** que copia al portapapeles
+> `CUADRO_MODELO` — la misma plantilla con los campos vacíos, la que sirve para guardarla en
+> WhatsApp Business como respuesta rápida (Ajustes → Herramientas para la empresa →
+> Respuestas rápidas). Los campos que copia son un espejo de lo que
+> `buildDeliveryExtractionPrompt()` le pide a la IA (nombre, celular, dirección, método de
+> pago, monto); «Pedido» y «Notas» no los extrae el parser pero quedan en el mensaje para
+> quien despacha. Los cuatro pasos, el ejemplo en texto libre y el enlace a números
+> autorizados pasaron a una sección **plegada por defecto** («Ver cómo funciona, paso a
+> paso», con `aria-expanded`): el número y el cuadro modelo son lo único que el dueño usa a
+> diario y son lo único que queda siempre visible.
+
 ### Bloque 2 · Los domicilios registrados
 
 `visits` con `source = 'delivery'`, unidas a `customers`, filtradas por `tenant_id` y por

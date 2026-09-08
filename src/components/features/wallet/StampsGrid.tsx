@@ -3,6 +3,8 @@
 import type { CSSProperties } from 'react'
 import { brandWalletCardTheme, type StampsTheme } from '@/constants/wallet-card-theme'
 import { DEFAULT_BRANDING } from '@/lib/branding'
+import { DEFAULT_STAMP_ICON, type StampIconId } from '@/constants/card-extras'
+import { StampIcon } from './StampIcon'
 
 const STAMPS_COUNT = 10
 
@@ -13,9 +15,11 @@ interface StampsGridProps {
   totalVisits: number
   /** Paleta a usar. Sin ella, la de siempre. La Black la pasa `WalletCard` (§17.2). */
   theme?: StampsTheme
+  /** Símbolo del sello lleno (Tarjeta principal). Sin él, el ✓ de siempre. */
+  icon?: StampIconId
 }
 
-export function StampsGrid({ totalVisits, theme = DEFAULT_STAMPS_THEME }: StampsGridProps) {
+export function StampsGrid({ totalVisits, theme = DEFAULT_STAMPS_THEME, icon = DEFAULT_STAMP_ICON }: StampsGridProps) {
   const mod = totalVisits % STAMPS_COUNT
   const filledStamps = mod === 0 && totalVisits > 0 ? STAMPS_COUNT : mod
   const cycleNumber = totalVisits > 0 ? Math.floor((totalVisits - 1) / STAMPS_COUNT) + 1 : 1
@@ -61,37 +65,12 @@ export function StampsGrid({ totalVisits, theme = DEFAULT_STAMPS_THEME }: Stamps
                   boxShadow: filled ? theme.filledShadow : 'none',
                 }}
               >
-                {filled && <StampCheck color={theme.check} delayMs={i * 40 + 120} />}
+                {filled && <StampIcon id={icon} color={theme.check} delayMs={i * 40 + 120} />}
               </div>
             </div>
           )
         })}
       </div>
     </div>
-  )
-}
-
-/**
- * El ✓ se DIBUJA trazo a trazo en vez de aparecer de golpe.
- *
- * `pathLength={1}` normaliza el largo real del trazo a 1, así el par
- * dasharray/dashoffset no depende de la geometría del path: se oculta con 1 y
- * se dibuja hasta 0. El resto lo hace `animate-draw-check` (`globals.css`), que
- * ya respeta `prefers-reduced-motion`.
- */
-function StampCheck({ color, delayMs }: { color: string; delayMs: number }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden className="w-[52%] h-[52%]">
-      <path
-        d="M5 12.8 L9.7 17.5 L19 7.2"
-        stroke={color}
-        strokeWidth={3.4}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        pathLength={1}
-        className="animate-draw-check"
-        style={{ strokeDasharray: 1, strokeDashoffset: 1, animationDelay: `${delayMs}ms` }}
-      />
-    </svg>
   )
 }

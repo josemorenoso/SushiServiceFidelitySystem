@@ -70,6 +70,8 @@ export interface TenantConfig {
   branding?: TenantBrandingConfig
   /** Config del QR Studio. Antes vivía SOLO en el `localStorage` del navegador (§3). */
   qr_studio?: TenantQrStudioConfig
+  /** Lo que la tarjeta muestra además de puntos y sellos: símbolo del sello, decoración, redes, contacto, políticas (Tarjeta principal, 2026-09-08). */
+  card?: TenantCardConfig
   /**
    * RESERVADO — cuentas de terceros que el restaurante conecte (Google, Meta).
    * **No está construido y esta sesión no lo construye.** El nombre se aparta
@@ -115,6 +117,41 @@ export interface TenantBrandingConfig {
   card_bg?: string
   /** Idem para el fondo de página de la tarjeta. */
   page_bg?: string
+}
+
+/**
+ * La "Tarjeta principal" (dueño, 2026-09-08): lo que la tarjeta del cliente
+ * muestra ADEMÁS de puntos y sellos. Todo opcional; todo ausente = la tarjeta
+ * de siempre, sin una sección más.
+ *
+ * ⚠️ Es PÚBLICO: viaja al navegador en cada página vía `resolveBranding()`.
+ * Redes, contacto y políticas son justamente lo que el restaurante quiere que
+ * se vea. Nada de acá es secreto ni debe serlo.
+ *
+ * Instagram y WhatsApp NO están acá: son las claves planas de siempre
+ * (`instagram_url`, `whatsapp_link`), que ya lee `resolveBranding()`. Tener
+ * dos Instagram era tener dos Instagram.
+ */
+export interface TenantCardConfig {
+  /** Id de `STAMP_ICON_IDS` (`src/constants/card-extras.ts`). Ausente = chulo. */
+  stamp_icon?: string
+  /** Id de `CARD_MOTIF_IDS`. Ausente o `none` = sin decoración. */
+  motif?: string
+  /** Descripción breve del negocio, plegada bajo "Quiénes somos". */
+  description?: string
+  facebook_url?: string
+  tiktok_url?: string
+  website_url?: string
+  /** Perfil del negocio en Google (distinto del link de reseñas `google_maps_url`). */
+  google_profile_url?: string
+  /** Teléfono de contacto, tal como se muestra. */
+  contact_phone?: string
+  contact_email?: string
+  address?: string
+  /** Horario, texto libre en varias líneas. */
+  hours?: string
+  /** Políticas (reservas, cancelaciones, tratamiento de datos…). Texto libre. */
+  policies?: string
 }
 
 /**

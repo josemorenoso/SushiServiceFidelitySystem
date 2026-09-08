@@ -896,7 +896,7 @@ export default function SettingsPage() {
               ))}
             </select>
             <p className="text-[10px]" style={{ color: '#b0b0b0' }}>
-              Del catálogo de <a href="/dashboard/campaign-rewards" className="underline">Premios de campaña</a>. Sin premio, la campaña sigue siendo solo un recordatorio.
+              Del catálogo de <a href="/dashboard/campaigns?tab=premios" className="underline">Premios de campaña</a>. Sin premio, la campaña sigue siendo solo un recordatorio.
             </p>
           </div>
 
@@ -1001,7 +1001,7 @@ export default function SettingsPage() {
               ))}
             </select>
             <p className="text-[10px]" style={{ color: '#b0b0b0' }}>
-              Del catálogo de <a href="/dashboard/campaign-rewards" className="underline">Premios de campaña</a>. El {'mesero'} lo entrega desde <em>Premios pendientes</em>, igual que todos los demás.
+              Del catálogo de <a href="/dashboard/campaigns?tab=premios" className="underline">Premios de campaña</a>. El {'mesero'} lo entrega desde <em>Premios pendientes</em>, igual que todos los demás.
             </p>
           </div>
 

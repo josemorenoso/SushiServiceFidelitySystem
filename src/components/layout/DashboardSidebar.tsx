@@ -18,7 +18,6 @@ import {
   UserCog,
   Crosshair,
   Ticket,
-  PackageOpen,
   Wallet,
   Bike,
   PlugZap,
@@ -33,7 +32,6 @@ export function DashboardSidebar({ isSuperAdmin = false }: { isSuperAdmin?: bool
     { href: '/dashboard', label: 'Métricas', icon: LayoutDashboard },
     { href: '/dashboard/customers', label: 'Clientes', icon: Users },
     { href: '/dashboard/rewards', label: 'Recompensas', icon: Gift },
-    { href: '/dashboard/campaign-rewards', label: 'Premios de campaña', icon: PackageOpen },
     { href: '/dashboard/redemptions', label: 'Redenciones', icon: Ticket },
     { href: '/dashboard/campaigns', label: 'Campañas', icon: Megaphone },
     { href: '/dashboard/imported-contacts', label: 'Golden Bullet', icon: Crosshair },
@@ -42,7 +40,7 @@ export function DashboardSidebar({ isSuperAdmin = false }: { isSuperAdmin?: bool
     // generador pelado y por eso nadie encontraba los temas, los tamaños de
     // imprenta ni el logo que ya existían (§3).
     { href: '/dashboard/qr', label: 'QR Studio', icon: QrCode },
-    { href: '/dashboard/marca', label: 'Identidad visual', icon: Palette },
+    { href: '/dashboard/marca', label: 'Tarjeta principal', icon: Palette },
     { href: '/dashboard/templates', label: 'Plantillas', icon: FileText },
     { href: '/dashboard/staff', label: `${branding.staffLabelPlural} QR`, icon: UserCog },
     { href: '/dashboard/domicilios', label: 'Domicilios', icon: Bike },

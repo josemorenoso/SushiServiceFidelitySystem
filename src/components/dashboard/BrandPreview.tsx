@@ -30,7 +30,7 @@ import { BrandingProvider } from '@/lib/branding-context'
 import { brandCssVars } from '@/lib/brand-css'
 import type { Branding } from '@/lib/branding'
 import { brandWalletCardTheme } from '@/constants/wallet-card-theme'
-import { StampsGrid } from '@/components/features/wallet'
+import { StampsGrid, CardMotif, CardExtras } from '@/components/features/wallet'
 import { BrandMark } from '@/components/features/branding'
 
 export type PreviewScreen = 'checkin' | 'card'
@@ -146,7 +146,7 @@ function CardPreview({
       style={{ background: theme.pageBg }}
     >
       <div
-        className="flex flex-col items-center px-4 pb-6 pt-5"
+        className="relative isolate flex flex-col items-center overflow-hidden px-4 pb-6 pt-5"
         style={{
           background: theme.cardBg,
           borderRadius: '1.5rem',
@@ -154,6 +154,7 @@ function CardPreview({
           boxShadow: theme.cardShadow,
         }}
       >
+        <CardMotif id={branding.card.motif} />
         <BrandMark variant="onColor" size={44} className="mb-2.5" />
 
         <p
@@ -181,7 +182,7 @@ function CardPreview({
         </div>
 
         <div className="mt-4 w-full">
-          <StampsGrid totalVisits={SAMPLE.visits} theme={theme.stamps} />
+          <StampsGrid totalVisits={SAMPLE.visits} theme={theme.stamps} icon={branding.card.stampIcon} />
         </div>
 
         <div className="mt-3 w-full">
@@ -209,6 +210,18 @@ function CardPreview({
         </div>
 
         <div className="mt-4 w-full" style={{ height: '1px', background: theme.divider }} />
+
+        {/* Redes, contacto y políticas, tal como los arma la tarjeta real (plegados). */}
+        <div className="mt-4 w-full">
+          <CardExtras
+            extras={branding.card}
+            instagramUrl={branding.instagramUrl}
+            whatsappLink={branding.whatsappLink}
+            googleReviewUrl={branding.googleReviewUrl}
+            theme={theme}
+            compact
+          />
+        </div>
 
         <div
           className="mt-4 w-full rounded-xl px-3 py-2.5 text-center"

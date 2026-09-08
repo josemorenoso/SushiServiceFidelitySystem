@@ -20,6 +20,35 @@
 --   3. Qué sedes tiene cada una hoy.
 -- ═══════════════════════════════════════════════════════════════════════════
 
+-- ⚠️ EL SQL EDITOR DE SUPABASE SOLO MUESTRA EL RESULTADO DE LA ÚLTIMA CONSULTA.
+--    Por eso lo que decide va PRIMERO y en UNA sola consulta, con veredicto.
+--    Las de abajo son el detalle: corrélas de a una, seleccionando el bloque y
+--    dándole Run, si alguna fila dice PARÁ.
+
+-- ═══ LO QUE DECIDE: ¿se pueden borrar? ════════════════════════════════════
+SELECT t.slug,
+       (SELECT count(*) FROM customers          c WHERE c.tenant_id = t.id) AS clientes,
+       (SELECT count(*) FROM visits             v WHERE v.tenant_id = t.id) AS visitas,
+       (SELECT count(*) FROM message_logs       m WHERE m.tenant_id = t.id) AS mensajes,
+       (SELECT count(*) FROM reward_grants      g WHERE g.tenant_id = t.id) AS premios,
+       (SELECT count(*) FROM restaurant_locations l WHERE l.tenant_id = t.id) AS sedes,
+       (SELECT count(*) FROM auth.users u
+         WHERE u.raw_app_meta_data->>'tenant_id' = t.id::text)              AS usuarios_panel,
+       t.zernio_account_id,
+       CASE WHEN (SELECT count(*) FROM customers     c WHERE c.tenant_id = t.id) = 0
+             AND (SELECT count(*) FROM visits        v WHERE v.tenant_id = t.id) = 0
+             AND (SELECT count(*) FROM message_logs  m WHERE m.tenant_id = t.id) = 0
+             AND (SELECT count(*) FROM reward_grants g WHERE g.tenant_id = t.id) = 0
+             AND t.zernio_account_id IS NULL
+            THEN 'LISTO PARA BORRAR'
+            ELSE 'PARÁ — hay datos, avisá'
+       END AS veredicto
+  FROM tenants t
+ WHERE t.slug IN ('clubtepuylaureles', 'clubtepuyenvigado')
+ ORDER BY t.created_at;
+
+-- ═══ EL DETALLE (correr de a una si hace falta) ═══════════════════════════
+
 -- ── 1. Las dos marcas ──────────────────────────────────────────────────────
 SELECT id, slug, name, domain, is_active, created_at
   FROM tenants

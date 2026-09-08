@@ -1,6 +1,6 @@
 # ESTADO — RestaurantQR / Cada1
 
-> **Última actualización:** 2026-09-08 (apertura de la sesión de cambios pre-reunión, Fable 5.1)
+> **Última actualización:** 2026-09-08, noche (cierre de la sesión de cambios pre-reunión, Fable 5.1)
 > Toda sesión lo lee PRIMERO. Toda sesión que cierra un bloque lo ACTUALIZA al final. Límite: 150 líneas.
 > Lo obsoleto se **saca**, no se tacha: un ítem tachado sigue costando tokens cada vez que alguien lee esto.
 >
@@ -14,8 +14,8 @@
 
 | Qué | Estado |
 |-----|--------|
-| Código | **`main` = `origin/main` = `c7d074e`, pusheado el 2026-09-07 (tarde) por orden del dueño.** Lleva F8 (00056 + test) y el método v3.1 por fast-forward desde `feat/multisede-aios` (también en `origin`); **nada de `src/` cambió** respecto al push anterior, así que ese push no desplegó código nuevo. ⚠️ **La carpeta sigue puesta en `feat/multisede-aios`** (= `main`): la próxima sesión trabaja ahí o el dueño la vuelve a `main`; nadie cambia de rama con otra sesión viva. Sin mergear a propósito: `master`, `port/sushi-fun-2.8`, `sushi-sync` |
-| Verificación | ✅ Sobre `main` `f003050`: `tsc` limpio · **vitest 31 archivos / 502 tests** · `build` OK (79 páginas, 121 rutas) · eslint **7 errores preexistentes** (hooks y gráficas del panel). Lo de F8 lo verifica F8 al cerrar |
+| Código | **`main` = `origin/main` = `c7d074e`** (pusheado el 07). **Local, SIN pushear: `596fb5b`** sobre `feat/multisede-aios` (= `main` + este commit): Tarjeta principal enriquecida, Premios dentro de Campañas, cuadro modelo de Domicilios. **Sin migración: se puede pushear a `main` cuando el dueño diga** (un push de `main` despliega). ⚠️ La carpeta sigue en `feat/multisede-aios`; nadie cambia de rama con otra sesión viva. Sin mergear a propósito: `master`, `port/sushi-fun-2.8`, `sushi-sync` |
+| Verificación | ✅ Sobre `596fb5b` (2026-09-08): `tsc` limpio · **vitest 33 archivos / 532 tests** · eslint **7 errores preexistentes** (hooks y gráficas del panel, ninguno en lo tocado el 08). `build` no se corrió el 08 |
 | Marcas vivas | **5**: sushi-service (542 clientes), demo-ventas (412), sushi-fun (251), don-alirio (244), cafe-frangal (8) |
 | Base de datos de producción | ✅ **Aplicadas hasta la `00056`** (dueño, 2026-09-08: `00047`, `00050`, `00051`, `00053`, `00054` y `00056`, todas). El esquema ya alcanza al código de `main`. La 00030 NUNCA aplicada (a propósito). La 00015 NO se aplica (reabre fuga). Huecos: `00048`, `00049`, `00052`, `00055` |
 | Migraciones: dónde están | El directorio muestra **solo la rama puesta**; el inventario real y el número de la próxima los da `node scripts/proxima-migracion.mjs`. **Desde el 07 la única reserva es la fila del tablero (§2)**: un número citado en cualquier otro doc no reserva nada. `00048`, `00049`, `00052` y `00055` son huecos: no se rellenan |
@@ -32,35 +32,25 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
-| Cambios pre-reunión (dueño, 2026-09-08): renombrar Identidad visual → Tarjeta principal · Premios de campaña dentro de Campañas · Domicilios con mensaje modelo copiable e instrucciones plegables · tarjeta enriquecida (sellos, redes, contacto, políticas) · prueba Zernio. Fable 5.1 | Fable 5.1 (Sonnet en subagentes) | `src/components/layout/DashboardSidebar.tsx` · `src/app/(dashboard)/dashboard/campaigns/**` · `src/app/(dashboard)/dashboard/campaign-rewards/**` · `src/components/dashboard/domicilios/**` · `src/app/(dashboard)/dashboard/marca/**` · `src/lib/tenant-config-paths.ts` · `src/lib/branding.ts` · `src/types/tenant.types.ts` · `src/components/features/wallet/**` · `src/components/features/check-in/CustomerCard.tsx` · `src/components/dashboard/BrandPreview.tsx` · `tests/unit/tenant-config-paths.test.ts` · `docs/features/identidad-visual.md` · `docs/features/delivery-dashboard.md` · `docs/features/campaigns.md` · `CHANGELOG.md` · `ESTADO.md`. **NO toca `Level 2.0/`** (otra sesión pule el AIOS) | ninguna | abierta |
+| _(vacío)_ | | | | |
 
 ## 3. Siguiente, en orden
 
-1. 🔴🔴 **Correr las CINCO migraciones en Supabase producción. Es lo único urgente y no admite espera:**
-   el código salió antes que el esquema. En el SQL Editor, el archivo completo, uno detrás del otro:
-   **`00047`** (sin ella, guardar en `/dashboard/marca` y subir el logo fallan) →
-   **`00050`** (sin ella, crear un evento da 42703) →
-   **`00051`** (dominio cruzado; ⚠️ **puede ABORTAR sola** si un host apunta a dos marcas: NO se
-   fuerza, se resuelve a quién pertenece cada host y las otras cuatro corren igual) →
-   **`00053`** (sin ella el tablero del AIOS sale en gris y Domicilios dice "todavía no se está guardando") →
-   **`00054`** (sin ella Conexiones responde **403**, que parece permisos y no lo es).
-   La `00051` y la `00054` traen autoverificación: si algo queda a medias abortan con `FALTA: …`.
-   **Lo visual (tarjeta, check-in, panel) no depende de ninguna: eso salió sano.**
-1.bis 🔴 **Multi-sede (F8): ESCRITO en las dos ramas, falta correrlo y desplegarlo.** Ya no es trabajo,
-   es despliegue. **La `00056` va con las otras cinco** (después de la `00054`), y el **orden entre repos no
-   es negociable**: `00056` en Supabase del producto → `00007` en el Supabase del AIOS → recién ahí desplegar
-   el AIOS v1.6.0. Al revés, `aios_add_location` no existe y el enganche de la sede 2 responde «falta aplicar
-   la migración 00056». Producto: ya en `main` y pusheado. AIOS: rama `feat/multisede-aios` **pusheada a `origin`,
-   sin mergear a `main` a propósito** (mergearla despliega la v1.6.0 antes de sus migraciones).
-   La decisión (opción B, del dueño) está en `Level 2.0/aios-constelarys/docs/DECISION-MULTISEDE-2026-09-07.md`:
-   el `tenant_slug` se queda en la sede y las sedes de una marca lo repiten, porque **un propietario puede
-   tener varias marcas** y `clients` es una sola fila. **La marca no es una tabla: es el `tenant_slug`.**
-   ⚠️ **Tepuy no se da de alta hasta que esto esté corrido y desplegado** (dueño, 2026-09-07).
+1. ✅ **Las seis migraciones (00047–00056) están aplicadas** (dueño, 2026-09-08). Del lado del AIOS queda
+   **la `00007` en su Supabase y desplegar la v1.6.0** (mergear `feat/multisede-aios` → `main` del AIOS): lo
+   está puliendo otra sesión del dueño el 08. Recién ahí se da de alta Tepuy y la sede 2 engancha.
+1.bis 🔴 **Pushear `596fb5b` a `main`** (los cuatro cambios pre-reunión; sin migración, despliega solo).
+   Después: mirar `/dashboard/marca` (ahora "Tarjeta principal"), cargar redes/sellos de una marca y abrir
+   su `/tarjeta` en un celular. Sin config nueva, ninguna marca cambia.
 2. **Smoke test** del `docs/RUNBOOK-DEPLOY.md` §5 con Sushi Service real, apenas terminen las cinco:
    crear un evento con enlace, abrir Conexiones, y mirar la tarjeta en un celular.
 3. **Asignarle sede a los meseros que ya existen.** Todos tienen `location_id` NULL, así que **no aparecen
    en ningún escáner**. Preparado en `SQL-PARA-CORRER/meseros-sin-sede/`; falta la DECISIÓN, persona por persona.
-4. **Zernio E2E** con la cuenta ya limpia → desbloquea al primer cliente nuevo bajo coexistencia. Con él va
+4. **Zernio E2E** con la cuenta ya limpia → desbloquea al primer cliente nuevo bajo coexistencia. ⚠️ **Se intentó
+   el 08 y no se puede desde esta máquina**: la `ZERNIO_API_KEY` de `.env.local` responde **401** a todo GET
+   (`/v1/profiles`, `/v1/phone-numbers`, `/v1/api-keys`), `.env.local` no tiene credenciales de Supabase, y no
+   hay un teléfono propio al que mandar. Hace falta: la key vigente (la de Vercel), el `accountId` de la marca
+   Zernio y un número del dueño para `scripts/zernio-sandbox-test.mjs --account … --to …`. Con él va
    **`ZERNIO_TEMPLATE_SAMPLE_IMAGE_URL`** = `…/event-media/5103017800669793459.jpg` en Vercel (la muestra
    que Meta YA aprobó; el HEIC del bucket **no sirve**). Sin ella las 2 de calendario salen bloqueadas.
 5. **`owner_email` está vacío en las 5 marcas**: Conexiones **solo la opera el super-admin** (`isTenantOwner()`
@@ -72,7 +62,7 @@
    se les contesta que ese número «es exclusivo para mensajes automáticos») y **18.c** (plantilla de fallo de Zernio).
 8. **De `docs/AUDITORIA-POST-DEPLOY-2026-09-06.md`** queda vivo el AMARILLO de `reward-reminder` (Crons). El
    ROJO 3 está entero en `main` y vive solo hasta que corra la 00053. Siguen stale: `docs/ESTADO-REQUERIMIENTOS.md`
-   y `docs/04-deployment.md`.
+   (además da por abierta la **18.e**, que ya está hecha en Conexiones C1) y `docs/04-deployment.md`.
 9. **Aplicar la 00030** en ventana tranquila (cierra el riesgo del DEFAULT puente).
 10. **Onboarding de los 25**: wildcard DNS ya resuelto y probado con Sushi Fun.
 
@@ -81,9 +71,8 @@ reseñas y **Meta** para campañas. Ninguna decisión de hoy cierra esa puerta (
 
 ## 4. Bloqueado: solo lo puede destrabar el dueño
 
-- **Correr la `00047`, `00050`, `00051`, `00053` y `00054`** (§3.1). Son migraciones sobre datos reales.
-- **Mergear y pushear `main` del AIOS** (despliega la v1.6.0): solo DESPUÉS de correr la `00056` en el producto y la
-  `00007` en el AIOS, en ese orden (§3.1.bis).
+- **Pushear `596fb5b` a `main`** (§3.1.bis) y **mergear y pushear `main` del AIOS** (despliega la v1.6.0): solo DESPUÉS de
+  la `00007` en el AIOS (la `00056` del producto ya está).
 - **Borrar las ramas locales ya mergeadas** (`feat/salud-aios`, `feat/domicilios`, `feat/conexiones`, `feat/visual`,
   `preview/capa-visual`) y el **stash** olvidado de `fix/opt-out-visible` (`git stash show -p stash@{0}` para mirarlo).
 - **Borrar el Supabase de Sushi Fun.** Esperar a un fin de semana de operación normal. El respaldo son los
@@ -95,6 +84,12 @@ reseñas y **Meta** para campañas. Ninguna decisión de hoy cierra esa puerta (
 
 ## 5. Hecho reciente
 
+- **Cambios pre-reunión** (2026-09-08, `596fb5b`, **local, sin pushear**, sin migración): "Identidad visual" pasa a
+  **"Tarjeta principal"**; la tarjeta muestra símbolo del sello (20), decoración de contorno (6), redes, perfil de
+  Google, descripción, contacto/horario y políticas, plegados (`CardExtras`/`CardMotif`/`StampIcon`; se guarda en
+  `config.card.*` + `instagram_url`/`whatsapp_link` por la whitelist, listas cerradas para los dibujos). **Sin config
+  no cambia nada.** Premios de campaña vive como pestaña de Campañas (la ruta vieja redirige). Domicilios: cuadro
+  modelo con "Copiar modelo" y pasos plegables. → `docs/features/identidad-visual.md`, `campaigns.md`, `delivery-dashboard.md`.
 - **El AIOS aprende lo que es una sede** (2026-09-07, F8, **rama `feat/multisede-aios` en los DOS repos, sin
   mergear**): el AIOS creaba **un tenant por cada sede**, así que un negocio con dos locales nacía como dos
   MARCAS — el cliente perdía sus puntos al cambiar de local y el WhatsApp no se podía compartir. Producto:

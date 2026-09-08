@@ -32,6 +32,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| El rol del AIOS no puede leer sedes: `permission denied for schema auth` (2026-09-08) | Opus 5 | `supabase/migrations/00057_aios_lee_sedes.sql` (nueva) · `docs/features/multi-sede.md` | **00057** | En curso |
 
 ## 3. Siguiente, en orden
 

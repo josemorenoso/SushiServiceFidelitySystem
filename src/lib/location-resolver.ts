@@ -56,6 +56,13 @@ export interface ActiveLocation {
   /** Subdominio propio de la sede (único GLOBAL, 00041). NULL = no estrenó dominio. */
   domain: string | null
   is_primary: boolean
+  /**
+   * Override de la sede sobre `tenants.config` — ficha de Google, dirección,
+   * horario, teléfonos y redes de ESTE local (00058). `{}` = hereda la marca.
+   * Viaja acá y no en una consulta aparte porque quien resuelve el host para
+   * pintar la tarjeta ya está leyendo esta fila.
+   */
+  config: Record<string, unknown> | null
 }
 
 /** Lo que resuelve el host, antes de que entren las señales más fuertes. */

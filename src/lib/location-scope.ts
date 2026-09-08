@@ -101,6 +101,19 @@ export interface LocationScope {
 
   /** ¿Esta petición incluye las filas con `location_id IS NULL`? */
   readonly includesUnassigned: boolean
+
+  /**
+   * Cuántas sedes ACTIVAS tiene la MARCA. No es lo mismo que
+   * `allowedLocationIds.length`: un admin de una sede dentro de una marca de
+   * tres ve una, pero la marca sigue siendo multi-sede.
+   *
+   * Es el **interruptor de compatibilidad** del §8.3 llevado al panel: con una
+   * sola sede, «todas», «la sede» y «sin sede» son el mismo conjunto de filas y
+   * el selector sobra. Vive en el alcance —y no se recalcula en cada pantalla—
+   * porque ya lo sabe quien resolvió el alcance, y porque una segunda consulta
+   * podría contestar distinto a mitad de un render.
+   */
+  readonly brandActiveLocationCount: number
 }
 
 /** El resultado de resolver el alcance. Nunca lanza: la ruta responde el código. */
@@ -127,6 +140,7 @@ function buildScope(params: {
   selection: LocationSelection
   locationIds: readonly string[] | null
   includesUnassigned: boolean
+  brandActiveLocationCount: number
 }): LocationScope {
   return {
     [LOCATION_SCOPE]: true,
@@ -137,6 +151,7 @@ function buildScope(params: {
     selection: params.selection,
     locationIds: params.locationIds,
     includesUnassigned: params.includesUnassigned,
+    brandActiveLocationCount: params.brandActiveLocationCount,
   }
 }
 
@@ -229,6 +244,7 @@ export function decideLocationScope(params: {
         role,
         allowedLocationIds: allowed,
         canSeeUnassigned,
+        brandActiveLocationCount: activeLocationIds.length,
         selection: 'all',
         // `null` solo para la marca: es lo único que incluye el cubo NULL sin
         // enumerar sedes. Para un usuario de sede, "todas" es su lista y punto.
@@ -253,6 +269,7 @@ export function decideLocationScope(params: {
         role,
         allowedLocationIds: allowed,
         canSeeUnassigned,
+        brandActiveLocationCount: activeLocationIds.length,
         selection: 'unknown',
         locationIds: [],
         includesUnassigned: true,
@@ -277,6 +294,7 @@ export function decideLocationScope(params: {
       role,
       allowedLocationIds: allowed,
       canSeeUnassigned,
+      brandActiveLocationCount: activeLocationIds.length,
       selection: 'one',
       locationIds: [pedido],
       includesUnassigned: false,
@@ -380,6 +398,8 @@ export function toScopeView(scope: LocationScope, locations: LocationOption[]): 
     canSeeAll: scope.role === 'brand',
     canSeeUnassigned: scope.canSeeUnassigned,
     locations,
+    // El selector no se dibuja con una sola sede (§8.3). Ver `LocationScopeView`.
+    multiSede: scope.brandActiveLocationCount >= 2,
   }
 }
 

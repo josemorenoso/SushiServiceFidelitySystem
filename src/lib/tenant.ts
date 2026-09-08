@@ -66,6 +66,13 @@ export interface HostContext {
   requiresLocationChoice: boolean
   /** Las sedes entre las que elegir. Vacío salvo en el caso del 409. */
   locationChoices: ActiveLocation[]
+  /**
+   * La sede resuelta, ENTERA. `locationId` sigue siendo lo que se atribuye; esto
+   * es para quien además necesita su `config` (la ficha de Google, la dirección
+   * y el teléfono de ESTE local) sin pagar una segunda consulta. `null` cuando la
+   * sede es desconocida — ahí la marca contesta por ella, que es lo de siempre.
+   */
+  location: ActiveLocation | null
 }
 
 const EMPTY_HOST_CONTEXT: HostContext = {
@@ -74,9 +81,10 @@ const EMPTY_HOST_CONTEXT: HostContext = {
   locationSource: null,
   requiresLocationChoice: false,
   locationChoices: [],
+  location: null,
 }
 
-const LOCATION_COLUMNS = 'id, name, slug, domain, is_primary'
+const LOCATION_COLUMNS = 'id, name, slug, domain, is_primary, config'
 
 /**
  * Resuelve MARCA + SEDE a partir del host de la petición. Fase F3 de multi-sede.
@@ -176,6 +184,7 @@ export async function resolveHostContext(host: string | null | undefined): Promi
     locationSource: pick.source,
     requiresLocationChoice: pick.requiresChoice,
     locationChoices: pick.choices,
+    location: pick.locationId ? (activas.find((l) => l.id === pick.locationId) ?? null) : null,
   }
 }
 

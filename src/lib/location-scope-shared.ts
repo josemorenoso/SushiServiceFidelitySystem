@@ -43,6 +43,22 @@ export interface LocationScopeView {
   canSeeAll: boolean
   canSeeUnassigned: boolean
   locations: LocationOption[]
+  /**
+   * ¿Esta marca tiene 2+ sedes activas? Es **el interruptor de compatibilidad**
+   * del §8.3 del spec, ahora también de cara al usuario.
+   *
+   * Con UNA sola sede, «todas las sedes», «Sede Principal» y «Sin sede» nombran
+   * exactamente el mismo conjunto de filas, así que el selector ofrecía tres
+   * opciones para una sola realidad. El dueño lo reportó tal cual: *"si es sede
+   * única no quiero que me ande saliendo para seleccionar sede porque es solo
+   * una y todos se confunden"*. Un menú que no puede cambiar nada no es una
+   * opción, es una pregunta sin respuesta.
+   *
+   * Se calcula sobre las sedes ACTIVAS de la MARCA (no sobre las que este
+   * usuario ve): un admin de una sede dentro de una marca de tres sigue
+   * necesitando saber en cuál está parado.
+   */
+  multiSede: boolean
 }
 
 /** El nombre del parámetro. Uno solo, para que el cliente y el servidor no discrepen. */

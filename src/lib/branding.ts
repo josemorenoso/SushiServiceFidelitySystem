@@ -180,12 +180,66 @@ function text(value: string | null | undefined): string | null {
 }
 
 /**
+ * Mezcla la config de la SEDE sobre la de la MARCA, campo a campo.
+ *
+ * Solo el primer nivel y `card`, que es la única forma que tiene el `config` de
+ * una sede (lo garantiza el CHECK `chk_restaurant_locations_config_whitelist`,
+ * migración 00058 §1). Un valor vacío o ausente en la sede NO pisa: es como una
+ * sede dice *"esto lo hereda de la marca"*, y es lo que hace que una sede recién
+ * creada —`config = {}`— se comporte bit a bit como antes de la 00058.
+ *
+ * PURA a propósito: es la regla de precedencia entera, probable sin base.
+ */
+export function mergeLocationOverConfig(
+  brand?: TenantConfig | null,
+  location?: TenantConfig | null
+): TenantConfig | undefined {
+  if (!location) return brand ?? undefined
+  // `TenantConfig` tiene claves declaradas, no un index signature: el puente por
+  // `unknown` es lo que permite recorrerla por nombre sin aflojar el tipo público.
+  const base = (brand ?? {}) as unknown as Record<string, unknown>
+  const over = location as unknown as Record<string, unknown>
+
+  const out: Record<string, unknown> = { ...base }
+
+  for (const [k, v] of Object.entries(over)) {
+    if (k === 'card') continue
+    // `text()` es el mismo criterio de "no configurado" que usa todo el archivo:
+    // '' y null heredan, en vez de borrar el dato de la marca.
+    if (text(v as string | null | undefined) !== null) out[k] = v
+  }
+
+  const cardBase = (base.card ?? {}) as Record<string, unknown>
+  const cardOver = (over.card ?? {}) as Record<string, unknown>
+  const card: Record<string, unknown> = { ...cardBase }
+  for (const [k, v] of Object.entries(cardOver)) {
+    if (text(v as string | null | undefined) !== null) card[k] = v
+  }
+  if (Object.keys(card).length > 0) out.card = card
+
+  return out as unknown as TenantConfig
+}
+
+/**
  * Mezcla la config de un tenant (`tenants.config`) sobre los defaults.
  * Cualquier campo ausente cae al default → un tenant cuya config no fije un
  * campo se ve idéntico al comportamiento anterior a §5/§6.
+ *
+ * `locationConfig` es el override de la SEDE (`restaurant_locations.config`,
+ * migración 00058). Existe porque cada local tiene su propia ficha de Google, su
+ * propia dirección y su propio teléfono, y sin esto las dos sedes de una marca
+ * mandaban a reseñar la MISMA ficha: la de la segunda sede nacía muerta.
+ *
+ * Lo que la sede NO puede pisar —nombre, logo, colores, sellos— lo impone la
+ * whitelist, no este archivo. El porqué está en `src/lib/location-config-paths.ts`:
+ * la tarjeta muestra puntos que son de la MARCA, así que si la identidad
+ * cambiara con la sede, la tarjeta mentiría.
  */
-export function resolveBranding(config?: TenantConfig | null): Branding {
-  const c = config ?? undefined
+export function resolveBranding(
+  config?: TenantConfig | null,
+  locationConfig?: TenantConfig | null
+): Branding {
+  const c = mergeLocationOverConfig(config, locationConfig)
   const b = c?.branding ?? undefined
   const staffLabel = c?.staff_role_label || DEFAULT_BRANDING.staffLabel
 

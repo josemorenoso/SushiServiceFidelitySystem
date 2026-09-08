@@ -26,7 +26,7 @@ import { CARD_MOTIF_IDS, STAMP_ICON_IDS } from '@/constants/card-extras'
 /** Resultado de validar un valor: o el texto ya normalizado, o el error a devolver. */
 export type PathValidation = { ok: true; value: string | number } | { ok: false; error: string }
 
-interface EditablePath {
+export interface EditablePath {
   /** `clave` o `espacio.clave`. Máximo dos niveles: es todo lo que el panel edita. */
   path: string
   validate: (raw: unknown) => PathValidation
@@ -164,6 +164,10 @@ const EDITABLE_PATHS: readonly EditablePath[] = [
   // `resolveBranding()` ya las leía, solo que nadie podía editarlas.
   { path: 'instagram_url', validate: httpUrl },
   { path: 'whatsapp_link', validate: httpUrl },
+  // `resolveBranding()` ya leía `delivery_phone` desde siempre (branding.ts:222)
+  // pero NADIE podía editarlo: solo lo escribía el AIOS al dar de alta. Un
+  // restaurante que cambiaba el teléfono de domicilios tenía que pedírnoslo.
+  { path: 'delivery_phone', validate: phoneText },
   { path: 'card.stamp_icon', validate: oneOf(STAMP_ICON_IDS) },
   { path: 'card.motif', validate: oneOf(CARD_MOTIF_IDS) },
   { path: 'card.description', validate: multilineText(400) },
@@ -195,6 +199,29 @@ export function isEditablePath(path: string): boolean {
   return BY_PATH.has(path)
 }
 
+/**
+ * Toma un subconjunto de la lista de arriba, POR NOMBRE.
+ *
+ * Es lo que hace que la whitelist de una SEDE no sea una lista nueva sino una
+ * vista de esta: las validaciones son literalmente las mismas funciones, así que
+ * un `google_maps_url` de sede no puede aceptar algo que el de la marca rechaza.
+ *
+ * Lanza si un nombre no existe. Es un error de programación, no de datos, y vale
+ * más que reviente al importar el módulo que descubrirlo el día que alguien
+ * renombre una ruta y la sede se quede callada sin poder editar ese campo.
+ */
+export function pickEditablePaths(names: readonly string[]): EditablePath[] {
+  return names.map((name) => {
+    const spec = BY_PATH.get(name)
+    if (!spec) {
+      throw new Error(
+        `pickEditablePaths: la ruta "${name}" no está en EDITABLE_PATHS de tenant-config-paths.ts`
+      )
+    }
+    return spec
+  })
+}
+
 export type ConfigPatch = Record<string, unknown>
 
 export type BuildPatchResult =
@@ -211,11 +238,25 @@ export type BuildPatchResult =
  * de más no es motivo para rechazar el resto. Un valor MAL FORMADO sí corta.
  */
 export function buildConfigPatch(body: Record<string, unknown>): BuildPatchResult {
+  return buildPatchFrom(BY_PATH, body)
+}
+
+/**
+ * El cuerpo de `buildConfigPatch()`, parametrizado por la lista de rutas.
+ *
+ * Existe porque las SEDES tienen su propia whitelist —un subconjunto de esta
+ * misma lista— y duplicar el bucle habría creado dos versiones de la misma
+ * decisión: la que valida y la que aplana. Ver `src/lib/location-config-paths.ts`.
+ */
+export function buildPatchFrom(
+  byPath: ReadonlyMap<string, EditablePath>,
+  body: Record<string, unknown>
+): BuildPatchResult {
   const patch: ConfigPatch = {}
   const paths: string[] = []
 
   for (const [path, raw] of Object.entries(body)) {
-    const spec = BY_PATH.get(path)
+    const spec = byPath.get(path)
     if (!spec) continue
 
     const result = spec.validate(raw)
@@ -245,8 +286,16 @@ export function buildConfigPatch(body: Record<string, unknown>): BuildPatchResul
  * Solo devuelve lo editable: el resto de `config` no es asunto de este endpoint.
  */
 export function projectEditablePaths(config: Record<string, unknown>): Record<string, unknown> {
+  return projectPaths(EDITABLE_PATH_NAMES, config)
+}
+
+/** El cuerpo de `projectEditablePaths()`, parametrizado. Ver `buildPatchFrom()`. */
+export function projectPaths(
+  pathNames: readonly string[],
+  config: Record<string, unknown>
+): Record<string, unknown> {
   const out: Record<string, unknown> = {}
-  for (const { path } of EDITABLE_PATHS) {
+  for (const path of pathNames) {
     const [head, tail] = path.split('.')
     if (tail === undefined) {
       out[path] = config[head]

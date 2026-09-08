@@ -35,6 +35,8 @@ function sede(id: string, over: Partial<ActiveLocation> = {}): ActiveLocation {
     slug: id === ENVIGADO ? 'envigado' : 'laureles',
     domain: null,
     is_primary: false,
+    // `{}` = esta sede hereda todo de la marca, que es como nacen todas (00058).
+    config: {},
     ...over,
   }
 }

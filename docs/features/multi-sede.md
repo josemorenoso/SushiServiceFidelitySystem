@@ -38,7 +38,7 @@ re-litigan.** Si algo de este doc contradice al spec, manda el spec.
 | **F5** | 00046 + calendario, crons y domicilios con el interruptor de ≥2 sedes (D8, D9) | ⏳ |
 | **F6** | Desglose por sede en el dashboard (D4, D12) | ⏳ |
 | **F7** | 00045 + `LocationScope` + selector en el panel (D10) | ✅ **hecha** — ver §3.quater |
-| **F8** | ~~00047~~ **el número sale de `proxima-migracion.mjs`** (hoy diría `00055`) + AIOS: `aios_add_location()`, `product_location_id`, `site_model`, wizard de sede 2..N | ⏳ **brief escrito 2026-09-07** — ver §2.bis |
+| **F8** | ~~00047~~ **`00056`** (`aios_add_location()`, `aios_set_location()`, `aios_provision_tenant()` con sedes de verdad) + AIOS: `product_location_id`, `site_model`, wizard de sede 2..N | 🚧 **en curso 2026-09-07** — ver §2.bis |
 | **F9** | 00048: `location_messaging`, cupo por línea, plantillas por línea | ⏳ **D6 decidida 2026-09-05**: N líneas por marca, la sede NO obliga a una línea — ver §5, deuda 6.bis |
 | **F10** | 00049: `customer_review_state` | ⏳ confirmar la suposición §7.2 |
 
@@ -63,8 +63,50 @@ simplemente nunca le mandó más de una. Lo que SÍ hace falta es **agregar una 
 ya existe**: el rol `aios_constelarys` no tiene INSERT sobre `restaurant_locations` desde la
 00035 v2, así que va una `aios_add_location()` `SECURITY DEFINER` con el mismo patrón de la 00036.
 
+⚠️ **Pero ese dato estaba a medias, y la corrección es lo que obligó a tocar más de lo previsto**
+(2026-09-07): el bucle itera, sí, pero su `INSERT` escribe solo
+`tenant_id, name, address, lat, lon, radius_meters, is_active` — **no escribe `slug` ni `domain`**.
+Y por D21 (§3.5) una marca con 2+ sedes activas deja de atribuir por el dominio raíz: el registro
+responde **409**. O sea que un alta de dos sedes con la función como estaba **nacía creada pero
+MUERTA** — dos sedes sin subdominio, ni un cliente nuevo pudiendo registrarse. Por eso la 00056
+**reemplaza** `aios_provision_tenant`, conservando su firma `(payload jsonb)`: la trampa del
+42725 aplica a *agregar un parámetro*, no a cambiar el cuerpo, y la migración lo verifica al
+final (si quedan dos versiones, aborta).
+
 ⚠️ **El número `00047` que este doc reservaba para F8 ya lo tomó `00047_identidad_visual.sql`.**
-El de F8 sale de `node scripts/proxima-migracion.mjs` corrido en el momento.
+El de F8 salió de `node scripts/proxima-migracion.mjs`: es la **`00056`**.
+
+### Lo que trae la `00056` (lado producto de F8)
+
+| Qué | Para qué |
+|---|---|
+| `aios_add_location(p_tenant_slug, payload)` | La sede 2..N de una marca que ya existe. `is_primary` **siempre false** (la principal la fijó la 00042) y `sort_order` se calcula solo |
+| `aios_set_location(p_tenant_slug, p_location_id, payload)` | Editar nombre/dirección/estado/orden. Lo que el payload no trae, **no se toca** |
+| `aios_validar_sede(...)` | Validación compartida por las dos vías de escritura, en un solo sitio para que no diverjan (mismo criterio que `connection_apply_whatsapp()` en la 00054) |
+| `aios_provision_tenant(payload)` | **Reemplazada**: su bucle escribe `slug`, `domain`, `is_primary` y `sort_order`. La PRIMERA sede del array nace principal |
+| `GRANT SELECT` **por columnas** + policy | El rol lee `restaurant_locations`. **`config` queda FUERA**: es el espacio de override por sede y mañana puede llevar datos que el AIOS no tiene por qué ver |
+
+**Tres rechazos que valen más que las tres funciones juntas**, porque convierten caídas
+silenciosas en errores que dicen qué hacer:
+
+- **`sede_sin_identidad`** — un alta de 2+ sedes en la que alguna venga sin `slug` o sin `domain`.
+  Es el caso «nace creada pero muerta» de arriba.
+- **`sede_previa_sin_subdominio`** — agregar la sede 2 a una marca cuya sede 1 todavía vive del
+  dominio raíz. Mientras es única, la sede 1 se atribuye por «sede única implícita»; el instante
+  en que nace la segunda ese atajo **se apaga**, y sin este rechazo el alta de la sede 2 dejaría a
+  la sede 1 sin poder registrar un solo cliente nuevo. Es el paso `single → multi`, y se destraba
+  con `aios_set_location()` dándole su subdominio a la sede 1.
+- **`sede_dominio_es_el_de_la_marca`** — una sede nueva tomando el dominio raíz. El raíz tiene que
+  seguir significando «la marca»: con 2+ sedes su trabajo es dar 409 y dejar elegir.
+
+⚠️ **La única excepción al «`domain` se fija al crear»**: `aios_set_location()` sí puede FIJARLO
+mientras la sede no tenga uno propio (NULL, o igual al de su marca). Sin eso, `single → multi` no
+se puede hacer y `sede_previa_sin_subdominio` sería un callejón sin salida. Una sede que ya
+estrenó subdominio queda **congelada** (`sede_dominio_congelado`): ahí sí está impreso en QR.
+
+Pruebas: `tests/db/multisede-aios-sedes.test.ts` — 17 comprobaciones contra Postgres real,
+incluidas las dos direcciones del paso `single → multi` y que una sede de otra marca no se puede
+editar aunque llegue su uuid.
 
 Brief completo (invariante, qué está mal con archivo y línea, guardrails, 8 criterios de
 aceptación): `Level 2.0/aios-constelarys/docs/PROMPT-2026-09-07-multisede-aios.md`.
@@ -748,7 +790,7 @@ Ninguna de éstas se cierra por cuenta propia: son decisiones del dueño o de un
 | ~~14~~ | ~~**`src/app/api/dashboard/location/route.ts` sigue con su `.single()`.**~~ **CERRADA en F4.** Y con una correccion al diagnostico: el bug NO era el `.single()`, era que el `PUT` **descartaba el error** de su sonda — por eso cambiarlo a `.maybeSingle()` no habria arreglado nada. Ver §3.ter. Texto original: Filtra solo por tenant: con 2 sedes activas devuelve 500, y su `PUT` inserta una tercera fila en vez de actualizar. Este doc decía «se arregla en F3». | **NO se arregló en F3**: el alcance de la sesión de F3 excluyó explícitamente tocar lecturas y pantallas de dashboard (eso es F6/F7). Contradicción real entre este doc y el alcance ejecutado, dejada por escrito a propósito. Ningún tenant vivo tiene 2 sedes, así que hoy no es explotable. |
 | 15 | **`staff_devices.staff_user_id` es una FK SIMPLE** a `staff_users(id)` (00018:31, `ON DELETE CASCADE`): nada en la BASE impide atribuir un dispositivo de la marca A a un mesero de la marca B. | **Mitigado, no cerrado.** El trigger `trg_staff_devices_sede_coherente` de la 00044 lo rechaza (23514) buscando al mesero DENTRO de la marca del dispositivo, pero un trigger es mas facil de saltar que una FK. Convertirla en compuesta `(staff_user_id, tenant_id)` exige un `UNIQUE (id, tenant_id)` en `staff_users` que hoy no existe, y eso no esta en el spec. |
 | ~~16~~ | ~~**No hay control en el panel para asignarle sede a un mesero.**~~ **CERRADA en F7.** `/dashboard/staff` ya dibuja el `<select>` de sede en Crear y Editar (`assignableLocations`, tomado del mismo `LocationScopeProvider` del header — cero fetch nuevo), la tabla muestra la sede de cada mesero como badge (`location_id` NULL → "Sin sede", nunca se adivina), y el aviso de D11 (mover de sede con dispositivos en otra se rechaza, 23514) queda escrito en la propia pantalla. Texto original: La API ya lo acepta (`POST`/`PATCH /api/dashboard/staff` con `location_id`) y el `GET` ya lo devuelve, pero el formulario de `/dashboard/staff` no dibuja el selector. | F4 entregó el MECANISMO, F7 la pantalla — ver §3.quater. El `<select>` solo se dibuja si la marca tiene al menos una sede activa (`assignableLocations.length > 0`); con `role='location'` el admin solo ve SUS sedes, que es la restricción correcta: no debería poder asignar meseros a una sede que no administra. |
-| 17 | **Las sedes NO se pueden crear ni editar desde el producto**, solo la principal y solo sus coordenadas (`PUT /api/dashboard/location`). **Y el AIOS tampoco sabe**: crea un tenant por sede (§2.bis). | Dar de alta la sede 2..N es el wizard del AIOS, **F8**. No se adelanta: `restaurant_locations` es la 00041 y su superficie de escritura la define esa fase. **2026-09-07: brief escrito, bloquea a Tepuy.** El número de migración **ya no es la `00047`** (la tomó `identidad_visual`): sale de `proxima-migracion.mjs`. |
+| 17 | ⚠️ **PARCIALMENTE CERRADA por la `00056` (2026-09-07).** Ya existe la superficie de escritura de sedes para el AIOS: `aios_add_location()` y `aios_set_location()` (§2.bis). **Lo que sigue abierto es el PRODUCTO**: desde el panel del cliente las sedes se siguen sin poder crear ni editar — solo la principal y solo sus coordenadas (`PUT /api/dashboard/location`), que necesita el selector de F7 para llegar a las demás. | La escritura desde el AIOS era lo que bloqueaba a Tepuy y es lo que abrió la 00056. Que el dueño de un restaurante administre sus propias sedes desde `/dashboard` es otra pantalla y otra fase: no se adelanta acá. |
 
 ---
 

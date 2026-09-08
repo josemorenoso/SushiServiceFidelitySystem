@@ -28,7 +28,7 @@
 
 🔵 **EN VUELO — `feat/multisede-aios` (sesión "el AIOS entiende sedes", Opus 5, 2026-09-07).**
 Territorio, en los DOS repos:
-- **Producto**: migración **00055** (`aios_add_location` / `aios_set_location` + SELECT por columnas
+- **Producto**: migración **00056** (`aios_add_location` / `aios_set_location` + SELECT por columnas
   sobre `restaurant_locations` al rol `aios_constelarys`) · `docs/features/multi-sede.md` (§2, F8,
   deuda D17) · `ESTADO.md` · `CHANGELOG.md`. **No toco** `src/` del producto.
 - **AIOS** (`Level 2.0/aios-constelarys`, rama `feat/multisede-aios`): migración **00007**
@@ -100,7 +100,7 @@ El brief completo quedó escrito en el repo del AIOS:
    negocio con varios locales tiene que quedar como **UN tenant con N `restaurant_locations`**, no
    como N tenants. Falta de los dos lados: en el PRODUCTO una función `aios_add_location()`
    `SECURITY DEFINER` (el rol `aios_constelarys` no puede escribir en `restaurant_locations` desde
-   la 00035 v2) — **su número sale de `node scripts/proxima-migracion.mjs`, hoy diría `00055`, y
+   la 00035 v2) — **su número sale de `node scripts/proxima-migracion.mjs`, que dio la `00056`, y
    NO es la `00047` que reserva el doc de multi-sede: ese número ya lo tomó `identidad_visual`**;
    en el AIOS, `clients.site_model` (`single`/`multi`), `client_locations.product_location_id` y el
    selector «una sede / varias» en el alta. Brief entero:

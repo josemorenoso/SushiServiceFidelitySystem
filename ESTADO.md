@@ -40,6 +40,12 @@
    con el código ya desplegado. Sin ella el producto responde **503** y la tarjeta «Usuario del panel» se ve
    pero dice que está apagada. Comprobarla dando de alta a **Pedacito de Amor**, que espera su usuario;
    si algo falla, el SQL de `docs/features/alta-usuario-admin.md` §7 hace lo mismo a mano.
+0.bis **Tepuy nació como DOS marcas** (`clubtepuylaureles` 01:48 y `clubtepuyenvigado` 01:53): el alta salió con
+   el AIOS **v1.5.2**, que creaba un tenant por sede; la v1.6.0 quedó desplegada a las ~01:59. Con los QR **ya
+   impresos**, el arreglo deja los dos subdominios como `domain` de las SEDES y le da a la marca una raíz nueva
+   (`clubtepuy.constelarys.com`), porque con 2+ sedes el raíz pide elegir sede y rompería el QR de Laureles.
+   Los cuatro scripts, en orden, en `SQL-PARA-CORRER/tepuy-una-marca/` (el 03 va en el Supabase del **AIOS**).
+   **Corre prisa**: los dos subdominios ya responden, y el primer check-in en Envigado convierte esto en otro problema.
 1. ✅ **Las seis migraciones (00047–00056) del producto y la `00007` del AIOS están aplicadas** (dueño, 2026-09-08).
    Del AIOS queda **desplegar la v1.6.0** (mergear `feat/multisede-aios` → `main` del AIOS), que lo está puliendo
    otra sesión del dueño el 08. Recién ahí se da de alta Tepuy y la sede 2 engancha.

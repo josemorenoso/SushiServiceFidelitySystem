@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useDemo } from '@/contexts/DemoContext'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
-import { LogOut, Menu, QrCode, LayoutDashboard, Users, Gift, Megaphone, UtensilsCrossed, FileText, Settings, CalendarDays, UserCog, ShieldCheck, Ticket, Crosshair, Palette } from 'lucide-react'
+import { LogOut, Menu, QrCode, LayoutDashboard, Users, Gift, Megaphone, UtensilsCrossed, FileText, Settings, CalendarDays, UserCog, ShieldCheck, Ticket, Crosshair, Palette, Store, KeyRound } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
@@ -31,9 +31,15 @@ export function DashboardHeader() {
     // imprenta ni el logo que ya existían (§3).
     { href: '/dashboard/qr', label: 'QR Studio', icon: QrCode },
     { href: '/dashboard/marca', label: 'Tarjeta principal', icon: Palette },
+    // "Mis sedes" va JUNTO a la tarjeta y no dentro de Ajustes: es la pantalla
+    // donde el restaurante edita cada local -su ficha de Google, su direccion,
+    // sus telefonos- y hasta hoy no existia en ningun lado (00058).
+    { href: '/dashboard/sedes', label: 'Mis sedes', icon: Store },
     { href: '/dashboard/templates', label: 'Plantillas', icon: FileText },
     { href: '/dashboard/staff', label: `${branding.staffLabelPlural} QR`, icon: UserCog },
     { href: '/dashboard/authorized-numbers', label: 'Autorizados Domicilio', icon: ShieldCheck },
+    // Accesos justo antes de Ajustes: quien entra al panel y que ve cada uno.
+    { href: '/dashboard/accesos', label: 'Accesos', icon: KeyRound },
     { href: '/dashboard/settings', label: 'Ajustes', icon: Settings },
   ]
 

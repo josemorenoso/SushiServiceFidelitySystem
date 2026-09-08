@@ -21,6 +21,8 @@ import {
   Wallet,
   Bike,
   PlugZap,
+  Store,
+  KeyRound,
 } from 'lucide-react'
 import { useBranding } from '@/lib/branding-context'
 
@@ -41,6 +43,10 @@ export function DashboardSidebar({ isSuperAdmin = false }: { isSuperAdmin?: bool
     // imprenta ni el logo que ya existían (§3).
     { href: '/dashboard/qr', label: 'QR Studio', icon: QrCode },
     { href: '/dashboard/marca', label: 'Tarjeta principal', icon: Palette },
+    // "Mis sedes" va JUNTO a la tarjeta y no dentro de Ajustes: es la pantalla
+    // donde el restaurante edita cada local -su ficha de Google, su direccion,
+    // sus telefonos- y hasta hoy no existia en ningun lado (00058).
+    { href: '/dashboard/sedes', label: 'Mis sedes', icon: Store },
     { href: '/dashboard/templates', label: 'Plantillas', icon: FileText },
     { href: '/dashboard/staff', label: `${branding.staffLabelPlural} QR`, icon: UserCog },
     { href: '/dashboard/domicilios', label: 'Domicilios', icon: Bike },
@@ -50,6 +56,8 @@ export function DashboardSidebar({ isSuperAdmin = false }: { isSuperAdmin?: bool
     // Conexiones va JUSTO encima de Ajustes: es donde el negocio ve por qué
     // número sale su WhatsApp, y mañana conecta Google y Meta (diseño §3).
     { href: '/dashboard/conexiones', label: 'Conexiones', icon: PlugZap },
+    // Accesos justo antes de Ajustes: quien entra al panel y que ve cada uno.
+    { href: '/dashboard/accesos', label: 'Accesos', icon: KeyRound },
     { href: '/dashboard/settings', label: 'Ajustes', icon: Settings },
   ]
 

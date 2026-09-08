@@ -6,7 +6,7 @@ import { grantReward } from '@/services/reward-grant.service'
 import { buildTiersRoadmap } from '@/services/reward-tiers.service'
 import { sendTemplateMessage } from '@/services/whatsapp.service'
 import { getMultipleSettings } from '@/services/settings.service'
-import { getTenantByDomain } from '@/lib/tenant'
+import { getTenantByHost } from '@/lib/tenant'
 import type { MysteryBoxChoice } from '@/types/database.types'
 
 interface ResolveRequestBody {
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
 
     // Resolver tenant por dominio
     const host = request.headers.get('host')
-    const tenant = await getTenantByDomain(host)
+    const tenant = await getTenantByHost(host)
     if (!tenant) {
       return NextResponse.json(
         { error: 'Restaurante no reconocido', message: 'No se pudo identificar el restaurante para este dominio' },

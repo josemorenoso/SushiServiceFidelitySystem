@@ -400,6 +400,23 @@ El bloque que dormía comentado en `src/app/api/check-in/route.ts:209-244` **ya 
 con `PGRST116` para **todos los clientes de todos los tenants**. `lat`/`lon` se siguen
 aceptando en el body y se ignoran.
 
+### 3.quinquies — Lo PÚBLICO también resuelve por la sede (2026-09-08)
+
+F3 y F4 cambiaron el check-in y la superficie del mesero a `resolveHostContext()`, pero
+**la superficie pública se quedó en `getTenantByDomain()`**, que solo mira `tenants.domain`.
+Con el subdominio propio de una sede eso devuelve `null`: la tarjeta,
+`/api/check-in/status`, `/api/mystery-box/resolve` y las tres rutas de `/api/public/*`
+respondían **404**, y `getBrandingForHost()` caía a `DEFAULT_BRANDING` — las
+`NEXT_PUBLIC_BRAND_*` del despliegue. O sea: **el cliente escanea el QR impreso de su sede
+y ve el nombre y los colores de otro restaurante.**
+
+No se notó antes porque ninguna marca viva tenía dos sedes. Lo destapó **Tepuy**.
+
+La resolución vive ahora en **`getTenantByHost()`** (`src/lib/tenant.ts`), que es el cuerpo
+que `resolveHostContext()` usa para llegar a la marca: quien solo necesita la marca paga una
+consulta menos, y los dos caminos no pueden divergir. `getTenantByDomain()` conserva su firma
+y sus llamadores.
+
 ### Cómo se verifica
 
 - `tests/unit/location-resolver.test.ts` — la **decisión**: precedencia, sede única implícita,

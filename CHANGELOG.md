@@ -26,6 +26,26 @@
 
 ---
 
+## [2026-09-08] - El subdominio de una sede ya resuelve la marca en TODO lo publico
+
+**Tipo:** fix · **Origen:** Tepuy, la primera marca con dos sedes · **Sin migracion**
+
+- **`getTenantByHost()`** (nuevo, en `src/lib/tenant.ts`): la marca detras de un host, venga por
+  `tenants.domain` o por `restaurant_locations.domain`. `resolveHostContext()` pasa a usarlo, asi
+  que los dos caminos comparten un solo cuerpo y no pueden divergir. `getTenantByDomain()` NO
+  cambia de firma.
+- **Lo que estaba roto:** la tarjeta, `/api/check-in/status`, `/api/mystery-box/resolve` y las tres
+  rutas de `/api/public/*` resolvian con `getTenantByDomain()`, que solo mira `tenants.domain`. En
+  el subdominio propio de una SEDE devolvia `null` → **404**. Y `getBrandingForHost()` caia a
+  `DEFAULT_BRANDING`, que son las `NEXT_PUBLIC_BRAND_*` del despliegue: **un cliente escaneando el
+  QR impreso de su sede veia el nombre y los colores de Sushi Service**.
+- F3/F4 ya habian arreglado el check-in y toda la superficie del mesero con `resolveHostContext()`;
+  lo publico se quedo atras y nadie lo noto porque ninguna marca viva tenia dos sedes.
+- Sin efecto en marcas de una sola sede: ahi el host ES `tenants.domain` y el primer camino resuelve
+  igual que antes, con la misma consulta.
+
+---
+
 ## [2026-09-08] - El usuario con el que entra el cliente, desde el AIOS
 
 **Tipo:** feat · **Origen:** el dueno ("cree un cliente nuevo en el AIOS y al entrar no tengo usuario y contrasena") · **Sin migracion**

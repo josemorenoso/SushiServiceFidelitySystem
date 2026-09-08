@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getPointsConfig } from '@/services/points.service'
 import { rateLimit, getClientIp } from '@/lib/rate-limit'
-import { getTenantByDomain } from '@/lib/tenant'
+import { getTenantByHost } from '@/lib/tenant'
 
 export async function GET(request: NextRequest) {
   const ip = getClientIp(request)
@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const tenant = await getTenantByDomain(request.headers.get('host'))
+    const tenant = await getTenantByHost(request.headers.get('host'))
     if (!tenant) {
       return NextResponse.json({ min: 60, max: 90 }, { status: 200 })
     }

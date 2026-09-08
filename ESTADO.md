@@ -32,7 +32,6 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
-| Sedes: la superficie PÚBLICA resolvía solo por `tenants.domain` (2026-09-08) | Opus 5 | **Producto:** `src/lib/tenant.ts` · `src/lib/branding-server.ts` · `src/app/(public)/tarjeta/page.tsx` · `src/app/api/check-in/status/route.ts` · `src/app/api/mystery-box/resolve/route.ts` · `src/app/api/public/{customer-card,points-range,reward-tiers}/route.ts` — **AIOS:** `src/lib/actions/provisioning.ts` (solo `siteVerifyDomain`) | ninguna | En curso |
 
 ## 3. Siguiente, en orden
 
@@ -94,6 +93,12 @@ reseñas y **Meta** para campañas. Ninguna decisión de hoy cierra esa puerta (
 
 ## 5. Hecho reciente
 
+- **El subdominio de una sede ya resuelve la marca en TODO lo público** (2026-09-08, sin migración,
+  **en `main`**): la tarjeta, `/api/check-in/status`, `/api/mystery-box/resolve` y las tres rutas de
+  `/api/public/*` resolvían con `getTenantByDomain()` (solo `tenants.domain`) y respondían **404** en el
+  subdominio de una sede; el branding caía a `DEFAULT_BRANDING`, o sea **el cliente veía Sushi Service al
+  escanear el QR de su sede**. Nuevo `getTenantByHost()`, que es el cuerpo que ya usaba
+  `resolveHostContext()`. Lo destapó Tepuy. → `docs/features/multi-sede.md` §3.quinquies.
 - **El cliente ya nace con usuario** (2026-09-08, sin migración, **en `main` y pusheado**): el AIOS dejaba la marca
   completa y el cliente abría su enlace **sin con qué entrar**. Ahora `POST /api/aios/tenant-admin`
   (llave: `x-aios-secret`, **503 sin la variable**) + tarjeta «Usuario del panel» del AIOS v1.7.0. Nunca da

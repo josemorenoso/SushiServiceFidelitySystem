@@ -3,7 +3,7 @@ import { validatePhone } from '@/lib/validators/phone'
 import { findCustomerByPhone } from '@/services/customer.service'
 import { getNextTier, getAllTiers } from '@/services/reward-tiers.service'
 import { rateLimit, getClientIp } from '@/lib/rate-limit'
-import { getTenantByDomain } from '@/lib/tenant'
+import { getTenantByHost } from '@/lib/tenant'
 
 export async function GET(request: NextRequest) {
   const ip = getClientIp(request)
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Teléfono inválido' }, { status: 400 })
   }
 
-  const tenant = await getTenantByDomain(request.headers.get('host'))
+  const tenant = await getTenantByHost(request.headers.get('host'))
   if (!tenant) {
     return NextResponse.json({ error: 'Restaurante no reconocido' }, { status: 404 })
   }

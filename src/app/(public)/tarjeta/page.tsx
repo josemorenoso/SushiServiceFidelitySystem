@@ -6,7 +6,7 @@ import { rateLimit } from '@/lib/rate-limit'
 import { WalletCard } from '@/components/features/wallet'
 import type { Branding } from '@/lib/branding'
 import { getBrandingForHost } from '@/lib/branding-server'
-import { getTenantByDomain } from '@/lib/tenant'
+import { getTenantByHost } from '@/lib/tenant'
 
 export default async function TarjetaPage({
   searchParams,
@@ -34,7 +34,7 @@ export default async function TarjetaPage({
     return <TarjetaInput branding={branding} error="Número de celular inválido" />
   }
 
-  const tenant = await getTenantByDomain(headersList.get('host'))
+  const tenant = await getTenantByHost(headersList.get('host'))
   if (!tenant) {
     return <TarjetaInput branding={branding} error="Restaurante no reconocido" />
   }

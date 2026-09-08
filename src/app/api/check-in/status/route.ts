@@ -6,7 +6,7 @@ import { getPendingReward } from '@/services/redemption.service'
 import { getActiveGrants } from '@/services/reward-grant.service'
 import { rateLimit } from '@/lib/rate-limit'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
-import { getTenantByDomain } from '@/lib/tenant'
+import { getTenantByHost } from '@/lib/tenant'
 import { isDbFailure, logDbFailure } from '@/lib/db-failure'
 
 function getServiceClient() {
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
 
     // ─── RESOLVER TENANT POR DOMINIO ───
     const host = request.headers.get('host')
-    const tenant = await getTenantByDomain(host)
+    const tenant = await getTenantByHost(host)
     if (!tenant) {
       return NextResponse.json(
         { error: 'Restaurante no reconocido' },

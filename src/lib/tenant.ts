@@ -98,45 +98,74 @@ const LOCATION_COLUMNS = 'id, name, slug, domain, is_primary'
  * en vez de propagar el error. El check-in es el camino más caliente del producto: perder
  * la atribución de una visita es un dato menos; tumbar el check-in es un cliente menos.
  */
+/**
+ * La MARCA que hay detrás de un host, venga por su dominio raíz o por el subdominio
+ * de una de sus sedes.
+ *
+ * POR QUÉ EXISTE, Y POR QUÉ NO ALCANZA `getTenantByDomain()`
+ * ─────────────────────────────────────────────────────────
+ * `getTenantByDomain()` mira SOLO `tenants.domain` y **conserva su firma** (cambiarla
+ * toca 16 archivos). Con una sede que estrena subdominio propio —`laureles.marca.com`,
+ * `restaurant_locations.domain`, único global desde la 00041— esa consulta devuelve
+ * `null`, y el llamador no distingue "no es de nadie" de "es de una sede".
+ *
+ * Lo destapó Tepuy el 2026-09-08, la primera marca con dos sedes: sus dos subdominios
+ * están IMPRESOS en los QR, y toda la superficie pública que resolvía con
+ * `getTenantByDomain()` les respondía 404 — la tarjeta, el estado del check-in, la
+ * mystery box y las tres rutas de `/api/public/*` — mientras el branding del layout
+ * caía a `DEFAULT_BRANDING`, que hoy es la marca del despliegue (Sushi Service). O sea:
+ * el cliente escanea el QR de su restaurante y ve el nombre de OTRO.
+ *
+ * `resolveHostContext()` ya sabía hacer esto desde F3, pero devuelve además la SEDE, lo
+ * que cuesta una consulta más (`getActiveLocations`). Quien solo necesita la marca usa
+ * esta función; quien necesita atribuir una visita usa `resolveHostContext()`. Las dos
+ * comparten este cuerpo, para que no vuelvan a divergir.
+ */
+export async function getTenantByHost(host: string | null | undefined): Promise<Tenant | null> {
+  const domain = normalizeHost(host)
+  if (!domain) return null
+
+  // Camino 1: el host es el dominio raíz de la marca.
+  const porDominio = await getTenantByDomain(host)
+  if (porDominio) return porDominio
+
+  // Camino 2: el host es el subdominio de una sede.
+  const supabase = getServiceClient()
+  const { data: sede, error: sedeError } = await supabase
+    .from('restaurant_locations')
+    .select('tenant_id')
+    .eq('domain', domain)
+    .eq('is_active', true)
+    .maybeSingle()
+
+  // Esta consulta decide la MARCA, no la sede. Si falla y se devuelve `null`, el llamador
+  // responde 404 y `laureles.marca.com` deja de existir para todo el mundo — un fallo de
+  // base disfrazado de "ese host no es de nadie". Se registra para que se vea.
+  if (isDbFailure(sedeError)) {
+    logDbFailure({
+      scope: 'Tenant',
+      reason: 'location_domain_lookup_error',
+      error: sedeError,
+      context: { domain },
+    })
+    return null
+  }
+
+  if (!sede?.tenant_id) return null
+
+  const porSede = await getTenantById(sede.tenant_id as string)
+  // `getTenantById` no filtra `is_active`; `getTenantByDomain` sí. Se iguala el criterio
+  // para que un subdominio de sede no reviva una marca desactivada.
+  if (!porSede || porSede.is_active === false) return null
+  return porSede
+}
+
 export async function resolveHostContext(host: string | null | undefined): Promise<HostContext> {
   const domain = normalizeHost(host)
   if (!domain) return EMPTY_HOST_CONTEXT
 
-  let tenant = await getTenantByDomain(host)
-
-  // Camino 2: el host es el subdominio de una sede, no el de la marca.
-  if (!tenant) {
-    const supabase = getServiceClient()
-    const { data: sede, error: sedeError } = await supabase
-      .from('restaurant_locations')
-      .select('tenant_id')
-      .eq('domain', domain)
-      .eq('is_active', true)
-      .maybeSingle()
-
-    // OJO: el "falla blando en la sede" del comentario de arriba se refiere a
-    // `getActiveLocations()`, que decide QUÉ SEDE. Esta consulta es otra cosa: decide la
-    // MARCA. Si falla y se devuelve `EMPTY_HOST_CONTEXT`, el llamador responde 404 y
-    // `laureles.marca.com` deja de existir para todo el mundo — un fallo de base
-    // disfrazado de "ese host no es de nadie". Se registra para que se vea.
-    if (isDbFailure(sedeError)) {
-      logDbFailure({
-        scope: 'Tenant',
-        reason: 'location_domain_lookup_error',
-        error: sedeError,
-        context: { domain },
-      })
-      return EMPTY_HOST_CONTEXT
-    }
-
-    if (!sede?.tenant_id) return EMPTY_HOST_CONTEXT
-
-    const porSede = await getTenantById(sede.tenant_id as string)
-    // `getTenantById` no filtra `is_active`; `getTenantByDomain` sí. Se iguala el criterio
-    // para que un subdominio de sede no reviva una marca desactivada.
-    if (!porSede || porSede.is_active === false) return EMPTY_HOST_CONTEXT
-    tenant = porSede
-  }
+  const tenant = await getTenantByHost(host)
+  if (!tenant) return EMPTY_HOST_CONTEXT
 
   const activas = await getActiveLocations(tenant.id)
   const pick = pickLocationForHost(domain, normalizeHost(tenant.domain), activas)

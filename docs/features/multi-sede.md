@@ -38,12 +38,36 @@ re-litigan.** Si algo de este doc contradice al spec, manda el spec.
 | **F5** | 00046 + calendario, crons y domicilios con el interruptor de ≥2 sedes (D8, D9) | ⏳ |
 | **F6** | Desglose por sede en el dashboard (D4, D12) | ⏳ |
 | **F7** | 00045 + `LocationScope` + selector en el panel (D10) | ✅ **hecha** — ver §3.quater |
-| **F8** | 00047 + AIOS: `product_location_id`, wizard de sede 2..N | ⏳ |
+| **F8** | ~~00047~~ **el número sale de `proxima-migracion.mjs`** (hoy diría `00055`) + AIOS: `aios_add_location()`, `product_location_id`, `site_model`, wizard de sede 2..N | ⏳ **brief escrito 2026-09-07** — ver §2.bis |
 | **F9** | 00048: `location_messaging`, cupo por línea, plantillas por línea | ⏳ **D6 decidida 2026-09-05**: N líneas por marca, la sede NO obliga a una línea — ver §5, deuda 6.bis |
 | **F10** | 00049: `customer_review_state` | ⏳ confirmar la suposición §7.2 |
 
 ~~**F3 es el cuello de botella**~~ — ya no lo es: desde F3 las columnas de la 00043 se llenan
 solas en el check-in, el registro y los domicilios. Lo que sigue vacío y por qué está en §3.bis.
+
+### 2.bis — F8 dejó de ser teórica (2026-09-07)
+
+**El AIOS crea un tenant por cada sede.** `siteCreateTenant()` llama
+`aios_provision_tenant` una vez por fila de `client_locations`, así que un negocio con dos locales
+nace como **dos marcas**. Eso rompe las dos cosas de §1: el número compartido (dos
+`zernio_account_id` chocan contra `idx_tenants_zernio_account_id`, que **hace bien** — impide que
+dos MARCAS compartan línea) y el recorrido del cliente entre sedes.
+
+**Nada roto en producción**: las 5 marcas vivas son de una sola sede. Lo destapó **Tepuy**
+(dos locales), que llega ANTES de tener datos — la única ventana barata, porque unir dos tenants
+después es fusionar clientes, puntos y tiers a mano.
+
+Dato que este doc no tenía: **`aios_provision_tenant` YA itera `payload->'locations'`**
+(`00036:199-213`). El alta de varias sedes de una marca no necesita función nueva; el AIOS
+simplemente nunca le mandó más de una. Lo que SÍ hace falta es **agregar una sede a un tenant que
+ya existe**: el rol `aios_constelarys` no tiene INSERT sobre `restaurant_locations` desde la
+00035 v2, así que va una `aios_add_location()` `SECURITY DEFINER` con el mismo patrón de la 00036.
+
+⚠️ **El número `00047` que este doc reservaba para F8 ya lo tomó `00047_identidad_visual.sql`.**
+El de F8 sale de `node scripts/proxima-migracion.mjs` corrido en el momento.
+
+Brief completo (invariante, qué está mal con archivo y línea, guardrails, 8 criterios de
+aceptación): `Level 2.0/aios-constelarys/docs/PROMPT-2026-09-07-multisede-aios.md`.
 
 ---
 
@@ -724,7 +748,7 @@ Ninguna de éstas se cierra por cuenta propia: son decisiones del dueño o de un
 | ~~14~~ | ~~**`src/app/api/dashboard/location/route.ts` sigue con su `.single()`.**~~ **CERRADA en F4.** Y con una correccion al diagnostico: el bug NO era el `.single()`, era que el `PUT` **descartaba el error** de su sonda — por eso cambiarlo a `.maybeSingle()` no habria arreglado nada. Ver §3.ter. Texto original: Filtra solo por tenant: con 2 sedes activas devuelve 500, y su `PUT` inserta una tercera fila en vez de actualizar. Este doc decía «se arregla en F3». | **NO se arregló en F3**: el alcance de la sesión de F3 excluyó explícitamente tocar lecturas y pantallas de dashboard (eso es F6/F7). Contradicción real entre este doc y el alcance ejecutado, dejada por escrito a propósito. Ningún tenant vivo tiene 2 sedes, así que hoy no es explotable. |
 | 15 | **`staff_devices.staff_user_id` es una FK SIMPLE** a `staff_users(id)` (00018:31, `ON DELETE CASCADE`): nada en la BASE impide atribuir un dispositivo de la marca A a un mesero de la marca B. | **Mitigado, no cerrado.** El trigger `trg_staff_devices_sede_coherente` de la 00044 lo rechaza (23514) buscando al mesero DENTRO de la marca del dispositivo, pero un trigger es mas facil de saltar que una FK. Convertirla en compuesta `(staff_user_id, tenant_id)` exige un `UNIQUE (id, tenant_id)` en `staff_users` que hoy no existe, y eso no esta en el spec. |
 | ~~16~~ | ~~**No hay control en el panel para asignarle sede a un mesero.**~~ **CERRADA en F7.** `/dashboard/staff` ya dibuja el `<select>` de sede en Crear y Editar (`assignableLocations`, tomado del mismo `LocationScopeProvider` del header — cero fetch nuevo), la tabla muestra la sede de cada mesero como badge (`location_id` NULL → "Sin sede", nunca se adivina), y el aviso de D11 (mover de sede con dispositivos en otra se rechaza, 23514) queda escrito en la propia pantalla. Texto original: La API ya lo acepta (`POST`/`PATCH /api/dashboard/staff` con `location_id`) y el `GET` ya lo devuelve, pero el formulario de `/dashboard/staff` no dibuja el selector. | F4 entregó el MECANISMO, F7 la pantalla — ver §3.quater. El `<select>` solo se dibuja si la marca tiene al menos una sede activa (`assignableLocations.length > 0`); con `role='location'` el admin solo ve SUS sedes, que es la restricción correcta: no debería poder asignar meseros a una sede que no administra. |
-| 17 | **Las sedes NO se pueden crear ni editar desde el producto**, solo la principal y solo sus coordenadas (`PUT /api/dashboard/location`). | Dar de alta la sede 2..N es el wizard del AIOS, **F8** (00047). No se adelanta: `restaurant_locations` es la 00041 y su superficie de escritura la define esa fase. |
+| 17 | **Las sedes NO se pueden crear ni editar desde el producto**, solo la principal y solo sus coordenadas (`PUT /api/dashboard/location`). **Y el AIOS tampoco sabe**: crea un tenant por sede (§2.bis). | Dar de alta la sede 2..N es el wizard del AIOS, **F8**. No se adelanta: `restaurant_locations` es la 00041 y su superficie de escritura la define esa fase. **2026-09-07: brief escrito, bloquea a Tepuy.** El número de migración **ya no es la `00047`** (la tomó `identidad_visual`): sale de `proxima-migracion.mjs`. |
 
 ---
 

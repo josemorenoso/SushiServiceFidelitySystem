@@ -14,7 +14,7 @@
 
 | Qué | Estado |
 |-----|--------|
-| Código | **`main` = `origin/main` = `c7d074e`** (pusheado el 07). **Local, SIN pushear: `596fb5b`** sobre `feat/multisede-aios` (= `main` + este commit): Tarjeta principal enriquecida, Premios dentro de Campañas, cuadro modelo de Domicilios. **Sin migración: se puede pushear a `main` cuando el dueño diga** (un push de `main` despliega). ⚠️ La carpeta sigue en `feat/multisede-aios`; nadie cambia de rama con otra sesión viva. Sin mergear a propósito: `master`, `port/sushi-fun-2.8`, `sushi-sync` |
+| Código | **`main` = `origin/main` = `c96bce5`, pusheado el 2026-09-08 (noche) por orden del dueño.** Lleva los cuatro cambios pre-reunión (`596fb5b`, sin migración) desplegándose en Vercel. ⚠️ La carpeta sigue en `feat/multisede-aios` (= `main`); nadie cambia de rama con otra sesión viva. Sin mergear a propósito: `master`, `port/sushi-fun-2.8`, `sushi-sync` |
 | Verificación | ✅ Sobre `596fb5b` (2026-09-08): `tsc` limpio · **vitest 33 archivos / 532 tests** · eslint **7 errores preexistentes** (hooks y gráficas del panel, ninguno en lo tocado el 08). `build` no se corrió el 08 |
 | Marcas vivas | **5**: sushi-service (542 clientes), demo-ventas (412), sushi-fun (251), don-alirio (244), cafe-frangal (8) |
 | Base de datos de producción | ✅ **Aplicadas hasta la `00056`** (dueño, 2026-09-08: `00047`, `00050`, `00051`, `00053`, `00054` y `00056`, todas). El esquema ya alcanza al código de `main`. La 00030 NUNCA aplicada (a propósito). La 00015 NO se aplica (reabre fuga). Huecos: `00048`, `00049`, `00052`, `00055` |
@@ -36,11 +36,10 @@
 
 ## 3. Siguiente, en orden
 
-1. ✅ **Las seis migraciones (00047–00056) están aplicadas** (dueño, 2026-09-08). Del lado del AIOS queda
-   **la `00007` en su Supabase y desplegar la v1.6.0** (mergear `feat/multisede-aios` → `main` del AIOS): lo
-   está puliendo otra sesión del dueño el 08. Recién ahí se da de alta Tepuy y la sede 2 engancha.
-1.bis 🔴 **Pushear `596fb5b` a `main`** (los cuatro cambios pre-reunión; sin migración, despliega solo).
-   Después: mirar `/dashboard/marca` (ahora "Tarjeta principal"), cargar redes/sellos de una marca y abrir
+1. ✅ **Las seis migraciones (00047–00056) del producto y la `00007` del AIOS están aplicadas** (dueño, 2026-09-08).
+   Del AIOS queda **desplegar la v1.6.0** (mergear `feat/multisede-aios` → `main` del AIOS), que lo está puliendo
+   otra sesión del dueño el 08. Recién ahí se da de alta Tepuy y la sede 2 engancha.
+1.bis **Pusheado `c96bce5` a `main` el 08 (noche).** Falta la mirada del dueño: abrir `/dashboard/marca` (ahora "Tarjeta principal"), cargar redes/sellos de una marca y abrir
    su `/tarjeta` en un celular. Sin config nueva, ninguna marca cambia.
 2. **Smoke test** del `docs/RUNBOOK-DEPLOY.md` §5 con Sushi Service real, apenas terminen las cinco:
    crear un evento con enlace, abrir Conexiones, y mirar la tarjeta en un celular.
@@ -71,8 +70,7 @@ reseñas y **Meta** para campañas. Ninguna decisión de hoy cierra esa puerta (
 
 ## 4. Bloqueado: solo lo puede destrabar el dueño
 
-- **Pushear `596fb5b` a `main`** (§3.1.bis) y **mergear y pushear `main` del AIOS** (despliega la v1.6.0): solo DESPUÉS de
-  la `00007` en el AIOS (la `00056` del producto ya está).
+- **Mergear y pushear `main` del AIOS** (despliega la v1.6.0). Sus migraciones ya están: puede ir cuando la otra sesión cierre.
 - **Borrar las ramas locales ya mergeadas** (`feat/salud-aios`, `feat/domicilios`, `feat/conexiones`, `feat/visual`,
   `preview/capa-visual`) y el **stash** olvidado de `fix/opt-out-visible` (`git stash show -p stash@{0}` para mirarlo).
 - **Borrar el Supabase de Sushi Fun.** Esperar a un fin de semana de operación normal. El respaldo son los
@@ -84,7 +82,7 @@ reseñas y **Meta** para campañas. Ninguna decisión de hoy cierra esa puerta (
 
 ## 5. Hecho reciente
 
-- **Cambios pre-reunión** (2026-09-08, `596fb5b`, **local, sin pushear**, sin migración): "Identidad visual" pasa a
+- **Cambios pre-reunión** (2026-09-08, `596fb5b`, **en `main` y pusheado**, sin migración): "Identidad visual" pasa a
   **"Tarjeta principal"**; la tarjeta muestra símbolo del sello (20), decoración de contorno (6), redes, perfil de
   Google, descripción, contacto/horario y políticas, plegados (`CardExtras`/`CardMotif`/`StampIcon`; se guarda en
   `config.card.*` + `instagram_url`/`whatsapp_link` por la whitelist, listas cerradas para los dibujos). **Sin config

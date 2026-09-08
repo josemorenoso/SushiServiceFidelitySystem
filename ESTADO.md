@@ -32,7 +32,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
-| **F8: el AIOS entiende sedes** — "el AIOS entiende sedes", 2026-09-07 | Opus 5 | Producto: `supabase/migrations/00056_aios_sedes.sql` · `tests/db/multisede-aios-sedes.test.ts` · `docs/features/multi-sede.md` (§2, F8, D17) · su entrada en `CHANGELOG.md`. **No toca `src/` del producto.** AIOS (rama `feat/multisede-aios` de ese repo): migración 00007 (`clients.site_model`, `client_locations.product_location_id`) · `src/lib/actions/provisioning.ts` · `src/lib/product-db.ts` · `src/lib/data/sites.ts` · `src/components/sites/*` · sus docs | **00056** (escrita) · AIOS 00007 | en curso |
+| _(vacío)_ | | | | |
 
 ## 3. Siguiente, en orden
 
@@ -46,15 +46,15 @@
    **`00054`** (sin ella Conexiones responde **403**, que parece permisos y no lo es).
    La `00051` y la `00054` traen autoverificación: si algo queda a medias abortan con `FALTA: …`.
    **Lo visual (tarjeta, check-in, panel) no depende de ninguna: eso salió sano.**
-1.bis 🔴 **Multi-sede en el AIOS (F8) — bloquea a Tepuy (dos locales), que el dueño quiere vivo YA.**
-   Hoy el AIOS crea **un tenant por cada `client_locations`**, y eso choca con el invariante (`tenants` es
-   LA MARCA, `restaurant_locations` es LA SEDE): un negocio con dos locales pierde el **número compartido**
-   (un tenant = un `zernio_account_id`) y **el recorrido del cliente entre sedes** (`customers_phone_tenant_key`
-   es por marca). Nada roto en producción: las 5 marcas son de una sede. Tiene que quedar como **UN tenant
-   con N `restaurant_locations`**: en el producto la `00056` (`aios_add_location` / `aios_set_location`,
-   `SECURITY DEFINER`, en vuelo, §2); en el AIOS `clients.site_model`, `client_locations.product_location_id`
-   y el selector «una sede / varias» en el alta. Brief: `Level 2.0/aios-constelarys/docs/PROMPT-2026-09-07-multisede-aios.md`.
-   ⚠️ **Tepuy no se da de alta hasta que esto esté** (dueño, 2026-09-07).
+1.bis 🔴 **Multi-sede (F8): ESCRITO en las dos ramas, falta correrlo y desplegarlo.** Ya no es trabajo,
+   es despliegue. **La `00056` va con las otras cinco** (después de la `00054`), y el **orden entre repos no
+   es negociable**: `00056` en Supabase del producto → `00007` en el Supabase del AIOS → recién ahí desplegar
+   el AIOS v1.6.0. Al revés, `aios_add_location` no existe y el enganche de la sede 2 responde «falta aplicar
+   la migración 00056». Ramas: `feat/multisede-aios` en los dos repos, **sin mergear ni pushear**.
+   La decisión (opción B, del dueño) está en `Level 2.0/aios-constelarys/docs/DECISION-MULTISEDE-2026-09-07.md`:
+   el `tenant_slug` se queda en la sede y las sedes de una marca lo repiten, porque **un propietario puede
+   tener varias marcas** y `clients` es una sola fila. **La marca no es una tabla: es el `tenant_slug`.**
+   ⚠️ **Tepuy no se da de alta hasta que esto esté corrido y desplegado** (dueño, 2026-09-07).
 2. **Smoke test** del `docs/RUNBOOK-DEPLOY.md` §5 con Sushi Service real, apenas terminen las cinco:
    crear un evento con enlace, abrir Conexiones, y mirar la tarjeta en un celular.
 3. **Asignarle sede a los meseros que ya existen.** Todos tienen `location_id` NULL, así que **no aparecen
@@ -93,6 +93,15 @@ reseñas y **Meta** para campañas. Ninguna decisión de hoy cierra esa puerta (
 
 ## 5. Hecho reciente
 
+- **El AIOS aprende lo que es una sede** (2026-09-07, F8, **rama `feat/multisede-aios` en los DOS repos, sin
+  mergear**): el AIOS creaba **un tenant por cada sede**, así que un negocio con dos locales nacía como dos
+  MARCAS — el cliente perdía sus puntos al cambiar de local y el WhatsApp no se podía compartir. Producto:
+  **`00056`** (`aios_add_location`, `aios_set_location`, `SELECT` por columnas sobre `restaurant_locations`) +
+  **`aios_provision_tenant` reemplazada**, porque no escribía `slug` ni `domain` en las sedes y un alta de dos
+  sedes nacía **creada pero muerta** (sin subdominio, el registro responde 409). AIOS v1.6.0: `site_model`,
+  `product_location_id`, el paso 2 con dos caminos (crear la marca / engancharse) y la plata contada **una vez
+  por marca**. 18 comprobaciones nuevas contra Postgres real.
+  → `docs/features/multi-sede.md` §2.bis · `Level 2.0/aios-constelarys/docs/DECISION-MULTISEDE-2026-09-07.md`.
 - **Método v3.1: modo simple** (2026-09-07): todas las sesiones en esta carpeta y en la misma rama, territorios por
   archivo en §2, commit solo de lo propio por nombre, sin `checkout`/`stash`/`reset --hard`, una sola sesión verifica
   al cierre. Hook post-commit de graphify instalado. El script de migraciones solo lee reservas del §2. `.worktrees/` fuera.
@@ -117,7 +126,8 @@ reseñas y **Meta** para campañas. Ninguna decisión de hoy cierra esa puerta (
 sin UNIQUE por tenant · **D4** diagrama ER de DB_SCHEMA obsoleto · **D5** conteo de migraciones stale en comentarios ·
 **D7** premios sin precio · **D8** adopción de histórico irreversible · **D9** el 409 de sede no acepta elección por API ·
 **D12** campañas masivas con `location_id` NULL (es F6) · **D13** 5 columnas de sede vacías · **D15** FK simple en
-`staff_devices.staff_user_id` (mitigada con trigger) · **D17** las sedes no se crean desde el producto (F8 la ataca).
+`staff_devices.staff_user_id` (mitigada con trigger) · **D17** ⚠️ **media cerrada por la `00056`**: el AIOS ya
+puede crear y editar sedes; desde el PANEL DEL CLIENTE siguen sin poderse (solo la principal y solo sus coordenadas).
 
 **Rutas que F7 dejó SIN cablear a propósito**: `send-queue` GET, `check-in-override`, `campaigns/manual`,
 `imported-contacts/confirm`, `campaigns/run-auto`. El filtro de sede ahí es **no-op seguro (fail-closed)** hasta F6.

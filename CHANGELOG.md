@@ -8,6 +8,31 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [2026-09-07] - F8: el AIOS entiende lo que es una sede (migracion 00056)
+
+**Tipo:** feat · **Origen:** el dueno (Tepuy, dos locales) + `Level 2.0/aios-constelarys/docs/PROMPT-2026-09-07-multisede-aios.md`
+
+- **El problema.** El AIOS creaba **un tenant por cada sede**, asi que un negocio con dos locales nacia
+  como DOS MARCAS: el cliente perdia sus puntos al cambiar de local (`customers_phone_tenant_key` garantiza
+  una ficha por MARCA) y el WhatsApp no se podia compartir. Nada roto en produccion: las 5 marcas vivas son
+  de un solo local, y Tepuy llega ANTES de tener datos que migrar.
+- **La `00056`** le abre al rol `aios_constelarys` la puerta de las sedes sin abrirle ninguna otra:
+  `aios_add_location()` y `aios_set_location()` `SECURITY DEFINER` (el rol sigue SIN INSERT directo desde la
+  00035 v2), `aios_validar_sede()` compartida por las dos vias, y `GRANT SELECT` **por columnas** sobre
+  `restaurant_locations` — con `config` FUERA a proposito.
+- **Y reemplaza `aios_provision_tenant`**, conservando su firma `(payload jsonb)`: su bucle de sedes NO
+  escribia `slug` ni `domain`, y por D21 una marca con 2+ sedes deja de atribuir por el dominio raiz (409).
+  Un alta de dos sedes nacia **creada pero muerta**. La trampa del 42725 es agregar un PARAMETRO, no cambiar
+  el cuerpo; el bloque 6 aborta si quedan dos versiones.
+- **Tres rechazos que valen mas que las funciones**, porque convierten caidas silenciosas en errores que
+  dicen que hacer: `sede_sin_identidad`, `sede_previa_sin_subdominio` (agregar la sede 2 apagaria el registro
+  de la sede 1) y `sede_dominio_es_el_de_la_marca`.
+- **CERO filas tocadas.** El alta de UNA sede se comporta identica a hoy.
+  `tests/db/multisede-aios-sedes.test.ts`: 18 comprobaciones contra Postgres real.
+  → `docs/features/multi-sede.md` §2.bis · decision del dueno en `DECISION-MULTISEDE-2026-09-07.md`.
+
+---
+
 ## [2026-09-07] - Metodo v3.1: modo simple para trabajar en paralelo, y el ritual de cada sesion
 
 **Tipo:** docs/chore · **Origen:** el dueno ("los desarrollos se chocan entre si; migraciones con huecos; commits sin pushear; carpetas nuevas en el PC")

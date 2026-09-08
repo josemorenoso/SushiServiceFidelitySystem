@@ -436,6 +436,37 @@ describe('00056 — el paso single → multi', () => {
     )
   })
 
+  it('lo mismo cuando la sede 1 no tiene NINGÚN dominio — el caso de un alta reciente', async () => {
+    // Es el camino de producción de verdad: una marca dada de alta HOY por el
+    // AIOS en modo «una sola sede» nace con la sede sin slug y sin domain (la
+    // 00042 solo adoptó las que ya existían). La guarda tiene que verlo igual.
+    const s = sufijo()
+    const slug = `t12b-${s}`
+
+    await provisionar({
+      slug,
+      name: 'Alta reciente',
+      domain: `${slug}.constelarys.com`,
+      locations: [{ name: 'Sede principal' }],
+    })
+
+    const mensaje = await fallaCon(() =>
+      addLocation(slug, { name: 'Laureles', slug: 'laureles', domain: `l12b-${s}.constelarys.com` })
+    )
+    expect(mensaje).toContain('sede_previa_sin_subdominio')
+
+    // Y se destraba igual: se le da slug + domain propios a la sede 1.
+    const { rows } = await getPool().query<{ id: string }>(
+      `SELECT l.id FROM restaurant_locations l
+         JOIN tenants t ON t.id = l.tenant_id WHERE t.slug = $1`,
+      [slug]
+    )
+    await setLocation(slug, rows[0].id, { slug: 'poblado', domain: `p12b-${s}.constelarys.com` })
+    await addLocation(slug, { name: 'Laureles', slug: 'laureles', domain: `l12b-${s}.constelarys.com` })
+
+    expect(await sedesDe(slug)).toHaveLength(2)
+  })
+
   it('pero una sede que YA estrenó subdominio queda congelada', async () => {
     // Ahí sí está impreso en QR y guardado en enlaces de clientes: moverlo es
     // el error irreversible que esta fase no puede permitir.

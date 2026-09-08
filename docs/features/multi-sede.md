@@ -916,15 +916,51 @@ ninguna usa las de la marca.* Reemplaza, **no mezcla** — porque «tenés los d
 excepto los que redefiniste» no se le puede explicar a un restaurantero, y porque mezclar
 impide que una sede tenga MENOS niveles que la marca.
 
-> **ESTADO REAL, sin adornos.** La base está lista y `getAllTiers(tenantId, locationId?)`
-> ya resuelve. Lo que **falta** es enhebrar la sede en los ~10 llamadores
-> (`tarjeta`, `check-in`, `check-in/status`, `public/customer-card`,
-> `public/reward-tiers`, `points.service`, `delivery.service`, `check-in-override`,
-> `cron/birthday`, `mystery-box/resolve`) y una pantalla que cree filas por sede.
-> **Mientras no exista esa pantalla, nadie puede crear filas por sede y el sistema es
-> consistente**: `location_id` es NULL en todo y cada consulta devuelve lo de hoy. Enhebrar
-> a medias sería peor que no hacerlo: una sede vería sus premios en la tarjeta y los de la
-> marca al hacer check-in.
+**El cuello de botella no eran los llamadores de `getAllTiers`**, sino tres funciones
+intermedias con 18 call-sites entre ellas: `evaluateNewTier`, `getNextTier` y
+`buildTiersRoadmap`. Las tres reciben ahora un `locationId` **opcional**, así que ningún
+llamador rompe y el que no conoce su sede se queda con los premios de la marca.
+
+Dónde se enhebró, y de dónde sale la sede en cada sitio:
+
+| Dónde | La sede sale de | Nota |
+|---|---|---|
+| `points.service` | el `locationId` que **ya era un parámetro** | solo se usaba para atribuir el movimiento de puntos |
+| `check-in` (registro) | `regLocation.locationId` | `resolveVisitLocation()`: mesero → aparato → host |
+| `check-in` (visita) | `visitLocation.locationId` | ídem; el QR nunca decide, solo marca conflicto |
+| `delivery.service` | `deliveryLocation.locationId` | ya resuelta 90 líneas antes |
+| tarjeta · `check-in/status` · `public/customer-card` · `public/reward-tiers` | `resolveHostContext(host)` | los cuatro usaban `getTenantByHost()`, que tira la sede |
+| `mystery-box/resolve` | `tier.location_id` | el nivel que se canjea ya dice de qué local es |
+
+**Dos sitios se quedan con los premios de la MARCA a propósito**, y está escrito en el
+código para que no se lea como un olvido:
+
+- **`check-in-override`** — un admin concede una visita a mano desde el panel: no hay
+  mesero, no hay QR y no hay host de sede, así que **no existe una «sede del acto»**.
+  Inferirla del cliente sería atribuir un hecho a una sede donde no ocurrió, que es
+  justo lo que este proyecto no hace: `location_id` NULL significa «desconocida» y se
+  muestra.
+- **`cron/birthday`** (y el de reactivación) — un envío programado no tiene sede del acto.
+  La cascada `last_visit_location_id` → `origin_location_id` está diseñada y
+  explícitamente aplazada a **F6** (`whatsapp.service.ts` §6.1).
+
+**Dos trampas que aparecieron al hacerlo:**
+
+1. **`/api/public/reward-tiers` cachea 60 s en público** y su contenido pasó a variar por
+   sede — o sea, por host. Le faltaba `Vary: Host`: una caché compartida que no keyee por
+   host podía servirle a Envigado los niveles de Laureles durante un minuto.
+2. **El GET de `/api/dashboard/reward-tiers` sigue devolviendo un ARRAY.** Tiene DOS
+   consumidores —la pantalla de Recompensas y `dashboard/settings:226`, que hace
+   `r.ok ? r.json() : []`—, así que envolverlo en un objeto para mandar metadatos habría
+   dejado el selector de premios de Ajustes vacío **en silencio**. Es la misma trampa que
+   `/api/dashboard/location` ya tiene documentada. El panel deduce si está heredando:
+   pidió una sede y todo lo que volvió tiene `location_id === null`.
+
+**El modo de fallo caro de la regla de reemplazo, y cómo se tapa.** Sin nada más, el primer
+premio propio que alguien creara en una sede la haría dejar de heredar y quedarse **con ese
+solo**: el restaurante vería desaparecer sus otros tres sin haber borrado nada. Por eso
+existe `POST /api/dashboard/reward-tiers/copiar`, que le da a la sede una copia de los de la
+marca para que edite desde ahí, y por eso «Nuevo Tier» está **apagado mientras hereda**.
 
 ### Cómo se verifica
 

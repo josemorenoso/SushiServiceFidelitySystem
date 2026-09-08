@@ -44,10 +44,6 @@
    cambiar una clave desde «Accesos» y desde el AIOS, así que nadie queda encerrado — pero mientras
    no exista el autoservicio, cada olvido sigue pasando por una persona. Depende de que el SMTP del
    proyecto de Supabase esté configurado, que **no está comprobado**: comprobarlo es el primer paso.
-0.sexies **Recompensas por sede: falta enhebrar la sede en ~10 llamadores** de `getAllTiers()`. La
-   base y la regla (`elegirFilasDeSede()`) están; NO hay pantalla que cree filas por sede, así que
-   hoy el sistema es consistente y nada cambió. Enhebrar a MEDIAS sería peor que no hacerlo: una
-   sede vería sus premios en la tarjeta y los de la marca al hacer check-in. → `multi-sede.md` §3.septies.
 0.ter **Aplicar la `00057` en Supabase** (`aios_list_locations()`, `SECURITY DEFINER`). Sin ella el AIOS
    **no puede leer las sedes**: el paso 3 del alta falla con `42501 permission denied for schema auth` en todo
    negocio con dos locales. No bloquea el alta —el paso 3 solo comprueba—, pero deja la verificación a ojo.
@@ -111,6 +107,12 @@ reseñas y **Meta** para campañas. Ninguna decisión de hoy cierra esa puerta (
 
 ## 5. Hecho reciente
 
+- **Las recompensas ya varían por sede** (2026-09-08, dentro de la `00058`): el cuello de botella no
+  eran los llamadores de `getAllTiers` sino TRES funciones intermedias con 18 call-sites
+  (`evaluateNewTier`, `getNextTier`, `buildTiersRoadmap`). Enhebrado en check-in, domicilios, tarjeta,
+  `check-in/status`, las dos rutas públicas y la mystery box. **Sin sede a propósito**: el override del
+  panel y los crons (no existe una «sede del acto»; esa cascada es F6). Pantalla con selector de alcance
+  y `/reward-tiers/copiar`, que evita que una sede se quede con UN solo premio al crear el primero.
 - **Las sedes ya son del cliente** (2026-09-08, **migración `00058`, SIN aplicar**): hasta hoy
   multi-sede era una función NUESTRA — el cliente filtraba por sede pero solo podía editar la
   principal, y solo su geocerca. Ahora **`/dashboard/sedes`** (ver, elegir y editar cualquier

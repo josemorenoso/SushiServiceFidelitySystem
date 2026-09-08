@@ -14,7 +14,7 @@
 
 | Qué | Estado |
 |-----|--------|
-| Código | `origin/main` = `f003050` (pusheado el 2026-09-07 por decisión del dueño, con las 4 ramas del 07 dentro). **La carpeta está en `feat/multisede-aios`**, una rama que la sesión F8 creó el 07 encima de `main` (00056 + test + este método v3.1): **va a `main` por fast-forward** cuando F8 cierre. Quedaron SIN mergear a propósito `master`, `port/sushi-fun-2.8` y `sushi-sync`: líneas viejas o de otro producto |
+| Código | **`main` = `origin/main` = `c7d074e`, pusheado el 2026-09-07 (tarde) por orden del dueño.** Lleva F8 (00056 + test) y el método v3.1 por fast-forward desde `feat/multisede-aios` (también en `origin`); **nada de `src/` cambió** respecto al push anterior, así que ese push no desplegó código nuevo. ⚠️ **La carpeta sigue puesta en `feat/multisede-aios`** (= `main`): la próxima sesión trabaja ahí o el dueño la vuelve a `main`; nadie cambia de rama con otra sesión viva. Sin mergear a propósito: `master`, `port/sushi-fun-2.8`, `sushi-sync` |
 | Verificación | ✅ Sobre `main` `f003050`: `tsc` limpio · **vitest 31 archivos / 502 tests** · `build` OK (79 páginas, 121 rutas) · eslint **7 errores preexistentes** (hooks y gráficas del panel). Lo de F8 lo verifica F8 al cerrar |
 | Marcas vivas | **5**: sushi-service (542 clientes), demo-ventas (412), sushi-fun (251), don-alirio (244), cafe-frangal (8) |
 | Base de datos de producción | Aplicadas hasta la **00046**. 🔴🔴 **CINCO sin aplicar y su código YA ESTÁ EN `origin/main`**: `00047`, `00050`, `00051`, `00053`, `00054` → §3.1. **Cada minuto sin correrlas es una función rota en producción.** La 00030 NUNCA aplicada (a propósito). La 00015 NO se aplica (reabre fuga) |
@@ -50,7 +50,8 @@
    es despliegue. **La `00056` va con las otras cinco** (después de la `00054`), y el **orden entre repos no
    es negociable**: `00056` en Supabase del producto → `00007` en el Supabase del AIOS → recién ahí desplegar
    el AIOS v1.6.0. Al revés, `aios_add_location` no existe y el enganche de la sede 2 responde «falta aplicar
-   la migración 00056». Ramas: `feat/multisede-aios` en los dos repos, **sin mergear ni pushear**.
+   la migración 00056». Producto: ya en `main` y pusheado. AIOS: rama `feat/multisede-aios` **pusheada a `origin`,
+   sin mergear a `main` a propósito** (mergearla despliega la v1.6.0 antes de sus migraciones).
    La decisión (opción B, del dueño) está en `Level 2.0/aios-constelarys/docs/DECISION-MULTISEDE-2026-09-07.md`:
    el `tenant_slug` se queda en la sede y las sedes de una marca lo repiten, porque **un propietario puede
    tener varias marcas** y `clients` es una sola fila. **La marca no es una tabla: es el `tenant_slug`.**
@@ -81,7 +82,8 @@ reseñas y **Meta** para campañas. Ninguna decisión de hoy cierra esa puerta (
 ## 4. Bloqueado: solo lo puede destrabar el dueño
 
 - **Correr la `00047`, `00050`, `00051`, `00053` y `00054`** (§3.1). Son migraciones sobre datos reales.
-- **Pushear `main`**, que despliega. Siempre DESPUÉS de las migraciones. La sesión de cierre lo pide con el hash.
+- **Mergear y pushear `main` del AIOS** (despliega la v1.6.0): solo DESPUÉS de correr la `00056` en el producto y la
+  `00007` en el AIOS, en ese orden (§3.1.bis).
 - **Borrar las ramas locales ya mergeadas** (`feat/salud-aios`, `feat/domicilios`, `feat/conexiones`, `feat/visual`,
   `preview/capa-visual`) y el **stash** olvidado de `fix/opt-out-visible` (`git stash show -p stash@{0}` para mirarlo).
 - **Borrar el Supabase de Sushi Fun.** Esperar a un fin de semana de operación normal. El respaldo son los

@@ -32,6 +32,8 @@
 
 import { describe, it, expect, afterAll } from 'vitest'
 import { getPool, closePool } from '../setup/db'
+import { pickLocationForHost } from '@/lib/location-resolver'
+import type { ActiveLocation } from '@/lib/location-resolver'
 
 /** Sufijo único por corrida: `tenants.slug` y los dominios son únicos GLOBAL. */
 function sufijo(): string {
@@ -492,6 +494,142 @@ describe('00056 — el paso single → multi', () => {
       setLocation(slug, rows[0].id, { domain: `otro14-${s}.constelarys.com` })
     )
     expect(mensaje).toContain('sede_dominio_congelado')
+  })
+})
+
+describe('00056 — lo que el AIOS crea es lo que el producto resuelve', () => {
+  /**
+   * Espejo EXACTO de `getActiveLocations()` en `src/lib/tenant.ts` — mismos
+   * filtros, mismo orden. Si las dos se separan, se separan a la vista.
+   */
+  async function leerSedesActivas(tenantSlug: string): Promise<ActiveLocation[]> {
+    const { rows } = await getPool().query<ActiveLocation>(
+      `SELECT l.id, l.name, l.slug, l.domain, l.is_primary
+         FROM restaurant_locations l
+         JOIN tenants t ON t.id = l.tenant_id
+        WHERE t.slug = $1 AND l.is_active = true
+        ORDER BY l.is_primary DESC, l.sort_order ASC, l.name ASC`,
+      [tenantSlug]
+    )
+    return rows
+  }
+
+  /**
+   * El criterio de aceptación 2, de punta a punta: lo que el AIOS escribe por
+   * `aios_provision_tenant` / `aios_add_location` es exactamente lo que
+   * `resolveHostContext()` sabe leer.
+   *
+   * Los dos lados estaban probados por separado —el resolver en
+   * `multisede-resolucion.test.ts`, las funciones acá arriba— y esa es
+   * justamente la costura donde un alta puede quedar «creada pero muerta» sin
+   * que ninguno de los dos tests se entere.
+   */
+  it('cada subdominio resuelve a SU sede, y el raíz pasa a pedir que elijan', async () => {
+    const s = sufijo()
+    const slug = `t17-${s}`
+    const brandDomain = `${slug}.constelarys.com`
+    const poblado = `p17-${s}.constelarys.com`
+    const laureles = `l17-${s}.constelarys.com`
+
+    await provisionar({
+      slug,
+      name: 'Tepuy',
+      domain: brandDomain,
+      locations: [
+        { name: 'Poblado', slug: 'poblado', domain: poblado },
+        { name: 'Laureles', slug: 'laureles', domain: laureles },
+      ],
+    })
+
+    const sedes = await leerSedesActivas(slug)
+    expect(sedes).toHaveLength(2)
+
+    const idPoblado = sedes.find((l) => l.slug === 'poblado')!.id
+    const idLaureles = sedes.find((l) => l.slug === 'laureles')!.id
+
+    // Cada subdominio, a SU sede — y con procedencia `host`, no `host_single`.
+    expect(pickLocationForHost(poblado, brandDomain, sedes)).toMatchObject({
+      locationId: idPoblado,
+      source: 'host',
+      requiresChoice: false,
+    })
+    expect(pickLocationForHost(laureles, brandDomain, sedes)).toMatchObject({
+      locationId: idLaureles,
+      source: 'host',
+      requiresChoice: false,
+    })
+
+    // Y el dominio RAÍZ deja de atribuir: con 2 sedes tiene que preguntar.
+    // Es lo que hace que una sede sin subdominio propio quede sin registro, y
+    // por eso `sede_sin_identidad` y `sede_previa_sin_subdominio` existen.
+    const raiz = pickLocationForHost(brandDomain, brandDomain, sedes)
+    expect(raiz.locationId).toBeNull()
+    expect(raiz.requiresChoice).toBe(true)
+    expect(raiz.choices).toHaveLength(2)
+  })
+
+  it('la sede agregada DESPUÉS resuelve igual que las del alta', async () => {
+    const s = sufijo()
+    const slug = `t18-${s}`
+    const envigado = `e18-${s}.constelarys.com`
+
+    await provisionar({
+      slug,
+      name: 'Tepuy',
+      domain: `${slug}.constelarys.com`,
+      locations: [
+        { name: 'Poblado', slug: 'poblado', domain: `p18-${s}.constelarys.com` },
+        { name: 'Laureles', slug: 'laureles', domain: `l18-${s}.constelarys.com` },
+      ],
+    })
+    const nueva = await addLocation(slug, {
+      name: 'Envigado',
+      slug: 'envigado',
+      domain: envigado,
+    })
+
+    const sedes = await leerSedesActivas(slug)
+    expect(pickLocationForHost(envigado, `${slug}.constelarys.com`, sedes)).toMatchObject({
+      locationId: nueva,
+      source: 'host',
+    })
+  })
+
+  it('una sede DESACTIVADA deja de resolver, pero no se borra', async () => {
+    // Una sede nunca se borra: se desactiva. Y desactivada tiene que salir de
+    // la resolución, o seguiría atribuyéndose visitas a un local cerrado.
+    const s = sufijo()
+    const slug = `t19-${s}`
+    const laureles = `l19-${s}.constelarys.com`
+
+    await provisionar({
+      slug,
+      name: 'Tepuy',
+      domain: `${slug}.constelarys.com`,
+      locations: [
+        { name: 'Poblado', slug: 'poblado', domain: `p19-${s}.constelarys.com` },
+        { name: 'Laureles', slug: 'laureles', domain: laureles },
+      ],
+    })
+    const { rows } = await getPool().query<{ id: string }>(
+      `SELECT l.id FROM restaurant_locations l
+         JOIN tenants t ON t.id = l.tenant_id
+        WHERE t.slug = $1 AND l.slug = 'laureles'`,
+      [slug]
+    )
+
+    await setLocation(slug, rows[0].id, { is_active: 'false' })
+
+    const sedes = await leerSedesActivas(slug)
+    expect(sedes).toHaveLength(1)
+    expect(pickLocationForHost(laureles, `${slug}.constelarys.com`, sedes).locationId).toBeNull()
+
+    // Sigue existiendo: su historia no se pierde.
+    const { rows: sigue } = await getPool().query(
+      `SELECT is_active FROM restaurant_locations WHERE id = $1`,
+      [rows[0].id]
+    )
+    expect(sigue[0].is_active).toBe(false)
   })
 })
 

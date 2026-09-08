@@ -32,7 +32,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
-| _(vacío)_ | | | | |
+| Usuario admin del cliente desde el AIOS (2026-09-08, tarde) | Opus 5 | **Producto:** `src/app/api/aios/tenant-admin/route.ts` (nuevo) · `.env.example` · `docs/API_DOCS.md` · `docs/features/alta-usuario-admin.md` (nuevo) — **AIOS:** `src/lib/actions/tenant-admin.ts` (nuevo) · `src/components/clients/TenantAdminSection.tsx` (nuevo) · `src/app/(app)/clientes/[id]/page.tsx` · `src/lib/env.ts` · `.env.example` | ninguna | En curso |
 
 ## 3. Siguiente, en orden
 

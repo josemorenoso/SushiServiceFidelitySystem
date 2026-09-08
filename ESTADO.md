@@ -32,6 +32,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| **Multi-sede de cara al cliente (sedes editables, roles, recompensas por sede, alta guiada del AIOS) — Opus 5, 2026-09-08 noche** | Opus 5 | `supabase/migrations/00058_*` · `src/lib/location-config-paths.ts` (nuevo) · `src/lib/location-scope*.ts` · `src/components/layout/LocationSelector.tsx` · `src/app/api/dashboard/locations/**` (nuevo) · `src/app/api/dashboard/users/**` (nuevo) · `src/app/api/dashboard/location-scope/route.ts` · `src/app/api/aios/tenant-admin/**` · `src/app/(dashboard)/dashboard/sedes/**` (nuevo) · `.../settings/page.tsx` · `.../rewards/page.tsx` · `Level 2.0/aios-constelarys/src/**` · `docs/features/multi-sede.md` | **00058** | En curso |
 
 ## 3. Siguiente, en orden
 

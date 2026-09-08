@@ -709,3 +709,82 @@ describe('00056 — aios_set_location', () => {
     expect(intacta[0].name).toBe('P')
   })
 })
+
+/**
+ * `aios_list_locations()` — la LECTURA de sedes del AIOS (00057).
+ *
+ * Existe porque el SELECT directo devolvía `42501 permission denied for schema
+ * auth`: las policies de la 00026 no llevan cláusula `TO`, así que aplican
+ * también al rol del AIOS, y su USING llama a `current_tenant_id()` →
+ * `auth.jwt()`. Con eso, el paso 3 del alta fallaba en todo negocio con dos
+ * locales.
+ *
+ * El permiso no se puede ejercer acá —el arnés no crea el rol `aios_constelarys`—
+ * pero sí lo que la función DEVUELVE, que es el otro lado del contrato: si el
+ * orden o las columnas se separan de `getActiveLocations()`, el AIOS y el panel
+ * dejan de estar mirando lo mismo.
+ */
+describe('aios_list_locations — lo que el AIOS ve de las sedes', () => {
+  it('devuelve las sedes de ESA marca, en el orden del panel', async () => {
+    const s = sufijo()
+    const a = `lst-a-${s}`
+    const b = `lst-b-${s}`
+
+    await provisionar({
+      slug: a,
+      name: 'A',
+      domain: `${a}.constelarys.com`,
+      locations: [
+        { name: 'Zeta', slug: 'zeta', domain: `za17-${s}.constelarys.com` },
+        { name: 'Alfa', slug: 'alfa', domain: `al17-${s}.constelarys.com` },
+      ],
+    })
+    await provisionar({
+      slug: b,
+      name: 'B',
+      domain: `${b}.constelarys.com`,
+      locations: [{ name: 'Ajena', slug: 'ajena', domain: `aj17-${s}.constelarys.com` }],
+    })
+
+    const { rows } = await getPool().query<{ name: string; slug: string; is_primary: boolean }>(
+      `SELECT name, slug, is_primary FROM aios_list_locations($1)`,
+      [a]
+    )
+
+    // Ni una sola fila de la otra marca: la función filtra por slug, no por lo
+    // que el llamador se acuerde de pedir.
+    expect(rows.map((r) => r.name)).toEqual(['Zeta', 'Alfa'])
+    // La principal primero (es la que hereda el material impreso), y después
+    // `sort_order` — el MISMO orden que `getActiveLocations()` del producto.
+    expect(rows[0].is_primary).toBe(true)
+    expect(rows.filter((r) => r.is_primary)).toHaveLength(1)
+  })
+
+  it('NO devuelve `config`: es el override por sede y el AIOS no lo ve', async () => {
+    // El GRANT por columnas de la 00056 dejaba `config` afuera a propósito.
+    // Al pasar la lectura a una función, esa decisión tenía que viajar con ella:
+    // una función SECURITY DEFINER se salta las policies, así que lo único que
+    // sigue protegiendo esa columna es su lista de retorno.
+    // Se le pregunta a la función misma, no al catálogo: `fields` viene incluso
+    // con cero filas, así que esto es exactamente la forma que el AIOS recibe.
+    const res = await getPool().query(
+      `SELECT * FROM aios_list_locations($1)`,
+      [`forma-${sufijo()}`]
+    )
+    const columnas = res.fields.map((f) => f.name)
+    expect(columnas).not.toContain('config')
+    expect(columnas).toEqual(
+      expect.arrayContaining(['id', 'name', 'slug', 'domain', 'address', 'is_active', 'is_primary', 'sort_order'])
+    )
+  })
+
+  it('una marca que no existe devuelve vacío, no un error', async () => {
+    // El AIOS la llama en el paso 3 del alta, cuando el tenant puede no estar
+    // creado todavía. Un error ahí sería un fallo de la pantalla entera.
+    const { rows } = await getPool().query(
+      `SELECT * FROM aios_list_locations($1)`,
+      [`no-existe-${sufijo()}`]
+    )
+    expect(rows).toHaveLength(0)
+  })
+})

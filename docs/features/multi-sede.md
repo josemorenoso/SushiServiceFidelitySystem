@@ -421,7 +421,8 @@ y sus llamadores.
 
 La `00056` le dio al rol `aios_constelarys` un `GRANT SELECT` por columnas sobre
 `restaurant_locations` y su propia policy `USING (true)`. Aun así, leer la tabla devolvía
-**`42501: permission denied for schema auth`**.
+**`42501: permission denied for schema auth`**, y con eso el paso 3 del alta («Verificar el
+subdominio») fallaba en TODO negocio con dos locales.
 
 No faltaba el GRANT: fallaba **evaluar las otras policies**. Las de la `00026` se crearon
 **sin cláusula `TO`**, así que aplican a `PUBLIC` —el rol del AIOS incluido— y su `USING`
@@ -429,17 +430,21 @@ llama a `current_tenant_id()` (`00024:32`), que es `LANGUAGE sql STABLE`, **no**
 `SECURITY DEFINER`, y por dentro hace `auth.jwt()`. Sin `USAGE` sobre el esquema `auth`,
 Postgres revienta ahí y ni llega a mirar la policy permisiva del AIOS.
 
-La `00057` otorga **solo** `USAGE ON SCHEMA auth`: deja entrar al esquema para resolver el
-nombre de la función y **no da acceso a ninguna tabla de `auth`** — la propia migración
-aborta si detecta que el rol puede leer alguna.
+La `00057` mueve la lectura a **`aios_list_locations(p_tenant_slug)`**, `SECURITY DEFINER`
+como todo lo demás que el AIOS usa: corre como su dueño, no pasa por las policies y no
+necesita nada de `auth`. Devuelve las mismas columnas que el GRANT de la 00056 autorizaba —
+**`config` sigue fuera**, y al pasar a función esa lista de retorno es lo ÚNICO que la
+protege, así que hay un test que lo vigila.
 
-> **Que la lectura de `tenants` sí funcionara era suerte:** depende de que Postgres corte el
-> `OR` al evaluar primero la policy `USING (true)`, y ese orden no está garantizado. La
-> `00057` también le quita ese azar.
+> ⚠️ **La primera versión de la 00057 hacía `GRANT USAGE ON SCHEMA auth` y no sirve.** En
+> Supabase el esquema `auth` es de `supabase_auth_admin`: un `GRANT` que el ejecutor no
+> tiene derecho a otorgar sale como **WARNING, no como ERROR** — parece exitoso y no hace
+> nada. Lo cazó el bloque de verificación de la propia migración. Es una trampa que vuelve:
+> que el motor no se queje no significa que algo haya pasado.
 >
-> La alternativa —volver `current_tenant_id()` `SECURITY DEFINER`— se descartó: esa función
-> la evalúa CADA policy del sistema, y cambiarle el modo de ejecución por un permiso del
-> AIOS es mover el suelo de todo el aislamiento por un problema de una esquina.
+> Tampoco se tocó `current_tenant_id()`: volverla `SECURITY DEFINER` arreglaría esto y más,
+> pero esa función la evalúa CADA policy del sistema, y cambiarle el modo de ejecución por
+> un permiso del AIOS es mover el suelo de todo el aislamiento por un problema de una esquina.
 
 ### Cómo se verifica
 

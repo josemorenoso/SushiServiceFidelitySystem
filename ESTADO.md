@@ -35,10 +35,11 @@
 
 ## 3. Siguiente, en orden
 
-0.ter **Aplicar la `00057` en Supabase** (una línea: `GRANT USAGE ON SCHEMA auth TO aios_constelarys`).
-   Sin ella el AIOS **no puede leer las sedes**: el paso 3 del alta («Verificar el subdominio») falla con
-   `42501 permission denied for schema auth` en todo negocio con dos locales. No bloquea el alta —el paso 3
-   solo comprueba—, pero deja la verificación a ojo. → `docs/features/multi-sede.md` §3.sexies.
+0.ter **Aplicar la `00057` en Supabase** (`aios_list_locations()`, `SECURITY DEFINER`). Sin ella el AIOS
+   **no puede leer las sedes**: el paso 3 del alta falla con `42501 permission denied for schema auth` en todo
+   negocio con dos locales. No bloquea el alta —el paso 3 solo comprueba—, pero deja la verificación a ojo.
+   ⚠️ Su primera versión hacía `GRANT USAGE ON SCHEMA auth` y **no sirve**: en Supabase ese esquema es de
+   `supabase_auth_admin` y el GRANT sale como WARNING, no como error. → `docs/features/multi-sede.md` §3.sexies.
 0. **`AIOS_ADMIN_PROVISION_SECRET` en los DOS Vercel**, la MISMA cadena — el dueño la estaba cargando el 08,
    con el código ya desplegado. Sin ella el producto responde **503** y la tarjeta «Usuario del panel» se ve
    pero dice que está apagada. Comprobarla dando de alta a **Pedacito de Amor**, que espera su usuario;

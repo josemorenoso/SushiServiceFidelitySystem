@@ -1,6 +1,6 @@
 -- ═══════════════════════════════════════════════════════════════════════════
 -- TEPUY — 00. VERIFICAR (SOLO LEE, no cambia nada)
--- 2026-09-08 · Correr ANTES de 01-FUNDIR.sql, en el SQL Editor del PRODUCTO.
+-- 2026-09-08 · Correr ANTES de 01-BORRAR-TENANTS.sql, en el SQL Editor del PRODUCTO.
 --
 -- QUÉ PASÓ
 --   El alta de Tepuy salió con el AIOS v1.5.2, que llamaba aios_provision_tenant
@@ -15,8 +15,8 @@
 -- QUÉ MIRA ESTE SCRIPT
 --   1. Que las dos marcas son las que creemos.
 --   2. Que están VACÍAS. Si alguna tiene un solo cliente o una sola visita,
---      NO se corre 01-FUNDIR.sql: fundir marcas con historia es otro problema
---      (de quién son los puntos, el saldo, los opt-outs) y no se improvisa.
+--      NO se corre 01-BORRAR-TENANTS.sql: borrar una marca con historia es otro
+--      problema (de quién son los puntos, el saldo, los opt-outs) y no se improvisa.
 --   3. Qué sedes tiene cada una hoy.
 -- ═══════════════════════════════════════════════════════════════════════════
 
@@ -87,8 +87,9 @@ SELECT slug, messaging_provider, zernio_account_id, zernio_phone_number
  WHERE slug IN ('clubtepuylaureles', 'clubtepuyenvigado');
 
 -- ── 5. ¿Hay usuarios de panel colgando de estas marcas? ────────────────────
--- Si creaste el usuario del cliente desde el AIOS, va a salir acá. Después de
--- fundir hay que repuntarlo a la marca que queda (01-FUNDIR.sql lo hace solo).
+-- Si creaste el usuario del cliente desde el AIOS, va a salir acá. El
+-- 01-BORRAR-TENANTS.sql lo borra junto con la marca (p_borrar_usuarios = true) y
+-- se vuelve a crear al final, desde la tarjeta «Usuario del panel» del AIOS.
 SELECT u.email, u.created_at, u.last_sign_in_at,
        u.raw_app_meta_data->>'tenant_id' AS tenant_id,
        t.slug AS marca

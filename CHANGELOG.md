@@ -8,6 +8,24 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [2026-09-08] - Una plantilla con imagen fija ya se puede enviar como campaña
+
+**Tipo:** fix · **Origen:** el dueño ("creé campananuevocombo, aparece en plantillas pero no aparece en el apartado para enviar campañas") · **Sin migración**
+
+- Los dos selectores de campaña (`ManualCampaigns`, `AtRiskBubbles`) excluían **toda** plantilla
+  `twilio/media`. El filtro era demasiado grueso: se escribió para dejar afuera las de EVENTO, que llevan
+  `{{6}}` dentro de la URL de media (el path del flyer en el bucket) y que la campaña no rellena — pero se
+  llevaba puesta también cualquier plantilla con **imagen fija**, que sí es enviable.
+- `GET /api/dashboard/templates` expone ahora **`media_needs_variable`**: true solo si la URL de media
+  contiene un `{{n}}`. Los dos filtros miran ese campo en vez de `has_media`. Las de evento siguen fuera.
+- Por qué una imagen fija sí sale: `ContentSid` y `MediaUrl` son mutuamente excluyentes en Twilio, así que
+  la media viaja en la **definición** de la plantilla y no depende de las variables del envío
+  (`src/lib/twilio/media.ts`). El calendario, al revés, RECHAZA una plantilla de media fija a propósito
+  (`calendar.service.ts`): allí cada evento lleva su flyer, y uno fijo mandaría la imagen de muestra a todos.
+- Se corrige el `has_media` de `docs/API_DOCS.md`, que decía que los selectores excluyen la media entera.
+
+---
+
 ## [2026-09-08] - El usuario con el que entra el cliente, desde el AIOS
 
 **Tipo:** feat · **Origen:** el dueno ("cree un cliente nuevo en el AIOS y al entrar no tengo usuario y contrasena") · **Sin migracion**

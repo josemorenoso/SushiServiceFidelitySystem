@@ -21,7 +21,8 @@ interface ApprovedTemplate {
   body: string
   approval_status: string
   status: string
-  has_media?: boolean
+  /** true = la URL de media lleva una variable que la campaña no rellena (eventos, `{{6}}`) */
+  media_needs_variable?: boolean
 }
 
 function hexToRgba(hex: string, alpha: number): string {
@@ -79,10 +80,13 @@ export function AtRiskBubbles({ groups, loading, isDemo }: AtRiskBubblesProps) {
     try {
       const res = await fetch('/api/dashboard/templates')
       const data = await res.json()
-      // Solo texto aprobado (las twilio/media son de eventos y exigen {{6}}).
+      // Aprobadas y enviables. Se excluyen solo las que llevan una variable DENTRO de
+      // la URL de media (las de evento, con {{6}}): la campaña rellena {{1}}, {{2}} y
+      // {{3}}, así que esa saldría vacía. Una plantilla con imagen FIJA sí sirve — su
+      // media viaja en la definición y no depende del envío.
       const approved = (data.templates ?? []).filter(
         (t: ApprovedTemplate) =>
-          (t.approval_status || t.status)?.toLowerCase() === 'approved' && !t.has_media
+          (t.approval_status || t.status)?.toLowerCase() === 'approved' && !t.media_needs_variable
       )
       setTemplates(approved)
     } catch {

@@ -1195,9 +1195,15 @@ cron correspondiente (`/api/cron/birthday` o `/api/cron/reactivation`) del tenan
 **`GET /api/dashboard/templates`** — Admin JWT
 
 > v2.8.1: usa `ContentAndApprovals` de Twilio (1 llamada, antes 1+N). Cada plantilla incluye ahora
-> `rejection_reason` (motivo de rechazo de Meta, o `null`) y `has_media` (true = `twilio/media`,
-> plantillas de eventos — los selectores de campañas las excluyen). El `POST` valida reglas duras de
-> Meta antes de crear: variable al inicio/fin del cuerpo y máximo 1024 caracteres → 400 con mensaje.
+> `rejection_reason` (motivo de rechazo de Meta, o `null`), `has_media` (true = `twilio/media`) y
+> `media_needs_variable`. El `POST` valida reglas duras de Meta antes de crear: variable al inicio/fin
+> del cuerpo y máximo 1024 caracteres → 400 con mensaje.
+>
+> **`media_needs_variable` es lo que miran los selectores de campaña, no `has_media`.** Es true solo
+> si la URL de media contiene un `{{n}}`: las plantillas de EVENTO llevan `{{6}}` (el path del flyer
+> dentro del bucket, ver `src/lib/twilio/media.ts`) y la campaña solo rellena `{{1}}`, `{{2}}` y
+> `{{3}}`, así que quedaría vacía. Una plantilla con **imagen fija** sí se envía como campaña: al
+> mandar `ContentSid` la media sale de la definición de la plantilla, nunca del envío.
 
 **Response 200:**
 ```json

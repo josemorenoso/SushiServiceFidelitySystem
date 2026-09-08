@@ -80,6 +80,13 @@ export async function GET() {
         category,
         body,
         has_media: !!t.types?.['twilio/media'],
+        // Las plantillas de EVENTO llevan una variable DENTRO de la URL de media
+        // (`{{6}}` = el path del archivo en el bucket; ver src/lib/twilio/media.ts).
+        // Los selectores de campaña solo rellenan {{1}}, {{2}} y {{3}}, así que esa
+        // variable saldría vacía: por eso se excluyen. Una plantilla con imagen FIJA
+        // no tiene ese problema — `ContentSid` y `MediaUrl` son excluyentes, la media
+        // viaja en la definición de la plantilla y sale sola en cada envío.
+        media_needs_variable: (t.types?.['twilio/media']?.media ?? []).some((u) => /\{\{\d+\}\}/.test(u)),
         rejection_reason: rejectionReason,
         variables: t.variables || {},
         createdAt: t.date_created,

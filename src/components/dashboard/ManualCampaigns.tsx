@@ -53,8 +53,8 @@ interface TwilioTemplate {
   approval_status: string
   status: string
   category: string
-  /** true = plantilla twilio/media (eventos del calendario) — no sirve para campañas de texto */
-  has_media?: boolean
+  /** true = la URL de media lleva una variable que la campaña no rellena (eventos, `{{6}}`) */
+  media_needs_variable?: boolean
 }
 
 interface PresetCampaign {
@@ -202,11 +202,13 @@ export function ManualCampaigns() {
     try {
       const res = await fetch('/api/dashboard/templates')
       const data = await res.json()
-      // Solo texto aprobado: las plantillas twilio/media (eventos del calendario)
-      // exigen la variable de media {{6}} y fallarían enviadas como campaña.
+      // Aprobadas y enviables. Se excluyen solo las plantillas cuya URL de media lleva
+      // una variable (las de evento: `{{6}}` es el path del flyer), porque la campaña
+      // rellena {{1}}, {{2}} y {{3}} y esa quedaría vacía. Una plantilla con imagen
+      // FIJA sí se envía: la media sale de la definición, no del envío.
       const approved = (data.templates ?? []).filter(
         (t: TwilioTemplate) =>
-          (t.approval_status || t.status)?.toLowerCase() === 'approved' && !t.has_media
+          (t.approval_status || t.status)?.toLowerCase() === 'approved' && !t.media_needs_variable
       )
       setTemplates(approved)
     } catch {

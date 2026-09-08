@@ -14,6 +14,28 @@ export interface TenantAdminBody {
   tenantSlug: string
   email: string
   password: string
+  /**
+   * `true` = si el correo YA existe en esta marca, ponerle la contraseña que
+   * viene en `password` en vez de ignorarla.
+   *
+   * Es una decisión EXPLÍCITA y por eso es un campo aparte en vez de un cambio
+   * de comportamiento del alta: pisarle la contraseña a alguien que ya entra es
+   * exactamente lo que el alta se niega a hacer sola. Existe porque hasta hoy
+   * NADIE podía cambiar una contraseña —el AIOS remite a "olvidé mi contraseña"
+   * y ese flujo no existe en el producto—, así que la única salida era entrar al
+   * Supabase a mano.
+   */
+  resetPassword: boolean
+  /**
+   * Alcance del usuario en `dashboard_user_locations` (00045):
+   * `brand` = super usuario (todas las sedes) · `location` = administrador de
+   * las sedes de `locationIds`.
+   *
+   * ⚠️ NO es un rol de Auth. Ver el comentario de `parseTenantAdminBody()`.
+   */
+  scopeRole: 'brand' | 'location' | null
+  /** Las sedes de un `scopeRole = 'location'`. Vacío en cualquier otro caso. */
+  locationIds: string[]
 }
 
 /**
@@ -37,9 +59,14 @@ export function matchesProvisionSecret(expected: string | undefined, received: s
  * Valida el cuerpo del alta.
  *
  * Lo que NO tiene este parser es tan importante como lo que tiene: **no existe un
- * campo `role`**. El `app_metadata` que escribe la ruta es `{ tenant_id }` y nada
- * más, así que ningún cuerpo — venga de donde venga — puede pedir `super_admin`,
- * el rol que ve TODAS las marcas (`src/lib/admin.ts`).
+ * campo para el rol de Auth**. El `app_metadata` que escribe la ruta es
+ * `{ tenant_id }` y nada más, así que ningún cuerpo — venga de donde venga —
+ * puede pedir `super_admin`, el rol que ve TODAS las marcas (`src/lib/admin.ts`).
+ *
+ * `scope_role` SÍ existe, y no es lo mismo ni por asomo: vive en
+ * `dashboard_user_locations` (00045), solo distingue «ve todas las sedes de SU
+ * marca» de «ve estas sedes», y no puede sacar a nadie de su marca. Los nombres
+ * se mantienen distintos a propósito para que nadie los confunda leyendo rápido.
  */
 export function parseTenantAdminBody(
   raw: unknown,
@@ -51,6 +78,16 @@ export function parseTenantAdminBody(
   const tenantSlug = typeof r.tenant_slug === 'string' ? r.tenant_slug.trim() : ''
   const email = typeof r.email === 'string' ? r.email.trim().toLowerCase() : ''
   const password = typeof r.password === 'string' ? r.password : ''
+  const resetPassword = r.reset_password === true
+  const scopeRole =
+    r.scope_role === 'brand' || r.scope_role === 'location' ? r.scope_role : null
+  const locationIds = Array.isArray(r.location_ids)
+    ? r.location_ids.filter(
+        (v): v is string =>
+          typeof v === 'string' &&
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v),
+      )
+    : []
 
   if (!tenantSlug) return { ok: false, error: 'Falta tenant_slug.' }
   // El slug entra en un `.eq()` parametrizado, así que esto no es defensa contra
@@ -62,5 +99,12 @@ export function parseTenantAdminBody(
     return { ok: false, error: `La contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres.` }
   }
 
-  return { ok: true, body: { tenantSlug, email, password } }
+  // Un administrador SIN sedes no tendría acceso a nada y el panel le
+  // respondería 403 sin decir por qué: se corta acá, que es donde hay algo que
+  // explicar.
+  if (scopeRole === 'location' && locationIds.length === 0) {
+    return { ok: false, error: 'Un administrador de sede necesita al menos una sede (location_ids).' }
+  }
+
+  return { ok: true, body: { tenantSlug, email, password, resetPassword, scopeRole, locationIds } }
 }

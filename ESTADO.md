@@ -15,7 +15,7 @@
 | Qué | Estado |
 |-----|--------|
 | Código | **`main` = `origin/main` = `79fea79`, pusheado el 2026-09-08 (noche) por orden del dueño** — despliega en Vercel el alta del usuario del cliente (`/api/aios/tenant-admin`), **sin migración**. La carpeta sigue en `feat/multisede-aios` (= `main`). Sin mergear a propósito: `master`, `port/sushi-fun-2.8`, `sushi-sync` |
-| Verificación | ✅ 2026-09-08 (tarde): `tsc` limpio · **vitest 34 archivos / 543 tests, 1 rojo** · eslint **7 errores preexistentes** (hooks y gráficas del panel, ninguno en lo tocado). ⚠️ El rojo es `tests/db/aios-health.test.ts` «active_days_28d cuenta DÍAS»: el helper mete «dos pedidos hoy» con `now() - 1h` y `now() - 2h`, así que **entre medianoche y las 2 a.m. el segundo cae en el día anterior** y cuenta 4 días en vez de 3. Es del reloj, no del código, y NO lo tocó nadie: se corrige eligiendo horas que no crucen medianoche. `build` no se corrió |
+| Verificación | ✅ 2026-09-08 (noche): `tsc` limpio · **vitest 35 archivos / 559 tests, TODOS en verde** · eslint **7 errores preexistentes** (hooks y gráficas del panel, ninguno en lo tocado). El rojo de `aios-health` era del RELOJ (el helper mete dos pedidos con `now() - 1h`/`- 2h`, así que entre medianoche y las 2 a.m. el segundo cae en el día anterior): a esta hora pasa. Sigue sin corregirse. `build` no se corrió |
 | Marcas vivas | **5**: sushi-service (542 clientes), demo-ventas (412), sushi-fun (251), don-alirio (244), cafe-frangal (8) |
 | Base de datos de producción | ✅ **Aplicadas hasta la `00056`** (dueño, 2026-09-08: `00047`, `00050`, `00051`, `00053`, `00054` y `00056`, todas). El esquema ya alcanza al código de `main`. La 00030 NUNCA aplicada (a propósito). La 00015 NO se aplica (reabre fuga). Huecos: `00048`, `00049`, `00052`, `00055` |
 | Migraciones: dónde están | El directorio muestra **solo la rama puesta**; el inventario real y el número de la próxima los da `node scripts/proxima-migracion.mjs`. **Desde el 07 la única reserva es la fila del tablero (§2)**: un número citado en cualquier otro doc no reserva nada. `00048`, `00049`, `00052` y `00055` son huecos: no se rellenan |
@@ -32,10 +32,22 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
-| **Multi-sede de cara al cliente (sedes editables, roles, recompensas por sede, alta guiada del AIOS) — Opus 5, 2026-09-08 noche** | Opus 5 | `supabase/migrations/00058_*` · `src/lib/location-config-paths.ts` (nuevo) · `src/lib/location-scope*.ts` · `src/components/layout/LocationSelector.tsx` · `src/app/api/dashboard/locations/**` (nuevo) · `src/app/api/dashboard/users/**` (nuevo) · `src/app/api/dashboard/location-scope/route.ts` · `src/app/api/aios/tenant-admin/**` · `src/app/(dashboard)/dashboard/sedes/**` (nuevo) · `.../settings/page.tsx` · `.../rewards/page.tsx` · `Level 2.0/aios-constelarys/src/**` · `docs/features/multi-sede.md` | **00058** | En curso |
 
 ## 3. Siguiente, en orden
 
+0.quinquies **Aplicar la `00058` en Supabase** (producto) y la **`00009` en el Supabase del AIOS**,
+   en ese orden y ANTES de desplegar. Sin la 00058, `/dashboard/sedes` responde **503** al guardar
+   (`merge_location_config_deep()` no existe) y las columnas `location_id` de recompensas tampoco.
+   Sin la 00009 del AIOS, guardar un cliente revienta con el CHECK viejo en cuanto alguien elija
+   «grupo» o «franquicia». Las dos son de RIESGO BAJO: no tocan una sola fila de historia.
+0.quater **Falta el autoservicio de contraseña** («olvidé mi contraseña» en `/login`). Ya se puede
+   cambiar una clave desde «Accesos» y desde el AIOS, así que nadie queda encerrado — pero mientras
+   no exista el autoservicio, cada olvido sigue pasando por una persona. Depende de que el SMTP del
+   proyecto de Supabase esté configurado, que **no está comprobado**: comprobarlo es el primer paso.
+0.sexies **Recompensas por sede: falta enhebrar la sede en ~10 llamadores** de `getAllTiers()`. La
+   base y la regla (`elegirFilasDeSede()`) están; NO hay pantalla que cree filas por sede, así que
+   hoy el sistema es consistente y nada cambió. Enhebrar a MEDIAS sería peor que no hacerlo: una
+   sede vería sus premios en la tarjeta y los de la marca al hacer check-in. → `multi-sede.md` §3.septies.
 0.ter **Aplicar la `00057` en Supabase** (`aios_list_locations()`, `SECURITY DEFINER`). Sin ella el AIOS
    **no puede leer las sedes**: el paso 3 del alta falla con `42501 permission denied for schema auth` en todo
    negocio con dos locales. No bloquea el alta —el paso 3 solo comprueba—, pero deja la verificación a ojo.
@@ -99,6 +111,22 @@ reseñas y **Meta** para campañas. Ninguna decisión de hoy cierra esa puerta (
 
 ## 5. Hecho reciente
 
+- **Las sedes ya son del cliente** (2026-09-08, **migración `00058`, SIN aplicar**): hasta hoy
+  multi-sede era una función NUESTRA — el cliente filtraba por sede pero solo podía editar la
+  principal, y solo su geocerca. Ahora **`/dashboard/sedes`** (ver, elegir y editar cualquier
+  sede: ficha de Google, dirección, horario, teléfonos, redes) y **`/dashboard/accesos`**
+  (super usuario / administrador de sede, altas, bajas y **contraseña nueva**). La 00041 había
+  dejado `restaurant_locations.config` sin whitelist ni escritor, así que las dos sedes de una
+  marca mandaban a reseñar **la misma ficha de Google**: la de la segunda nacía muerta.
+  Con 0 o 1 sede activa ninguna marca ve un solo cambio. → `docs/features/multi-sede.md` §3.septies.
+- **Se puede cambiar una contraseña** (2026-09-08, sin migración): hasta hoy **no podía nadie**.
+  El AIOS remitía a «olvidé mi contraseña» y ese flujo **no existe** en el producto (no hay
+  `resetPasswordForEmail`, `/login` no tiene enlace). Ahora desde «Accesos» y desde el AIOS
+  (`reset_password` en `/api/aios/tenant-admin`). El autoservicio sigue faltando: §3 punto 0.quater.
+- **El alta del AIOS pregunta bien** (2026-09-08, AIOS v1.9.0, **migración `00009` del AIOS, SIN
+  aplicar**): «¿cuántas sedes?» no distinguía un GRUPO (comparten marca, clientes y puntos) de una
+  FRANQUICIA (no comparten nada) — las dos contestaban «varias» y la diferencia solo se veía cuando
+  ya era irreversible. **Tepuy nació de ahí.** `site_model` pasa a `single | group | franchise`.
 - **El subdominio de una sede ya resuelve la marca en TODO lo público** (2026-09-08, sin migración,
   **en `main`**): la tarjeta, `/api/check-in/status`, `/api/mystery-box/resolve` y las tres rutas de
   `/api/public/*` resolvían con `getTenantByDomain()` (solo `tenants.domain`) y respondían **404** en el
@@ -116,41 +144,27 @@ reseñas y **Meta** para campañas. Ninguna decisión de hoy cierra esa puerta (
   `config.card.*` + `instagram_url`/`whatsapp_link` por la whitelist, listas cerradas para los dibujos). **Sin config
   no cambia nada.** Premios de campaña vive como pestaña de Campañas (la ruta vieja redirige). Domicilios: cuadro
   modelo con "Copiar modelo" y pasos plegables. → `docs/features/identidad-visual.md`, `campaigns.md`, `delivery-dashboard.md`.
-- **El AIOS aprende lo que es una sede** (2026-09-07, F8, **rama `feat/multisede-aios` en los DOS repos, sin
-  mergear**): el AIOS creaba **un tenant por cada sede**, así que un negocio con dos locales nacía como dos
-  MARCAS — el cliente perdía sus puntos al cambiar de local y el WhatsApp no se podía compartir. Producto:
-  **`00056`** (`aios_add_location`, `aios_set_location`, `SELECT` por columnas sobre `restaurant_locations`) +
-  **`aios_provision_tenant` reemplazada**, porque no escribía `slug` ni `domain` en las sedes y un alta de dos
-  sedes nacía **creada pero muerta** (sin subdominio, el registro responde 409). AIOS v1.6.0: `site_model`,
-  `product_location_id`, el paso 2 con dos caminos (crear la marca / engancharse) y la plata contada **una vez
-  por marca**. 18 comprobaciones nuevas contra Postgres real.
-  → `docs/features/multi-sede.md` §2.bis · `Level 2.0/aios-constelarys/docs/DECISION-MULTISEDE-2026-09-07.md`.
-- **Método v3.1: modo simple** (2026-09-07): todas las sesiones en esta carpeta y en la misma rama, territorios por
-  archivo en §2, commit solo de lo propio por nombre, sin `checkout`/`stash`/`reset --hard`, una sola sesión verifica
-  al cierre. Hook post-commit de graphify instalado. El script de migraciones solo lee reservas del §2. `.worktrees/` fuera.
+- **El AIOS aprende lo que es una sede** (2026-09-07, F8): creaba **un tenant por sede**, así que un negocio
+  con dos locales nacía como dos MARCAS. Migración **`00056`** (`aios_add_location`, `aios_set_location`, y
+  `aios_provision_tenant` reemplazada porque no escribía `slug` ni `domain`: un alta de dos sedes nacía
+  **creada pero muerta**). → `docs/features/multi-sede.md` §2.bis.
 - **Un domicilio perdido deja rastro** (2026-09-07, ROJO 3, **en `main`, sin desplegar**): `delivery_intake_failures`
   (00053). El INSERT vive dentro de `logDeliveryIntakeFailure()`, que pasa a `async`. Con ella va `aios_health()`.
-- **El apartado de Domicilios** (2026-09-07, §18.d + §24.3-B, **en `main`**): `/dashboard/domicilios` separa
-  «llegaron tres y se perdieron» de «hoy no pidió nadie», y «no hubo fallos» de «no pudimos leer» y de «falta la
-  00053». Solo lectura, sin migración, no manda mensajes. → `docs/features/delivery-dashboard.md`.
 - **Conexiones: el cliente conecta su propio WhatsApp** (2026-09-07, **en `main`**, 00054). Destapó que el
   `redirect_url` apuntaba a `/api/webhook/zernio` (405 a un navegador) y que `verification_required` no lo miraba
   nadie. Nonce del `state` NUESTRO; `isTenantOwner()` fail-closed. → `docs/features/conexiones.md`.
-- **Capa visual v3** (2026-09-07, **en `main`**): tarjeta, check-in y panel. **Solo pinta.** Fuera los emojis del
-  sistema y ~20 hex horneados. **Sin probar en un teléfono real**: falta la pasada visual del dueño.
-- **Plantillas: enviar tal cual o editar** (2026-09-07): cada fila tiene «Enviar a Meta» y «Editar».
 - **Lo del 2026-09-06, desplegado** (detalle en `CHANGELOG.md`): `SALIR` visible y contestado · los 3 AMARILLO del
   calendario · Recovery Zone · alta de mesero por ROL · Sushi Fun absorbido (1.421 filas). Con migración sin aplicar:
   enlace del evento (00050) y dominio cruzado simétrico D2 (00051). Lo anterior (§19, F7/F4/F3, identidad visual) está desplegado.
 
 ## 6. Deudas y límites conocidos
 
-**Multi-sede** (`docs/features/multi-sede.md`): **D1** `restaurant_locations.config` sin whitelist · **D3** `is_primary`
+**Multi-sede** (`docs/features/multi-sede.md`): **D3** `is_primary`
 sin UNIQUE por tenant · **D4** diagrama ER de DB_SCHEMA obsoleto · **D5** conteo de migraciones stale en comentarios ·
 **D7** premios sin precio · **D8** adopción de histórico irreversible · **D9** el 409 de sede no acepta elección por API ·
 **D12** campañas masivas con `location_id` NULL (es F6) · **D13** 5 columnas de sede vacías · **D15** FK simple en
-`staff_devices.staff_user_id` (mitigada con trigger) · **D17** ⚠️ **media cerrada por la `00056`**: el AIOS ya
-puede crear y editar sedes; desde el PANEL DEL CLIENTE siguen sin poderse (solo la principal y solo sus coordenadas).
+`staff_devices.staff_user_id` (mitigada con trigger). **D1 y D17 CERRADAS por la `00058`**: la whitelist de
+`restaurant_locations.config` existe (en la base) y el cliente edita cualquier sede desde `/dashboard/sedes`.
 
 **Rutas que F7 dejó SIN cablear a propósito**: `send-queue` GET, `check-in-override`, `campaigns/manual`,
 `imported-contacts/confirm`, `campaigns/run-auto`. El filtro de sede ahí es **no-op seguro (fail-closed)** hasta F6.
@@ -162,7 +176,7 @@ puede crear y editar sedes; desde el PANEL DEL CLIENTE siguen sin poderse (solo 
 - **00030 sin aplicar**: DEFAULT puente → un INSERT sin `tenant_id` se va calladito a Sushi Service.
   Y **17.b**: "quién es Black" difiere entre la tarjeta (`black-tier.ts`) y el panel (`POWER_RANKS`).
 - **Domicilios perdidos sin rastro** (ROJO 3): entero en `main`, pero **no sirve hasta que corra la 00053**.
-- **Huecos de migración**: `00048` y `00049` los citó el diseño de multi-sede (F9, F10) y nunca se escribieron;
+- **Huecos de migración**: `00048` y `00049` los citó el diseño (F9 se escribió, pero como `00058`; F10 no);
   `00052` y `00055` los fabricó el script viejo al leer una cita como reserva. Ninguno se rellena.
 - **Choques de migración en ramas muertas**: `sushi-sync` (00015) y `port/sushi-fun-2.8` (00028).
 - **Catálogo de producto sin empezar** (referidos, push, fatiga, §7, §8, §18): `docs/ESTADO-REQUERIMIENTOS.md`.

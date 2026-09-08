@@ -8,6 +8,30 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [2026-09-08b] - Las sedes pasan a ser del cliente: se ven, se eligen y se editan
+
+**Tipo:** feat · **Origen:** el dueño ("el cliente debe poder ver sus sedes, seleccionarlas y modificarlas desde un solo lugar, punto final" · "cada sede tiene su propio google maps" · "necesito poder agregar super usuarios y administradores") · **Migración: `00058`**
+
+- **`/dashboard/sedes`** — ver, elegir y editar CUALQUIER sede: nombre, dirección, ficha de Google, horario,
+  teléfonos y redes. Antes solo se editaba la principal, y solo su geocerca. Con **una sola sede la palabra
+  «sede» no aparece**: sin lista y sin selector. El selector del encabezado también desaparece ahí — mostraba
+  «Todas las sedes», «Sede Principal» y «Sin sede» para el mismo conjunto de filas.
+- **`restaurant_locations.config` por fin se puede escribir.** La 00041 dejó la columna sin whitelist ni
+  función, así que las dos sedes de una marca mandaban a reseñar **la misma ficha de Google**: la de la
+  segunda nacía muerta. Ahora hay CHECK en la BASE (`service_role` se salta el RLS) y
+  `merge_location_config_deep()`, que filtra por `tenant_id` porque el uuid llega del navegador.
+  `resolveBranding(marca, sede)` mezcla la sede encima, así que tarjeta, reseñas y domicilios lo heredan solos.
+- **`/dashboard/accesos`** — super usuario (todas las sedes) y administrador (las suyas). Son los `role` que
+  la 00045 ya modelaba: faltaba el escritor, no el modelo. Nunca otorga `super_admin`, nunca reatribuye un
+  correo de otra marca, nadie se toca a sí mismo y la marca no se queda sin super usuarios.
+- **Cambiar una contraseña, por fin.** Hasta hoy no podía NADIE: el AIOS remitía a "olvidé mi contraseña" y
+  ese flujo **no existe** en el producto. Ahora desde Accesos y desde el AIOS (`reset_password`).
+- Recompensas por sede: `location_id` en `reward_tiers`/`rewards`/`campaign_rewards` con FK compuesta. Los
+  únicos llevan centinela `COALESCE(location_id, uuid cero)` porque **los NULL no colisionan entre sí**.
+  Falta enhebrar la sede en los ~10 llamadores; hasta entonces nadie puede crear filas por sede.
+
+---
+
 ## [2026-09-08] - Una plantilla con imagen fija ya se puede enviar como campaña
 
 **Tipo:** fix · **Origen:** el dueño ("creé campananuevocombo, aparece en plantillas pero no aparece en el apartado para enviar campañas") · **Sin migración**

@@ -57,6 +57,12 @@ describe('parseTenantAdminBody — qué se acepta', () => {
       tenantSlug: 'pedacito-de-amor',
       email: 'dueno@sunegocio.com',
       password: 'x'.repeat(20),
+      // Los tres campos nuevos (00058) tienen que salir APAGADOS cuando el
+      // cuerpo no los menciona: un alta normal no pisa contraseñas ni reescribe
+      // el alcance de nadie.
+      resetPassword: false,
+      scopeRole: null,
+      locationIds: [],
     })
   })
 
@@ -83,13 +89,51 @@ describe('parseTenantAdminBody — qué se acepta', () => {
     }
   })
 
-  it('IGNORA cualquier intento de pedir un rol: solo salen slug, correo y contraseña', () => {
+  it('IGNORA cualquier intento de pedir un rol de Auth', () => {
     // El endpoint escribe `app_metadata = { tenant_id }` con lo que devuelve este parser.
-    // Si algún día alguien agregara un campo `role` al cuerpo, este test lo delata: el
-    // super-admin ve TODAS las marcas y no se otorga desde ninguna pantalla.
+    // Si algún día alguien agregara un campo de rol de AUTH al cuerpo, este test lo
+    // delata: el super-admin ve TODAS las marcas y no se otorga desde ninguna pantalla.
+    //
+    // ⚠️ `scopeRole` (00058) NO es eso y por eso está en la lista de abajo: vive en
+    // `dashboard_user_locations`, solo distingue «todas las sedes de SU marca» de
+    // «estas sedes», y no puede sacar a nadie de su marca. Los nombres se mantienen
+    // distintos justamente para que este test siga diciendo algo.
     const out = parseTenantAdminBody({ ...VALIDO, role: 'super_admin', app_metadata: { role: 'super_admin' } })
     expect(out.ok).toBe(true)
     if (!out.ok) return
-    expect(Object.keys(out.body).sort()).toEqual(['email', 'password', 'tenantSlug'])
+    expect(Object.keys(out.body).sort()).toEqual([
+      'email', 'locationIds', 'password', 'resetPassword', 'scopeRole', 'tenantSlug',
+    ])
+    // Lo que llegó pidiendo `super_admin` no sobrevive en ninguna forma.
+    expect(JSON.stringify(out.body)).not.toContain('super_admin')
+  })
+
+  it('scope_role location exige al menos una sede', () => {
+    // Un administrador sin sedes no vería nada y el panel le respondería 403 sin
+    // decir por qué. Se corta en el parser, que es donde hay algo que explicar.
+    expect(parseTenantAdminBody({ ...VALIDO, scope_role: 'location', location_ids: [] }).ok).toBe(false)
+    const ok = parseTenantAdminBody({
+      ...VALIDO,
+      scope_role: 'location',
+      location_ids: ['aaaaaaaa-0000-4000-8000-000000000001', 'no-es-un-uuid'],
+    })
+    expect(ok.ok).toBe(true)
+    if (!ok.ok) return
+    // Los uuid mal formados se descartan en silencio; el resto pasa.
+    expect(ok.body.locationIds).toEqual(['aaaaaaaa-0000-4000-8000-000000000001'])
+  })
+
+  it('reset_password solo es verdadero si viene el booleano exacto', () => {
+    // Pisarle la contraseña a alguien que ya entra es una decisión explicita: un
+    // 'true' de texto o un 1 no alcanzan para tomarla.
+    expect(parseTenantAdminBody(VALIDO).ok && parseTenantAdminBody(VALIDO)).toBeTruthy()
+    for (const valor of ['true', 1, 'si', {}]) {
+      const out = parseTenantAdminBody({ ...VALIDO, reset_password: valor })
+      expect(out.ok).toBe(true)
+      if (out.ok) expect(out.body.resetPassword).toBe(false)
+    }
+    const si = parseTenantAdminBody({ ...VALIDO, reset_password: true })
+    expect(si.ok).toBe(true)
+    if (si.ok) expect(si.body.resetPassword).toBe(true)
   })
 })

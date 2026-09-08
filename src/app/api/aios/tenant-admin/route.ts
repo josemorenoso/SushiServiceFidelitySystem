@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { isDbFailure, logDbFailure } from '@/lib/db-failure'
 import { matchesProvisionSecret, parseTenantAdminBody } from '@/lib/aios-provision'
+import { setUserScope } from '@/lib/dashboard-users'
 
 /**
  * POST /api/aios/tenant-admin — crear el usuario admin de una marca desde el AIOS.
@@ -27,13 +28,21 @@ import { matchesProvisionSecret, parseTenantAdminBody } from '@/lib/aios-provisi
  *  - **No le cambia la marca a un usuario que ya tiene otra.** Reatribuir un usuario de
  *    la marca A a la marca B es exactamente el principio que no se negocia; ante ese
  *    caso responde 409 y no toca nada.
- *  - **No cambia contraseñas.** Si el correo ya existe, la contraseña que mandó el AIOS
- *    se ignora (y se dice en la respuesta). Recuperarla es "olvidé mi contraseña".
+ *  - **No cambia contraseñas por accidente.** Si el correo ya existe, la contraseña que
+ *    mandó el AIOS se ignora (y se dice en la respuesta) — salvo que el cuerpo traiga
+ *    `reset_password: true`, que es una decisión EXPLÍCITA del operador y no un efecto
+ *    secundario del alta. Ese interruptor existe porque hasta el 2026-09-08 NADIE podía
+ *    cambiar una contraseña en ningún lado: el AIOS remitía a "olvidé mi contraseña" y
+ *    ese flujo **no existe** en el producto, así que la única salida era entrar al
+ *    Supabase a mano. Con 25 altas encima, esa era la fricción.
  *
  * CONTRATO
  * ────────
  *   Header : `x-aios-secret: <AIOS_ADMIN_PROVISION_SECRET>`  (comparación timing-safe)
- *   Body   : { tenant_slug: string, email: string, password: string }
+ *   Body   : { tenant_slug, email, password,
+ *              reset_password?: boolean,          // pisar la clave de un usuario que ya existe
+ *              scope_role?: 'brand' | 'location', // alcance en dashboard_user_locations
+ *              location_ids?: string[] }          // las sedes, si scope_role = 'location'
  *   200    : { ok, created, user_id, tenant_id, tenant_slug, login_url,
  *              scope_row_created, active_locations, warnings[] }
  *   401    : secreto ausente o incorrecto · 404 : slug inexistente
@@ -103,7 +112,8 @@ export async function POST(req: NextRequest) {
   }
   const parsed = parseTenantAdminBody(raw)
   if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 })
-  const { tenantSlug: tenant_slug, email, password } = parsed.body
+  const { tenantSlug: tenant_slug, email, password, resetPassword, scopeRole, locationIds } =
+    parsed.body
 
   let supabase: SupabaseClient
   try {
@@ -192,8 +202,28 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: `No se pudo asignarle la marca: ${updateError.message}` }, { status: 502 })
       }
       warnings.push('El correo ya tenía usuario sin marca: se le asignó esta. La contraseña que se generó acá NO se aplicó — sigue siendo la que ya tenía.')
-    } else {
+    } else if (!resetPassword) {
       warnings.push('Ese usuario ya existía y ya era el admin de esta marca. No se cambió nada, ni la contraseña.')
+    }
+
+    // El reset va DESPUÉS de las tres negativas de arriba (super-admin, marca
+    // ajena, huérfano): pisar una contraseña es lo último que se hace y solo
+    // sobre un usuario que ya se comprobó que es de ESTA marca.
+    if (resetPassword) {
+      const { error: passwordError } = await supabase.auth.admin.updateUserById(existing.id, {
+        password,
+      })
+      if (passwordError) {
+        console.error('[aios/tenant-admin] reset de contraseña falló', { email, message: passwordError.message })
+        return NextResponse.json(
+          { error: `No se pudo cambiar la contraseña: ${passwordError.message}` },
+          { status: 502 },
+        )
+      }
+      // Se pisa el aviso de "no se cambió nada": ahora sí se cambió, y decir las
+      // dos cosas a la vez es peor que no decir ninguna.
+      warnings.length = 0
+      warnings.push('Ese usuario ya existía: se le puso la contraseña NUEVA que aparece abajo. La anterior dejó de servir.')
     }
 
     userId = existing.id
@@ -212,6 +242,52 @@ export async function POST(req: NextRequest) {
     .select('id')
     .eq('tenant_id', tenantId)
     .eq('is_active', true)
+
+  // ─── 3.bis. El alcance PEDIDO explícitamente ────────────────────────────────
+  // Cuando el AIOS manda `scope_role`, esa es la respuesta y no hay nada que
+  // deducir: reemplaza el alcance del usuario tal cual. Es lo que permite dar de
+  // alta a un encargado de UNA sede desde el AIOS, y no solo al dueño.
+  //
+  // Va ANTES del bloque automático de abajo y lo cortocircuita: si el operador
+  // dijo «este es administrador de Envigado», crearle además una fila de marca
+  // sería justo lo contrario de lo que pidió.
+  if (scopeRole) {
+    const sedesValidas = new Set((locations ?? []).map((l) => l.id as string))
+    const ajena = locationIds.find((id) => !sedesValidas.has(id))
+    if (scopeRole === 'location' && ajena) {
+      return NextResponse.json(
+        { error: 'Alguna de las sedes indicadas no es de esta marca (o no está activa).' },
+        { status: 409 },
+      )
+    }
+
+    const { error: scopeError } = await setUserScope(supabase, {
+      userId,
+      tenantId,
+      role: scopeRole,
+      locationIds,
+    })
+    if (scopeError) {
+      logDbFailure({ scope: 'AiosTenantAdmin', reason: 'scope_write_error', error: scopeError, context: { tenant_slug, user_id: userId } })
+      warnings.push('El usuario quedó creado pero SIN alcance de sedes: el panel le va a responder 403 hasta que se le asigne uno.')
+    } else {
+      scopeRowCreated = true
+    }
+
+    return NextResponse.json({
+      ok: true,
+      created,
+      user_id: userId,
+      tenant_id: tenantId,
+      tenant_slug: tenant.slug,
+      tenant_name: tenant.name,
+      login_url: typeof tenant.domain === 'string' && tenant.domain ? `https://${tenant.domain}/login` : null,
+      scope_row_created: scopeRowCreated,
+      active_locations: (locations ?? []).length,
+      scope_role: scopeRole,
+      warnings,
+    })
+  }
 
   if (isDbFailure(locError)) {
     logDbFailure({ scope: 'AiosTenantAdmin', reason: 'locations_read_error', error: locError, context: { tenant_slug } })

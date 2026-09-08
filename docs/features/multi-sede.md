@@ -789,6 +789,155 @@ pareja rechazando con `23514` las dos combinaciones inválidas, y una lectura RE
 
 ---
 
+## 3.septies — F9: la sede pasa a ser DEL CLIENTE (`00058`, 2026-09-08)
+
+> **De dónde sale.** El dueño, 2026-09-08: *"el cliente debe poder ver sus sedes,
+> seleccionarlas y modificarlas desde un solo lugar, punto final"*, *"cada sede tiene su
+> propio google maps, tiene su propia info, lo que se comparten son los clientes"*, y
+> *"necesito poder agregar super usuarios y administradores desde el AIOS y también desde
+> configuración desde el dashboard"*.
+
+Hasta esta fase, multi-sede era una función **nuestra**: el cliente podía FILTRAR por sede
+(F7) pero no editar ninguna salvo la principal, y solo sus cinco columnas de geocerca.
+
+### Qué estaba roto, y por qué no era un olvido
+
+Tres huecos que se tapaban entre sí:
+
+1. **`restaurant_locations.config` existía pero no se podía escribir.** La 00041 creó la
+   columna y su propio comentario lo dice —*"Acá va la COLUMNA y nada más"*—, dejando la
+   whitelist y la función de escritura para «después». Consecuencia: las dos sedes de una
+   marca mandaban a reseñar **la misma ficha de Google**, así que la ficha de la segunda
+   sede nacía muerta. Lo destapó Tepuy.
+2. **No había pantalla para la sede 2.** `/api/dashboard/location` (singular) elige la
+   principal y su comentario remite a un selector que era F7 — y F7 hizo el selector para
+   FILTRAR, no para editar. Nadie cerró el círculo.
+3. **`dashboard_user_locations` no tenía escritor.** La 00045 modeló los dos roles con su
+   CHECK, sus dos únicos parciales y su FK compuesta, y la única fila que alguien escribía
+   era la que `/api/aios/tenant-admin` crea sola cuando hay 2+ sedes. Un restaurante con
+   tres locales no podía darle a cada encargado su acceso.
+
+### 1. `restaurant_locations.config`, usable
+
+- **`location_config_es_valida()`** — el CHECK de whitelist, en la BASE. No solo en
+  TypeScript: 55 archivos escriben con `service_role`, que se salta el RLS, así que una
+  whitelist que viviera solo en TS sería una sugerencia.
+- **`merge_location_config_deep(tenant_id, location_id, patch)`** — espejo de
+  `merge_tenant_config_deep()` (00047) salvo por una cosa que no es cosmética: **filtra por
+  `tenant_id` además del id**, porque el uuid de la sede llega del navegador. La
+  comprobación vive en la misma sentencia que la escritura para que no exista una segunda
+  ruta que la olvide. Devuelve NULL si la sede no es de esa marca.
+- **`resolveBranding(marca, sede)`** mezcla la sede ENCIMA de la marca, así que la tarjeta,
+  el flujo de reseñas y domicilios lo heredan sin tocar ninguno. `getBrandingForHost()`
+  pasó de `getTenantByHost()` a `resolveHostContext()`: cuesta una consulta más y esa
+  consulta es la que trae el `config` de la sede.
+
+**Qué baja a la sede y qué no.** El criterio no es *"qué podría variar"* sino *"qué es
+coherente con lo que el cliente ya ve"*:
+
+| Se queda en la MARCA | Baja a la SEDE |
+|---|---|
+| `brand_name`, `tagline`, `short` | `google_maps_url` · `card.google_profile_url` |
+| `branding.*` (logo, colores) | `card.address` · `card.hours` |
+| `card.stamp_icon`, `card.motif` | `whatsapp_link` · `delivery_phone` |
+| `card.description`, `card.policies` | `card.contact_phone` · `card.contact_email` |
+| `qr_studio.*` | `instagram_url` · `card.facebook_url` / `tiktok_url` / `website_url` |
+
+La tarjeta muestra puntos y sellos que son **de la marca**: un cliente que juntó 8 sellos
+en Laureles y abre su tarjeta en Envigado tiene que ver el mismo nombre y el mismo logo,
+porque sus 8 sellos siguen ahí. Si la identidad cambiara con la sede, **la tarjeta
+mentiría**. Lo de la derecha es literalmente *"dónde estoy y cómo me contactás"*.
+
+La whitelist de TypeScript (`src/lib/location-config-paths.ts`) **no es una lista nueva**:
+es un SUBCONJUNTO de `EDITABLE_PATHS`, elegido por nombre, así que las validaciones son las
+mismas funciones. `tests/unit/location-config-paths.test.ts` compara la lista contra el SQL
+del CHECK, leyendo la migración de verdad.
+
+### 2. Las dos pantallas
+
+**`/dashboard/sedes`** — ver, elegir y editar cualquier sede.
+- Con **una sola sede la palabra «sede» no aparece**: sin lista, sin selector, título «Mi
+  local». Es el interruptor de compatibilidad del §8.3 llevado a la pantalla.
+- Cada campo dice qué pasa si se deja vacío, **con el valor heredado escrito**. Responde la
+  única pregunta real de un dueño con dos locales: *¿esto es de la marca o de este local?*
+- El subdominio **se enseña** aunque no se pueda cambiar, y dice por qué (está impreso en
+  los QR). Esconderlo hace que lo busquen en otro lado o que llamen.
+- **Crear y borrar sedes NO está acá**, a propósito: abrir un local cambia lo que el
+  restaurante paga y lo que hay que imprimir. Eso sigue en el AIOS.
+
+**`/dashboard/accesos`** — quién entra y qué ve. Los dos roles del cliente son
+`role='brand'` («super usuario», todas las sedes) y `role='location'` («administrador»,
+solo las suyas) de la 00045: **no hubo que inventar ningún modelo**, faltaba el escritor.
+
+> **No hay un botón de inicio de sesión por rol, y es a propósito.** Se entra por el mismo
+> `/login`. El rol se resuelve en el servidor y decide lo que se ve. Dos botones serían una
+> pregunta que el usuario no puede contestar («¿yo soy super usuario o administrador?») y
+> una pista de qué roles existen para quien no debería saberlo.
+
+Reglas que no se saltan: solo un super usuario administra accesos (uno de sede que pudiera
+crear usuarios se ascendería solo); nunca se otorga `super_admin` (ese es el operador de
+Cada1 y ve las 25 marcas); nunca se reatribuye un correo de otra marca; **nadie se toca a
+sí mismo** y **la marca no se queda sin super usuarios**.
+
+### 3. El agujero de las contraseñas — el que más fricción causaba
+
+Hasta el 2026-09-08 **nadie podía cambiar una contraseña**. `/api/aios/tenant-admin` se
+niega a propósito, y la tarjeta del AIOS remitía a *"olvidé mi contraseña en su propio
+panel"* — un flujo que **no existe**: no hay un solo `resetPasswordForEmail` en el producto
+y `/login` no tiene enlace de recuperación (verificado por grep sobre `src/app` y
+`src/lib`). La única salida era entrar al Supabase a mano.
+
+Ahora hay dos caminos, ninguno dependiente del SMTP:
+- **El cliente**: un super usuario le pone una contraseña nueva a quien la perdió, desde
+  «Accesos». Se enseña una vez y no se guarda.
+- **Nosotros**: `reset_password: true` en `POST /api/aios/tenant-admin`, con una casilla en
+  la tarjeta «Usuario del panel». Va después de las tres negativas (super-admin, marca
+  ajena, huérfano): pisar una contraseña es lo último que se hace.
+
+> ⚠️ **Sigue faltando el autoservicio** («olvidé mi contraseña» en `/login`), que es lo que
+> saca a un humano del medio. Va aparte porque depende del SMTP del proyecto de Supabase,
+> que es una incógnita que no se descubre el día del despliegue. Anotado en `ESTADO.md` §3.
+
+### 4. Recompensas por sede — la base, y lo que falta
+
+`reward_tiers`, `rewards` y `campaign_rewards` llevan `location_id` nullable con FK
+COMPUESTA `(location_id, tenant_id) ON DELETE RESTRICT`. **`NULL` = de la marca.**
+
+**La trampa que esto activaba sola:** los NULL no colisionan entre sí. Agregar una columna
+nullable al único `(point_threshold, tenant_id) WHERE is_active` habría permitido dos
+niveles DE LA MARCA con el mismo umbral, **en silencio**. Los índices se recalculan con un
+centinela — `COALESCE(location_id, '000…0'::uuid)` — que no puede ser una sede real (la FK
+lo rechazaría), así que «de la marca» pasa a ser un valor concreto que colisiona consigo
+mismo.
+
+**La regla de resolución** vive en `elegirFilasDeSede()` y es una sola frase: *una sede que
+definió al menos una fila propia usa las suyas y solo las suyas; una sede que no definió
+ninguna usa las de la marca.* Reemplaza, **no mezcla** — porque «tenés los de la marca
+excepto los que redefiniste» no se le puede explicar a un restaurantero, y porque mezclar
+impide que una sede tenga MENOS niveles que la marca.
+
+> **ESTADO REAL, sin adornos.** La base está lista y `getAllTiers(tenantId, locationId?)`
+> ya resuelve. Lo que **falta** es enhebrar la sede en los ~10 llamadores
+> (`tarjeta`, `check-in`, `check-in/status`, `public/customer-card`,
+> `public/reward-tiers`, `points.service`, `delivery.service`, `check-in-override`,
+> `cron/birthday`, `mystery-box/resolve`) y una pantalla que cree filas por sede.
+> **Mientras no exista esa pantalla, nadie puede crear filas por sede y el sistema es
+> consistente**: `location_id` es NULL en todo y cada consulta devuelve lo de hoy. Enhebrar
+> a medias sería peor que no hacerlo: una sede vería sus premios en la tarjeta y los de la
+> marca al hacer check-in.
+
+### Cómo se verifica
+
+- `npx vitest run tests/unit/location-config-paths.test.ts` — la whitelist contra el SQL.
+- Con una marca de UNA sede: el selector del encabezado **no se dibuja** y
+  `/dashboard/sedes` dice «Mi local».
+- Con una marca de dos: cargar el `google_maps_url` de una sede, abrir su subdominio y
+  comprobar que la reseña apunta a ESA ficha y que la otra sede conserva la suya.
+- Crear un administrador de sede en «Accesos», entrar con él y comprobar que no ve el
+  selector completo ni la pantalla de accesos.
+
+---
+
 ## 4. Reglas que valen para todas las fases
 
 - **`location_id` es SIEMPRE nullable**, con **FK compuesta** `(location_id, tenant_id)

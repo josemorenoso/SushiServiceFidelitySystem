@@ -210,6 +210,13 @@ export interface RewardTier {
   sort_order: number
   is_active: boolean
   created_at: string
+  /**
+   * Sede duena de este nivel. `null` = de la MARCA, lo heredan todas las sedes
+   * (00058 §3). Una sede que define al menos un nivel propio usa los suyos y
+   * solo los suyos: la regla vive en `elegirFilasDeSede()`
+   * (`src/services/reward-tiers.service.ts`).
+   */
+  location_id?: string | null
 }
 
 export type MysteryBoxChoice = 'safe' | 'mystery'

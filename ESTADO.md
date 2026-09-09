@@ -32,6 +32,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Sesión 2 — «ya reclamé» por umbral, no por id + `current_tier` (2026-09-09) | Opus 5 | `supabase/migrations/00059_*.sql` · `src/services/reward-tiers.service.ts` · `src/app/api/check-in/status/route.ts` · `src/app/api/dashboard/reward-tiers/copiar/route.ts` · `docs/features/points-mystery-box.md` · `tests/db/` (archivo nuevo propio) | **00059** | Abierta |
 
 ## 3. Siguiente, en orden
 

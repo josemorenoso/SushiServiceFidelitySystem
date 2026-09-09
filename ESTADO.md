@@ -33,6 +33,7 @@
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
 | Sesión 2 — «ya reclamé» por umbral, no por id + `current_tier` (2026-09-09) | Opus 5 | `supabase/migrations/00059_*.sql` · `src/services/reward-tiers.service.ts` · `src/app/api/check-in/status/route.ts` · `src/app/api/dashboard/reward-tiers/copiar/route.ts` · `docs/features/points-mystery-box.md` · `tests/db/` (archivo nuevo propio) | **00059** | Abierta |
+| Sesión 3 — permisos de `/api/dashboard/reward-tiers` (agujero 0.BETA) + aviso de panel vacío al administrador de sede (0.DELTA) (2026-09-09) | Opus 5 | `src/app/api/dashboard/reward-tiers/route.ts` · `src/lib/location-scope.ts` · `src/app/(dashboard)/dashboard/rewards/page.tsx` · `src/app/(dashboard)/dashboard/accesos/page.tsx` · `docs/features/multi-sede.md` (§3.septies) | — | Abierta |
 
 ## 3. Siguiente, en orden
 

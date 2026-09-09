@@ -138,6 +138,19 @@ export default function StaffPage() {
   // Action states
   const [toggling, setToggling] = useState<string | null>(null)
 
+  // ─── Asignación de sede EN MASA ───
+  //
+  // Todo el parque vivo tiene `location_id` NULL y `/api/staff/waiters` filtra por sede:
+  // con 2+ sedes, los escáneres salen VACÍOS. Arreglarlo con el lápiz de cada fila son
+  // tres clics por persona; con doce sedes eso es media mañana.
+  //
+  // Esto NO es un backfill (D11 sigue en pie): no adivina nada, no propone una sede, y no
+  // hay ningún «asignar a todos la principal». La persona MARCA a quiénes y ELIGE la sede;
+  // lo único que se automatiza es repetir la misma llamada que ya hace el lápiz.
+  const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set())
+  const [bulkLocationId, setBulkLocationId] = useState('')
+  const [bulkRunning, setBulkRunning] = useState(false)
+
   // Filters
   const [search, setSearch] = useState('')
   const [filterRole, setFilterRole] = useState<'all' | 'waiter' | 'supervisor' | 'admin'>('all')
@@ -394,6 +407,76 @@ export default function StaffPage() {
   const devicesForStaff = (staffId: string) =>
     data.devices.filter((d) => d.staff_user_id === staffId)
 
+  const toggleBulk = (id: string) => {
+    setBulkSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  /**
+   * Aplica la sede elegida a los meseros marcados.
+   *
+   * Uno por uno y en serie, con el MISMO `PATCH /api/dashboard/staff` que usa el lápiz: no
+   * hay ninguna ruta nueva ni ningún UPDATE masivo, así que todas las guardas del motor
+   * siguen valiendo persona por persona — el trigger `trg_staff_users_sede_coherente`
+   * (00044, un aparato ya activado en otra sede) y `staff_users_nombre_sede_key` (00046,
+   * dos «Ana» en el mismo local).
+   *
+   * Por eso el resultado es PARCIAL a propósito: los que pasan quedan guardados y los que
+   * el motor rechaza siguen marcados, con su motivo. Abortar todo por un choque de nombres
+   * obligaría a repetir el trabajo bueno.
+   */
+  const handleBulkAssign = async () => {
+    if (!bulkLocationId || bulkSelected.size === 0) return
+    const objetivo = data.staff.filter((s) => bulkSelected.has(s.id))
+    setBulkRunning(true)
+    const fallaron: { id: string; name: string; motivo: string }[] = []
+    let ok = 0
+
+    for (const s of objetivo) {
+      try {
+        const res = await fetch('/api/dashboard/staff', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: s.id, location_id: bulkLocationId }),
+        })
+        const json = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          fallaron.push({ id: s.id, name: s.name, motivo: json.message || json.error || 'error' })
+        } else {
+          ok++
+        }
+      } catch {
+        fallaron.push({ id: s.id, name: s.name, motivo: 'error de conexión' })
+      }
+    }
+
+    // Solo quedan marcados los que NO se pudieron asignar: la selección se convierte en la
+    // lista de lo que falta, y volver a pulsar reintenta exactamente eso.
+    setBulkSelected(new Set(fallaron.map((f) => f.id)))
+    setBulkRunning(false)
+    await fetchData()
+
+    if (ok > 0) {
+      toast.success(
+        ok === 1
+          ? `1 mesero asignado a ${locationName(bulkLocationId)}`
+          : `${ok} meseros asignados a ${locationName(bulkLocationId)}`
+      )
+    }
+    if (fallaron.length > 0) {
+      toast.error(
+        `${fallaron.length} no se pudieron asignar: ${fallaron
+          .map((f) => `${f.name} (${f.motivo})`)
+          .join(' · ')}`,
+        { duration: 12000 }
+      )
+    }
+  }
+
   // Filtered staff list
   const filteredStaff = data.staff.filter((s) => {
     if (search) {
@@ -469,6 +552,83 @@ export default function StaffPage() {
             </div>
           )}
 
+          {/*
+            Asignar sede a varios de una vez. Aparece solo cuando hay a quién asignársela y
+            sedes a las que asignar. No propone ninguna: la sede se elige y a las personas se
+            las marca — D11 sigue siendo «la decisión es del dueño, persona por persona»; lo
+            que se ahorra es repetir el mismo formulario doce veces.
+          */}
+          {sinSede.length > 0 && assignableLocations.length > 0 && (
+            <div className="mb-4 rounded-lg border border-amber-200 bg-white p-3">
+              <p className="text-sm font-medium">Asignar sede a varios a la vez</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Marca en la tabla a los que trabajan en un mismo local, elige la sede y
+                aplícala. Nadie adivina la sede por ti: si no marcas a alguien, se queda como
+                está.
+              </p>
+              <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={bulkRunning}
+                  onClick={() => {
+                    // El atajo marca a los que la tabla está mostrando AHORA (respeta la
+                    // búsqueda y los filtros): marcar en silencio a gente que no se ve es
+                    // justo la manera de asignarle una sede equivocada a alguien.
+                    const visiblesSinSede = filteredStaff.filter((s) => s.is_active && !s.location_id)
+                    setBulkSelected((prev) =>
+                      visiblesSinSede.every((s) => prev.has(s.id)) && visiblesSinSede.length > 0
+                        ? new Set()
+                        : new Set(visiblesSinSede.map((s) => s.id))
+                    )
+                  }}
+                >
+                  {filteredStaff.filter((s) => s.is_active && !s.location_id).every((s) => bulkSelected.has(s.id)) &&
+                  bulkSelected.size > 0
+                    ? 'Desmarcar todos'
+                    : 'Marcar los sin sede que estoy viendo'}
+                </Button>
+
+                <select
+                  className="h-9 rounded-md border bg-background px-2 text-sm"
+                  value={bulkLocationId}
+                  disabled={bulkRunning}
+                  onChange={(e) => setBulkLocationId(e.target.value)}
+                  aria-label="Sede a asignar en masa"
+                >
+                  <option value="">Elige la sede…</option>
+                  {assignableLocations.map((l) => (
+                    <option key={l.id} value={l.id}>{l.name}</option>
+                  ))}
+                </select>
+
+                <Button
+                  type="button"
+                  size="sm"
+                  className="gap-2"
+                  disabled={bulkRunning || !bulkLocationId || bulkSelected.size === 0}
+                  onClick={handleBulkAssign}
+                >
+                  {bulkRunning && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {bulkRunning
+                    ? 'Asignando…'
+                    : `Asignar a ${bulkSelected.size} ${bulkSelected.size === 1 ? 'mesero' : 'meseros'}`}
+                </Button>
+
+                {bulkSelected.size > 0 && !bulkRunning && (
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground underline"
+                    onClick={() => setBulkSelected(new Set())}
+                  >
+                    limpiar selección
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Filters */}
           <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center">
             <div className="relative flex-1">
@@ -521,6 +681,13 @@ export default function StaffPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  {/* La casilla solo existe mientras haya alguien sin sede y alguna sede a
+                      la que asignarlo: resuelto el parque viejo, la columna desaparece. */}
+                  {sinSede.length > 0 && assignableLocations.length > 0 && (
+                    <TableHead className="w-8">
+                      <span className="sr-only">Marcar para asignar sede</span>
+                    </TableHead>
+                  )}
                   <TableHead>Nombre</TableHead>
                   <TableHead>Celular</TableHead>
                   <TableHead>Rol</TableHead>
@@ -533,6 +700,23 @@ export default function StaffPage() {
               <TableBody>
                 {filteredStaff.map((s) => (
                   <TableRow key={s.id}>
+                    {sinSede.length > 0 && assignableLocations.length > 0 && (
+                      <TableCell className="w-8">
+                        {/* Solo se marca a quien NO tiene sede. Esta herramienta llena
+                            huecos; MUDAR a alguien que ya está en un local se hace con su
+                            lápiz, donde se ve de dónde sale y qué aparatos arrastra. */}
+                        {s.is_active && !s.location_id ? (
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 cursor-pointer accent-amber-600"
+                            checked={bulkSelected.has(s.id)}
+                            disabled={bulkRunning}
+                            onChange={() => toggleBulk(s.id)}
+                            aria-label={`Marcar a ${s.name} para asignarle sede`}
+                          />
+                        ) : null}
+                      </TableCell>
+                    )}
                     <TableCell className="font-medium">{s.name}</TableCell>
                     <TableCell className="font-mono text-sm">{formatPhone(s.phone)}</TableCell>
                     <TableCell>

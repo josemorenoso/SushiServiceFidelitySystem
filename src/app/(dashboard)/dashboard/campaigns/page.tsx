@@ -27,6 +27,7 @@ import { ManualCampaigns } from '@/components/dashboard/ManualCampaigns'
 import { AtRiskBubbles } from '@/components/dashboard/AtRiskBubbles'
 import { CampaignRewardsCatalog } from '@/components/dashboard/CampaignRewardsCatalog'
 import { WalletCard } from '@/components/dashboard/WalletCard'
+import { CupoEnvioCard } from '@/components/dashboard/CupoEnvioCard'
 import { SegmentRadar } from '@/components/dashboard/SegmentRadar'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { useDemo } from '@/contexts/DemoContext'
@@ -294,6 +295,11 @@ export default function CampaignsPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Encima de las pestañas a propósito: el cupo se ve igual en «Manuales», que es
+          desde donde se dispara un envío. Es de la MARCA, así que no lo filtra el selector
+          de sede del encabezado. */}
+      <CupoEnvioCard />
 
       <SegmentRadar />
 

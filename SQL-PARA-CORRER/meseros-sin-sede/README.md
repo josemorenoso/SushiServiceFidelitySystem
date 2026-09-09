@@ -27,9 +27,17 @@ barato; un dato inventado que parece bueno, no.
 
 Por eso la decisión es **persona por persona**, y hay dos formas de tomarla:
 
-- **Desde el panel** (`/dashboard/staff`): el lápiz de cada fila. Los que están sin sede
-  salen marcados en ámbar y hay un botón *«Ver solo esos»*. Para unos pocos, es lo más rápido.
-- **Con el `02`**: una línea por persona. Para muchos, o para varias marcas de una sentada.
+- **Desde el panel** (`/dashboard/staff`), que desde el **2026-09-09** es la vía normal:
+  los que están sin sede salen marcados en ámbar, hay un botón *«Ver solo esos»*, y encima
+  de la tabla aparece **«Asignar sede a varios a la vez»** — se marcan con la casilla los
+  que trabajan en un mismo local, se elige la sede y se aplica de una. Sigue sin adivinar
+  nada: no propone ninguna sede, no hay «asignar a todos la principal», y solo se puede
+  marcar a quien NO tiene sede (mudar a alguien que ya la tiene se hace con su lápiz, donde
+  se ve qué dispositivos arrastra). Por dentro repite el mismo `PATCH` que el lápiz, uno por
+  uno, así que todas las guardas del motor siguen valiendo persona por persona y el
+  resultado puede ser parcial: los que el motor rechaza quedan marcados con su motivo.
+- **Con el `02`**: una línea por persona. Para varias marcas de una sentada, o si se prefiere
+  dejar la decisión escrita y revisable antes de aplicarla.
 
 ## Lo que las guardas del `02` no dejan pasar
 

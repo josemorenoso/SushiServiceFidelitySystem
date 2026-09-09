@@ -147,6 +147,90 @@ duplicados a clientes reales).
 
 ---
 
+## Paso 8 — Habilitar 2+ sedes en una marca (preparación de datos, no de código)
+
+> No es parte del despliegue: son los tres arreglos de **datos** sin los cuales el día 1 de una
+> marca multi-sede no funciona. El orden completo está en [ESTADO.md](../ESTADO.md) §3 punto
+> **0.ALFA**; acá van solo los pasos que se ejecutan.
+
+### 8.a — Sede a cada mesero (si no, los escáneres salen VACÍOS)
+
+Todos los meseros vivos tienen `staff_users.location_id` **NULL** y `/api/staff/waiters` filtra
+por sede (`waiters/route.ts:88`). Con 2+ sedes, **ningún mesero aparece en ningún escáner**.
+
+- **Desde el panel** (lo normal): `/dashboard/staff` → los sin sede salen en ámbar, se marcan con
+  la casilla los de un mismo local, se elige la sede y se aplica de una.
+- **Con SQL**, para varias marcas de una sentada: `SQL-PARA-CORRER/meseros-sin-sede/`.
+
+Ninguna de las dos adivina la sede: la decisión es del dueño, persona por persona (**D11**).
+
+### 8.b — Sede a cada número de domicilios (si no, todo cae en «sede desconocida»)
+
+`authorized_numbers.location_id` existe desde la 00043 y hasta el 2026-09-09 el panel **nunca lo
+escribía**. Es la señal de la que sale la sede de un pedido (`resolveDeliveryLocation()`).
+
+- **Desde el panel**: `/dashboard/authorized-numbers` → columna «Sede».
+- **Con SQL**: `SQL-PARA-CORRER/authorized-numbers-sin-sede/`.
+
+⚠️ Un celular existe **una sola vez por marca** (`authorized_numbers_phone_tenant_key`). Si las
+sedes comparten de verdad un mismo celular de operador, no hay sede correcta que ponerle: se queda
+en NULL y sus domicilios se muestran como «sede desconocida». La salida buena es **un celular de
+operador por sede**.
+
+### 8.c — Subir el cupo de envío al tier REAL de la línea
+
+Meta limita cada línea a **N destinatarios ÚNICOS por 24 h rodantes**. Ese cupo es de la **marca**
+y lo comparten todas las sedes (**D6**): no se reparte por local — eso sería **F9**, y no está
+construido.
+
+**Primero mirá en qué estado está la marca**, porque hay dos y se comportan al revés:
+
+```sql
+SELECT slug, messaging_daily_limit, messaging_limit_synced_at, line_status, quality_rating
+  FROM tenants WHERE slug = 'la-marca';
+```
+
+| `messaging_daily_limit` | Quién está así | Qué pasa |
+|---|---|---|
+| **NULL** | Las marcas que ya existían al aplicarse la 00037 (Sushi Service, Don Alirio, Frangal, Demo) | Se **mide** el consumo y **no se bloquea nada**. Un `DEFAULT 250` retroactivo les habría cortado las campañas, por eso quedaron en NULL a propósito |
+| **250** | Toda marca **nueva** (la que crea el AIOS) | Es el escalón de una WABA sin verificar, y **sí** frena |
+
+O sea: **una marca nueva de doce sedes nace en 250 y se le agota a media mañana**; una marca
+vieja no frena, pero tampoco sabés cuánto le queda.
+
+Cuando se agota, `reserve_send_slot()` **falla CERRADO**: las campañas dejan de salir. Lo que no
+cabe se **encola** y sale solo cuando la ventana libera cupo (`/api/cron/queue-drain`, cada 15
+min), así que no se pierde nada — pero llega tarde, y en el momento nadie se entera.
+
+> 🛑 **CONFIRMA EL TIER CON META/ZERNIO ANTES DE CORRER ESTO.** El número no se estima ni se
+> deduce del uso: es el escalón que Meta le tiene asignado a **esa** línea (1.000 / 10.000 /
+> ilimitado según verificación y calidad). Poner un tope más alto del real **no amplía nada**:
+> apaga tu propio freno y los envíos empiezan a rebotar en el proveedor, que es peor que
+> encolarlos. Si no lo podés confirmar, **no lo toques**: 250 y la cola son el lado seguro.
+
+```sql
+-- Supabase PRINCIPAL. Reemplazá el slug y el número por los reales.
+-- `messaging_limit_synced_at` deja constancia de CUÁNDO se confirmó ese escalón: sin esa fecha,
+-- dentro de tres meses nadie sabe si el número sigue siendo el de Meta o el de una corazonada.
+UPDATE tenants
+   SET messaging_daily_limit  = 1000,      -- ← el tier CONFIRMADO con Meta/Zernio
+       messaging_limit_synced_at = now()
+ WHERE slug = 'la-marca'                   -- ← el slug real
+   AND is_active;
+
+-- Verificación: el presupuesto derivado ya con el tope nuevo.
+SELECT slug, messaging_daily_limit, line_budget(id) FROM tenants WHERE slug = 'la-marca';
+```
+
+⚠️ **No pongas NULL para «quitar el freno».** NULL no es «ilimitado»: es «no sabemos», y deja a la
+marca sin ninguna red — se mide el consumo y se envía hasta que rebote el proveedor.
+
+`line_budget()` recalcula sola la reserva transaccional y el presupuesto de campañas; no hay nada
+más que tocar. El consumo y lo que queda se ven en **`/dashboard/campaigns`** (tarjeta de cupo,
+que avisa en ámbar al 75 % y en rojo al agotarse) y en `/dashboard/conexiones`.
+
+---
+
 ## Si algo sale mal
 
 - **Los meseros reciben 403** → la 00044 no entró. Aplícala; el código ya desplegado empieza a

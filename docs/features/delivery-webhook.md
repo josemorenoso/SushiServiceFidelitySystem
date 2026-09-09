@@ -46,6 +46,25 @@ Tablas involucradas:
 - **customers** — Se busca/crea el cliente extraído del mensaje
 - **visits** — Se registra visita con `source = 'delivery'`
 
+### La sede del operador (`authorized_numbers.location_id`, D9)
+
+Es de dónde sale la sede de un pedido. La columna existe desde la **00043**, pero hasta el
+**2026-09-09 el panel nunca la escribía**: el `INSERT` mandaba `{phone, name, is_active,
+tenant_id}` y punto, así que todo el parque quedó en `NULL` y —con 2+ sedes— *todos* los
+domicilios de *todos* los locales caían al mismo cubo de «sede desconocida».
+
+Desde entonces `/dashboard/authorized-numbers` la pide al crear y la deja cambiar por fila
+(columna «Sede»), y cuenta en ámbar los que siguen sin ella. `POST` y `PATCH` validan que la
+sede sea **activa y de esta marca**; el `PATCH` además rechaza una sede que quien llama no
+administre, y no deja que un administrador de sede se deje un número en `NULL` (dejaría de
+verlo: §5.1). Lo que ya existía se arregla desde esa misma pantalla o con
+`SQL-PARA-CORRER/authorized-numbers-sin-sede/`.
+
+`NULL` sigue significando **«sede desconocida»** y se **muestra**: nunca se backfillea. Y como
+`authorized_numbers_phone_tenant_key` es `UNIQUE (phone, tenant_id)`, un celular existe una
+sola vez por marca — si varias sedes comparten de verdad el mismo celular de operador, no hay
+sede correcta que ponerle y se queda en `NULL`. La salida buena es un celular por sede.
+
 ## Flujo de Uso
 
 ### Flujo Domicilios (vigente desde 2026-09-03 — todo dentro del producto)

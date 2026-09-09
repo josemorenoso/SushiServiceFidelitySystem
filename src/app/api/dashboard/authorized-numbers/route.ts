@@ -12,6 +12,36 @@ function getServiceClient() {
   return createServiceClient(url, key)
 }
 
+/**
+ * Valida que `location_id` sea una sede ACTIVA DE ESTA MARCA.
+ *
+ * Es el mismo control que `/api/dashboard/staff` (00044, D11) y existe por la misma razón:
+ * la FK compuesta `(location_id, tenant_id)` de la 00043 ya impide grabar la sede de otra
+ * marca, pero su 23503 crudo sale por el `catch` como un 500 sin explicación. Esto lo
+ * convierte en un 400 que dice qué pasó, y de paso rechaza las sedes DESACTIVADAS —que la
+ * FK sí aceptaría— porque atribuirle domicilios a un local cerrado es un error de dedo.
+ *
+ * Devuelve `undefined` si es válida, o el mensaje de error si no lo es.
+ */
+async function sedeInvalida(
+  db: ReturnType<typeof getServiceClient>,
+  tenantId: string,
+  locationId: string
+): Promise<string | undefined> {
+  const { data, error } = await db
+    .from('restaurant_locations')
+    .select('id')
+    // El `.eq('tenant_id', …)` es el aislamiento real: esta ruta usa `service_role`.
+    .eq('tenant_id', tenantId)
+    .eq('id', locationId)
+    .eq('is_active', true)
+    .maybeSingle()
+
+  if (error) return 'No se pudo verificar la sede'
+  if (!data) return 'La sede no existe, no está activa o no pertenece a este restaurante'
+  return undefined
+}
+
 export async function GET(request: NextRequest) {
   const scopeResult = await requireLocationScope(request)
   if (!scopeResult.ok) {
@@ -39,7 +69,16 @@ export async function POST(request: NextRequest) {
     if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
     const body = await request.json()
-    const { phone, name } = body
+    // `location_id` (D9): OPCIONAL y nullable. Omitirlo deja el número en «sede
+    // desconocida», que es exactamente el estado de todo el parque actual y sigue
+    // funcionando igual que siempre. Lo que cambia es que ahora se PUEDE escribir: hasta
+    // hoy la columna existía (00043) y el panel no la escribía nunca, así que con dos o más
+    // sedes TODOS los domicilios caían al mismo cubo sin forma de saber a qué local iban.
+    const { phone, name, location_id = null } = body as {
+      phone?: string
+      name?: string
+      location_id?: string | null
+    }
 
     if (!phone || !name) {
       return NextResponse.json({ error: 'Teléfono y nombre son requeridos' }, { status: 400 })
@@ -53,9 +92,22 @@ export async function POST(request: NextRequest) {
     const tenantId = await requireTenantId()
     const db = getServiceClient()
 
+    if (location_id) {
+      const problema = await sedeInvalida(db, tenantId, location_id)
+      if (problema) {
+        return NextResponse.json({ error: 'Sede inválida', message: problema }, { status: 400 })
+      }
+    }
+
     // Esta lectura ES el dup-check: ante un fallo de base `existing` llegaba `null`, el
     // código concluía "no hay duplicado" y el INSERT seguía adelante. `.maybeSingle()`
     // separa el vacío legítimo (número nuevo) del fallo real.
+    //
+    // El alcance es la MARCA, no la sede, y así tiene que ser: la llave del motor es
+    // `authorized_numbers_phone_tenant_key (phone, tenant_id)` (00028). Un mismo celular NO
+    // puede existir dos veces en la misma marca, ni siquiera en sedes distintas — de ahí
+    // que un número REALMENTE compartido por varias sedes se quede en «sede desconocida»
+    // en vez de mentir diciendo que es de una.
     const { data: existing, error: existingError } = await db
       .from('authorized_numbers')
       .select('id')
@@ -85,7 +137,15 @@ export async function POST(request: NextRequest) {
 
     const { data, error } = await db
       .from('authorized_numbers')
-      .insert({ phone: cleaned, name: String(name).trim(), is_active: true, tenant_id: tenantId })
+      // `tenant_id` EXPLÍCITO siempre: la 00030 nunca se aplicó en producción y la columna
+      // arrastra un DEFAULT puente que manda a Sushi Service todo INSERT que lo omita.
+      .insert({
+        phone: cleaned,
+        name: String(name).trim(),
+        is_active: true,
+        tenant_id: tenantId,
+        location_id: location_id ?? null,
+      })
       .select()
       .single()
 

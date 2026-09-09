@@ -8,6 +8,30 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [2026-09-09e] - Los tres huecos que dejaban muerto el día 1 de una marca de 12 sedes
+
+**Tipo:** fix (operación) · **Origen:** auditoría adversarial 2026-09-09 (ESTADO §3, 0.ALFA puntos 3, 4 y 5) · **Sin migración**
+
+- **Los escáneres salían vacíos.** Todo mesero vivo tiene `location_id` NULL y `/api/staff/waiters`
+  filtra por sede: con 2+ sedes no aparecía **nadie** en ningún escáner. `/dashboard/staff` gana
+  «Asignar sede a varios a la vez» — casilla por fila, se elige la sede y se aplica. **No es un
+  backfill** (D11 sigue): no propone sede, solo deja marcar a quien NO tiene, y repite por dentro el
+  mismo `PATCH` del lápiz uno por uno, así que las guardas del motor valen persona por persona y el
+  resultado puede ser parcial, con el motivo de cada rechazo.
+- **`authorized_numbers.location_id` no lo escribía nadie.** La columna existía desde la 00043 y el
+  panel mandaba el INSERT sin ella, así que **todos** los domicilios de **todas** las sedes caían en
+  «sede desconocida». Ahora el POST la acepta, el PATCH la cambia y el listado la muestra con su
+  desplegable. El PATCH además impide que un administrador de sede se lleve los domicilios a la sede
+  **hermana** (la FK compuesta solo frena la otra marca) o se deje un número en NULL, que lo haría
+  desaparecer de su propio panel: `decidirSedeDestino()`, 7 pruebas.
+- **El cupo de envío era invisible.** Es de la MARCA, lo comparten las 12 sedes, y al agotarse el
+  sistema falla CERRADO **en silencio**. El dato solo vivía en `/dashboard/conexiones`, que hoy con
+  `owner_email` vacío **solo abre el super-admin**. `CupoEnvioCard` lo pone en `/dashboard/campaigns`:
+  ámbar al 75 %, rojo al agotarse. **No se toca el modelo de cupo** (eso es F9 y choca con D6).
+- SQL idempotente y comentado para lo que ya existe: `SQL-PARA-CORRER/authorized-numbers-sin-sede/`.
+  RUNBOOK §8 documenta el `UPDATE tenants SET messaging_daily_limit` — con la advertencia de confirmar
+  el tier con Meta/Zernio primero, y de que las 5 marcas vivas están en NULL (miden, no frenan).
+
 ## [2026-09-09d] - Copiarle los premios a una sede ya no le regala un premio a nadie
 
 **Tipo:** fix (datos/plata) · **Origen:** auditoría adversarial 2026-09-09, 3/3 verificadores (ESTADO §3, 0.GAMMA) · **Migración `00059`, SIN aplicar**

@@ -32,7 +32,6 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
-| Sesión 4 — los tres huecos del día 1 de las 12 sedes: meseros sin sede en masa, `authorized_numbers.location_id` y el cupo de envío visible (2026-09-09) | Opus 5 | `src/app/api/dashboard/authorized-numbers/**` · `src/app/(dashboard)/dashboard/authorized-numbers/page.tsx` · `src/app/(dashboard)/dashboard/staff/page.tsx` · `src/components/dashboard/CupoEnvioCard.tsx` (nuevo) · `src/app/(dashboard)/dashboard/campaigns/page.tsx` (SOLO import + montaje) · `SQL-PARA-CORRER/**` · `docs/RUNBOOK-DEPLOY.md` · `docs/features/delivery-webhook.md` · `docs/features/send-governance.md` | — (ninguna) | Abierta |
 
 ## 3. Siguiente, en orden
 
@@ -47,13 +46,21 @@
       Elegir para la MARCA un host raíz distinto del de toda sede.
    3. **Asignarle sede a cada mesero.** Todos los vivos tienen `location_id` NULL y
       `/api/staff/waiters` filtra por sede (`waiters/route.ts:88`): con 2+ sedes, **los escáneres
-      salen vacíos**. Script en `SQL-PARA-CORRER/meseros-sin-sede/`.
-   4. **`authorized_numbers.location_id` a mano por cada sede.** El panel nunca lo escribe
-      (`authorized-numbers/route.ts:86-90`), así que con número compartido todos los domicilios
-      caen a «sede desconocida».
+      salen vacíos**. Sigue siendo una DECISIÓN, persona por persona — pero ya no cuesta doce
+      formularios: `/dashboard/staff` → «Asignar sede a varios a la vez» (casilla, sede, aplicar).
+      Para varias marcas de una sentada, `SQL-PARA-CORRER/meseros-sin-sede/`.
+   4. **`authorized_numbers.location_id` por cada sede.** Ya se escribe desde el panel
+      (`/dashboard/authorized-numbers`, columna «Sede»); lo que YA existe sigue en NULL y hay que
+      asignarlo: esa pantalla o `SQL-PARA-CORRER/authorized-numbers-sin-sede/`. ⚠️ Un celular
+      existe UNA vez por marca (`authorized_numbers_phone_tenant_key`): si las 12 comparten de
+      verdad el mismo celular de operador **no hay sede correcta**, se queda en «sede desconocida»
+      y la salida buena es un celular por sede.
    5. **Confirmar el cupo real de la línea con Meta/Zernio** y ponerlo en
-      `tenants.messaging_daily_limit`. Las N sedes comparten UN cupo de 250 destinatarios únicos
-      por 24 h y el sistema falla CERRADO (00037): con 12 sedes se agota a media mañana.
+      `tenants.messaging_daily_limit`. Las N sedes comparten UN cupo de destinatarios únicos por
+      24 h y el sistema falla CERRADO (00037). Ojo con los dos estados: las 5 marcas vivas están
+      en **NULL** (miden, no frenan) y toda marca **nueva** nace en **250**, que con 12 sedes se
+      agota a media mañana. El consumo ya se ve en `/dashboard/campaigns` (avisa al 75 %); el
+      `UPDATE` con su advertencia está en `docs/RUNBOOK-DEPLOY.md` §8.c.
 0.BETA **Lo que la auditoría dejó SIN JUZGAR** (34 de 95 agentes murieron por el límite de gasto
    de la cuenta, incluida la síntesis). Se corrigieron ya: el selector fantasma, el 409 sin
    pantalla, el 409 falso del PATCH de niveles, las filas heredadas editables y las dos guardas
@@ -125,7 +132,8 @@
 2. **Smoke test** del `docs/RUNBOOK-DEPLOY.md` §5 con Sushi Service real, apenas terminen las cinco:
    crear un evento con enlace, abrir Conexiones, y mirar la tarjeta en un celular.
 3. **Asignarle sede a los meseros que ya existen.** Todos tienen `location_id` NULL, así que **no aparecen
-   en ningún escáner**. Preparado en `SQL-PARA-CORRER/meseros-sin-sede/`; falta la DECISIÓN, persona por persona.
+   en ningún escáner**. Falta solo la DECISIÓN, persona por persona: la herramienta ya está en
+   `/dashboard/staff` («Asignar sede a varios a la vez») y en `SQL-PARA-CORRER/meseros-sin-sede/`.
 4. **Zernio E2E** con la cuenta ya limpia → desbloquea al primer cliente nuevo bajo coexistencia. ⚠️ **Se intentó
    el 08 y no se puede desde esta máquina**: la `ZERNIO_API_KEY` de `.env.local` responde **401** a todo GET
    (`/v1/profiles`, `/v1/phone-numbers`, `/v1/api-keys`), `.env.local` no tiene credenciales de Supabase, y no
@@ -162,6 +170,17 @@ reseñas y **Meta** para campañas. Ninguna decisión de hoy cierra esa puerta (
 
 ## 5. Hecho reciente
 
+- **Los tres huecos del día 1 de una marca de 12 sedes** (2026-09-09, sin migración): (a) asignar
+  sede a los meseros deja de ser un formulario por persona — `/dashboard/staff` gana «Asignar sede a
+  varios a la vez», que **no adivina nada** (solo deja marcar a quien NO tiene sede y repite por
+  dentro el mismo `PATCH` del lápiz, uno por uno, con las guardas del motor intactas); (b)
+  `authorized_numbers.location_id` **ya se escribe** desde el panel —existía desde la 00043 y nadie
+  lo escribía, así que todos los domicilios de todas las sedes caían en «sede desconocida»— con la
+  guarda de que un administrador de sede no se los lleve a la sede hermana (`decidirSedeDestino()`,
+  7 pruebas); (c) el cupo de envío, que es de la MARCA y falla CERRADO **en silencio**, se ve ahora
+  en `/dashboard/campaigns` y avisa al 75 % — antes solo estaba en Conexiones, que con `owner_email`
+  vacío solo abre el super-admin. **El modelo de cupo NO se tocó** (es F9, choca con D6).
+  → `docs/features/delivery-webhook.md`, `send-governance.md`, `RUNBOOK-DEPLOY.md` §8.
 - **Copiarle los premios a una sede ya no regala premios** (2026-09-09, **migración `00059`,
   SIN aplicar**): el «ya reclamé» se llevaba por `tier_id` y los niveles propios de una sede son
   COPIAS con ids nuevos, así que «Darle premios propios» le devolvía a los 542 clientes de la

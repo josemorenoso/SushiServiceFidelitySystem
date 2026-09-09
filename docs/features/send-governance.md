@@ -324,6 +324,23 @@ congelan y cuáles se recalculan al drenar, y dónde van los efectos posteriores
 
 `GET /api/dashboard/line-budget` ahora incluye además `queueDepth`.
 
+### Dónde lo ve el cliente (2026-09-09)
+
+`CupoEnvioCard` (`src/components/dashboard/CupoEnvioCard.tsx`), encima de las pestañas de
+**`/dashboard/campaigns`** — o sea, en la misma pantalla desde la que se dispara un envío, y
+visible también en la pestaña «Manuales». Muestra el consumo de las 24 h, cuánto queda para
+campañas, y **avisa antes del cero**: ámbar al 75 % del tope, rojo al agotarse o con la línea
+congelada. Reusa `/api/dashboard/line-budget` tal cual — no recalcula nada.
+
+Existe porque el dato solo vivía en `/dashboard/conexiones`, y esa pantalla se cae entera a «No
+hay conexiones que mostrar» cuando `/api/dashboard/conexiones` niega el acceso: `isTenantOwner()`
+es fail-closed y **`owner_email` está vacío en las cinco marcas vivas**, así que hoy solo la abre
+el super-admin. El cliente no tenía ninguna pantalla donde enterarse de que estaba por quedarse
+mudo — y el fallo es CERRADO y silencioso.
+
+No pide sede a propósito: el cupo es de la **marca** y lo comparten todas las sedes (**D6**).
+Repartirlo por local es **F9**, y no está construido.
+
 El `DELETE` **no borra la fila**: la pasa a `cancelled`. La cola es el registro de qué se decidió
 enviar y qué pasó con cada intento; borrar filas dejaría al operador sin poder explicar por qué una
 campaña envió 180 de 380. Cancelar además libera el hueco del índice único (que solo cubre

@@ -97,6 +97,32 @@
 0.THETA **El requisito «un celular por sede» NO está construido** y hay que decirlo antes de
    firmar. La línea se elige leyendo solo columnas de `tenants`; un subdominio de sede resuelve a
    la MISMA fila. Lo que sí hay por sede: enlace `wa.me`, teléfono de domicilios y ficha propia.
+0.IOTA **WhatsApp nunca se estrenó de verdad, y los dos restaurantes nuevos estrenan caminos
+   DISTINTOS.** `docs/features/zernio-messaging.md` lo dice con todas las letras: *"no se ha
+   enviado un mensaje de verdad a un número controlado por el equipo con un tenant
+   `messaging_provider='zernio'` en producción"*. Ojo con la confusión de base: **coexistencia
+   NO es lo mismo que Zernio**. Coexistencia es `whatsapp_provisioning.route='own_number'`
+   (trae su número: `onboarding='business_app'`, `isCoexistence=true`, no cotiza ni compra);
+   Zernio es `tenants.messaging_provider`. Sushi Fun es coexistente **por Twilio**, absorbido
+   por SQL, no por el wizard — así que no prueba nada del camino nuevo.
+   En orden, antes de mandarle un mensaje a un cliente real:
+   1. **`ZERNIO_WEBHOOK_SECRET` en Vercel.** Sin él el webhook rechaza TODO (es a propósito:
+      exige firma siempre, aunque Zernio la trate como opcional). No está en `.env.local`.
+   2. **Confirmar el NOMBRE del header de la firma.** `webhook/zernio/route.ts:580` acepta
+      `x-zernio-signature` **o** `x-late-signature` porque nadie confirmó cuál manda Zernio.
+      Si no es ninguno de los dos: 401 a todo entrante, no llega ningún cuadro de pedido y
+      **parece un problema de permisos**. Se confirma con UN mensaje entrante real.
+   3. **Decidir la cuenta/Team de Zernio** (la compartida con otro proyecto o una dedicada).
+      El saldo se factura por Team completo y no hay endpoint de saldo por tenant.
+   4. **Probar el envío con `scripts/zernio-sandbox-test.mjs --to <tu propio celular>`.**
+      ⚠️ El número de sandbox (`+12029087457`) es COMPARTIDO entre todos los desarrolladores
+      que prueban Zernio: nunca a un cliente, nunca a un número ajeno.
+   5. **Los dos nacen con `messaging_daily_limit = 250`** (DEFAULT de la 00037). Es el punto 5
+      del 0.ALFA y aplica igual con una sola sede.
+   Lo que YA no bloquea: la firma de Twilio se valida con el token del tenant dueño del número
+   (`34b30a6`), así que el coexistente por Twilio recibe su TwiML completo. Lo que SÍ falta para
+   el de Zernio: **18.c** — su operador de domicilios manda el cuadro y **no recibe nada**, ni
+   éxito ni fallo, y un reenvío humano **duplica cliente, visita y puntos** (nada deduplica eso).
 0.quinquies **Aplicar la `00058` y la `00059` en Supabase** (producto) y la **`00009` en el Supabase del AIOS**,
    en ese orden y ANTES de desplegar. Sin la 00058, `/dashboard/sedes` responde **503** al guardar
    (`merge_location_config_deep()` no existe) y las columnas `location_id` de recompensas tampoco.

@@ -824,12 +824,20 @@ Sección "Sistema de Puntos" con feature flag toggle y los siguientes campos:
 
 ### 12.3 API REST: `/api/dashboard/reward-tiers`
 
-| Método | Acción | Notas |
-|--------|--------|-------|
-| GET | Lista TODOS los tiers (incluye inactivos) | Ordenados por sort_order |
-| POST | Crea nuevo tier | Valida umbral único, probabilidades 100%, BLACK único |
-| PATCH | Actualiza tier existente | Requiere id en body |
-| DELETE | Soft-delete (desactiva) | Hard-delete solo si no hay clientes y ?hard=true |
+| Método | Acción | Quién puede | Notas |
+|--------|--------|-------------|-------|
+| GET | Lista TODOS los tiers (incluye inactivos) | `requireTenantId()` | Ordenados por sort_order. Devuelve un **ARRAY** — envolverlo en un objeto vaciaría en silencio el selector de premios de `dashboard/settings` |
+| POST | Crea nuevo tier | `exigirAlcanceDeMarca()` | Valida umbral único, probabilidades 100%, BLACK único |
+| PATCH | Actualiza tier existente | `exigirAlcanceDeMarca()` | Requiere id en body |
+| DELETE | Soft-delete (desactiva) | `exigirAlcanceDeMarca()` | Hard-delete solo si no hay clientes y `?hard=true` |
+| POST `/copiar` | Le da a una sede una COPIA de los niveles de la marca | alcance de marca sobre esa sede | 409 si la sede ya tiene propios. Es el único sitio que copia un `tier_key` ajeno (00059) |
+
+**El GET es el único verbo que NO exige alcance de marca, y es a propósito**: la pantalla pide
+`?location_id=brand`, que `decideLocationScope()` rechaza, y `dashboard/settings` hace
+`r.ok ? r.json() : []`. Exigir alcance ahí habría respondido 403 a todos y vaciado el selector
+de Ajustes **sin un solo error a la vista**. Los tres verbos que escriben sí lo exigen desde el
+2026-09-09: antes, un `role='location'` podía editar los premios de la marca y los de sus sedes
+hermanas.
 
 ---
 

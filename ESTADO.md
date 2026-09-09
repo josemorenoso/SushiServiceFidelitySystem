@@ -32,7 +32,6 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
-| Sesión 2 — «ya reclamé» por umbral, no por id + `current_tier` (2026-09-09) | Opus 5 | `supabase/migrations/00059_*.sql` · `src/services/reward-tiers.service.ts` · `src/app/api/check-in/status/route.ts` · `src/app/api/dashboard/reward-tiers/copiar/route.ts` · `docs/features/points-mystery-box.md` · `tests/db/` (archivo nuevo propio) | **00059** | Abierta |
 | Sesión 4 — los tres huecos del día 1 de las 12 sedes: meseros sin sede en masa, `authorized_numbers.location_id` y el cupo de envío visible (2026-09-09) | Opus 5 | `src/app/api/dashboard/authorized-numbers/**` · `src/app/(dashboard)/dashboard/authorized-numbers/page.tsx` · `src/app/(dashboard)/dashboard/staff/page.tsx` · `src/components/dashboard/CupoEnvioCard.tsx` (nuevo) · `src/app/(dashboard)/dashboard/campaigns/page.tsx` (SOLO import + montaje) · `SQL-PARA-CORRER/**` · `docs/RUNBOOK-DEPLOY.md` · `docs/features/delivery-webhook.md` · `docs/features/send-governance.md` | — (ninguna) | Abierta |
 
 ## 3. Siguiente, en orden
@@ -62,13 +61,18 @@
    (era el más caro): sus escrituras exigen alcance de MARCA. **Quedan SIN verificar**:
    `/api/mystery-box/resolve` (otorga premios sin visita ni límite de tasa) y la coordenada
    con decimales en «Mis sedes».
-0.GAMMA **Recompensas por sede: NO usarlas el primer día.** La base y la resolución están, pero
-   «Darle premios propios» a una sede crea COPIAS con ids nuevos, y como el «ya reclamé» se
-   lleva por `tier_id` (`check-in/status:174-201`), **toda la base de clientes vuelve a tener
-   premios sin reclamar en esa sede**. Además `customers.current_tier` es UNA columna y la pisa
-   la última sede donde el cliente cruzó un umbral. Dejar todos los `reward_tiers` en
-   `location_id NULL` (que es el estado del despliegue: la 00058 no hace backfill). Decisión de
-   producto pendiente: o `current_tier` se deriva siempre, o se acepta que el nivel es de la marca.
+0.GAMMA **Recompensas por sede: ya se pueden usar, con la `00059` aplicada ANTES.** Los dos
+   agujeros están cerrados en el código (09): el «ya reclamé» dejó de llevarse por `tier_id`
+   —copiarle los niveles a una sede ya NO le gana un premio a nadie— y `current_tier` pasa a ser
+   **el nivel de la MARCA** (se elige la salida «b»; el porqué en `points-mystery-box.md`
+   §7.1.bis). **Hasta que la `00059` corra en Supabase, seguir sin apretar «Darle premios
+   propios»**: sin ella el código nuevo pide `claimed_tier_key` y PostgREST devuelve 42703.
+   Lo que la 00059 NO tapa: `/api/mystery-box/resolve` **no tiene ninguna guarda de «ya
+   reclamé»** —ni por id ni por umbral—, así que el único freno sigue siendo que
+   `check-in/status` no lo ofrezca. Es el mismo endpoint del 0.BETA y ahora tiene con qué
+   guardarse (`claimed_tier_key` / `claimed_threshold`); falta hacerlo. Tampoco se tocó
+   `mystery_box_global_caps`, que sigue por `tier_id`: con premios propios el cupo global de
+   premios altos pasaría a ser **por sede** sin que nadie lo haya decidido.
 0.DELTA **Un administrador de sede abre un panel VACÍO.** `role='location'` nunca ve el cubo
    NULL (`location-scope.ts`, fila 4 del §5.1) y todo el histórico anterior a multi-sede es NULL.
    **(b) ya está hecha** (09): «Accesos» avisa, al elegir «Administrador de sede», que esa
@@ -86,7 +90,7 @@
 0.THETA **El requisito «un celular por sede» NO está construido** y hay que decirlo antes de
    firmar. La línea se elige leyendo solo columnas de `tenants`; un subdominio de sede resuelve a
    la MISMA fila. Lo que sí hay por sede: enlace `wa.me`, teléfono de domicilios y ficha propia.
-0.quinquies **Aplicar la `00058` en Supabase** (producto) y la **`00009` en el Supabase del AIOS**,
+0.quinquies **Aplicar la `00058` y la `00059` en Supabase** (producto) y la **`00009` en el Supabase del AIOS**,
    en ese orden y ANTES de desplegar. Sin la 00058, `/dashboard/sedes` responde **503** al guardar
    (`merge_location_config_deep()` no existe) y las columnas `location_id` de recompensas tampoco.
    Sin la 00009 del AIOS, guardar un cliente revienta con el CHECK viejo en cuanto alguien elija
@@ -158,6 +162,15 @@ reseñas y **Meta** para campañas. Ninguna decisión de hoy cierra esa puerta (
 
 ## 5. Hecho reciente
 
+- **Copiarle los premios a una sede ya no regala premios** (2026-09-09, **migración `00059`,
+  SIN aplicar**): el «ya reclamé» se llevaba por `tier_id` y los niveles propios de una sede son
+  COPIAS con ids nuevos, así que «Darle premios propios» le devolvía a los 542 clientes de la
+  marca todos sus niveles sin reclamar allí — un regalo masivo a un botón de distancia. Ahora un
+  nivel tiene identidad propia (`reward_tiers.tier_key`, que la copia HEREDA) y cada reclamo se
+  sella con esa clave **y** con el umbral cruzado; vale cualquiera de las dos, que es la lectura
+  conservadora a propósito. `customers.current_tier` pasa a ser el nivel de la MARCA: con
+  escaleras por sede podía RETROCEDER de nombre mientras el cliente subía de puntos.
+  → `docs/features/points-mystery-box.md` §7.1.bis y §7.4.bis.
 - **Los premios ya no los cambia un administrador de sede** (2026-09-09, sin migración): los
   cuatro verbos de `/api/dashboard/reward-tiers` autenticaban con `requireTenantId()`, que solo
   mira que el JWT traiga una marca — así que un `role='location'` editaba y borraba los premios

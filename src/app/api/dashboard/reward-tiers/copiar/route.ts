@@ -84,8 +84,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Se copia TODO salvo la identidad de la fila: `id` y `created_at` los pone
-    // la base, y `location_id` es lo único que cambia de valor.
+    // Se copia TODO salvo la identidad de la FILA: `id` y `created_at` los pone la
+    // base, y `location_id` es lo único que cambia de valor.
+    //
+    // `tier_key` SÍ se copia, y es la línea más importante del archivo. Es la
+    // identidad del NIVEL dentro de la marca (00059 §1): la copia es «el mismo
+    // escalón, ahora en esta sede», no un escalón nuevo. Sin heredarlo, cada copia
+    // estrenaría clave y volveríamos exactamente al bug que la 00059 cierra — este
+    // endpoint le devolvería a TODA la base de clientes sus niveles «sin reclamar»
+    // en la sede, o sea un regalo masivo de premios a un botón de distancia.
+    // Este es el ÚNICO sitio del código que copia un `tier_key` ajeno; un nivel
+    // creado desde la pantalla estrena el suyo por el DEFAULT de la columna.
     const copias = deLaMarca.map((f) => ({
       tier_name: f.tier_name,
       point_threshold: f.point_threshold,
@@ -95,6 +104,7 @@ export async function POST(request: NextRequest) {
       is_black: f.is_black,
       sort_order: f.sort_order,
       is_active: f.is_active,
+      tier_key: f.tier_key,
       tenant_id: scope.tenantId,
       location_id: sede,
     }))

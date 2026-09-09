@@ -8,6 +8,26 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [2026-09-09d] - Copiarle los premios a una sede ya no le regala un premio a nadie
+
+**Tipo:** fix (datos/plata) · **Origen:** auditoría adversarial 2026-09-09, 3/3 verificadores (ESTADO §3, 0.GAMMA) · **Migración `00059`, SIN aplicar**
+
+- **El agujero.** El «ya reclamé este nivel» se llevaba por `tier_id`, o sea por el id de la FILA, y los
+  niveles propios de una sede son COPIAS con ids nuevos (`/reward-tiers/copiar`, 00058). Apretar «Darle
+  premios propios» le devolvía a los 542 clientes de la marca **todos** sus niveles «sin reclamar» allí.
+- **Un nivel no es su fila.** `reward_tiers.tier_key` es su identidad dentro de la marca: la copia la
+  **hereda**, un nivel creado en la pantalla estrena la suya. Cada reclamo se sella con esa clave **y** con
+  el umbral cruzado (trigger `sellar_nivel_reclamado()`, aditivo), y basta cualquiera de las dos.
+- **En OR**: solo el umbral no alcanza (editar «Bronce» de 150 a 200 sería el mismo regalo) y solo la clave tampoco (crear a mano los niveles de la sede estrena clave). Ofrecer de menos se recupera.
+- **`customers.current_tier` pasa a ser el nivel de la MARCA** (salida «b»): con escaleras por sede podía
+  RETROCEDER de nombre mientras el cliente SUBÍA de puntos. Derivarlo siempre no se pudo — el DELETE de
+  niveles cuenta clientes por esa columna para decidir el borrado duro, que arrastraría los reclamos.
+- **Con 0 o 1 sede no cambia nada**, salvo un regalo silencioso que se cierra: desactivar «Bronce 150» y
+  crear otro nivel en el mismo umbral hoy vuelve a ofrecer premio a quien ya lo reclamó.
+- Sigue **sin guarda** `/api/mystery-box/resolve`, y `mystery_box_global_caps` sigue por `tier_id`.
+- 9 pruebas contra Postgres real que contrastan la regla vieja con la nueva sobre las mismas filas:
+  `tests/db/premios-por-sede-sin-regalo.test.ts`. → `docs/features/points-mystery-box.md` §7.1.bis, §7.4.bis.
+
 ## [2026-09-09c] - Los premios son de la marca: un administrador de sede ya no los cambia
 
 **Tipo:** fix (seguridad) · **Origen:** auditoría adversarial 2026-09-09 (ESTADO §3, 0.BETA — «el más caro y NO está arreglado») · **Sin migración**

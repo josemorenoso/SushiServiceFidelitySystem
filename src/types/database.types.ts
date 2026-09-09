@@ -217,6 +217,15 @@ export interface RewardTier {
    * (`src/services/reward-tiers.service.ts`).
    */
   location_id?: string | null
+  /**
+   * Identidad del NIVEL dentro de la marca, estable a traves de las copias por
+   * sede (00059 §1). Una copia hecha por `/api/dashboard/reward-tiers/copiar`
+   * HEREDA el `tier_key` de su original; un nivel creado desde la pantalla
+   * estrena el suyo por el DEFAULT de la columna. Es lo que hace que «ya reclame
+   * este nivel» no dependa del id de la fila: ver `elegirNivelSinReclamar()`
+   * (`src/services/reward-tiers.service.ts`).
+   */
+  tier_key?: string | null
 }
 
 export type MysteryBoxChoice = 'safe' | 'mystery'

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { validatePhone } from '@/lib/validators/phone'
 import { findCustomerByPhone } from '@/services/customer.service'
-import { getNextTier, getAllTiers } from '@/services/reward-tiers.service'
+import { getNextTier, getAllTiers, elegirNivelSinReclamar } from '@/services/reward-tiers.service'
 import { getPendingReward } from '@/services/redemption.service'
 import { getActiveGrants } from '@/services/reward-grant.service'
 import { rateLimit } from '@/lib/rate-limit'
@@ -159,9 +159,14 @@ export async function GET(request: NextRequest) {
     // ─── Detectar tier desbloqueado NO reclamado ───
     // El cruce de tier ocurre en el request del mesero (POST /api/check-in), pero la
     // elección de premio sucede en el celular del cliente vía este polling.
-    // Buscamos el tier de mayor umbral que el cliente ya superó y para el que aún NO
-    // existe un mystery_box_results (no reclamado). Esto también auto-recupera unlocks
-    // que se hayan perdido en visitas anteriores.
+    // Buscamos el tier de mayor umbral que el cliente ya superó y todavía no reclamó.
+    // Esto también auto-recupera unlocks que se hayan perdido en visitas anteriores.
+    //
+    // «Ya reclamado» NO es «hay una fila de mystery_box_results con este tier_id».
+    // Lo fue hasta la 00059 y era un regalo masivo de premios: los niveles propios de
+    // una sede son COPIAS con ids nuevos, así que darle premios propios a una sede le
+    // devolvía a TODA la base de clientes sus niveles «sin reclamar» allí. La regla
+    // entera —y el porqué de sus dos claves— vive en `elegirNivelSinReclamar()`.
     let tierUnlocked: {
       id: string
       name: string
@@ -173,9 +178,14 @@ export async function GET(request: NextRequest) {
 
     const qualifiedTiers = allTiers.filter((t) => totalPoints >= t.point_threshold)
     if (qualifiedTiers.length > 0) {
+      // Sin `.eq('tenant_id', …)` a propósito: `customer.id` ya está resuelto dentro
+      // de la marca, y filtrar además por `tenant_id` haría que un reclamo con el
+      // tenant mal grabado (el DEFAULT puente que la 00030 nunca llegó a quitar) se
+      // leyera como «no reclamado» y le regalara el premio otra vez. Acá de más es
+      // barato; de menos, no.
       const { data: claimed, error: claimedError } = await supabase
         .from('mystery_box_results')
-        .select('tier_id')
+        .select('claimed_tier_key, claimed_threshold')
         .eq('customer_id', customer.id)
 
       // El peor de este archivo. `claimed` se usa para EXCLUIR los tiers ya reclamados; un
@@ -192,13 +202,11 @@ export async function GET(request: NextRequest) {
           context: { tenant: tenant.slug, customer_id: customer.id },
         })
       }
-      const claimedTierIds = new Set((claimed ?? []).map((r) => r.tier_id))
-
       // De mayor a menor umbral, el primero no reclamado. Con `claimedError` no se ofrece
       // NINGUNO: la lista de reclamados no es de fiar y ofrecer de más regala premios.
       const unclaimed = claimedError
         ? undefined
-        : [...qualifiedTiers].reverse().find((t) => !claimedTierIds.has(t.id))
+        : elegirNivelSinReclamar(qualifiedTiers, claimed ?? [])
       if (unclaimed) {
         tierUnlocked = {
           id: unclaimed.id,

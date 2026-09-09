@@ -437,9 +437,40 @@ Tus puntos: *{{2}}* — seguís sumando 🔥
 | Columna | Tipo | Default | Descripción |
 |---------|------|---------|-------------|
 | `total_points` | `integer` | `0` | Puntos acumulados totales (nunca se resetean) |
-| `current_tier` | `text` | `NULL` | Tier actual del cliente (ej: 'bronce', 'plata', 'oro', 'black') |
+| `current_tier` | `text` | `NULL` | Tier actual del cliente. **Es el nivel de la MARCA**, no el de la sede — ver 7.1.bis |
 | `mystery_box_low_streak` | `integer` | `0` | Racha consecutiva de premios del tier más bajo en mystery box (pity timer) |
 | `last_points_awarded_at` | `timestamptz` | `NULL` | Última vez que se le dieron puntos (anti-abuse) |
+
+### 7.1.bis `current_tier` es el nivel de la MARCA (2026-09-09, salida «b» de 0.GAMMA)
+
+`current_tier` es UNA sola columna, y hasta la 00058 daba igual: había una sola escalera.
+Con **recompensas por sede** dejó de dar igual — la escribía el nombre del nivel que el
+cliente acababa de cruzar *en la sede donde estaba*, así que la pisaba la última sede
+visitada y podía **retroceder de nombre mientras el cliente sube de puntos**: cruza «Oro»
+en Laureles (600 pts) y a la semana cruza «Plata» en Envigado, que allá vale 700.
+
+Las dos salidas posibles eran dejar de persistirla y derivarla siempre, o declarar que el
+nivel es de la marca. **Se eligió la segunda**, y `updateCustomerTier()` es quien la aplica:
+deriva el nombre con la escalera de la MARCA (`getCurrentTier(puntos, tenantId)`, sin sede)
+y escribe eso, use el llamador la sede que use.
+
+Por qué:
+
+- **Es lo que el producto ya dice.** Un negocio con varios locales es UNA marca que comparte
+  clientes y puntos (AIOS v1.6.0/v1.9.0, `site_model`). `total_points` es uno solo para todas
+  las sedes; el nivel que sale de esos puntos también tiene que ser uno solo, o la tarjeta
+  del cliente diría una cosa distinta según por qué puerta entró.
+- **Dejar de persistirla rompía algo de fuera.** `DELETE /api/dashboard/reward-tiers` cuenta
+  clientes por `current_tier = tier_name` para decidir entre desactivar y BORRAR de verdad un
+  nivel. Con la columna vacía ese conteo da cero, se habilita el borrado duro y el
+  `ON DELETE CASCADE` de `tier_id` (00013) se lleva por delante los `mystery_box_results` —
+  la prueba de qué premios se entregaron.
+
+Lo que la sede **sí** sigue gobernando es qué premio se ofrece y con qué umbral: eso es
+`getAllTiers(tenantId, locationId)` y no cambia. Lo único de la marca es cómo se **llama** el
+nivel del cliente. `tierName`, el parámetro que el llamador venía pasando, queda de respaldo
+para dos casos sin respuesta de marca: que la marca no tenga ningún nivel propio (todos viven
+en sedes) o que la base falle al derivarlo.
 
 ### 7.2 Nueva tabla: `point_transactions`
 
@@ -466,6 +497,8 @@ Tus puntos: *{{2}}* — seguís sumando 🔥
 | `is_black` | `boolean` | TRUE = tier BLACK (último tier) |
 | `sort_order` | `integer` | Orden de display |
 | `is_active` | `boolean` | Si está activo |
+| `location_id` | `uuid` | **00058** — sede dueña del nivel. NULL = de la MARCA |
+| `tier_key` | `uuid` | **00059** — identidad del nivel en la marca, estable a través de las copias por sede. Ver 7.4.bis |
 | `created_at` | `timestamptz` | |
 
 ### 7.4 Nueva tabla: `mystery_box_results`
@@ -479,7 +512,71 @@ Tus puntos: *{{2}}* — seguís sumando 🔥
 | `prize_title` | `text` | Premio obtenido |
 | `prize_tier_index` | `integer` | Índice del premio en el array (0=más bajo, N=más alto) |
 | `was_golden` | `boolean` | Si fue Golden Box (pity timer) |
+| `claimed_tier_key` | `uuid` | **00059** — qué NIVEL se reclamó, no qué fila. Ver 7.4.bis |
+| `claimed_threshold` | `integer` | **00059** — qué umbral cruzó, congelado. Ver 7.4.bis |
 | `created_at` | `timestamptz` | |
+
+### 7.4.bis «Ya reclamé este nivel» no es el id de una fila (migración 00059)
+
+**El problema, verificado por auditoría adversarial el 2026-09-09 (3/3 verificadores).**
+`/api/check-in/status` ofrece «el nivel superado de mayor umbral que no esté en
+`mystery_box_results`», y esa exclusión se llevaba por `tier_id`. Los niveles propios de una
+sede son **copias con ids nuevos** (`POST /api/dashboard/reward-tiers/copiar`, 00058 §3). O
+sea que en el instante en que alguien apretaba «Darle premios propios a esta sede», los 542
+clientes de la marca volvían a tener **todos** sus niveles «sin reclamar» en esa sede: un
+regalo masivo de premios a un botón de distancia.
+
+**La idea.** Un nivel no *es* su fila. La fila es dónde vive el nivel (marca o sede); el
+nivel —«el escalón de los 150 puntos de esta marca»— sobrevive a la copia. La 00059 agrega:
+
+| Columna | Tabla | Qué es |
+|---------|-------|--------|
+| `tier_key` | `reward_tiers` | `uuid NOT NULL DEFAULT gen_random_uuid()`. La identidad del NIVEL dentro de la marca. Una copia **hereda** el `tier_key` de su original; un nivel creado desde la pantalla estrena el suyo por el DEFAULT. |
+| `claimed_tier_key` | `mystery_box_results` | El `tier_key` del nivel reclamado, copiado el día del reclamo. |
+| `claimed_threshold` | `mystery_box_results` | El umbral que el cliente cruzó, congelado el día que lo cruzó. |
+
+Las dos últimas las rellena el trigger `sellar_nivel_reclamado()`, **aditivo**: solo escribe
+donde el valor llega NULL, nunca corrige. Por eso `mystery-box.service.ts` no las conoce ni
+hace falta que las conozca, y por eso un INSERT a mano en el SQL Editor también queda sellado.
+
+**Un nivel está reclamado si coincide CUALQUIERA de las dos claves** — en OR, no en AND. La
+regla entera vive en `elegirNivelSinReclamar()` (`src/services/reward-tiers.service.ts`), que
+es pura:
+
+- Solo el **umbral** no alcanzaría: editar «Bronce» de 150 a 200 volvería a ofrecerle premio a
+  todo el que ya lo reclamó. El `tier_key` no se mueve al editar la fila, así que lo tapa.
+- Solo el **tier_key** no alcanzaría: `POST /api/dashboard/reward-tiers` deja crear a mano el
+  nivel de una sede sin pasar por «copiar», y esa fila estrena clave. El umbral lo tapa.
+
+En OR son estrictamente más conservadoras que cualquiera sola, y es a propósito: equivocarse
+hacia «no hay premio» es recuperable (el cliente vuelve a consultar); equivocarse hacia «tomá
+otro premio» le cuesta plata al restaurante y no se deshace.
+
+**Por qué se denormaliza en vez de hacer un JOIN a `reward_tiers`.** Las dos razones son de
+historia: `mystery_box_results.tier_id` es `ON DELETE CASCADE`, así que borrar un nivel
+borraría la prueba de que alguien lo reclamó; y `point_threshold` es editable, así que un JOIN
+haría que la historia se *moviera* al editar la escalera. Lo que se reclamó ocurrió una vez y
+no cambia.
+
+**Lo que cambia para las 5 marcas vivas: nada**, con una excepción que conviene conocer.
+Cada nivel existente estrena su `tier_key` al crearse la columna y el backfill sella cada
+reclamo contra el nivel del que salió, así que la comparación por clave devuelve fila por fila
+lo mismo que la de hoy. La única diferencia observable sin sedes: **desactivar «Bronce 150» y
+crear otro nivel activo en el mismo umbral 150** hoy le ofrece premio otra vez a todo el que ya
+lo reclamó; a partir de la 00059, no. Era un regalo silencioso.
+
+**Lo que esto NO tapa** (queda anotado, no arreglado):
+
+- `mystery_box_global_caps` sigue llevándose por `tier_id`. Las copias de una sede estrenarían
+  su propio cupo global de premios altos, o sea que el cupo pasaría a ser **por sede** sin que
+  nadie lo haya decidido. Hoy no muerde porque ninguna sede tiene premios propios.
+- Una sede con escalera **propia de verdad** (umbrales que la marca nunca tuvo) sí puede
+  ofrecer un nivel nuevo a un cliente viejo. Es lo que «las recompensas varían por sede»
+  significa, y está cubierto por una prueba para que no se confunda con el bug.
+
+**Pruebas:** `tests/db/premios-por-sede-sin-regalo.test.ts`, contra Postgres real. Contrasta
+la regla vieja (por `tier_id`) con la nueva sobre las mismas filas, así que el verde distingue
+«lo arreglé» de «el escenario nunca falló».
 
 ### 7.5 Nueva tabla: `mystery_box_global_caps`
 

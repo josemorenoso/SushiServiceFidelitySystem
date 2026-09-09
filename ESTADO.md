@@ -72,10 +72,6 @@
    NULL (`location-scope.ts:215-218`), y todo el histórico anterior a multi-sede es NULL.
    Decisión del dueño: (a) darle el cubo NULL de sus sedes mientras el histórico no esté
    atribuido, o (b) avisarlo en la pantalla de Accesos al elegir «Administrador».
-0.EPSILON **La ficha de Google por sede está a medias.** `resolveBranding(marca, sede)` ya mezcla,
-   pero el flujo de reseñas resuelve el link sin sede (`review.service.ts:112-116`,
-   `check-in/review-prompt/route.ts:52-53`): con 12 sedes, las 12 mandan a reseñar la MISMA ficha.
-   Es el requisito original del dueño y **no está cerrado**.
 0.ZETA **`rewards` y `campaign_rewards` recibieron `location_id` pero NADIE lo lee.** «Las
    recompensas varían por sede» hoy es cierto **solo** para `reward_tiers`. Los premios por
    visitas y los de campaña siguen siendo de la marca.
@@ -157,6 +153,10 @@ reseñas y **Meta** para campañas. Ninguna decisión de hoy cierra esa puerta (
 
 ## 5. Hecho reciente
 
+- **Cada sede manda a reseñar SU ficha de Google** (2026-09-09, sin migración, **en `main`**):
+  `getReviewPromptState` recibía solo la marca aunque `review-prompt/route.ts:52` ya tenía la
+  sede resuelta en la variable de al lado. Guardar y mostrar el link por sede ya funcionaba;
+  mandar a reseñar, no. Era el requisito original del dueño. → `docs/features/review-flow.md`.
 - **Las recompensas ya varían por sede** (2026-09-08, dentro de la `00058`): el cuello de botella no
   eran los llamadores de `getAllTiers` sino TRES funciones intermedias con 18 call-sites
   (`evaluateNewTier`, `getNextTier`, `buildTiersRoadmap`). Enhebrado en check-in, domicilios, tarjeta,

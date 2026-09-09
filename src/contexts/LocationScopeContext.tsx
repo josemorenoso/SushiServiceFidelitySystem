@@ -70,6 +70,30 @@ export function LocationScopeProvider({ children }: { children: ReactNode }) {
         return
       }
       const data: LocationScopeView = await res.json()
+
+      // ⚠️ MARCA DE UNA SOLA SEDE CON UNA SELECCIÓN VIEJA GUARDADA.
+      //
+      // Desde que el selector no se dibuja con una sola sede
+      // (`LocationSelector`, 2026-09-08), un admin que ALGUNA VEZ eligió «Sede
+      // Principal» o «Sin sede» se queda con esa selección viva en
+      // `localStorage` y **sin ninguna interfaz para deshacerla**. El 403 de
+      // arriba no lo rescata: la sede sigue siendo válida y permitida, así que
+      // el servidor responde 200 y filtra obedientemente.
+      //
+      // El resultado es el peor posible y es silencioso: como el histórico de
+      // las marcas vivas tiene `location_id` NULL, filtrar por su única sede
+      // deja el panel **en cero** —cero clientes, cero visitas, cero métricas—
+      // y la persona no tiene con qué cambiarlo.
+      //
+      // Se resetea acá y no en el selector porque el selector ya no existe en
+      // ese caso. No hace bucle: la recarga con `all` vuelve a traer
+      // `multiSede: false` y esta condición ya no se cumple.
+      if (!data.multiSede && currentSelection !== LOCATION_ALL) {
+        localStorage.removeItem(STORAGE_KEY)
+        setSelectionState(LOCATION_ALL)
+        return
+      }
+
       setView(data)
     } catch {
       setView(null)

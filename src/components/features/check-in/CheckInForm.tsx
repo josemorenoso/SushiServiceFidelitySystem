@@ -113,6 +113,37 @@ export function CheckInForm({
   const [justEarnedPoints, setJustEarnedPoints] = useState<number | null>(null)
   /** Premios otorgados y sin reclamar. Alimenta el banner "Disponible" (migración 00031). */
   const [activeGrants, setActiveGrants] = useState<ActiveGrant[]>([])
+  /**
+   * Las sedes que devuelve el 409 del registro (D21, §3.2 del spec).
+   *
+   * Con 2+ sedes activas, el dominio RAIZ de la marca deja de poder atribuir un
+   * cliente nuevo y `/api/check-in` responde 409 **con la lista de sedes y sus
+   * dominios**. Hasta hoy esta pantalla tiraba esa lista y solo pintaba el texto
+   * del error, asi que un cliente que escaneaba el QR del host raiz —que es el
+   * que ya esta IMPRESO— se quedaba sin ninguna salida: no habia ningun sitio en
+   * la app donde elegir sede. Con 12 sedes eso es "nadie nuevo se puede
+   * registrar".
+   */
+  const [sedesParaElegir, setSedesParaElegir] = useState<
+    { id: string; name: string; slug: string | null; domain: string | null }[]
+  >([])
+
+  /**
+   * Prefill del telefono cuando se llega desde el selector de sede.
+   *
+   * Se lee de `window.location.search` y NO con `useSearchParams()`: ese hook
+   * fuerza el CSR bailout de toda la ruta en esta version de Next (trampa
+   * documentada en CLAUDE.md), y esta pantalla es la que ve un cliente parado en
+   * la mesa con mala senal. Un `useEffect` en un componente que ya es
+   * `'use client'` no cuesta nada.
+   *
+   * Solo prefilla: no envia nada solo. El cliente sigue tocando su boton.
+   */
+  useEffect(() => {
+    const crudo = new URLSearchParams(window.location.search).get('phone') ?? ''
+    const soloDigitos = crudo.replace(/\D/g, '').slice(0, 10)
+    if (soloDigitos.length > 0) setPhone(soloDigitos)
+  }, [])
 
   useEffect(() => {
     fetch('/api/public/reward-tiers')
@@ -311,9 +342,20 @@ export function CheckInForm({
         }),
       })
 
-      const data = (await res.json()) as RegisterResult & { message?: string }
+      const data = (await res.json()) as RegisterResult & {
+        message?: string
+        locations?: { id: string; name: string; slug: string | null; domain: string | null }[]
+      }
 
       if (!res.ok) {
+        // 409 + `locations` = "este negocio tiene varias sedes". No es un error
+        // que el cliente pueda corregir escribiendo mejor: es una PREGUNTA, y
+        // hay que hacersela. Solo se ofrecen las sedes que estrenaron su propio
+        // dominio; una sede sin dominio no tiene enlace al que mandar a nadie.
+        if (res.status === 409 && Array.isArray(data.locations) && data.locations.length > 0) {
+          setSedesParaElegir(data.locations.filter((l) => Boolean(l.domain)))
+          return
+        }
         onError(data.message ?? 'Error registrando')
         return
       }
@@ -343,6 +385,59 @@ export function CheckInForm({
     } finally {
       setLoading(false)
     }
+  }
+
+  // ── «¿En cuál de nuestros locales estás?» ───────────────────────────────────
+  //
+  // Va ANTES de cualquier paso: mientras la marca no sepa en qué sede está el
+  // cliente, no hay nada más que preguntarle. Se llega acá solo por el 409 del
+  // registro, o sea solo en marcas con 2+ sedes activas — una marca de un local
+  // no ve esto jamás.
+  //
+  // Se navega al dominio de la sede llevando el teléfono ya escrito: obligar a
+  // teclearlo de nuevo en el otro subdominio es donde se pierde a la gente.
+  if (sedesParaElegir.length > 0) {
+    return (
+      <div className="premium-card animate-fade-in-up w-full p-7">
+        <div className="mb-6 text-center">
+          <h2
+            className="font-playfair text-2xl font-bold"
+            style={{ color: 'var(--brand-ink)', letterSpacing: '-0.02em' }}
+          >
+            ¿En cuál estás?
+          </h2>
+          <p className="mt-2 text-sm" style={{ color: 'var(--brand-ink-faint)' }}>
+            Tocá tu local para terminar de registrarte. Tus puntos son los mismos en todos.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-3">
+          {sedesParaElegir.map((sede) => (
+            <button
+              key={sede.id}
+              type="button"
+              onClick={() => {
+                // `phone` viaja para que no lo tenga que escribir otra vez.
+                const destino = `https://${sede.domain}/?phone=${encodeURIComponent(phone)}`
+                window.location.href = destino
+              }}
+              className="btn-premium flex h-[52px] w-full items-center justify-center rounded-xl text-sm font-semibold"
+            >
+              {sede.name}
+            </button>
+          ))}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setSedesParaElegir([])}
+          className="mt-5 w-full text-center text-xs underline"
+          style={{ color: 'var(--brand-ink-faint)' }}
+        >
+          Volver
+        </button>
+      </div>
+    )
   }
 
   if (step === 'phone') {

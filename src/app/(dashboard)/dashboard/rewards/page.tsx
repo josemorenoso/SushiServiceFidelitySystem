@@ -429,11 +429,21 @@ export default function RewardsPage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-center">
+                      {/*
+                        Mientras la sede HEREDA, las filas que se ven son las de
+                        la MARCA. Dejar editarlas o borrarlas desde acá seria una
+                        trampa: el dueño cree que esta tocando "los premios de
+                        Laureles" y en realidad se los esta cambiando a las 12
+                        sedes de golpe. Se apagan, y el aviso de arriba explica
+                        como darle premios propios a esta sede.
+                      */}
                       <div className="flex items-center justify-center gap-1">
                         <Button
                           variant="ghost"
                           size="sm"
                           className="h-7 w-7 p-0"
+                          disabled={heredando}
+                          title={heredando ? 'Estos premios son de la marca. Dale premios propios a esta sede para editarlos acá.' : undefined}
                           onClick={() => openEdit(t)}
                         >
                           <Pencil className="h-3.5 w-3.5" />
@@ -442,6 +452,7 @@ export default function RewardsPage() {
                           variant="ghost"
                           size="sm"
                           className="h-7 w-7 p-0"
+                          disabled={heredando}
                           onClick={() => handleToggle(t.id, t.is_active)}
                         >
                           {t.is_active
@@ -453,6 +464,7 @@ export default function RewardsPage() {
                           variant="ghost"
                           size="sm"
                           className="h-7 w-7 p-0 text-red-500 hover:text-red-700"
+                          disabled={heredando}
                           onClick={() => setDeleteConfirm(t.id)}
                         >
                           <Trash2 className="h-4 w-4" />

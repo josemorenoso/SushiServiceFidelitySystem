@@ -309,14 +309,49 @@ export async function PATCH(request: NextRequest) {
         return NextResponse.json({ error: 'point_threshold debe ser positivo' }, { status: 400 })
       }
 
-      // Verificar que no exista otro tier con el mismo umbral
-      const { data: existingThreshold, error: existingThresholdError } = await db
+      // Verificar que no exista otro tier con el mismo umbral EN SU MISMO CUBO.
+      //
+      // ⚠️ Sin el filtro de cubo, este chequeo devolvia un 409 FALSO en cuanto una
+      // sede estrenaba premios propios: sus niveles son una COPIA de los de la
+      // marca, asi que cada umbral existe dos veces —una en la marca, otra en la
+      // sede— y guardar cualquiera de los dos chocaba contra el otro. O sea que
+      // «Darle premios propios» dejaba los niveles de esa sede Y los de la marca
+      // imposibles de editar. La sede del tier que se esta editando se lee de la
+      // fila, no del cuerpo: nadie puede mudar un nivel de cubo por accidente.
+      const { data: filaActual, error: filaActualError } = await db
+        .from('reward_tiers')
+        .select('location_id')
+        .eq('id', id)
+        .eq('tenant_id', tenantId)
+        .maybeSingle()
+
+      if (isDbFailure(filaActualError)) {
+        logDbFailure({
+          scope: 'RewardTiers',
+          reason: 'tier_cubo_lookup_error',
+          error: filaActualError,
+          context: { tenant_id: tenantId, id },
+        })
+        return NextResponse.json(
+          { error: 'Problema técnico', message: 'No pudimos verificar el umbral ahora mismo. Intenta de nuevo en un momento.' },
+          { status: 503 }
+        )
+      }
+
+      const cuboActual = (filaActual?.location_id as string | null) ?? null
+
+      let consultaDup = db
         .from('reward_tiers')
         .select('id')
         .eq('point_threshold', threshold)
         .eq('tenant_id', tenantId)
         .neq('id', id)
-        .maybeSingle()
+      consultaDup =
+        cuboActual === null
+          ? consultaDup.is('location_id', null)
+          : consultaDup.eq('location_id', cuboActual)
+
+      const { data: existingThreshold, error: existingThresholdError } = await consultaDup.maybeSingle()
 
       if (isDbFailure(existingThresholdError)) {
         logDbFailure({

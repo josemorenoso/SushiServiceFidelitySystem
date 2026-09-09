@@ -28,8 +28,10 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createServiceClient, type SupabaseClient } from '@supabase/supabase-js'
+import { createClient } from '@/lib/supabase/server'
 import { requireLocationScope } from '@/lib/location-scope'
 import {
+  contarSuperUsuarios,
   findUserByEmail,
   generatePassword,
   listTenantUsers,
@@ -56,6 +58,12 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
  * evita que una de las tres se olvide de hacerla.
  */
 async function requireBrandScope(request: NextRequest) {
+  const ssr = await createClient()
+  const { data: { user } } = await ssr.auth.getUser()
+  if (!user) {
+    return { ok: false as const, res: NextResponse.json({ error: 'No autorizado' }, { status: 401 }) }
+  }
+
   const scopeResult = await requireLocationScope(request)
   if (!scopeResult.ok) {
     return { ok: false as const, res: NextResponse.json({ error: scopeResult.error }, { status: scopeResult.status }) }
@@ -69,7 +77,7 @@ async function requireBrandScope(request: NextRequest) {
       ),
     }
   }
-  return { ok: true as const, scope: scopeResult.scope }
+  return { ok: true as const, scope: scopeResult.scope, actorId: user.id }
 }
 
 export async function GET(request: NextRequest) {
@@ -201,6 +209,39 @@ export async function POST(request: NextRequest) {
       }
       userId = encontrado.user.id
       creado = false
+    }
+
+    // ─── Las dos guardas que este POST no tenia ───────────────────────────────
+    //
+    // Este endpoint tambien REESCRIBE el alcance de un usuario que ya existe
+    // (arriba, cuando el correo ya estaba en esta marca), asi que necesita
+    // exactamente las mismas dos reglas que el PATCH — y no las tenia:
+    //
+    //   1. Nadie se toca a si mismo. Un super usuario que se manda su propio
+    //      correo como «administrador de sede» se degrada solo, y despues no
+    //      puede volver: administrar accesos es justo lo que acaba de perder.
+    //   2. La marca no se queda sin super usuarios. Es la misma llamada de
+    //      soporte, con un paso mas.
+    if (!creado) {
+      if (userId === guard.actorId && role === 'location') {
+        return NextResponse.json(
+          { error: 'No podés bajarte el alcance a vos mismo. Pedíselo a otro super usuario de la marca.' },
+          { status: 409 }
+        )
+      }
+
+      const { users, error: listError } = await listTenantUsers(supabase, tenantId)
+      if (listError) {
+        console.error('[DashboardUsers] No se pudo verificar el cambio:', listError.message)
+        return NextResponse.json({ error: 'No se pudo verificar el cambio' }, { status: 500 })
+      }
+      const objetivo = users.find((u) => u.id === userId)
+      if (objetivo?.role === 'brand' && role === 'location' && contarSuperUsuarios(users, userId) === 0) {
+        return NextResponse.json(
+          { error: 'Es el único super usuario de la marca. Nombrá otro antes de bajarle el alcance a una sede.' },
+          { status: 409 }
+        )
+      }
     }
 
     // ─── El alcance ───────────────────────────────────────────────────────────

@@ -35,6 +35,56 @@
 
 ## 3. Siguiente, en orden
 
+0.ALFA **ANTES de habilitar la sede 2 de cualquier marca — auditoría adversarial 2026-09-09.**
+   Lo que sigue está confirmado leyendo el código, no supuesto. En orden de ejecución:
+   1. **En el AIOS, marcar el cliente como «grupo» ANTES de dar de alta las sedes 2..N.**
+      Si no, el paso 2 del wizard sigue ofreciendo crear un tenant por sede y salen N MARCAS,
+      no N sedes. Es lo que le pasó a Tepuy. (`brands.ts:119` — `attachableBrands` devuelve `[]`
+      si el modelo no es `group`.)
+   2. **Darle subdominio propio a CADA sede, incluida la primera.** `aios_add_location` rechaza
+      la sede 2 con `sede_previa_sin_subdominio` si la sede 1 vive del dominio raíz (00056).
+      Elegir para la MARCA un host raíz distinto del de toda sede.
+   3. **Asignarle sede a cada mesero.** Todos los vivos tienen `location_id` NULL y
+      `/api/staff/waiters` filtra por sede (`waiters/route.ts:88`): con 2+ sedes, **los escáneres
+      salen vacíos**. Script en `SQL-PARA-CORRER/meseros-sin-sede/`.
+   4. **`authorized_numbers.location_id` a mano por cada sede.** El panel nunca lo escribe
+      (`authorized-numbers/route.ts:86-90`), así que con número compartido todos los domicilios
+      caen a «sede desconocida».
+   5. **Confirmar el cupo real de la línea con Meta/Zernio** y ponerlo en
+      `tenants.messaging_daily_limit`. Las N sedes comparten UN cupo de 250 destinatarios únicos
+      por 24 h y el sistema falla CERRADO (00037): con 12 sedes se agota a media mañana.
+0.BETA **Lo que la auditoría dejó SIN JUZGAR** (34 de 95 agentes murieron por el límite de gasto
+   de la cuenta, incluida la síntesis). Se corrigieron ya: el selector fantasma, el 409 sin
+   pantalla, el 409 falso del PATCH de niveles, las filas heredadas editables y las dos guardas
+   del POST de accesos. **NO se verificaron**: `/api/mystery-box/resolve` (otorga premios sin
+   visita ni límite de tasa), la coordenada con decimales en «Mis sedes», y que
+   `/api/dashboard/reward-tiers` autentica con `requireTenantId()` y **no** con
+   `requireLocationScope()` — o sea que un «administrador de sede» puede editar los premios de
+   la marca y de sus hermanas. Ese último es el más caro y NO está arreglado.
+0.GAMMA **Recompensas por sede: NO usarlas el primer día.** La base y la resolución están, pero
+   «Darle premios propios» a una sede crea COPIAS con ids nuevos, y como el «ya reclamé» se
+   lleva por `tier_id` (`check-in/status:174-201`), **toda la base de clientes vuelve a tener
+   premios sin reclamar en esa sede**. Además `customers.current_tier` es UNA columna y la pisa
+   la última sede donde el cliente cruzó un umbral. Dejar todos los `reward_tiers` en
+   `location_id NULL` (que es el estado del despliegue: la 00058 no hace backfill). Decisión de
+   producto pendiente: o `current_tier` se deriva siempre, o se acepta que el nivel es de la marca.
+0.DELTA **Un administrador de sede abre un panel VACÍO.** `role='location'` nunca ve el cubo
+   NULL (`location-scope.ts:215-218`), y todo el histórico anterior a multi-sede es NULL.
+   Decisión del dueño: (a) darle el cubo NULL de sus sedes mientras el histórico no esté
+   atribuido, o (b) avisarlo en la pantalla de Accesos al elegir «Administrador».
+0.EPSILON **La ficha de Google por sede está a medias.** `resolveBranding(marca, sede)` ya mezcla,
+   pero el flujo de reseñas resuelve el link sin sede (`review.service.ts:112-116`,
+   `check-in/review-prompt/route.ts:52-53`): con 12 sedes, las 12 mandan a reseñar la MISMA ficha.
+   Es el requisito original del dueño y **no está cerrado**.
+0.ZETA **`rewards` y `campaign_rewards` recibieron `location_id` pero NADIE lo lee.** «Las
+   recompensas varían por sede» hoy es cierto **solo** para `reward_tiers`. Los premios por
+   visitas y los de campaña siguen siendo de la marca.
+0.ETA **La importación de clientes por CSV cuenta como importados los que la base rechazó**
+   (`dashboard/customers/page.tsx:156-161`: no mira `res.ok`). Con 2+ sedes el registro responde
+   409 y la importación reportaría éxito sobre cero filas.
+0.THETA **El requisito «un celular por sede» NO está construido** y hay que decirlo antes de
+   firmar. La línea se elige leyendo solo columnas de `tenants`; un subdominio de sede resuelve a
+   la MISMA fila. Lo que sí hay por sede: enlace `wa.me`, teléfono de domicilios y ficha propia.
 0.quinquies **Aplicar la `00058` en Supabase** (producto) y la **`00009` en el Supabase del AIOS**,
    en ese orden y ANTES de desplegar. Sin la 00058, `/dashboard/sedes` responde **503** al guardar
    (`merge_location_config_deep()` no existe) y las columnas `location_id` de recompensas tampoco.

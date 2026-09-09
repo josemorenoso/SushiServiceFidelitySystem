@@ -13,7 +13,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js'
-import { resolveBranding, NO_GOOGLE_REVIEW_URL } from '@/lib/branding'
+import { resolveBranding, mergeLocationOverConfig, NO_GOOGLE_REVIEW_URL } from '@/lib/branding'
 import { percentInt } from '@/lib/format/percent'
 import { getCampaignRewardById } from '@/services/campaign-reward.service'
 import { getMultipleSettings } from '@/services/settings.service'
@@ -24,7 +24,7 @@ import {
   REVIEW_SHOWN_DEDUPE_HOURS,
 } from '@/constants/rewards'
 import type { Customer, ReviewAction, ReviewFunnel, ReviewPromptState } from '@/types/database.types'
-import type { Tenant } from '@/types/tenant.types'
+import type { Tenant, TenantConfig } from '@/types/tenant.types'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -107,12 +107,24 @@ export async function getReviewConfig(tenantId: string): Promise<ReviewConfig> {
  */
 export async function getReviewPromptState(
   customer: Customer,
-  tenant: Tenant
+  tenant: Tenant,
+  /**
+   * `restaurant_locations.config` de la sede donde está el cliente (00058).
+   *
+   * OPCIONAL a propósito: sin ella se resuelve la ficha de la MARCA, que es el
+   * comportamiento anterior bit a bit. Con ella, el cliente que comió en
+   * Laureles reseña la ficha de Laureles — que es el requisito original del
+   * dueño y lo que hace que la ficha de la segunda sede no nazca muerta.
+   */
+  locationConfig?: TenantConfig | null
 ): Promise<ReviewPromptState> {
-  const configuredUrl = tenant.config?.google_maps_url
+  // La sede pisa a la marca campo a campo; una sede sin ficha propia hereda la
+  // de la marca. La regla vive en `mergeLocationOverConfig()` y no acá.
+  const configDeLaSede = mergeLocationOverConfig(tenant.config, locationConfig)
+  const configuredUrl = configDeLaSede?.google_maps_url
   const googleUrl =
     configuredUrl === undefined
-      ? resolveBranding(tenant.config).googleReviewUrl
+      ? resolveBranding(tenant.config, locationConfig).googleReviewUrl
       : configuredUrl
   const hasUrl = !!googleUrl && googleUrl !== NO_GOOGLE_REVIEW_URL
 

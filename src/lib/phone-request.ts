@@ -11,6 +11,7 @@
 import { validatePhone } from '@/lib/validators/phone'
 import { rateLimit } from '@/lib/rate-limit'
 import { resolveHostContext } from '@/lib/tenant'
+import type { ActiveLocation } from '@/lib/location-resolver'
 import { findCustomerByPhone } from '@/services/customer.service'
 import type { Customer } from '@/types/database.types'
 import type { Tenant } from '@/types/tenant.types'
@@ -29,6 +30,15 @@ export type PhoneRequestResult =
        * que no es de ninguna sede. Se propaga a `review_events.location_id`.
        */
       locationId: string | null
+      /**
+       * La sede resuelta ENTERA, con su `config` (00058). `locationId` sigue
+       * siendo lo que se ATRIBUYE; esto es para quien además necesita saber qué
+       * ficha de Google, qué dirección o qué teléfono tiene ESE local.
+       *
+       * Viaja acá y no en una consulta aparte porque `resolveHostContext()` ya
+       * la trae: pedirla de nuevo sería una segunda lectura de la misma fila.
+       */
+      location: ActiveLocation | null
     }
   | { ok: false; reason: PhoneRequestFailure; retryAfterSeconds?: number }
 
@@ -51,11 +61,11 @@ export async function resolvePhoneRequest(params: {
   // `resolveHostContext` en vez de `getTenantByDomain`: resuelve la misma marca por el
   // dominio raíz Y además reconoce el subdominio propio de una sede, que es como llega la
   // sede 2..N. La marca resuelta es idéntica en el caso de hoy (1 sede por tenant).
-  const { tenant, locationId } = await resolveHostContext(params.host)
+  const { tenant, locationId, location } = await resolveHostContext(params.host)
   if (!tenant) return { ok: false, reason: 'no_tenant' }
 
   const customer = await findCustomerByPhone(cleaned, tenant.id)
   if (!customer) return { ok: false, reason: 'no_customer' }
 
-  return { ok: true, tenant, customer, cleaned, locationId }
+  return { ok: true, tenant, customer, cleaned, locationId, location }
 }

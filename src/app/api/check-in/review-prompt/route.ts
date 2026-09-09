@@ -14,6 +14,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getReviewPromptState, logReviewShown } from '@/services/review.service'
+import type { TenantConfig } from '@/types/tenant.types'
 import { resolvePhoneRequest } from '@/lib/phone-request'
 
 /** Respuesta neutra: la UI simplemente no muestra nada. Nunca rompe el check-in. */
@@ -49,8 +50,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(HIDDEN)
     }
 
-    const { tenant, customer, locationId } = resolved
-    const state = await getReviewPromptState(customer, tenant)
+    const { tenant, customer, locationId, location } = resolved
+    // ⚠️ `location` es la sede donde está parado el cliente. Hasta hoy esta línea
+    // llamaba con `(customer, tenant)` y la sede quedaba sin usar EN LA VARIABLE
+    // DE AL LADO: las 12 sedes de una marca mandaban a reseñar la MISMA ficha de
+    // Google, así que las 11 fichas nuevas nacían muertas.
+    const state = await getReviewPromptState(
+      customer,
+      tenant,
+      (location?.config ?? null) as TenantConfig | null
+    )
 
     // La impresión se sella aquí, no en el navegador: es el único punto que sabe con
     // certeza que el modal se va a renderizar. Deduplicado a 12h por si el cliente recarga.

@@ -24,6 +24,8 @@ import {
 } from '@/lib/location-config-paths'
 import { EDITABLE_PATH_NAMES } from '@/lib/tenant-config-paths'
 import { elegirFilasDeSede } from '@/services/reward-tiers.service'
+import { mergeLocationOverConfig, resolveBranding } from '@/lib/branding'
+import type { TenantConfig } from '@/types/tenant.types'
 
 const MIGRACION = path.resolve(
   __dirname,
@@ -142,5 +144,47 @@ describe('elegirFilasDeSede — recompensas por sede (00058 §3)', () => {
   it('nunca devuelve filas de OTRA sede', () => {
     const envigado = { id: 'e1', location_id: 'sede-envigado' }
     expect(elegirFilasDeSede([laureles, envigado], 'sede-laureles')).toEqual([laureles])
+  })
+})
+
+
+describe('la sede pisa a la marca campo a campo (00058)', () => {
+  const marca = {
+    brand_name: 'Tepuy',
+    google_maps_url: 'https://g.page/tepuy-marca',
+    instagram_url: 'https://instagram.com/tepuy',
+    card: { address: 'Sede principal', hours: 'L-D 12-22' },
+  } as unknown as TenantConfig
+
+  it('una sede SIN config hereda todo de la marca', () => {
+    // Es el estado del día del despliegue: `config = {}` en las 6 sedes vivas.
+    const out = mergeLocationOverConfig(marca, {} as TenantConfig)
+    expect(out?.google_maps_url).toBe('https://g.page/tepuy-marca')
+    expect(resolveBranding(marca, {} as TenantConfig).googleReviewUrl).toBe('https://g.page/tepuy-marca')
+  })
+
+  it('una sede CON ficha propia gana, y solo en ese campo', () => {
+    // El requisito del dueño: cada local manda a reseñar SU ficha. Lo demás sigue
+    // siendo de la marca — si el nombre cambiara con la sede, la tarjeta mentiría.
+    const laureles = { google_maps_url: 'https://g.page/tepuy-laureles' } as unknown as TenantConfig
+    const out = mergeLocationOverConfig(marca, laureles)
+    expect(out?.google_maps_url).toBe('https://g.page/tepuy-laureles')
+    expect(out?.brand_name).toBe('Tepuy')
+    expect(out?.instagram_url).toBe('https://instagram.com/tepuy')
+  })
+
+  it('el vacío NO borra: es como una sede dice «esto lo hereda»', () => {
+    // Un campo en blanco en la pantalla de «Mis sedes» tiene que devolver el valor
+    // de la marca, no dejar al cliente sin link.
+    const out = mergeLocationOverConfig(marca, { google_maps_url: '   ' } as unknown as TenantConfig)
+    expect(out?.google_maps_url).toBe('https://g.page/tepuy-marca')
+  })
+
+  it('`card` se mezcla clave a clave, no de golpe', () => {
+    // Sin esto, una sede que solo pone su dirección borraría el horario de la marca.
+    const out = mergeLocationOverConfig(marca, { card: { address: 'Carrera 73 C3-5' } } as unknown as TenantConfig)
+    const card = out?.card as Record<string, unknown> | undefined
+    expect(card?.address).toBe('Carrera 73 C3-5')
+    expect(card?.hours).toBe('L-D 12-22')
   })
 })

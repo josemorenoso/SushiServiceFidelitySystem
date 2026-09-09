@@ -91,6 +91,17 @@ export default function RewardsPage() {
   const [multiSede, setMultiSede] = useState(false)
   const [copiando, setCopiando] = useState(false)
 
+  // ── Quién está mirando: super usuario de la marca, o administrador de sede ──
+  //
+  // Los premios son de la MARCA, así que un administrador de sede los VE pero no
+  // los toca — la ruta lo hace cumplir (`exigirAlcanceDeMarca()`), y esto es
+  // solo la mitad de la pantalla: ofrecerle botones que van a responder 403 es
+  // pedirle que descubra el límite chocándose con él. `'brand'` de arranque
+  // porque es lo que era todo el mundo hasta la 00058: con una sola sede nadie
+  // ve un cambio.
+  const [rol, setRol] = useState<'brand' | 'location'>('brand')
+  const soloLectura = rol === 'location'
+
   // ── Fetch ──
   const fetchTiers = useCallback(async () => {
     setLoading(true)
@@ -117,6 +128,8 @@ export default function RewardsPage() {
         if (!j) return
         setSedes(j.locations ?? [])
         setMultiSede(j.multiSede === true)
+        // Misma respuesta, un campo más: no cuesta una petición nueva.
+        if (j.role === 'location') setRol('location')
       })
       .catch(() => { /* sin sedes el panel se comporta como siempre */ })
   }, [])
@@ -297,11 +310,32 @@ export default function RewardsPage() {
           <Gift className="h-6 w-6" />
           Tiers de Recompensas
         </h1>
-        <Button onClick={openCreate} className="gap-2" disabled={heredando}>
+        <Button onClick={openCreate} className="gap-2" disabled={heredando || soloLectura}>
           <Plus className="h-4 w-4" />
           Nuevo Tier
         </Button>
       </div>
+
+      {/*
+        Un administrador de sede ve los premios pero no los cambia. Sin este
+        cartel la pantalla se ve rota —todo apagado y sin motivo—, que es
+        exactamente la llamada que este aviso evita. Va ANTES del selector
+        porque explica por qué lo de abajo no responde.
+      */}
+      {soloLectura && (
+        <Card className="border-dashed">
+          <CardContent className="flex items-start gap-3 p-4">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+            <div>
+              <p className="text-sm font-medium">Los premios son de la marca</p>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                Acá los podés consultar, pero cambiarlos le tocaría a todas las sedes a la vez,
+                así que solo lo hace un super usuario. Pedíselo a quien administra la marca.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/*
         El selector de alcance. Solo con dos o más sedes: con una sola, «la
@@ -343,7 +377,7 @@ export default function RewardsPage() {
                 de los de la marca y desde ahí los cambiás — así no arranca sin nada.
               </p>
             </div>
-            <Button variant="outline" onClick={darlePropios} disabled={copiando}>
+            <Button variant="outline" onClick={darlePropios} disabled={copiando || soloLectura}>
               {copiando ? 'Copiando…' : 'Darle premios propios'}
             </Button>
           </CardContent>
@@ -368,7 +402,7 @@ export default function RewardsPage() {
           ) : sortedTiers.length === 0 ? (
             <div className="py-8 text-center space-y-3">
               <p className="text-muted-foreground">No hay tiers configurados.</p>
-              <Button variant="outline" onClick={openCreate} className="gap-2">
+              <Button variant="outline" onClick={openCreate} className="gap-2" disabled={soloLectura}>
                 <Plus className="h-4 w-4" />
                 Crear primer tier
               </Button>
@@ -442,8 +476,14 @@ export default function RewardsPage() {
                           variant="ghost"
                           size="sm"
                           className="h-7 w-7 p-0"
-                          disabled={heredando}
-                          title={heredando ? 'Estos premios son de la marca. Dale premios propios a esta sede para editarlos acá.' : undefined}
+                          disabled={heredando || soloLectura}
+                          title={
+                            soloLectura
+                              ? 'Los premios son de la marca. Solo un super usuario puede cambiarlos.'
+                              : heredando
+                                ? 'Estos premios son de la marca. Dale premios propios a esta sede para editarlos acá.'
+                                : undefined
+                          }
                           onClick={() => openEdit(t)}
                         >
                           <Pencil className="h-3.5 w-3.5" />
@@ -452,7 +492,7 @@ export default function RewardsPage() {
                           variant="ghost"
                           size="sm"
                           className="h-7 w-7 p-0"
-                          disabled={heredando}
+                          disabled={heredando || soloLectura}
                           onClick={() => handleToggle(t.id, t.is_active)}
                         >
                           {t.is_active
@@ -464,7 +504,7 @@ export default function RewardsPage() {
                           variant="ghost"
                           size="sm"
                           className="h-7 w-7 p-0 text-red-500 hover:text-red-700"
-                          disabled={heredando}
+                          disabled={heredando || soloLectura}
                           onClick={() => setDeleteConfirm(t.id)}
                         >
                           <Trash2 className="h-4 w-4" />

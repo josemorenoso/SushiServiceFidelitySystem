@@ -962,8 +962,86 @@ solo**: el restaurante vería desaparecer sus otros tres sin haber borrado nada.
 existe `POST /api/dashboard/reward-tiers/copiar`, que le da a la sede una copia de los de la
 marca para que edite desde ahí, y por eso «Nuevo Tier» está **apagado mientras hereda**.
 
+### 5. Quién puede CAMBIAR los premios (2026-09-09, sin migración)
+
+Lo destapó la auditoría adversarial del 09 y era el más caro de lo que quedó sin juzgar:
+**los cuatro verbos de `/api/dashboard/reward-tiers` autenticaban con `requireTenantId()`**,
+que solo comprueba que el JWT traiga una marca. Un **administrador de UNA sede**
+(`role='location'`) pasaba esa puerta igual que el dueño, y como su alcance por defecto en
+esa pantalla es «la marca», podía editar y borrar los premios de la marca **y los de sus
+sedes hermanas** — y la pantalla se lo ofrecía. Con una sola sede daba lo mismo; con doce, el
+encargado de Laureles le cambiaba los premios a Envigado sin salir de su pantalla.
+
+**La regla ahora: los premios son de la MARCA.** `exigirAlcanceDeMarca()` guarda POST, PATCH
+y DELETE; el GET no. Que el guardián esté escrito UNA vez y los tres verbos lo llamen es lo
+que evita que el cuarto se olvide.
+
+**El GET se queda con `requireTenantId()`, y no es comodidad.** Dos razones, las dos
+verificadas:
+
+1. **Leer no cruza marcas.** Cada consulta filtra por `tenant_id`, que es el aislamiento
+   real (`service_role` se salta el RLS). Lo más que ve un administrador de sede son los
+   premios de una sede hermana de SU marca.
+2. **Exigir alcance ahí rompería el panel.** La pantalla pide `?location_id=brand`, y
+   `brand` no es un valor que `decideLocationScope()` acepte —espera `all`, `unknown` o un
+   uuid—: contestaría **403 «Sede no válida»** a todo el mundo, incluido el dueño. Y el
+   segundo consumidor, `dashboard/settings:226`, hace `r.ok ? r.json() : []`, así que ese
+   403 dejaría el selector de premios **vacío en silencio**.
+
+Dejar que un administrador edite los premios de SU sede es una decisión de producto, no una
+corrección, y hoy choca de frente con 0.GAMMA (una sede con premios propios le devuelve el
+«ya reclamé» a toda la base de clientes). Está en ESTADO §3.
+
+**La trampa del super-admin, que había que comprobar antes de tocar la autenticación.**
+`requireLocationScope()` no tiene el `OR` del operador de Cada1, y en SQL sí lo tiene: las
+policies de la 00045 son `is_super_admin() OR can_see_location(...)`. El operador **no tiene
+fila en `dashboard_user_locations`** de las marcas de sus clientes, así que en una marca de
+dos sedes la fábrica le contesta 403 — y como el camino real del panel corre con
+`service_role`, sin ese `OR` en TypeScript perdía en el panel lo que el motor sí le concede.
+Por eso la decisión vive en `puedeEscribirEnLaMarca()` (`src/lib/location-scope.ts`), que es
+**pura** y toma dos entradas: el `LocationScope` (`null` si no se pudo resolver) y
+`esSuperAdmin` (de `isSuperAdmin()`). `null` nunca autoriza por sí solo: sin sesión, sin
+marca en el JWT, sin alcance con 2+ sedes **o con la base caída**, no se escribe. Y cuando
+no se pudo resolver se devuelve lo que dijo la fábrica —401, 403 o **500**—, nunca un 403
+genérico: confundir un fallo de base con «no tenés permiso» manda a alguien a revisar los
+accesos durante media hora.
+
+`requireTenantId()` sigue importado a propósito: lee el MISMO `app_metadata.tenant_id` que
+el alcance, y es de donde sale la marca en el único caso en que no hay alcance que leer —el
+operador de Cada1.
+
+**Hay un gemelo que NO se unificó**: `requireBrandScope()` en
+`src/app/api/dashboard/users/route.ts` exige `role === 'brand'` sin el `OR` del super-admin.
+Se dejó como está porque quién puede crear usuarios de una marca ajena es una decisión del
+dueño, y unificarlas de paso se la habría respondido sola.
+
+**Con 0 o 1 sede activa nada cambia para las 5 marcas vivas**: sin filas de alcance, la fila
+1 del §5.1 las resuelve como `role='brand'`.
+
+### 6. El panel vacío del administrador de sede (0.DELTA)
+
+Un `role='location'` **nunca** ve las filas con `location_id IS NULL` (fila 4 del §5.1), y
+todo el histórico anterior a multi-sede es NULL: nadie lo atribuyó a una sede porque cuando
+ocurrió no había sedes. O sea que el primer administrador de sede que entre **ve CERO
+clientes y CERO visitas**, y no porque algo esté roto.
+
+Hay dos salidas y **la elección es del dueño** (ESTADO §3, punto 0.DELTA):
+
+- **(a)** darle a `role='location'` el cubo NULL de las sedes que ya tiene asignadas mientras
+  el histórico no esté atribuido. Toca `decideLocationScope()`, o sea los **dos espejos** —el
+  TS y `can_see_location()` de la 00045, que `tests/db/multisede-permisos.test.ts` vigila— y
+  ensancha lo que ve un rol restringido. No se hace por cuenta propia.
+- **(b)** avisarlo, que es lo implementado: la pantalla de **Accesos** muestra el aviso en el
+  momento de elegir «Administrador de sede», antes de marcar las sedes. Es reversible y no
+  toca una sola fila de permisos.
+
+Lo que **no** se hace es backfillear el histórico: `location_id` NULL significa «sede
+desconocida» y se muestra (§ *Cero backfill*).
+
 ### Cómo se verifica
 
+- `npx vitest run tests/unit/reward-tiers-permisos.test.ts` — quién puede escribir los
+  premios, incluido el fail-closed y el `OR` del operador de Cada1.
 - `npx vitest run tests/unit/location-config-paths.test.ts` — la whitelist contra el SQL.
 - Con una marca de UNA sede: el selector del encabezado **no se dibuja** y
   `/dashboard/sedes` dice «Mi local».
@@ -971,6 +1049,11 @@ marca para que edite desde ahí, y por eso «Nuevo Tier» está **apagado mientr
   comprobar que la reseña apunta a ESA ficha y que la otra sede conserva la suya.
 - Crear un administrador de sede en «Accesos», entrar con él y comprobar que no ve el
   selector completo ni la pantalla de accesos.
+- Al elegir «Administrador de sede» en «Accesos», el aviso de que esa persona **verá su sede
+  desde hoy, no el histórico**, tiene que aparecer antes de marcar las sedes.
+- Con ese mismo usuario, abrir «Recompensas»: se ven los premios, el cartel explica que son
+  de la marca, y crear/editar/borrar están apagados. Un `PATCH` a mano contra
+  `/api/dashboard/reward-tiers` tiene que responder **403**, no 200.
 
 ---
 

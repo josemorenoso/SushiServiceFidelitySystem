@@ -340,6 +340,37 @@ export default function AccesosPage() {
                 </div>
               </div>
 
+              {/*
+                EL AVISO DEL PANEL VACÍO.
+                ────────────────────────
+                Un `role='location'` **nunca** ve las filas con `location_id IS
+                NULL` (`location-scope.ts`, fila 4 del §5.1), y todo el histórico
+                anterior a multi-sede es NULL: nadie lo atribuyó a una sede
+                porque cuando ocurrió no había sedes. O sea que esta persona
+                abre el panel y ve CERO clientes y CERO visitas — no porque algo
+                esté roto, sino porque su alcance empieza hoy.
+                Decirlo ACÁ, en el momento de elegir el rol, es lo único que
+                convierte «el panel no me carga nada» en una expectativa.
+                No se backfillea el histórico: `location_id NULL` significa
+                «sede desconocida» y se muestra, nunca se inventa.
+                → ESTADO.md §3 punto 0.DELTA: darle además el cubo NULL de sus
+                  sedes es la otra salida, y es decisión del dueño.
+              */}
+              {rol === 'location' && (
+                <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>
+                    <span className="block font-medium">Va a ver su sede desde hoy, no lo de antes</span>
+                    <span className="mt-0.5 block">
+                      Los clientes y las visitas que se registraron antes de que existieran las
+                      sedes no están atribuidos a ninguna, así que esta persona no los va a ver:
+                      su panel arranca con lo que pase de ahora en adelante en las sedes que le
+                      marques. Un super usuario sí los sigue viendo todos.
+                    </span>
+                  </span>
+                </div>
+              )}
+
               {rol === 'location' && (
                 <div>
                   <Label>De qué sedes</Label>

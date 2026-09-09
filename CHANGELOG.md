@@ -8,6 +8,30 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [2026-09-09c] - Los premios son de la marca: un administrador de sede ya no los cambia
+
+**Tipo:** fix (seguridad) · **Origen:** auditoría adversarial 2026-09-09 (ESTADO §3, 0.BETA — «el más caro y NO está arreglado») · **Sin migración**
+
+- **El agujero.** Los cuatro verbos de `/api/dashboard/reward-tiers` autenticaban con `requireTenantId()`,
+  que solo comprueba que el JWT traiga una marca. Un `role='location'` —administrador de UNA sede— pasaba
+  esa puerta igual que el dueño y podía editar y borrar los premios de la marca **y los de sus sedes
+  hermanas**; la pantalla se lo ofrecía porque su alcance por defecto ahí es «la marca».
+- **POST, PATCH y DELETE** pasan por `exigirAlcanceDeMarca()`, escrito UNA vez para que el cuarto verbo no
+  se olvide. La pantalla de Recompensas queda en solo-lectura para ese rol, con el cartel que lo explica.
+- **El GET se queda con `requireTenantId()`, a propósito**: leer no cruza marcas (el filtro por `tenant_id`
+  sigue siendo el aislamiento real) y exigir alcance ahí daría **403 a todos** — el panel pide
+  `?location_id=brand`, que `decideLocationScope()` rechaza, y `dashboard/settings` hace
+  `r.ok ? r.json() : []`, o sea selector vacío en silencio.
+- **La trampa que había que comprobar antes de tocar la autenticación**: `requireLocationScope()` no tenía
+  el `OR` del operador de Cada1 que el RLS sí tiene (`is_super_admin()`, 00045), y el operador no tiene fila
+  en `dashboard_user_locations` de sus clientes: sin ese `OR` perdía el panel de toda marca con dos sedes.
+  Vive en `puedeEscribirEnLaMarca()`, PURA y probada. Falla CERRADO; un fallo de base sale **500**, no 403.
+- **0.DELTA (b)**: «Accesos» avisa, al elegir «Administrador de sede», que esa persona verá su sede **desde
+  hoy** y no el histórico (que es NULL y ese rol nunca lo ve). La salida (a) sigue siendo del dueño.
+- Con 0 o 1 sede activa **nada cambia** para las 5 marcas vivas. → `docs/features/multi-sede.md` §3.septies.
+
+---
+
 ## [2026-09-08b] - Las sedes pasan a ser del cliente: se ven, se eligen y se editan
 
 **Tipo:** feat · **Origen:** el dueño ("el cliente debe poder ver sus sedes, seleccionarlas y modificarlas desde un solo lugar, punto final" · "cada sede tiene su propio google maps" · "necesito poder agregar super usuarios y administradores") · **Migración: `00058`**

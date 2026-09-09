@@ -388,6 +388,41 @@ export async function requireLocationScope(request: Request): Promise<LocationSc
   return { ok: true, scope: decision.scope, locations: visibles }
 }
 
+/**
+ * ¿Este usuario puede ESCRIBIR lo que es de la MARCA entera?
+ *
+ * PURA a propósito, igual que `decideLocationScope()`: la decisión de permisos
+ * más cara del panel no debería necesitar una base para probarse.
+ *
+ * Contesta la pregunta que `LocationScope` por sí solo no contesta, porque le
+ * falta la mitad de arriba: **el operador de Cada1** (`app_metadata.role =
+ * 'super_admin'`) no tiene fila en `dashboard_user_locations` de las marcas de
+ * sus clientes, así que `requireLocationScope()` le contesta 403 en cuanto la
+ * marca tiene dos sedes. En SQL esa mitad SÍ está escrita —las policies de la
+ * 00045 son `is_super_admin() OR can_see_location(...)`— y el camino real del
+ * panel corre con `service_role`, que se salta el RLS: sin este `OR` en
+ * TypeScript, el operador pierde en el panel lo que el motor sí le concede.
+ *
+ * Las dos entradas y nada más:
+ *   · `scope` — `null` cuando el alcance NO se pudo resolver (sin sesión, sin
+ *     marca en el JWT, sin fila de alcance con 2+ sedes, o un fallo de base).
+ *     `null` NUNCA autoriza por sí solo: el fail-closed del §5.1 vale acá igual.
+ *   · `esSuperAdmin` — de `isSuperAdmin()` (`src/lib/admin.ts`), que lee el JWT.
+ *
+ * ⚠️ Hay un gemelo anterior, `requireBrandScope()` en
+ * `src/app/api/dashboard/users/route.ts`, que exige `role === 'brand'` SIN el
+ * `OR` del super-admin. No se unificaron acá porque los accesos son otra
+ * pregunta —quién puede crear usuarios de una marca ajena es una decisión del
+ * dueño, no una corrección— y unificarlas de paso se la habría respondido sola.
+ */
+export function puedeEscribirEnLaMarca(params: {
+  scope: LocationScope | null
+  esSuperAdmin: boolean
+}): boolean {
+  if (params.esSuperAdmin) return true
+  return params.scope !== null && params.scope.role === 'brand'
+}
+
 /** Lo que el panel necesita para dibujar el selector, derivado del alcance ya resuelto. */
 export function toScopeView(scope: LocationScope, locations: LocationOption[]): LocationScopeView {
   return {

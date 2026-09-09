@@ -34,7 +34,6 @@
 |---|---|---|---|---|
 | Sesión 2 — «ya reclamé» por umbral, no por id + `current_tier` (2026-09-09) | Opus 5 | `supabase/migrations/00059_*.sql` · `src/services/reward-tiers.service.ts` · `src/app/api/check-in/status/route.ts` · `src/app/api/dashboard/reward-tiers/copiar/route.ts` · `docs/features/points-mystery-box.md` · `tests/db/` (archivo nuevo propio) | **00059** | Abierta |
 | Sesión 4 — los tres huecos del día 1 de las 12 sedes: meseros sin sede en masa, `authorized_numbers.location_id` y el cupo de envío visible (2026-09-09) | Opus 5 | `src/app/api/dashboard/authorized-numbers/**` · `src/app/(dashboard)/dashboard/authorized-numbers/page.tsx` · `src/app/(dashboard)/dashboard/staff/page.tsx` · `src/components/dashboard/CupoEnvioCard.tsx` (nuevo) · `src/app/(dashboard)/dashboard/campaigns/page.tsx` (SOLO import + montaje) · `SQL-PARA-CORRER/**` · `docs/RUNBOOK-DEPLOY.md` · `docs/features/delivery-webhook.md` · `docs/features/send-governance.md` | — (ninguna) | Abierta |
-| Sesión 3 — permisos de `/api/dashboard/reward-tiers` (agujero 0.BETA) + aviso de panel vacío al administrador de sede (0.DELTA) (2026-09-09) | Opus 5 | `src/app/api/dashboard/reward-tiers/route.ts` · `src/lib/location-scope.ts` · `src/app/(dashboard)/dashboard/rewards/page.tsx` · `src/app/(dashboard)/dashboard/accesos/page.tsx` · `docs/features/multi-sede.md` (§3.septies) | — | Abierta |
 
 ## 3. Siguiente, en orden
 
@@ -59,11 +58,10 @@
 0.BETA **Lo que la auditoría dejó SIN JUZGAR** (34 de 95 agentes murieron por el límite de gasto
    de la cuenta, incluida la síntesis). Se corrigieron ya: el selector fantasma, el 409 sin
    pantalla, el 409 falso del PATCH de niveles, las filas heredadas editables y las dos guardas
-   del POST de accesos. **NO se verificaron**: `/api/mystery-box/resolve` (otorga premios sin
-   visita ni límite de tasa), la coordenada con decimales en «Mis sedes», y que
-   `/api/dashboard/reward-tiers` autentica con `requireTenantId()` y **no** con
-   `requireLocationScope()` — o sea que un «administrador de sede» puede editar los premios de
-   la marca y de sus hermanas. Ese último es el más caro y NO está arreglado.
+   del POST de accesos, y el 09 **el agujero de permisos de `/api/dashboard/reward-tiers`**
+   (era el más caro): sus escrituras exigen alcance de MARCA. **Quedan SIN verificar**:
+   `/api/mystery-box/resolve` (otorga premios sin visita ni límite de tasa) y la coordenada
+   con decimales en «Mis sedes».
 0.GAMMA **Recompensas por sede: NO usarlas el primer día.** La base y la resolución están, pero
    «Darle premios propios» a una sede crea COPIAS con ids nuevos, y como el «ya reclamé» se
    lleva por `tier_id` (`check-in/status:174-201`), **toda la base de clientes vuelve a tener
@@ -72,9 +70,13 @@
    `location_id NULL` (que es el estado del despliegue: la 00058 no hace backfill). Decisión de
    producto pendiente: o `current_tier` se deriva siempre, o se acepta que el nivel es de la marca.
 0.DELTA **Un administrador de sede abre un panel VACÍO.** `role='location'` nunca ve el cubo
-   NULL (`location-scope.ts:215-218`), y todo el histórico anterior a multi-sede es NULL.
-   Decisión del dueño: (a) darle el cubo NULL de sus sedes mientras el histórico no esté
-   atribuido, o (b) avisarlo en la pantalla de Accesos al elegir «Administrador».
+   NULL (`location-scope.ts`, fila 4 del §5.1) y todo el histórico anterior a multi-sede es NULL.
+   **(b) ya está hecha** (09): «Accesos» avisa, al elegir «Administrador de sede», que esa
+   persona verá su sede **desde hoy** y no el histórico. **Falta la decisión del dueño sobre
+   (a)**: darle además el cubo NULL de las sedes que tiene asignadas mientras el histórico no
+   esté atribuido. (a) toca `decideLocationScope()` y por lo tanto **los dos espejos** —el TS y
+   `can_see_location()` de la 00045, que `tests/db/multisede-permisos.test.ts` vigila—, así que
+   no se hace por cuenta propia. El histórico NO se backfillea en ninguno de los dos casos.
 0.ZETA **`rewards` y `campaign_rewards` recibieron `location_id` pero NADIE lo lee.** «Las
    recompensas varían por sede» hoy es cierto **solo** para `reward_tiers`. Los premios por
    visitas y los de campaña siguen siendo de la marca.
@@ -156,6 +158,18 @@ reseñas y **Meta** para campañas. Ninguna decisión de hoy cierra esa puerta (
 
 ## 5. Hecho reciente
 
+- **Los premios ya no los cambia un administrador de sede** (2026-09-09, sin migración): los
+  cuatro verbos de `/api/dashboard/reward-tiers` autenticaban con `requireTenantId()`, que solo
+  mira que el JWT traiga una marca — así que un `role='location'` editaba y borraba los premios
+  de la marca **y los de sus sedes hermanas**, y la pantalla se lo ofrecía por defecto. Ahora las
+  tres escrituras pasan por `exigirAlcanceDeMarca()`; el GET se queda como estaba **a propósito**
+  (leer no cruza marcas, y exigir alcance ahí daría 403 a todos: el panel pide `?location_id=brand`,
+  que `decideLocationScope()` rechaza). La decisión vive en `puedeEscribirEnLaMarca()`, que es PURA
+  y lleva el `OR` del operador de Cada1 que el RLS ya tenía (`is_super_admin()`, 00045) y el TS no:
+  sin él, el operador perdía el panel de todo cliente con dos sedes. Falla CERRADO, y un fallo de
+  base sale como 500, no como 403. Con 0 o 1 sede activa nada cambia. Y «Accesos» avisa, al elegir
+  «Administrador de sede», que esa persona ve su sede **desde hoy** y no el histórico (0.DELTA (b)).
+  → `docs/features/multi-sede.md` §3.septies.
 - **Cada sede manda a reseñar SU ficha de Google** (2026-09-09, sin migración, **en `main`**):
   `getReviewPromptState` recibía solo la marca aunque `review-prompt/route.ts:52` ya tenía la
   sede resuelta en la variable de al lado. Guardar y mostrar el link por sede ya funcionaba;

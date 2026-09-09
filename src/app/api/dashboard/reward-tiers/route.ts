@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { requireTenantId } from '@/lib/tenant'
+import { isSuperAdmin } from '@/lib/admin'
+import { requireLocationScope, puedeEscribirEnLaMarca } from '@/lib/location-scope'
 import { isDbFailure, logDbFailure } from '@/lib/db-failure'
 import { elegirFilasDeSede } from '@/services/reward-tiers.service'
 
@@ -37,6 +39,81 @@ function sedePedida(raw: string | null | undefined): string | null {
  * alcanza.
  */
 
+/**
+ * EL GUARDIÁN DE LAS ESCRITURAS. Los premios son de la MARCA: solo un super
+ * usuario (`role='brand'`) —o el operador de Cada1— los crea, los edita o los
+ * borra.
+ *
+ * QUÉ SE ARREGLÓ ACÁ, Y POR QUÉ ERA CARO
+ * ──────────────────────────────────────
+ * Hasta hoy los cuatro verbos autenticaban con `requireTenantId()`, que solo
+ * comprueba que el JWT traiga una marca. Un **administrador de UNA sede**
+ * (`role='location'`) pasaba esa puerta igual que el dueño: podía editar y
+ * borrar los premios de la marca **y los de sus sedes hermanas**, y la pantalla
+ * se los ofrecía por defecto porque su alcance por defecto es «la marca». Con
+ * una sola sede daba lo mismo; con doce, el encargado de Laureles le cambiaba
+ * los premios a Envigado sin salir de su pantalla.
+ *
+ * POR QUÉ EL GET NO PASA POR ACÁ
+ * ──────────────────────────────
+ * A propósito, y no por comodidad:
+ *   1. **No hay fuga de marca**: cada consulta filtra por `tenant_id`, que es
+ *      el aislamiento real (`service_role` se salta el RLS). Lo más que ve un
+ *      administrador de sede son los premios de una sede hermana de SU marca.
+ *   2. **`requireLocationScope()` lo rompería**: el panel pide
+ *      `?location_id=brand`, y `brand` no es un valor que `decideLocationScope()`
+ *      acepte (espera `all`, `unknown` o un uuid) — contestaría **403 «Sede no
+ *      válida»** a todo el mundo, incluido el dueño. Y el segundo consumidor,
+ *      `dashboard/settings:226`, hace `r.ok ? r.json() : []`: un 403 ahí deja el
+ *      selector de premios **vacío en silencio**.
+ * Abrir esa puerta es una decisión de producto (ESTADO §3), no una corrección.
+ *
+ * Ref: docs/features/multi-sede.md §3.septies · migraciones 00045 y 00058
+ */
+async function exigirAlcanceDeMarca(
+  request: NextRequest
+): Promise<{ ok: true; tenantId: string } | { ok: false; res: NextResponse }> {
+  // El alcance de ESCRITURA depende del ROL, nunca de la sede que la petición
+  // esté mirando — así que se resuelve sobre una URL SIN `?location_id=`. No es
+  // decorativo: hoy ninguna escritura manda ese parámetro, pero el día que
+  // alguien copie el `?location_id=brand` del GET, `decideLocationScope()`
+  // contestaría 403 «Sede no válida» y el error diría "permisos" cuando el
+  // problema sería el formato.
+  const url = new URL(request.url)
+  url.searchParams.delete('location_id')
+
+  const scopeResult = await requireLocationScope(new Request(url.toString()))
+  const scope = scopeResult.ok ? scopeResult.scope : null
+  const esSuperAdmin = await isSuperAdmin()
+
+  if (puedeEscribirEnLaMarca({ scope, esSuperAdmin })) {
+    // `scope.tenantId` y `requireTenantId()` leen el MISMO `app_metadata.tenant_id`.
+    // La segunda solo hace falta para el operador de Cada1 cuando el alcance no
+    // se pudo resolver: sin marca en el JWT lanza, y el `catch` del verbo lo
+    // convierte en el 500 de siempre.
+    return { ok: true, tenantId: scope ? scope.tenantId : await requireTenantId() }
+  }
+
+  // Sin alcance y sin super-admin se contesta lo que dijo la fábrica —401 sin
+  // sesión, 403 sin permiso, **500 si la base falló**—, nunca un 403 genérico:
+  // confundir un fallo de base con "no tenés permiso" es lo que manda a alguien
+  // a revisar los accesos durante media hora.
+  if (!scopeResult.ok) {
+    return {
+      ok: false,
+      res: NextResponse.json({ error: scopeResult.error }, { status: scopeResult.status }),
+    }
+  }
+
+  return {
+    ok: false,
+    res: NextResponse.json(
+      { error: 'Los premios son de la marca: solo un super usuario puede cambiarlos.' },
+      { status: 403 }
+    ),
+  }
+}
+
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -60,6 +137,11 @@ function getServiceClient() {
  * **en silencio**. Es exactamente la trampa que `/api/dashboard/location` ya
  * tiene documentada. Si el panel necesita saber si está heredando, lo deduce:
  * pidió una sede y todo lo que volvió tiene `location_id === null`.
+ *
+ * ⚠️ **El único verbo que NO pasa por `exigirAlcanceDeMarca()`**, a propósito y
+ * por dos razones que están escritas enteras en el comentario de esa función.
+ * En una frase: leer no cruza marcas (el filtro por `tenant_id` sigue ahí) y
+ * exigir alcance acá dejaría el panel en 403 por el formato de `?location_id=`.
  */
 export async function GET(request: NextRequest) {
   const supabase = await createClient()
@@ -86,9 +168,12 @@ export async function GET(request: NextRequest) {
 
 /** POST — Crea un nuevo reward tier. */
 export async function POST(request: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  // La puerta va PRIMERO: antes se validaba el cuerpo entero y recién al final
+  // se miraba quién llamaba, así que un administrador de sede recibía los
+  // mensajes de validación de una pantalla que no le corresponde.
+  const guardia = await exigirAlcanceDeMarca(request)
+  if (!guardia.ok) return guardia.res
+  const tenantId = guardia.tenantId
 
   try {
     const body = await request.json()
@@ -114,7 +199,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'safe_reward_title es requerido' }, { status: 400 })
     }
 
-    const tenantId = await requireTenantId()
     // La sede duena del nivel. `null` = de la MARCA, que es lo de siempre.
     const sede = sedePedida(typeof body.location_id === 'string' ? body.location_id : null)
     const db = getServiceClient()
@@ -284,16 +368,15 @@ export async function POST(request: NextRequest) {
 
 /** PATCH — Actualiza un reward tier existente. */
 export async function PATCH(request: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  const guardia = await exigirAlcanceDeMarca(request)
+  if (!guardia.ok) return guardia.res
+  const tenantId = guardia.tenantId
 
   try {
     const body = await request.json()
     const { id } = body
     if (!id) return NextResponse.json({ error: 'id requerido' }, { status: 400 })
 
-    const tenantId = await requireTenantId()
     const db = getServiceClient()
     const updates: Record<string, unknown> = {}
 
@@ -429,9 +512,9 @@ export async function PATCH(request: NextRequest) {
 
 /** DELETE — Soft-delete (desactiva) un tier. Si no tiene clientes, permite hard-delete. */
 export async function DELETE(request: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  const guardia = await exigirAlcanceDeMarca(request)
+  if (!guardia.ok) return guardia.res
+  const tenantId = guardia.tenantId
 
   try {
     const { searchParams } = new URL(request.url)
@@ -440,7 +523,6 @@ export async function DELETE(request: NextRequest) {
 
     if (!id) return NextResponse.json({ error: 'id requerido' }, { status: 400 })
 
-    const tenantId = await requireTenantId()
     const db = getServiceClient()
 
     // Verificar si hay clientes con este tier. Sin esto, un fallo de base aquí se

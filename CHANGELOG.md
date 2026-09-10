@@ -46,6 +46,9 @@ sale tanta redacción» (dueño).
 `docs/features/{calendar,whatsapp-templates}.md`.
 **De regalo:** una versión `retired` ya no revive si Meta la aprueba tarde — antes el webhook solo
 miraba `is_current` y una aprobación con 72h de retraso volvía a escribir el puntero con el texto viejo.
+Y una prueba nueva barre el banco entero exigiendo las variables en **orden ascendente**: las 6 de
+evento eran las únicas desordenadas (`1,3,4,5,2`, por la firma al final) y eso se paga con un rechazo
+de Meta 72h después, no al crear la plantilla.
 **Verificado:** `tsc` limpio en lo tocado · `tests/unit` entero en verde, con 4 pruebas nuevas en
 `template-catalog` (una MIDE cuánto texto fijo queda) · lint sin errores nuevos. **NO verificado:** nada contra Zernio — no se creó ninguna plantilla.
 **Aridad:** intacta (`{{1}}`..`{{5}}`); `calendar.service.ts` no se tocó y los 4 tenants Twilio quedan

@@ -507,22 +507,28 @@ imagen/video"*. Así que el texto fijo se redujo a lo que Meta **obliga**, y ni 
 
 - una plantilla no puede ser solo variables, ni empezar ni terminar con una → el saludo;
 - toda MARKETING lleva la salida → la línea de SALIR;
-- la firma `_— {{2}}_` es la misma de las otras 11: dice quién escribe sin gastar una frase.
+- `{{2}}` (la marca) va en su propia línea bajo el saludo, sin una frase que la presente.
 
-**Estilo `calido`** (`elegante` y `urbano` solo cambian el saludo):
+**Estilo `calido`** (`elegante` y `urbano` solo cambian el saludo; el emoji lo pone el
+`business_type` del tenant — 🍽️ restaurante, 💈 barbería, 💅 salón, ✨ el resto):
 
 ```
-¡Hola {{1}}! 🎉<emoji del rubro>
+¡Hola {{1}}! 🎉🍽️
+_{{2}}_
 
 *{{3}}*
 📅 {{4}}
 
 {{5}}
 
-_— {{2}}_
-
 _Responde SALIR para no recibir más mensajes._
 ```
+
+⚠️ **La marca va arriba, no como firma al final, por una razón dura: las variables tienen que ir en
+orden ASCENDENTE.** Con la firma abajo el cuerpo quedaba `1,3,4,5,2` — el único caso desordenado de
+las 39 combinaciones del banco. Meta numera en orden de aparición y un rechazo por eso no se ve al
+crear la plantilla: se ve 24-72h después, con las 25 cuentas ya sometidas. Hay una prueba que barre
+el banco entero.
 
 Sacando variables, firma y opt-out, lo que ponemos nosotros es **«¡Hola!»**: seis caracteres.
 Hay una prueba que lo mide y se cae si alguien vuelve a meter relleno.
@@ -538,10 +544,10 @@ después:
 | Los 3 estilos con voces distintas | Ya casi no se distinguen, y está bien: **el estilo lo pone la descripción del dueño**, no el marco |
 
 **La aridad es la misma** (`{{1}}`..`{{5}}`), así que `calendar.service.ts` manda lo mismo a los dos
-proveedores y no se tocó ni una línea del camino de envío. Hay cuatro pruebas que lo vigilan en
+proveedores y no se tocó ni una línea del camino de envío. Hay cinco pruebas que lo vigilan en
 `tests/unit/template-catalog.test.ts`: que las dos claves compartan cuerpo y variables, que debajo de
 `{{5}}` no quede una sola palabra nuestra, que el texto no hornee un momento del día ni una compañía,
-y que lo fijo no pase de 20 caracteres.
+que lo fijo no pase de 20 caracteres, y que en TODO el banco las variables vayan en orden ascendente.
 
 Para sacar de circulación las viejas de un tenant Zernio:
 [`SQL-PARA-CORRER/plantillas-evento-viejas/`](../SQL-PARA-CORRER/plantillas-evento-viejas/LEEME.md).

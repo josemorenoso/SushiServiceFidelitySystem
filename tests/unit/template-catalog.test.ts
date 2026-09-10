@@ -136,31 +136,26 @@ describe('banco de textos', () => {
     // El mensaje lo escribe el dueño en el formulario: {{5}} es su descripción
     // con el enlace pegado. El texto viejo remataba con "¡Te esperamos con tu
     // familia!" DESPUÉS de eso, o sea que le pisaba el llamado a la acción que
-    // acababa de escribir. Debajo de {{5}} solo pueden quedar la firma y el
-    // aviso de SALIR, que son las dos cosas que Meta y el catálogo obligan.
+    // acababa de escribir. Debajo de {{5}} solo puede quedar el aviso de SALIR,
+    // que es lo único que Meta obliga a poner ahí.
     for (const key of ['event_image', 'event_video'] as const) {
       for (const style of TEMPLATE_STYLES) {
         const cuerpo = buildTemplateBody(key, style, MARCA, RESTAURANTE)
-        expect(cuerpo.trim().endsWith(`{{5}}
-
-_— {{2}}_
-
-${OPT_OUT_LINE}`), `${key}/${style}`).toBe(true)
+        expect(cuerpo.trim().endsWith(`{{5}}\n\n${OPT_OUT_LINE}`), `${key}/${style}`).toBe(true)
       }
     }
   })
 
   it('las de evento son un MARCO: casi todo el cuerpo son datos del dueño', () => {
-    // La medida de "cuánta redacción nuestra queda": sacando las variables, la
-    // firma y el opt-out, no puede sobrar más que un saludo. Si alguien vuelve a
-    // meter una frase de relleno, este número se dispara y la prueba se cae.
+    // La medida de "cuánta redacción nuestra queda": sacando las variables y el
+    // opt-out, no puede sobrar más que un saludo. Si alguien vuelve a meter una
+    // frase de relleno, este número se dispara y la prueba se cae.
     for (const key of ['event_image', 'event_video'] as const) {
       for (const style of TEMPLATE_STYLES) {
         const nuestro = buildTemplateBody(key, style, MARCA, RESTAURANTE)
           .replace(OPT_OUT_LINE, '')
-          .replace('_— {{2}}_', '')
           .replace(/\{\{\d+\}\}/g, '')
-          .replace(/[\s*📅🎉🙌✨💈💅🍽️]/gu, '')
+          .replace(/[\s*_📅🎉🙌✨💈💅🍽️]/gu, '')
         expect(nuestro.length, `${key}/${style}: "${nuestro}"`).toBeLessThanOrEqual(20)
       }
     }
@@ -178,6 +173,22 @@ ${OPT_OUT_LINE}`), `${key}/${style}`).toBe(true)
         for (const palabra of PROHIBIDOS) {
           expect(cuerpo, `${key}/${style} hornea "${palabra}"`).not.toContain(palabra)
         }
+      }
+    }
+  })
+
+  it('en TODO el banco las variables van en orden ascendente', () => {
+    // Las 39 combinaciones menos las 6 de evento ya cumplían esto sin que nadie
+    // lo hubiera escrito. Las de evento no: con la firma de la marca al final el
+    // cuerpo quedaba `1,3,4,5,2`. Meta numera en orden de aparición y un rechazo
+    // por esto no se ve al crear la plantilla — se ve 24-72h después, cuando ya
+    // se sometió en las 25 cuentas.
+    for (const t of TEMPLATE_CATALOG) {
+      for (const style of TEMPLATE_STYLES) {
+        const orden = [...buildTemplateBody(t.key, style, MARCA, RESTAURANTE).matchAll(/\{\{(\d+)\}\}/g)]
+          .map((m) => Number(m[1]))
+        const ascendente = [...orden].sort((a, b) => a - b)
+        expect(orden, `${t.key}/${style}: ${orden.join(',')}`).toEqual(ascendente)
       }
     }
   })

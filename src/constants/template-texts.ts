@@ -85,8 +85,11 @@ export type TemplateBodyBuilder = (brandName: string, emoji: string) => string
  *  1. Una plantilla no puede ser solo variables ni empezar o terminar con una
  *     → de ahí el saludo y la línea de SALIR, y nada en el medio.
  *  2. Toda plantilla MARKETING lleva la salida (`OPT_OUT_LINE`).
- *  3. La firma `_— {{2}}_` es la misma que usan las otras 11 del catálogo: le
- *     dice al cliente quién le escribe sin gastar una frase en decirlo.
+ *  3. `{{2}}` (la marca) va en su propia línea bajo el saludo, sin una frase que
+ *     la presente. Ahí y no al final por una razón dura: **las variables van en
+ *     orden ASCENDENTE**. Con la firma abajo el cuerpo quedaba `1,3,4,5,2`, el
+ *     único caso desordenado de las 39 combinaciones del banco, y un rechazo de
+ *     Meta por eso se descubre 72 horas después. Lo vigila una prueba.
  *
  * Todo lo demás lo pone el dueño en el formulario: `{{3}}` su título, `{{4}}` su
  * fecha y `{{5}}` su descripción con el enlace pegado (`buildEventCta()`). El
@@ -103,11 +106,11 @@ export type TemplateBodyBuilder = (brandName: string, emoji: string) => string
  */
 const EVENT_INVITE_TEXTS: Record<TemplateStyle, TemplateBodyBuilder> = {
   calido: (_brand, emoji) =>
-    `¡Hola {{1}}! 🎉${emoji}\n\n*{{3}}*\n📅 {{4}}\n\n{{5}}\n\n_— {{2}}_\n\n${OPT_OUT_LINE}`,
+    `¡Hola {{1}}! 🎉${emoji}\n_{{2}}_\n\n*{{3}}*\n📅 {{4}}\n\n{{5}}\n\n${OPT_OUT_LINE}`,
   elegante: () =>
-    `Hola {{1}},\n\n*{{3}}*\nFecha: {{4}}\n\n{{5}}\n\n_— {{2}}_\n\n${OPT_OUT_LINE}`,
+    `Hola {{1}},\n_{{2}}_\n\n*{{3}}*\nFecha: {{4}}\n\n{{5}}\n\n${OPT_OUT_LINE}`,
   urbano: () =>
-    `¡Qué más, {{1}}! 🙌\n\n*{{3}}*\n📅 {{4}}\n\n{{5}}\n\n_— {{2}}_\n\n${OPT_OUT_LINE}`,
+    `¡Qué más, {{1}}! 🙌\n_{{2}}_\n\n*{{3}}*\n📅 {{4}}\n\n{{5}}\n\n${OPT_OUT_LINE}`,
 }
 
 /**

@@ -32,6 +32,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Píxel de Meta + política de privacidad (dueño, 2026-09-10) | Opus 5 | `src/lib/meta-pixel.ts`, `src/lib/tenant-config-paths.ts`, `src/components/features/analytics/*`, `src/app/(public)/layout.tsx`, `src/app/(public)/privacidad/page.tsx`, `src/components/features/check-in/CheckInForm.tsx`, `src/app/(dashboard)/dashboard/marca/*`, `tests/unit/meta-pixel.test.ts`, `.env.example`, `docs/features/meta-pixel.md` | — | en curso |
 
 ## 3. Siguiente, en orden
 

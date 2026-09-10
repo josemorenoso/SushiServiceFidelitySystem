@@ -124,6 +124,12 @@ dentro de `{{5}}` (el CTA) al enviar:
 WhatsApp lo vuelve clicleable igual, porque es texto del cuerpo del mensaje. Cero plantillas nuevas,
 cero re-aprobación, y funciona hoy con la plantilla que ya está viva.
 
+⚠️ **Dónde aparece el enlace depende del proveedor.** En la plantilla **Twilio** aprobada, debajo de
+`{{5}}` va todavía un cierre fijo («¡Te esperamos con tu familia!»), así que el enlace sale **en la
+mitad** del mensaje. En el cuerpo **Zernio** nuevo (2026-09-10) ese cierre ya no existe: `{{5}}` es lo
+último antes del aviso de SALIR y el enlace queda al final, que es lo que el formulario promete
+(«Va al final del mensaje y WhatsApp lo muestra clicleable»). Ver `docs/PLANTILLAS.md` § Plantilla 12.
+
 `buildEventCta()` y `normalizeEventLink()` son **puras** y viven en `calendar.service.ts`;
 `tests/unit/evento-link.test.ts` fija su comportamiento.
 

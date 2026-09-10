@@ -35,6 +35,7 @@ import {
   type CatalogTemplate,
   type TemplateKey,
   type TemplateStyle,
+  type TemplateVariable,
   type TemplateVersionStyle,
 } from '@/types/template.types'
 
@@ -128,6 +129,32 @@ export function resolveTemplateEmoji(
 
 const ROADMAP_SAMPLE =
   '🥉 Bronce (150 pts) → Bebida gratis — te faltan 23 pts 🔥 · 🥈 Plata (350 pts) → Postre gratis · 🥇 Oro (600 pts) → Plato fuerte · 🖤 BLACK (1000 pts) → Experiencia Chef'
+
+/**
+ * Las 5 variables de las dos plantillas de evento — las mismas para imagen y
+ * video, porque el mensaje es el mismo y solo cambia el header.
+ *
+ * Las MUESTRAS son lo que Meta revisa y lo que el dueño ve en la vista previa,
+ * así que copian el formulario del calendario campo por campo: título,
+ * descripción / CTA corta y enlace opcional. La de `{{5}}` trae el enlace
+ * pegado con " 👉 " porque así lo arma `buildEventCta()` — antes decía
+ * "¡Te esperamos con tu familia!", que además de no ser el dato real repetía
+ * palabra por palabra el cierre que el cuerpo traía horneado.
+ *
+ * ⚠️ La aridad NO se amplía. El enlace se compone DENTRO de `{{5}}`: una
+ * variable nueva obliga a re-aprobar en las 25 cuentas, 24-72h cada una.
+ */
+const EVENT_VARIABLES: readonly TemplateVariable[] = [
+  { index: 1, label: 'Nombre del cliente', sample: 'María' },
+  { index: 2, label: 'Nombre del negocio', sample: BRAND_TOKEN },
+  { index: 3, label: 'Título del evento', sample: 'Aniversario 5 años' },
+  { index: 4, label: 'Fecha del evento', sample: 'sábado 14 de junio' },
+  {
+    index: 5,
+    label: 'Descripción / CTA corta (con el enlace, si pusiste uno)',
+    sample: '¡Promo 2×1 todo el día! Te esperamos. 👉 https://tucarta.com/aniversario',
+  },
+]
 
 export const TEMPLATE_CATALOG: readonly CatalogTemplate[] = [
   {
@@ -293,15 +320,9 @@ export const TEMPLATE_CATALOG: readonly CatalogTemplate[] = [
     baseName: 'evento_imagen',
     category: 'MARKETING',
     label: 'Invitación a evento — con imagen',
-    description: 'Invitación a un evento del calendario, encabezada por un flyer.',
+    description: 'Invitación a un evento del calendario: título, fecha y tu llamado a la acción, encabezados por el flyer.',
     whenSent: 'Cuando programas un evento con imagen en el Calendario.',
-    variables: [
-      { index: 1, label: 'Nombre del cliente', sample: 'María' },
-      { index: 2, label: 'Nombre del negocio', sample: BRAND_TOKEN },
-      { index: 3, label: 'Nombre del evento', sample: 'Festival Gastronómico' },
-      { index: 4, label: 'Fecha del evento', sample: 'sábado 14 de junio' },
-      { index: 5, label: 'Cierre / llamado a la acción', sample: '¡Te esperamos con tu familia! 🍽️' },
-    ],
+    variables: EVENT_VARIABLES,
     header: { format: 'image' },
   },
   {
@@ -310,15 +331,9 @@ export const TEMPLATE_CATALOG: readonly CatalogTemplate[] = [
     baseName: 'evento_video',
     category: 'MARKETING',
     label: 'Invitación a evento — con video',
-    description: 'La misma invitación, pero encabezada por un video en vez de una imagen.',
+    description: 'La misma invitación, palabra por palabra, pero encabezada por un video en vez de una imagen.',
     whenSent: 'Cuando programas un evento con video en el Calendario.',
-    variables: [
-      { index: 1, label: 'Nombre del cliente', sample: 'María' },
-      { index: 2, label: 'Nombre del negocio', sample: BRAND_TOKEN },
-      { index: 3, label: 'Nombre del evento', sample: 'Festival Gastronómico' },
-      { index: 4, label: 'Fecha del evento', sample: 'sábado 14 de junio' },
-      { index: 5, label: 'Cierre / llamado a la acción', sample: '¡Te esperamos con tu familia! 🍽️' },
-    ],
+    variables: EVENT_VARIABLES,
     header: { format: 'video' },
   },
 ] as const

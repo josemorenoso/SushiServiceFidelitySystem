@@ -776,7 +776,13 @@ async function promoteVersion(version: TemplateVersion): Promise<void> {
 
 export type TemplateStatusOutcome =
   | { handled: false; reason: string }
-  | { handled: true; action: 'promoted' | 'rejected' | 'noted'; templateKey: TemplateKey }
+  | {
+      handled: true
+      action: 'promoted' | 'rejected' | 'noted'
+      templateKey: TemplateKey
+      /** Por qué se anotó sin actuar. Solo lo llena `noted`, para el log. */
+      reason?: string
+    }
 
 export interface ProviderTemplateStatusInput {
   provider: 'zernio' | 'twilio'
@@ -838,6 +844,19 @@ export async function applyProviderTemplateStatus(
   if (input.status === 'APPROVED') {
     if (version.is_current) {
       return { handled: true, action: 'noted', templateKey: version.template_key }
+    }
+    // Una versión RETIRADA no vuelve. `retired` significa que ya la reemplazó
+    // otra (o que se la retiró a mano para rehacer el texto): promoverla acá
+    // pisaría el puntero con el mensaje viejo y degradaría a la vigente, sin
+    // que nadie apretara nada. Pasa de verdad — Meta aprueba con 24-72h de
+    // retraso, y en ese hueco cabe una edición entera.
+    if (version.status === 'retired') {
+      return {
+        handled: true,
+        action: 'noted',
+        templateKey: version.template_key,
+        reason: `${input.providerRef} ya estaba retirada: se ignora la aprobación tardía`,
+      }
     }
     await promoteVersion(version)
     return { handled: true, action: 'promoted', templateKey: version.template_key }

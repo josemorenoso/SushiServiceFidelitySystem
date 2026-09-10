@@ -464,14 +464,14 @@ en caliente antes de despachar un evento.
 https://bredfyugmjjctxysnasw.supabase.co/storage/v1/object/public/event-media/{{6}}
 ```
 
-**Samples con los que Meta la aprobó:**
+**Samples con los que Meta aprobó la Twilio:**
 
 ```json
 {"1":"María","2":"\"Sushi Service Barra\"","3":"Festival Gastronómico",
  "4":"sábado 14 de junio","5":"¡Te esperamos con tu familia! 🍽️","6":"5103017800669793459.jpg"}
 ```
 
-**Cuerpo, literal:**
+**Cuerpo, literal — SOLO Twilio (los 4 tenants viejos):**
 
 ```
 ¡Hola {{1}}! 🎉
@@ -488,9 +488,49 @@ https://bredfyugmjjctxysnasw.supabase.co/storage/v1/object/public/event-media/{{
 _Responde SALIR para no recibir más mensajes._
 ```
 
-⚠️ **`{{5}}` NO es la última línea del mensaje.** Debajo van el cierre fijo y el aviso de SALIR. Como
-el enlace del evento (`link_url`, 00050) se pega al final de `{{5}}`, en el teléfono aparece **en
-medio**, no al final. Es a propósito: la alternativa era un `{{7}}` y re-aprobar en las 25 cuentas.
+⚠️ **En la Twilio, `{{5}}` NO es la última línea.** Debajo van el cierre fijo y el aviso de SALIR.
+Como el enlace del evento (`link_url`, 00050) se pega al final de `{{5}}`, en el teléfono aparece
+**en medio**, no al final. Se queda así: está aprobada y tocarla cuesta otra revisión de Meta.
+
+### Zernio (catálogo estándar) — el cuerpo NUEVO, 2026-09-10
+
+Los tenants Zernio nacen con **otro texto**, reescrito contra el formulario del calendario por
+decisión del dueño. Vive una sola vez en `EVENT_INVITE_TEXTS`
+([`src/constants/template-texts.ts`](../src/constants/template-texts.ts)) y lo comparten las dos
+claves: **`event_image` y `event_video` dicen exactamente lo mismo**, y lo único que las separa es
+el formato del header, que Meta congela al aprobar (una aprobada con header de imagen rechaza un
+MP4 al enviar, y al revés — por eso son dos registros y no uno).
+
+**Estilo `calido`** (los otros dos, `elegante` y `urbano`, están en el mismo archivo):
+
+```
+¡Hola {{1}}! 🎉
+
+*{{2}}* tiene algo para ti:
+*{{3}}* <emoji del rubro>
+
+📅 {{4}}
+
+{{5}}
+
+_Responde SALIR para no recibir más mensajes._
+```
+
+**Qué cambió y por qué** — los tres eran texto horneado, y Meta aprueba el literal:
+
+| Antes | Ahora | Por qué |
+|---|---|---|
+| «vivir una **noche** especial» | «tiene algo para ti» | El calendario no filtra por hora y su campo *Tipo* incluye promo, activación y aniversario: una promo de mediodía salía invitando a una noche |
+| Cierre fijo «¡Te esperamos con **tu familia**!» después de `{{5}}` | Sin cierre fijo | `{{5}}` **es** el llamado a la acción que el dueño escribió; el cierre se lo pisaba. Y ahora el enlace sí queda al final, como promete el formulario |
+| Muestra de `{{5}}` = ese mismo cierre | `¡Promo 2×1 todo el día! Te esperamos. 👉 https://…` | La muestra es lo que revisa Meta y lo que el dueño ve en la vista previa: mostraba la frase repetida dos veces en vez del dato real |
+
+**La aridad es la misma** (`{{1}}`..`{{5}}`), así que `calendar.service.ts` manda lo mismo a los dos
+proveedores y no se tocó ni una línea del camino de envío. Hay tres pruebas que lo vigilan en
+`tests/unit/template-catalog.test.ts`: que las dos claves compartan cuerpo y variables, que `{{5}}`
+sea lo último antes del opt-out, y que el texto no hornee un momento del día ni una compañía.
+
+Para sacar de circulación las viejas de un tenant Zernio:
+[`SQL-PARA-CORRER/plantillas-evento-viejas/`](../SQL-PARA-CORRER/plantillas-evento-viejas/LEEME.md).
 
 ### Media dinámica — cómo funciona
 
@@ -531,6 +571,9 @@ audiencia entera, no el de un cliente. Ver `docs/features/calendar.md` § "Enlac
 
 **Key en admin_settings:** `event_template_video_sid`
 **Tipo Twilio:** `twilio/media` · **Idéntica a la 12 pero con HEADER video MP4.**
+
+En Zernio comparte el cuerpo con la 12 **palabra por palabra** (`EVENT_INVITE_TEXTS`); en Twilio
+comparte la estructura vieja. En los dos casos lo único que cambia es el formato del header.
 
 🔴 **Hoy no existe en ninguna cuenta.** La única que se intentó (`evento_video_sushi_service_barra`,
 master) está **rejected** por Meta: *"Error downloading invalid media URL"* — el sample apuntaba a un

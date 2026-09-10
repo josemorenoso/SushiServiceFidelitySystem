@@ -116,6 +116,52 @@ describe('banco de textos', () => {
       expect(buildTemplateExample(key, MARCA)[1]).toBe(MARCA)
     }
   })
+
+  it('las dos de evento dicen EXACTAMENTE lo mismo: solo cambia el header', () => {
+    // Meta congela el formato del header al aprobar, así que la invitación tiene
+    // que registrarse dos veces (imagen y video). El texto, no: dos literales
+    // gemelos se despegan al primer retoque y el cliente recibe un mensaje
+    // distinto según haya subido un JPG o un MP4.
+    for (const style of TEMPLATE_STYLES) {
+      expect(buildTemplateBody('event_video', style, MARCA, RESTAURANTE), style).toBe(
+        buildTemplateBody('event_image', style, MARCA, RESTAURANTE)
+      )
+    }
+    expect(TEMPLATE_CATALOG_BY_KEY.event_video.variables).toEqual(
+      TEMPLATE_CATALOG_BY_KEY.event_image.variables
+    )
+  })
+
+  it('en las de evento, {{5}} es lo último antes del opt-out', () => {
+    // El formulario del calendario promete que el enlace "va al final del
+    // mensaje". El texto viejo remataba con un "¡Te esperamos con tu familia!"
+    // DESPUÉS de {{5}}, así que el enlace quedaba en la mitad y el cierre fijo
+    // le pisaba el llamado a la acción que el dueño acababa de escribir.
+    for (const key of ['event_image', 'event_video'] as const) {
+      for (const style of TEMPLATE_STYLES) {
+        const cuerpo = buildTemplateBody(key, style, MARCA, RESTAURANTE)
+        expect(cuerpo.trim().endsWith(`{{5}}
+
+${OPT_OUT_LINE}`), `${key}/${style}`).toBe(true)
+      }
+    }
+  })
+
+  it('las de evento no hornean un momento del día ni una compañía', () => {
+    // El calendario no filtra por hora y su campo Tipo incluye promo,
+    // activación y aniversario: "vivir una noche especial" salía igual en una
+    // promo de mediodía. Y "con tu familia" no lo decide el texto: lo decide el
+    // dueño en la descripción, que viaja en {{5}}.
+    const PROHIBIDOS = ['noche', 'familia', 'mediodía', 'tarde']
+    for (const key of ['event_image', 'event_video'] as const) {
+      for (const style of TEMPLATE_STYLES) {
+        const cuerpo = buildTemplateBody(key, style, MARCA, RESTAURANTE).toLowerCase()
+        for (const palabra of PROHIBIDOS) {
+          expect(cuerpo, `${key}/${style} hornea "${palabra}"`).not.toContain(palabra)
+        }
+      }
+    }
+  })
 })
 
 describe('emoji de marca', () => {

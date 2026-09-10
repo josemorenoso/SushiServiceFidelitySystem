@@ -334,6 +334,14 @@ video de la cuenta master quedó `rejected` con *"Error downloading invalid medi
 Las dos son **de una sola vez para todo el despliegue**, no por tenant: solo las mira Meta al aprobar.
 Cada evento real manda después su propia imagen.
 
+⚠️ **`Zernio respondió 502: Media upload failed: fetch failed` no es un problema de la plantilla.**
+Es Zernio diciendo que no pudo **bajar** el archivo de esa variable. Pasó el 2026-09-09 con
+`evento_imagen` mientras `evento_video` se creaba sin problema, o sea que la URL del video estaba
+bien y la de la imagen no. Se diagnostica en diez segundos: abrí la URL de la variable en una
+pestaña de incógnito. Si no te muestra el archivo, no existe en el bucket `event-media` o el nombre
+no coincide (típico: se subió `.png` y la variable dice `.jpg`). La variable va en las env de **este**
+software, no en las del AIOS, y el bucket tiene que ser el del proyecto `bredfyugmjjctxysnasw`.
+
 ## Lo que falta / decisiones no tomadas
 
 - **No se borra la plantilla vieja del proveedor.** §12 dice que al aprobar la nueva "se borra la
@@ -341,6 +349,10 @@ Cada evento real manda después su propia imagen.
   consultar) y esa doc prohíbe explícitamente inventar rutas. Lo que sí se hace —dejar de apuntarla y
   marcarla `retired`— resuelve el problema real; la plantilla queda huérfana en la WABA, sin costo ni
   efecto sobre el envío. **Si Zernio confirma un endpoint de borrado, el gancho es `retired_at`.**
+- **Una versión `retired` no revive** (2026-09-10). Si Meta aprueba con retraso una plantilla que ya
+  se había retirado, `applyProviderTemplateStatus()` **ignora** esa aprobación: promoverla pisaría el
+  puntero con el mensaje viejo y degradaría a la vigente sin que nadie apretara nada, y entre la
+  edición y el veredicto de Meta caben 72 horas. Antes solo se miraba `is_current`.
 - **Meta puede PAUSAR una plantilla ya vigente** por baja calidad. §12 no dice qué hacer con eso y no
   se inventó una política: se registra y se avisa en el log, el puntero no se toca. Es material del
   Bloque 3 de gobernanza de envío.

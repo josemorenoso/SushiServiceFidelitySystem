@@ -33,10 +33,14 @@
  * orden y no sabe qué estilo tiene el tenant.
  *
  * ⚠️ `calido` es un PORT LITERAL del catálogo ya en producción
- * (`scripts/twilio-create-text-templates.mjs` /`twilio-create-media-templates.mjs`,
- * portado a Zernio en `Level 2.0/aios-constelarys/src/lib/zernio/templates-catalog.ts`).
+ * (`scripts/twilio-create-text-templates.mjs`, portado a Zernio en
+ * `Level 2.0/aios-constelarys/src/lib/zernio/templates-catalog.ts`).
  * §12 respuesta 2: "Tono por defecto: cálido — el actual. Sin cambios en el
  * default". No tocar estos textos sin una decisión explícita del dueño.
+ * ÚNICA excepción, por decisión del dueño del 2026-09-10: las dos de evento
+ * (`EVENT_INVITE_TEXTS`) se reescribieron contra el formulario del calendario y
+ * ya NO son el port de `twilio-create-media-templates.mjs`. Las plantillas
+ * Twilio ya aprobadas de los 4 tenants viejos siguen intactas.
  * Nota para el dueño: los textos `calido` traen ${emoji} horneado (nacieron para
  * Sushi Service). En un tenant que no sea de comida japonesa ese emoji se ve
  * fuera de lugar. `elegante` y `urbano` nacen neutrales al tipo de negocio.
@@ -63,6 +67,46 @@ export const OPT_OUT_LINE = '_Responde SALIR para no recibir más mensajes._'
  * una función de menos parámetros sigue siendo asignable.
  */
 export type TemplateBodyBuilder = (brandName: string, emoji: string) => string
+
+/**
+ * LA INVITACIÓN A UN EVENTO — un solo texto para `event_image` y `event_video`.
+ *
+ * Las dos claves apuntan a ESTE mismo objeto porque el mensaje es idéntico: lo
+ * único que las separa es el formato del header, y Meta lo congela al aprobar
+ * (una plantilla aprobada con header de imagen rechaza un MP4 al enviar, y al
+ * revés). Por eso son dos registros y no uno, y por eso el texto se escribe una
+ * sola vez: dos literales gemelos se despegan al primer retoque.
+ *
+ * ESTÁ ESCRITO CONTRA EL FORMULARIO DEL CALENDARIO, no contra un evento
+ * imaginario. Lo que el dueño teclea es: título, descripción / CTA corta,
+ * enlace opcional, fecha y tipo (promo, festival, activación, aniversario u
+ * otro). De ahí las tres reglas de esta redacción:
+ *
+ *  1. **Nada de "noche".** El texto anterior invitaba a "vivir una noche
+ *     especial" y el calendario no filtra por hora: una promo de mediodía salía
+ *     invitando a una noche. Meta aprueba el literal, así que no se arregla
+ *     después.
+ *  2. **Nada de cierre fijo.** El anterior remataba con "¡Te esperamos con tu
+ *     familia!" DESPUÉS de `{{5}}`, que es justo el llamado a la acción que el
+ *     dueño escribió: el mensaje se contradecía consigo mismo y el formulario
+ *     promete que el enlace "va al final del mensaje". Ahora `{{5}}` es lo
+ *     último antes del aviso de SALIR.
+ *  3. **Ni un rubro horneado.** Sirve igual para un restaurante, una barbería o
+ *     un salón: lo único que cambia es `${emoji}`.
+ *
+ * ⚠️ Esto NO toca las plantillas Twilio ya aprobadas de los 4 tenants viejos,
+ * que conservan su cuerpo con cierre fijo y su `{{6}}`. La aridad es la misma
+ * ({{1}}..{{5}}), así que `calendar.service.ts` manda lo mismo a los dos
+ * proveedores. Ver docs/PLANTILLAS.md § "Plantilla 12".
+ */
+const EVENT_INVITE_TEXTS: Record<TemplateStyle, TemplateBodyBuilder> = {
+  calido: (_brand, emoji) =>
+    `¡Hola {{1}}! 🎉\n\n*{{2}}* tiene algo para ti:\n*{{3}}* ${emoji}\n\n📅 {{4}}\n\n{{5}}\n\n${OPT_OUT_LINE}`,
+  elegante: () =>
+    `Hola {{1}},\n\nQueremos contarte lo que preparamos en *{{2}}*:\n*{{3}}*\n\nFecha: {{4}}\n\n{{5}}\n\n${OPT_OUT_LINE}`,
+  urbano: () =>
+    `¡Hola {{1}}! 👀\n\nOjo con esto que armó *{{2}}*:\n*{{3}}*\n\n📅 {{4}}\n\n{{5}}\n\n${OPT_OUT_LINE}`,
+}
 
 /**
  * El banco. El tipo `Record<TemplateKey, Record<TemplateStyle, ...>>` obliga a
@@ -214,33 +258,12 @@ export const TEMPLATE_TEXTS: Record<TemplateKey, Record<TemplateStyle, TemplateB
   },
 
   // ─────────────────────────────────────────────────────────────
-  // 12 · Evento con imagen — MARKETING (header de media)
-  //      {{1}} nombre · {{2}} marca · {{3}} evento · {{4}} fecha · {{5}} cierre
-  //      OJO: aquí la marca es la VARIABLE {{2}}, no va horneada — igual que en
-  //      el script de media original y en calendar.service.ts.
+  // 12 y 13 · Invitación a un evento del calendario — MARKETING
+  //      {{1}} nombre · {{2}} marca · {{3}} título · {{4}} fecha · {{5}} CTA
+  //      UN SOLO texto para las dos: lo único que las separa es el formato del
+  //      header (imagen o video), que Meta congela al aprobar. Ver el porqué de
+  //      la duplicación de claves sobre `EVENT_INVITE_TEXTS`.
   // ─────────────────────────────────────────────────────────────
-  event_image: {
-    calido: (_brand, emoji) =>
-      `¡Hola {{1}}! 🎉\n\n*{{2}}* tiene el placer de invitarte a vivir una noche especial:\n*{{3}}* ${emoji}\n\n📅 {{4}}\n\n{{5}}\n\n¡Te esperamos con tu familia!\n\n${OPT_OUT_LINE}`,
-    elegante: () =>
-      `Hola {{1}},\n\n*{{2}}* tiene el gusto de invitarte a una ocasión especial:\n*{{3}}*\n\nFecha: {{4}}\n\n{{5}}\n\nSerá un placer contar con tu presencia.\n\n${OPT_OUT_LINE}`,
-    urbano: () =>
-      `¡Hola {{1}}! 🎉\n\n*{{2}}* te invita a algo que no te puedes perder:\n*{{3}}*\n\n📅 {{4}}\n\n{{5}}\n\n¡Trae a los tuyos!\n\n${OPT_OUT_LINE}`,
-  },
-
-  // ─────────────────────────────────────────────────────────────
-  // 13 · Evento con video — MARKETING (header de media)
-  //      Mismo cuerpo que `event_image`: lo único que cambia es el formato del
-  //      header. Se mantienen como dos plantillas separadas porque Meta aprueba
-  //      el header junto con el cuerpo, y el calendario elige una u otra según
-  //      `event.media_type`.
-  // ─────────────────────────────────────────────────────────────
-  event_video: {
-    calido: (_brand, emoji) =>
-      `¡Hola {{1}}! 🎉\n\n*{{2}}* tiene el placer de invitarte a vivir una noche especial:\n*{{3}}* ${emoji}\n\n📅 {{4}}\n\n{{5}}\n\n¡Te esperamos con tu familia!\n\n${OPT_OUT_LINE}`,
-    elegante: () =>
-      `Hola {{1}},\n\n*{{2}}* tiene el gusto de invitarte a una ocasión especial:\n*{{3}}*\n\nFecha: {{4}}\n\n{{5}}\n\nSerá un placer contar con tu presencia.\n\n${OPT_OUT_LINE}`,
-    urbano: () =>
-      `¡Hola {{1}}! 🎉\n\n*{{2}}* te invita a algo que no te puedes perder:\n*{{3}}*\n\n📅 {{4}}\n\n{{5}}\n\n¡Trae a los tuyos!\n\n${OPT_OUT_LINE}`,
-  },
+  event_image: EVENT_INVITE_TEXTS,
+  event_video: EVENT_INVITE_TEXTS,
 }

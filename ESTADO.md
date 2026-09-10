@@ -32,6 +32,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Plantillas de evento del calendario: un solo texto, dos headers (dueño, 2026-09-10) | Opus 5 | `src/constants/template-texts.ts`, `src/constants/template-catalog.ts`, `src/services/calendar.service.ts`, `tests/unit/template-catalog.test.ts`, `SQL-PARA-CORRER/plantillas-evento-viejas/`, `docs/PLANTILLAS.md`, `docs/features/calendar.md`, `docs/features/whatsapp-templates.md` | — | en curso |
 
 ## 3. Siguiente, en orden
 

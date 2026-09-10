@@ -6,6 +6,8 @@ import { Toaster, toast } from 'sonner'
 import { BrandMark } from '@/components/features/branding'
 import type { CheckInResult, RegisterResult, TierUnlockedInfo, NextTierInfo, TierItem } from '@/components/features/check-in/CheckInForm.types'
 import { useBranding } from '@/lib/branding-context'
+import { META_EVENT_CHECK_IN, META_EVENT_REGISTER } from '@/lib/meta-pixel'
+import { trackMetaEvent } from '@/lib/meta-pixel-client'
 
 type PageState =
   | { view: 'form'; phone?: string }
@@ -18,6 +20,9 @@ export default function CheckInPage() {
   const [state, setState] = useState<PageState>({ view: 'form' })
 
   const handleRegisterSuccess = useCallback((result: RegisterResult, phone: string) => {
+    // Un cliente NUEVO. Es el evento con el que se optimiza una campaña de Meta.
+    // No viaja ni el celular ni el nombre: solo la marca y la sede (meta-pixel.ts).
+    trackMetaEvent(META_EVENT_REGISTER, 'check-in')
     setState({
       view: 'success',
       type: 'welcome',
@@ -35,6 +40,13 @@ export default function CheckInPage() {
       : result.message === 'points_earned' ? 'points_earned'
       : result.message === 'duplicate' ? 'duplicate'
       : 'welcome_back'
+
+    // Un cliente que VUELVE. El duplicado queda afuera a propósito: es el mismo
+    // cliente en la misma visita apretando de nuevo, y contarlo infla la
+    // audiencia de "los que vuelven" con gente que no volvió.
+    if (resultType !== 'duplicate') {
+      trackMetaEvent(META_EVENT_CHECK_IN, 'check-in')
+    }
 
     setState({
       view: 'success',

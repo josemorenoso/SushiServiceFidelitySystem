@@ -6,8 +6,8 @@
  * escribe entero — escribe rutas de una lista cerrada. Estas pruebas fijan las
  * dos mitades de esa garantía:
  *
- *   · lo que NO está en la lista no llega nunca al patch (incluido el espacio
- *     `integrations`, reservado para las cuentas de Google y Meta que vienen);
+ *   · lo que NO está en la lista no llega nunca al patch (incluido casi todo el
+ *     espacio `integrations`, del que solo se abrió `meta_pixel_id`);
  *   · lo que sí está, llega VALIDADO y con la forma anidada que espera
  *     `merge_tenant_config_deep()`.
  */
@@ -36,13 +36,34 @@ describe('lo que la lista deja pasar y lo que no', () => {
     }
   })
 
-  it('NO deja tocar `integrations`: ese espacio no se abre agregando una línea acá', () => {
-    // Es la puerta que se dejó abierta para las cuentas de Google y de Meta. Se
-    // abre desde su propio flujo de OAuth, y sin tokens dentro de `config`.
+  it('de `integrations` solo se abrió el píxel de Meta, y nada más', () => {
+    // 2026-09-10: el espacio dejó de estar entero afuera. Entró UNA ruta, porque
+    // un id de píxel es público y no lo escribe ningún OAuth. Todo lo demás
+    // —empezando por cualquier cosa que huela a credencial— sigue afuera.
+    expect(isEditablePath('integrations.meta_pixel_id')).toBe(true)
     for (const path of ['integrations', 'integrations.google', 'integrations.meta.page_id']) {
       expect(isEditablePath(path)).toBe(false)
     }
     const built = buildConfigPatch({ 'integrations.google': { refresh_token: 'x' } })
+    expect(built.ok).toBe(false)
+  })
+
+  it('el píxel de Meta llega anidado y normalizado, y el vacío lo desconecta', () => {
+    const built = buildConfigPatch({ 'integrations.meta_pixel_id': ' 1234-5678 9012 3456 ' })
+    expect(built.ok).toBe(true)
+    if (!built.ok) return
+    expect(built.patch).toEqual({ integrations: { meta_pixel_id: '1234567890123456' } })
+
+    const vacío = buildConfigPatch({ 'integrations.meta_pixel_id': '' })
+    expect(vacío.ok).toBe(true)
+    if (!vacío.ok) return
+    expect(vacío.patch).toEqual({ integrations: { meta_pixel_id: '' } })
+  })
+
+  it('rechaza el error real: pegar el snippet entero en vez del número', () => {
+    const built = buildConfigPatch({
+      'integrations.meta_pixel_id': "<script>fbq('init', '1234567890123456');</script>",
+    })
     expect(built.ok).toBe(false)
   })
 })
@@ -216,7 +237,7 @@ describe('projectEditablePaths — lo que el GET le devuelve al panel', () => {
     const projected = projectEditablePaths({
       brand_name: 'Sushi Service',
       delivery_default_city: 'Envigado',
-      integrations: { google: { refresh_token: 'SECRETO' } },
+      integrations: { meta_pixel_id: '1234567890123456', google: { refresh_token: 'SECRETO' } },
       branding: { primary: '#0a7c4a', logo_url: 'https://cdn.example/l.png' },
       qr_studio: { theme: 'sushi', tables: 14 },
     })
@@ -225,10 +246,14 @@ describe('projectEditablePaths — lo que el GET le devuelve al panel', () => {
     expect(projected['qr_studio.tables']).toBe(14)
     expect(projected['branding.surface']).toBeUndefined()
 
-    // Ni el nombre de la marca ni NADA de `integrations` sale por este endpoint.
+    // De `integrations` sale EXACTAMENTE una clave: el id del píxel, que es
+    // público. Todo lo demás de ese espacio —empezando por cualquier cosa que
+    // huela a credencial— se queda del lado del servidor.
+    expect(projected['integrations.meta_pixel_id']).toBe('1234567890123456')
+    expect(Object.keys(projected).filter((k) => k.startsWith('integrations')))
+      .toEqual(['integrations.meta_pixel_id'])
     expect(JSON.stringify(projected)).not.toContain('SECRETO')
     expect(Object.keys(projected)).not.toContain('brand_name')
-    expect(Object.keys(projected).some((k) => k.startsWith('integrations'))).toBe(false)
   })
 
   it('una config vacía no revienta', () => {

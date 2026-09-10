@@ -8,6 +8,24 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [2026-09-10] - El píxel de Meta, y la política de privacidad que lo dice
+
+**Qué:** las páginas públicas disparan el píxel de Meta con `PageView`, `CompleteRegistration`
+(cliente nuevo) y `CheckIn` (cliente que vuelve). **Dos píxeles, no uno**: el de Cada1
+(`NEXT_PUBLIC_META_PIXEL_ID`, el mismo en las 25 marcas) y el propio de cada restaurante
+(`tenants.config.integrations.meta_pixel_id`, Configuración → Píxel de Meta). Un píxel solo
+alimenta a la cuenta que lo creó, así que hacen falta los dos para que tiren campañas los dos.
+**Por qué:** «integra el pixel de meta quiero que podamos usar esta info y actualiza la política
+de privacidad y pon una línea chiquitita que diga esto» (dueño).
+**Archivos:** `src/lib/meta-pixel{,-client,-server}.ts`, `src/lib/host-context-server.ts`,
+`src/components/features/analytics/*`, `src/app/(public)/layout.tsx`, `check-in/page.tsx`,
+`privacidad/page.tsx`, `dashboard/settings/page.tsx`, `tenant-config-paths.ts`, `tenant.types.ts`.
+**Verificado:** `tsc` limpio · 612 tests en verde (48 nuevos entre `meta-pixel` y la whitelist) ·
+lint sin errores nuevos. **NO verificado:** nada en el navegador ni con el Pixel Helper.
+**Migración:** ninguna. Falta `NEXT_PUBLIC_META_PIXEL_ID` en Vercel — sin ella no se carga nada.
+**Decisión:** a Meta no le va NINGÚN dato personal (solo marca, sede y pantalla), y `/mesero/*` no
+se mide — si no, el empleado entra a la audiencia como el cliente más fiel de la marca.
+
 ## [2026-09-09e] - Los tres huecos que dejaban muerto el día 1 de una marca de 12 sedes
 
 **Tipo:** fix (operación) · **Origen:** auditoría adversarial 2026-09-09 (ESTADO §3, 0.ALFA puntos 3, 4 y 5) · **Sin migración**

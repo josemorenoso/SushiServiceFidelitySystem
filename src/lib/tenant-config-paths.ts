@@ -14,13 +14,23 @@
  * (`branding.primary`, `qr_studio.theme`), así que la unidad de permiso pasa a
  * ser la ruta `espacio.clave`. Ver el comentario largo de `TenantConfig`.
  *
- * LO QUE NO ESTÁ ACÁ, A PROPÓSITO: `integrations.*`. El día que el restaurante
- * conecte su cuenta de Google o de Meta, ese espacio NO se abre agregando una
- * línea a esta lista — lo escribe su propio flujo de OAuth, y los tokens ni
- * siquiera viven en `config`.
+ * `integrations.*` SÍ ESTÁ ACÁ, PERO CON UNA SOLA RUTA (2026-09-10). Hasta hoy
+ * el espacio entero estaba fuera con este argumento: "lo escribe su propio flujo
+ * de OAuth, y los tokens ni siquiera viven en `config`". La segunda mitad sigue
+ * intacta y no se negocia — **un token jamás entra a `tenants.config`**. La
+ * primera resultó no aplicar al píxel de Meta: un id de píxel no es una cuenta
+ * conectada ni una credencial, es un número PÚBLICO que se lee en el HTML de la
+ * página, y no hay ningún OAuth que lo escriba — lo copia el restaurante desde
+ * su Administrador de eventos y lo pega en el panel. Por eso entra
+ * `integrations.meta_pixel_id`, y SOLO esa.
+ *
+ * La regla que queda para el que venga: una ruta de `integrations` entra acá si
+ * es metadato no secreto Y no la escribe un OAuth. Un `access_token`, un
+ * `refresh_token` o un secreto de app NO entran ni en esta lista ni en `config`.
  */
 
 import { isHexColor } from './brand-palette'
+import { normalizeMetaPixelId } from './meta-pixel'
 import { CARD_MOTIF_IDS, STAMP_ICON_IDS } from '@/constants/card-extras'
 
 /** Resultado de validar un valor: o el texto ya normalizado, o el error a devolver. */
@@ -122,6 +132,27 @@ function emailText(raw: unknown): PathValidation {
   return { ok: true, value: v.toLowerCase() }
 }
 
+/**
+ * Id del píxel de Meta de la marca. El vacío borra el píxel propio y deja solo
+ * el de la plataforma — es como el panel "desconecta" sin un botón aparte.
+ *
+ * El mensaje de error nombra el largo real porque el error de verdad no es
+ * escribir mal un número: es pegar el snippet entero o la URL del Administrador
+ * de eventos, y ahí "debe ser un número" no le dice a nadie qué hacer.
+ */
+function metaPixelId(raw: unknown): PathValidation {
+  if (typeof raw !== 'string') return { ok: false, error: 'debe ser texto' }
+  if (raw.trim() === '') return { ok: true, value: '' }
+  const id = normalizeMetaPixelId(raw)
+  if (!id) {
+    return {
+      ok: false,
+      error: 'debe ser solo el número del píxel (15 o 16 dígitos), no el código ni un enlace',
+    }
+  }
+  return { ok: true, value: id }
+}
+
 function integerBetween(min: number, max: number) {
   return (raw: unknown): PathValidation => {
     const n = typeof raw === 'number' ? raw : Number(raw)
@@ -180,6 +211,11 @@ const EDITABLE_PATHS: readonly EditablePath[] = [
   { path: 'card.address', validate: freeText(160) },
   { path: 'card.hours', validate: multilineText(300) },
   { path: 'card.policies', validate: multilineText(2000) },
+
+  // Píxel de Meta (dueño, 2026-09-10) — la ÚNICA ruta de `integrations` en esta
+  // lista, y el porqué está en el comentario de cabecera. Es un id público: se
+  // lee en el HTML de la página pública de la marca.
+  { path: 'integrations.meta_pixel_id', validate: metaPixelId },
 
   // §3 — config del QR Studio, antes solo en localStorage.
   { path: 'qr_studio.theme', validate: oneOf(QR_THEME_IDS) },

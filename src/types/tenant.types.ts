@@ -73,11 +73,11 @@ export interface TenantConfig {
   /** Lo que la tarjeta muestra además de puntos y sellos: símbolo del sello, decoración, redes, contacto, políticas (Tarjeta principal, 2026-09-08). */
   card?: TenantCardConfig
   /**
-   * RESERVADO — cuentas de terceros que el restaurante conecte (Google, Meta).
-   * **No está construido y esta sesión no lo construye.** El nombre se aparta
-   * ahora para que el día que exista no haya que romper nada de lo de arriba.
+   * Cuentas de terceros del restaurante (Meta hoy; Google cuando llegue).
+   * Estrenado el 2026-09-10 con el píxel de Meta, que es su primer y único
+   * inquilino. Antes era un nombre reservado y nada más.
    *
-   * ⚠️ Dos reglas que van con el nombre, y que valen desde ya:
+   * ⚠️ Las dos reglas que iban con el nombre siguen enteras:
    *
    * 1. **Acá NUNCA va un token.** `tenants.config` lo lee el service role y su
    *    proyección pública (`resolveBranding()`) viaja al navegador en cada
@@ -86,9 +86,33 @@ export interface TenantConfig {
    *    cuenta conectada, cuándo se conectó, qué permisos dio. Las credenciales
    *    van en su propia tabla, con RLS, fuera de `config`.
    * 2. **Nada de esto entra en la whitelist del panel** sin una decisión
-   *    explícita: el endpoint de config solo escribe rutas listadas a mano.
+   *    explícita: el endpoint de config solo escribe rutas listadas a mano. La
+   *    de `meta_pixel_id` está tomada y argumentada en
+   *    `src/lib/tenant-config-paths.ts`; es la única.
    */
-  integrations?: Record<string, unknown>
+  integrations?: TenantIntegrationsConfig
+}
+
+/**
+ * Lo que el restaurante conecta de terceros. Todo opcional, todo NO secreto.
+ *
+ * Es `Record`-compatible a propósito (`[key: string]: unknown`): el espacio se
+ * escribe con `merge_tenant_config_deep()` y puede tener claves que este tipo
+ * todavía no nombra —las que escriba el día de mañana un flujo de OAuth— sin
+ * que un `tsc` se caiga por eso. Lo que el panel puede escribir no lo decide
+ * este tipo sino la whitelist.
+ */
+export interface TenantIntegrationsConfig {
+  /**
+   * Id del píxel de Meta de ESTA marca. Público: se lee en el HTML de la página
+   * pública. Ausente o vacío = la marca no tiene píxel propio y sus páginas solo
+   * disparan el de la plataforma (`NEXT_PUBLIC_META_PIXEL_ID`).
+   *
+   * Lo lee `tenantMetaPixelId()` en `src/lib/meta-pixel.ts` y NADIE más — en
+   * particular **no** `resolveBranding()`. Ver `docs/features/meta-pixel.md`.
+   */
+  meta_pixel_id?: string
+  [key: string]: unknown
 }
 
 /**

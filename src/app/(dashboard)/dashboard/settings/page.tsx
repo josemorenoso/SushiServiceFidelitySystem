@@ -1,11 +1,12 @@
 'use client'
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { Settings, DollarSign, Save, Loader2, CheckCircle, Crown, CalendarHeart, Mail, RefreshCw, Gift, UserPlus, X, Plus, Zap, MapPin, Sparkles, Package, TrendingUp, Flame, ScanLine, Star } from 'lucide-react'
+import { Settings, DollarSign, Save, Loader2, CheckCircle, Crown, CalendarHeart, Mail, RefreshCw, Gift, UserPlus, X, Plus, Zap, MapPin, Sparkles, Package, TrendingUp, Flame, ScanLine, Star, Megaphone } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { PointsCalibrator } from '@/components/dashboard/PointsCalibrator'
 import type { PointsEngineConfig } from '@/lib/points-engine'
+import { normalizeMetaPixelId } from '@/lib/meta-pixel'
 
 interface TwilioTemplate {
   sid: string
@@ -175,6 +176,14 @@ export default function SettingsPage() {
   const [reviewSaved, setReviewSaved] = useState(false)
   const [reviewError, setReviewError] = useState<string | null>(null)
 
+  // Píxel de Meta de la marca (dueño, 2026-09-10). Vive en tenants.config
+  // (`integrations.meta_pixel_id`), no en admin_settings: es un dato de la marca
+  // que leen las páginas públicas, igual que el link de reseñas de acá arriba.
+  const [metaPixelId, setMetaPixelId] = useState('')
+  const [pixelSaving, setPixelSaving] = useState(false)
+  const [pixelSaved, setPixelSaved] = useState(false)
+  const [pixelError, setPixelError] = useState<string | null>(null)
+
   const [locationLat, setLocationLat] = useState('')
   const [locationLon, setLocationLon] = useState('')
   const [locationRadius, setLocationRadius] = useState('20')
@@ -291,6 +300,9 @@ export default function SettingsPage() {
         // Reseñas de Google (migración 00032). El link vive en tenants.config, no en
         // admin_settings: es de donde lo lee resolveBranding().
         if (tenantConfigData?.google_maps_url) setGoogleReviewUrl(tenantConfigData.google_maps_url)
+        if (typeof tenantConfigData?.['integrations.meta_pixel_id'] === 'string') {
+          setMetaPixelId(tenantConfigData['integrations.meta_pixel_id'])
+        }
         setReviewRewardId(settingsData.review_reward_id ?? '')
         if (settingsData.review_reward_window_days) setReviewWindowDays(settingsData.review_reward_window_days)
 
@@ -476,6 +488,40 @@ export default function SettingsPage() {
       setReviewError(err instanceof Error ? err.message : 'Error guardando')
     } finally {
       setReviewSaving(false)
+    }
+  }
+
+  const handleSavePixel = async () => {
+    const raw = metaPixelId.trim()
+    setPixelError(null)
+
+    // Se valida ANTES de mandar con el MISMO normalizador que usa el servidor
+    // (`meta-pixel.ts`), para que el mensaje salga al lado del campo y no como
+    // un 400 genérico. La validación de verdad sigue siendo la del servidor.
+    if (raw !== '' && !normalizeMetaPixelId(raw)) {
+      setPixelError('Pegá solo el número del píxel (15 o 16 dígitos), no el código ni un enlace.')
+      return
+    }
+
+    setPixelSaving(true)
+    setPixelSaved(false)
+    try {
+      const res = await fetch('/api/dashboard/tenant-config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 'integrations.meta_pixel_id': raw }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error ?? 'Error guardando el píxel')
+      }
+      setMetaPixelId(normalizeMetaPixelId(raw) ?? '')
+      setPixelSaved(true)
+      setTimeout(() => setPixelSaved(false), 3000)
+    } catch (err) {
+      setPixelError(err instanceof Error ? err.message : 'Error guardando')
+    } finally {
+      setPixelSaving(false)
     }
   }
 
@@ -1027,6 +1073,48 @@ export default function SettingsPage() {
 
         <div className="mt-4">
           <SaveButton saving={reviewSaving} saved={reviewSaved} onClick={handleSaveReview} disabled={reviewSaving || loading} />
+        </div>
+      </div>
+
+      {/* ─── PÍXEL DE META (dueño, 2026-09-10) ─── */}
+      <div className="dashboard-card p-6 max-w-2xl" style={{ border: '1px solid rgba(24, 119, 242, 0.2)' }}>
+        <div className="flex items-center gap-3 mb-6">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ background: 'rgba(24, 119, 242, 0.15)' }}>
+            <Megaphone className="h-5 w-5" strokeWidth={1.5} style={{ color: '#1877F2' }} />
+          </div>
+          <div>
+            <h2 className="text-base font-bold" style={{ color: '#1a1c1d' }}>Píxel de Meta</h2>
+            <p className="text-xs" style={{ color: '#9ca3af' }}>Conectá tu cuenta publicitaria de Facebook e Instagram para tirar campañas con la gente que abre tu enlace, se registra y vuelve.</p>
+          </div>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-[11px] font-semibold" style={{ color: '#6b7280' }}>ID de tu píxel</label>
+          <Input
+            type="text"
+            inputMode="numeric"
+            value={metaPixelId}
+            onChange={(e) => setMetaPixelId(e.target.value)}
+            disabled={loading}
+            placeholder="1234567890123456"
+          />
+          <p className="text-[10px]" style={{ color: '#b0b0b0' }}>
+            Sácalo del <span className="font-semibold">Administrador de eventos</span> de Meta → <em>Orígenes de datos</em>. Es solo el número: no pegues el código ni un enlace. <span className="font-semibold">Déjalo vacío para desconectarlo.</span>
+          </p>
+        </div>
+
+        <div className="mt-4 rounded-xl p-3 text-[11px] leading-relaxed" style={{ background: 'rgba(24, 119, 242, 0.06)', color: '#4b5563' }}>
+          <p className="mb-1"><span className="font-semibold">Qué se le manda a Meta:</span> que alguien vio la página, se registró o hizo check-in, con tu marca y tu sede.</p>
+          <p className="mb-1"><span className="font-semibold">Qué NO se le manda, nunca:</span> el celular, el nombre, el correo, el cumpleaños ni los puntos de tus clientes.</p>
+          <p>Las pantallas del {'mesero'} no se miden — si no, tu propio personal entraría a la audiencia como si fuera tu mejor cliente. Y tus clientes ven un aviso con enlace a la <a href="/privacidad" target="_blank" rel="noopener noreferrer" className="underline">política de privacidad</a>.</p>
+        </div>
+
+        {pixelError && (
+          <p className="text-xs mt-3 font-medium" style={{ color: '#ef4444' }}>{pixelError}</p>
+        )}
+
+        <div className="mt-4">
+          <SaveButton saving={pixelSaving} saved={pixelSaved} onClick={handleSavePixel} disabled={pixelSaving || loading} />
         </div>
       </div>
 

@@ -49,6 +49,11 @@ export default async function PrivacidadPage() {
               <li>Fecha de nacimiento (opcional)</li>
               <li>Ciudad de residencia (opcional)</li>
               <li>Historial de visitas y puntos acumulados</li>
+              <li>
+                Datos de navegación en estas páginas (páginas vistas, si te registraste o
+                hiciste check-in, tu dispositivo y tu dirección IP), recogidos por el
+                píxel de Meta. Ver el punto 7.
+              </li>
             </ul>
           </section>
 
@@ -59,6 +64,10 @@ export default async function PrivacidadPage() {
               <li>Enviarte comunicaciones sobre tus puntos, premios y beneficios vía WhatsApp</li>
               <li>Enviarte promociones, novedades y campañas del establecimiento vía WhatsApp</li>
               <li>Recordarte fechas especiales como tu cumpleaños</li>
+              <li>
+                Medir y mejorar nuestras campañas publicitarias, y mostrarte anuncios
+                relevantes en Facebook e Instagram (ver el punto 7)
+              </li>
             </ul>
           </section>
 
@@ -80,6 +89,7 @@ export default async function PrivacidadPage() {
               <li><strong>Actualizar</strong> o corregir tus datos</li>
               <li><strong>Suprimir</strong> tus datos de nuestra base</li>
               <li><strong>Revocar</strong> el consentimiento para recibir comunicaciones</li>
+              <li><strong>Oponerte</strong> a la publicidad personalizada (ver el punto 7)</li>
               <li><strong>Presentar quejas</strong> ante la Superintendencia de Industria y Comercio (SIC)</li>
             </ul>
           </section>
@@ -88,12 +98,62 @@ export default async function PrivacidadPage() {
             <h2 className="mb-2 font-semibold text-gray-900">6. Almacenamiento y seguridad</h2>
             <p>
               Tus datos se almacenan en servidores seguros con cifrado en tránsito y en reposo.
-              No compartimos tu información con terceros para fines comerciales ajenos a este programa.
+              No vendemos tu información ni la compartimos con terceros para fines ajenos a este
+              programa. La única transmisión a un tercero es la que describe el punto 7, y no
+              incluye tu nombre, tu celular ni tu correo.
             </p>
           </section>
 
           <section>
-            <h2 className="mb-2 font-semibold text-gray-900">7. Vigencia</h2>
+            <h2 className="mb-2 font-semibold text-gray-900">7. Píxel de Meta y publicidad</h2>
+            <p className="mb-2">
+              Estas páginas usan el <strong>píxel de Meta</strong> (Facebook e Instagram), una
+              herramienta de medición de Meta Platforms, Inc. Nos permite saber cuántas personas
+              abren el enlace, cuántas se registran y cuántas hacen check-in, medir si nuestras
+              campañas funcionan y mostrarle anuncios a quien ya nos conoce.
+            </p>
+            <p className="mb-2">
+              <strong>Qué le mandamos a Meta:</strong> el hecho de que ocurrió una visita, un
+              registro o un check-in, junto con el establecimiento y la sede. Meta, por su cuenta y
+              como cualquier sitio web, recibe además tu dirección IP, tu tipo de dispositivo y las
+              cookies que ya tuvieras suyas.
+            </p>
+            <p className="mb-2">
+              <strong>Qué NO le mandamos, nunca:</strong> tu nombre, tu número de celular, tu correo,
+              tu fecha de nacimiento, tu ciudad ni tu historial de puntos y premios. Esos datos se
+              quedan en el programa de fidelización.
+            </p>
+            <p className="mb-2">
+              Meta trata esa información como responsable independiente, conforme a sus propias
+              políticas. Podés consultarlas y controlar qué anuncios ves en{' '}
+              <a
+                href="https://www.facebook.com/privacy/policy"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-green-600 underline"
+              >
+                la política de privacidad de Meta
+              </a>{' '}
+              y en{' '}
+              <a
+                href="https://accountscenter.facebook.com/ad_preferences"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-green-600 underline"
+              >
+                tus preferencias de anuncios
+              </a>.
+            </p>
+            <p>
+              <strong>Cómo evitarlo:</strong> podés bloquear estas cookies desde la configuración de
+              tu navegador o con cualquier extensión de bloqueo, sin perder nada del programa — tus
+              puntos, tus visitas y tus premios funcionan igual. Las pantallas de uso interno del
+              personal del establecimiento no llevan píxel.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="mb-2 font-semibold text-gray-900">8. Vigencia</h2>
             <p>
               Tus datos se conservan mientras estés activo en el programa o hasta que solicites
               su supresión.
@@ -101,7 +161,7 @@ export default async function PrivacidadPage() {
           </section>
 
           <section>
-            <h2 className="mb-2 font-semibold text-gray-900">8. Contacto</h2>
+            <h2 className="mb-2 font-semibold text-gray-900">9. Contacto</h2>
             <p>
               Para ejercer tus derechos o resolver dudas sobre el tratamiento de tus datos,
               comunícate con nosotros
@@ -126,7 +186,7 @@ export default async function PrivacidadPage() {
         </div>
 
         <p className="mt-10 text-center text-xs text-gray-400">
-          Última actualización: junio 2025 · Ley 1581 de 2012 — Colombia
+          Última actualización: septiembre de 2026 · Ley 1581 de 2012 — Colombia
         </p>
       </div>
     </div>

@@ -32,7 +32,6 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
-| Píxel de Meta + política de privacidad (dueño, 2026-09-10) | Opus 5 | `src/lib/meta-pixel.ts`, `src/lib/tenant-config-paths.ts`, `src/components/features/analytics/*`, `src/app/(public)/layout.tsx`, `src/app/(public)/privacidad/page.tsx`, `src/components/features/check-in/CheckInForm.tsx`, `src/app/(dashboard)/dashboard/marca/*`, `tests/unit/meta-pixel.test.ts`, `.env.example`, `docs/features/meta-pixel.md` | — | en curso |
 
 ## 3. Siguiente, en orden
 
@@ -181,11 +180,16 @@
 9. **Aplicar la 00030** en ventana tranquila (cierra el riesgo del DEFAULT puente).
 10. **Onboarding de los 25**: wildcard DNS ya resuelto y probado con Sushi Fun.
 
-**El norte — NO se desarrolla todavía** (dueño, 2026-09-05): automatizaciones dentro del restaurante, **Google** para
-reseñas y **Meta** para campañas. Ninguna decisión de hoy cierra esa puerta (`tenants.config`, credenciales de terceros).
+**El norte** (dueño, 2026-09-05, corregido el 09-10): **Meta ya arrancó** — el píxel mide las páginas públicas y cada
+marca puede cargar el suyo (`docs/features/meta-pixel.md`). Falta la API de Conversiones, que es la mitad que el
+bloqueador de anuncios se come. **NO se desarrollan todavía**: automatizaciones dentro del restaurante y **Google**
+para reseñas. Ninguna decisión de hoy cierra esa puerta (`config.integrations`, credenciales de terceros aparte).
 
 ## 4. Bloqueado: solo lo puede destrabar el dueño
 
+- **`NEXT_PUBLIC_META_PIXEL_ID` en Vercel** — el id del píxel de Cada1 (solo el número, 15 o 16 dígitos, del
+  Administrador de eventos de Meta). Sin ella el código está entero pero **apagado**: no se carga un byte de Meta
+  salvo en las marcas que hayan cargado el suyo desde el panel. `docs/features/meta-pixel.md`.
 - **Borrar las ramas locales ya mergeadas** (`feat/salud-aios`, `feat/domicilios`, `feat/conexiones`, `feat/visual`,
   `preview/capa-visual`) y el **stash** olvidado de `fix/opt-out-visible` (`git stash show -p stash@{0}` para mirarlo).
 - **Borrar el Supabase de Sushi Fun.** Esperar a un fin de semana de operación normal. El respaldo son los
@@ -197,6 +201,19 @@ reseñas y **Meta** para campañas. Ninguna decisión de hoy cierra esa puerta (
 
 ## 5. Hecho reciente
 
+- **El píxel de Meta, y la política que lo dice** (2026-09-10, sin migración): las páginas públicas
+  disparan `PageView`, `CompleteRegistration` (cliente nuevo) y `CheckIn` (el que vuelve; el
+  duplicado NO cuenta). **Son DOS píxeles y no uno**, porque un píxel solo alimenta a la cuenta que
+  lo creó: el de Cada1 (`NEXT_PUBLIC_META_PIXEL_ID`, el mismo en las 25 marcas, con el slug y la
+  sede en cada evento) y el propio de cada restaurante (Configuración → Píxel de Meta, que estrena
+  `config.integrations` con su ÚNICA ruta en la whitelist — un id de píxel es público y no lo
+  escribe ningún OAuth; un token sigue sin entrar ahí ni nunca). **A Meta no le va ni un dato
+  personal**: solo marca, sede y pantalla, por una única fábrica con un test que fija la lista de
+  claves. **`/mesero/*` no se mide** — cuarenta escaneos por turno meterían al empleado en la
+  audiencia como el cliente más fiel de la marca —, y el aviso al cliente sale del MISMO predicado
+  que el script, así que no puede haber una página que mida sin avisar. La política de privacidad
+  estrena §7 (qué se manda, qué no, cómo evitarlo) y §6 dejó de decir que no compartimos nada con
+  terceros, que ya no era verdad. → `docs/features/meta-pixel.md`.
 - **Los tres huecos del día 1 de una marca de 12 sedes** (2026-09-09, sin migración): (a) asignar
   sede a los meseros deja de ser un formulario por persona — `/dashboard/staff` gana «Asignar sede a
   varios a la vez», que **no adivina nada** (solo deja marcar a quien NO tiene sede y repite por

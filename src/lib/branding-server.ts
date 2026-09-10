@@ -24,8 +24,7 @@ import 'server-only'
  */
 
 import { cache } from 'react'
-import { headers } from 'next/headers'
-import { resolveHostContext } from './tenant'
+import { getHostContextForRequest } from './host-context-server'
 import { DEFAULT_BRANDING, resolveBranding, type Branding } from './branding'
 import type { TenantConfig } from '@/types/tenant.types'
 
@@ -35,9 +34,10 @@ import type { TenantConfig } from '@/types/tenant.types'
  */
 export const getBrandingForHost = cache(async (): Promise<Branding> => {
   try {
-    const h = await headers()
-    const host = h.get('host')
-    const { tenant, location } = await resolveHostContext(host)
+    // El contexto de host se resuelve UNA vez por request y lo comparte con el
+    // píxel de Meta (`getMetaPixelForHost`): sin ese envoltorio, cada uno pagaba
+    // sus dos consultas y una página pública hacía cuatro para lo mismo.
+    const { tenant, location } = await getHostContextForRequest()
     if (!tenant) return DEFAULT_BRANDING
     // Sede desconocida (el host es el dominio raíz de una marca con varias sedes):
     // contesta la marca, que es lo de siempre. `null` no pisa nada.

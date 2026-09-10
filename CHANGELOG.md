@@ -30,22 +30,24 @@ datos gigante» (dueño) + «asegúrate de que tenemos el límite real de cada m
 
 ## [2026-09-10b] - La invitación a un evento, escrita contra el formulario del calendario
 
-**Qué:** un SOLO texto para `event_image` y `event_video` (`EVENT_INVITE_TEXTS`) — son dos
+**Qué:** la invitación pasó a ser **un marco, no un mensaje**: sacando variables, firma y opt-out,
+lo que ponemos nosotros es «¡Hola!» — seis caracteres. Todo lo demás lo escribe el dueño en el
+formulario. Un SOLO texto para `event_image` y `event_video` (`EVENT_INVITE_TEXTS`): son dos
 registros porque Meta congela el formato del header al aprobar, pero dicen lo mismo palabra por
-palabra. Se fue lo horneado que no era verdad: «vivir una **noche** especial» (el calendario no
-filtra por hora y el Tipo incluye promo y aniversario) y el cierre fijo «¡Te esperamos con tu
-familia!», que iba DESPUÉS de `{{5}}` y le pisaba el llamado a la acción que el dueño acababa de
-escribir. Ahora `{{5}}` es lo último antes del SALIR, así que el enlace del evento sí queda al
-final, como promete el formulario. La muestra de `{{5}}` pasó a ser una descripción real.
+palabra. Se fue lo horneado que no era verdad — «vivir una **noche** especial» (el calendario no
+filtra por hora y el Tipo incluye promo y aniversario) y el cierre «¡Te esperamos con tu familia!»,
+que iba DESPUÉS de `{{5}}` y le pisaba el llamado a la acción del dueño — y la muestra de `{{5}}`
+pasó a ser una descripción real con su enlace.
 **Por qué:** «elimíname TODAS las plantillas de imágenes y videos y créame una que se adapte
-realmente al calendario, mira qué datos va a meter el usuario» (dueño).
+realmente al calendario» y «el que decide qué mensaje contiene es el cliente, no entiendo de dónde
+sale tanta redacción» (dueño).
 **Archivos:** `src/constants/template-{texts,catalog}.ts`, `src/services/template.service.ts`,
 `tests/unit/template-catalog.test.ts`, `SQL-PARA-CORRER/plantillas-evento-viejas/`, `docs/PLANTILLAS.md`,
 `docs/features/{calendar,whatsapp-templates}.md`.
 **De regalo:** una versión `retired` ya no revive si Meta la aprueba tarde — antes el webhook solo
 miraba `is_current` y una aprobación con 72h de retraso volvía a escribir el puntero con el texto viejo.
-**Verificado:** `tsc` limpio en lo tocado · 393 tests de `tests/unit` en verde (3 nuevos) · lint sin
-errores nuevos. **NO verificado:** nada contra Zernio — no se creó ninguna plantilla.
+**Verificado:** `tsc` limpio en lo tocado · `tests/unit` entero en verde, con 4 pruebas nuevas en
+`template-catalog` (una MIDE cuánto texto fijo queda) · lint sin errores nuevos. **NO verificado:** nada contra Zernio — no se creó ninguna plantilla.
 **Aridad:** intacta (`{{1}}`..`{{5}}`); `calendar.service.ts` no se tocó y los 4 tenants Twilio quedan
 exactamente como estaban. **Migración:** ninguna.
 

@@ -77,22 +77,24 @@ export type TemplateBodyBuilder = (brandName: string, emoji: string) => string
  * revés). Por eso son dos registros y no uno, y por eso el texto se escribe una
  * sola vez: dos literales gemelos se despegan al primer retoque.
  *
- * ESTÁ ESCRITO CONTRA EL FORMULARIO DEL CALENDARIO, no contra un evento
- * imaginario. Lo que el dueño teclea es: título, descripción / CTA corta,
- * enlace opcional, fecha y tipo (promo, festival, activación, aniversario u
- * otro). De ahí las tres reglas de esta redacción:
+ * ES UN MARCO, NO UN MENSAJE. Decisión del dueño, textual: "el que decide qué
+ * mensaje contiene es el cliente, por eso le pedimos que ingrese un título, una
+ * descripción, un link y una imagen". El texto fijo se reduce a lo que Meta
+ * OBLIGA y ni una palabra más:
  *
- *  1. **Nada de "noche".** El texto anterior invitaba a "vivir una noche
- *     especial" y el calendario no filtra por hora: una promo de mediodía salía
- *     invitando a una noche. Meta aprueba el literal, así que no se arregla
- *     después.
- *  2. **Nada de cierre fijo.** El anterior remataba con "¡Te esperamos con tu
- *     familia!" DESPUÉS de `{{5}}`, que es justo el llamado a la acción que el
- *     dueño escribió: el mensaje se contradecía consigo mismo y el formulario
- *     promete que el enlace "va al final del mensaje". Ahora `{{5}}` es lo
- *     último antes del aviso de SALIR.
- *  3. **Ni un rubro horneado.** Sirve igual para un restaurante, una barbería o
- *     un salón: lo único que cambia es `${emoji}`.
+ *  1. Una plantilla no puede ser solo variables ni empezar o terminar con una
+ *     → de ahí el saludo y la línea de SALIR, y nada en el medio.
+ *  2. Toda plantilla MARKETING lleva la salida (`OPT_OUT_LINE`).
+ *  3. La firma `_— {{2}}_` es la misma que usan las otras 11 del catálogo: le
+ *     dice al cliente quién le escribe sin gastar una frase en decirlo.
+ *
+ * Todo lo demás lo pone el dueño en el formulario: `{{3}}` su título, `{{4}}` su
+ * fecha y `{{5}}` su descripción con el enlace pegado (`buildEventCta()`). El
+ * texto de antes invitaba a "vivir una noche especial" —el calendario no filtra
+ * por hora, así que una promo de mediodía salía invitando a una noche— y
+ * remataba con un "¡Te esperamos con tu familia!" que le pisaba el llamado a la
+ * acción recién escrito. Los tres estilos ya casi no se distinguen entre sí, y
+ * está bien: acá el estilo lo pone la descripción del dueño, no nosotros.
  *
  * ⚠️ Esto NO toca las plantillas Twilio ya aprobadas de los 4 tenants viejos,
  * que conservan su cuerpo con cierre fijo y su `{{6}}`. La aridad es la misma
@@ -101,11 +103,11 @@ export type TemplateBodyBuilder = (brandName: string, emoji: string) => string
  */
 const EVENT_INVITE_TEXTS: Record<TemplateStyle, TemplateBodyBuilder> = {
   calido: (_brand, emoji) =>
-    `¡Hola {{1}}! 🎉\n\n*{{2}}* tiene algo para ti:\n*{{3}}* ${emoji}\n\n📅 {{4}}\n\n{{5}}\n\n${OPT_OUT_LINE}`,
+    `¡Hola {{1}}! 🎉${emoji}\n\n*{{3}}*\n📅 {{4}}\n\n{{5}}\n\n_— {{2}}_\n\n${OPT_OUT_LINE}`,
   elegante: () =>
-    `Hola {{1}},\n\nQueremos contarte lo que preparamos en *{{2}}*:\n*{{3}}*\n\nFecha: {{4}}\n\n{{5}}\n\n${OPT_OUT_LINE}`,
+    `Hola {{1}},\n\n*{{3}}*\nFecha: {{4}}\n\n{{5}}\n\n_— {{2}}_\n\n${OPT_OUT_LINE}`,
   urbano: () =>
-    `¡Hola {{1}}! 👀\n\nOjo con esto que armó *{{2}}*:\n*{{3}}*\n\n📅 {{4}}\n\n{{5}}\n\n${OPT_OUT_LINE}`,
+    `¡Qué más, {{1}}! 🙌\n\n*{{3}}*\n📅 {{4}}\n\n{{5}}\n\n_— {{2}}_\n\n${OPT_OUT_LINE}`,
 }
 
 /**

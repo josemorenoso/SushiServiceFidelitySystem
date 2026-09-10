@@ -32,7 +32,6 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
-| Plantillas de evento: bajarlas al marco mínimo (dueño, 2026-09-10) | Opus 5 | `src/constants/template-texts.ts`, `src/constants/template-catalog.ts`, `tests/unit/template-catalog.test.ts`, `docs/PLANTILLAS.md`, `docs/features/calendar.md` | — | en curso |
 
 ## 3. Siguiente, en orden
 

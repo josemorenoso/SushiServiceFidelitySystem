@@ -132,17 +132,36 @@ describe('banco de textos', () => {
     )
   })
 
-  it('en las de evento, {{5}} es lo último antes del opt-out', () => {
-    // El formulario del calendario promete que el enlace "va al final del
-    // mensaje". El texto viejo remataba con un "¡Te esperamos con tu familia!"
-    // DESPUÉS de {{5}}, así que el enlace quedaba en la mitad y el cierre fijo
-    // le pisaba el llamado a la acción que el dueño acababa de escribir.
+  it('en las de evento, después de {{5}} no hay UNA palabra nuestra', () => {
+    // El mensaje lo escribe el dueño en el formulario: {{5}} es su descripción
+    // con el enlace pegado. El texto viejo remataba con "¡Te esperamos con tu
+    // familia!" DESPUÉS de eso, o sea que le pisaba el llamado a la acción que
+    // acababa de escribir. Debajo de {{5}} solo pueden quedar la firma y el
+    // aviso de SALIR, que son las dos cosas que Meta y el catálogo obligan.
     for (const key of ['event_image', 'event_video'] as const) {
       for (const style of TEMPLATE_STYLES) {
         const cuerpo = buildTemplateBody(key, style, MARCA, RESTAURANTE)
         expect(cuerpo.trim().endsWith(`{{5}}
 
+_— {{2}}_
+
 ${OPT_OUT_LINE}`), `${key}/${style}`).toBe(true)
+      }
+    }
+  })
+
+  it('las de evento son un MARCO: casi todo el cuerpo son datos del dueño', () => {
+    // La medida de "cuánta redacción nuestra queda": sacando las variables, la
+    // firma y el opt-out, no puede sobrar más que un saludo. Si alguien vuelve a
+    // meter una frase de relleno, este número se dispara y la prueba se cae.
+    for (const key of ['event_image', 'event_video'] as const) {
+      for (const style of TEMPLATE_STYLES) {
+        const nuestro = buildTemplateBody(key, style, MARCA, RESTAURANTE)
+          .replace(OPT_OUT_LINE, '')
+          .replace('_— {{2}}_', '')
+          .replace(/\{\{\d+\}\}/g, '')
+          .replace(/[\s*📅🎉🙌✨💈💅🍽️]/gu, '')
+        expect(nuestro.length, `${key}/${style}: "${nuestro}"`).toBeLessThanOrEqual(20)
       }
     }
   })

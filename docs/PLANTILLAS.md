@@ -501,33 +501,47 @@ claves: **`event_image` y `event_video` dicen exactamente lo mismo**, y lo únic
 el formato del header, que Meta congela al aprobar (una aprobada con header de imagen rechaza un
 MP4 al enviar, y al revés — por eso son dos registros y no uno).
 
-**Estilo `calido`** (los otros dos, `elegante` y `urbano`, están en el mismo archivo):
+Es **un marco, no un mensaje**. Decisión del dueño, textual: *"el que decide qué mensaje contiene
+es el cliente, por eso le pedimos que ingrese un título, una descripción, un link y una
+imagen/video"*. Así que el texto fijo se redujo a lo que Meta **obliga**, y ni una palabra más:
+
+- una plantilla no puede ser solo variables, ni empezar ni terminar con una → el saludo;
+- toda MARKETING lleva la salida → la línea de SALIR;
+- la firma `_— {{2}}_` es la misma de las otras 11: dice quién escribe sin gastar una frase.
+
+**Estilo `calido`** (`elegante` y `urbano` solo cambian el saludo):
 
 ```
-¡Hola {{1}}! 🎉
+¡Hola {{1}}! 🎉<emoji del rubro>
 
-*{{2}}* tiene algo para ti:
-*{{3}}* <emoji del rubro>
-
+*{{3}}*
 📅 {{4}}
 
 {{5}}
 
+_— {{2}}_
+
 _Responde SALIR para no recibir más mensajes._
 ```
 
-**Qué cambió y por qué** — los tres eran texto horneado, y Meta aprueba el literal:
+Sacando variables, firma y opt-out, lo que ponemos nosotros es **«¡Hola!»**: seis caracteres.
+Hay una prueba que lo mide y se cae si alguien vuelve a meter relleno.
 
-| Antes | Ahora | Por qué |
-|---|---|---|
-| «vivir una **noche** especial» | «tiene algo para ti» | El calendario no filtra por hora y su campo *Tipo* incluye promo, activación y aniversario: una promo de mediodía salía invitando a una noche |
-| Cierre fijo «¡Te esperamos con **tu familia**!» después de `{{5}}` | Sin cierre fijo | `{{5}}` **es** el llamado a la acción que el dueño escribió; el cierre se lo pisaba. Y ahora el enlace sí queda al final, como promete el formulario |
-| Muestra de `{{5}}` = ese mismo cierre | `¡Promo 2×1 todo el día! Te esperamos. 👉 https://…` | La muestra es lo que revisa Meta y lo que el dueño ve en la vista previa: mostraba la frase repetida dos veces en vez del dato real |
+**Qué se fue del texto viejo** — todo era literal aprobado por Meta, o sea imposible de arreglar
+después:
+
+| Se fue | Por qué |
+|---|---|
+| «vivir una **noche** especial» | El calendario no filtra por hora y su campo *Tipo* incluye promo, activación y aniversario: una promo de mediodía salía invitando a una noche |
+| Cierre fijo «¡Te esperamos con **tu familia**!» después de `{{5}}` | `{{5}}` **es** el llamado a la acción que el dueño escribió: el cierre se lo pisaba |
+| Muestra de `{{5}}` = ese mismo cierre | La muestra es lo que revisa Meta y lo que el dueño ve en la vista previa: mostraba la frase repetida dos veces en vez del dato real. Ahora es `¡Promo 2×1 todo el día! Te esperamos. 👉 https://…` |
+| Los 3 estilos con voces distintas | Ya casi no se distinguen, y está bien: **el estilo lo pone la descripción del dueño**, no el marco |
 
 **La aridad es la misma** (`{{1}}`..`{{5}}`), así que `calendar.service.ts` manda lo mismo a los dos
-proveedores y no se tocó ni una línea del camino de envío. Hay tres pruebas que lo vigilan en
-`tests/unit/template-catalog.test.ts`: que las dos claves compartan cuerpo y variables, que `{{5}}`
-sea lo último antes del opt-out, y que el texto no hornee un momento del día ni una compañía.
+proveedores y no se tocó ni una línea del camino de envío. Hay cuatro pruebas que lo vigilan en
+`tests/unit/template-catalog.test.ts`: que las dos claves compartan cuerpo y variables, que debajo de
+`{{5}}` no quede una sola palabra nuestra, que el texto no hornee un momento del día ni una compañía,
+y que lo fijo no pase de 20 caracteres.
 
 Para sacar de circulación las viejas de un tenant Zernio:
 [`SQL-PARA-CORRER/plantillas-evento-viejas/`](../SQL-PARA-CORRER/plantillas-evento-viejas/LEEME.md).

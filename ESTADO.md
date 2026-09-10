@@ -33,6 +33,7 @@
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
 | Plantillas de evento del calendario: un solo texto, dos headers (dueño, 2026-09-10) | Opus 5 | `src/constants/template-texts.ts`, `src/constants/template-catalog.ts`, `src/services/calendar.service.ts`, `tests/unit/template-catalog.test.ts`, `SQL-PARA-CORRER/plantillas-evento-viejas/`, `docs/PLANTILLAS.md`, `docs/features/calendar.md`, `docs/features/whatsapp-templates.md` | — | en curso |
+| Golden Bullet por bloques + salud de línea real (Bloque 3 y Bloque 5) (dueño, 2026-09-10, noche) | Opus 5 | `src/services/line-health.service.ts`, `src/app/api/cron/line-health/`, `src/services/imported-contacts.service.ts`, `src/app/api/dashboard/imported-contacts/**`, `src/components/dashboard/ImportedContacts*.tsx`, `src/app/(dashboard)/dashboard/imported-contacts/page.tsx`, `src/app/api/webhook/twilio-incoming/route.ts`, `src/app/api/webhook/zernio/route.ts`, `src/services/send-queue.service.ts`, `src/app/api/cron/queue-drain/route.ts`, `vercel.json`, `tests/unit/line-health.test.ts`, `tests/unit/golden-bullet-blocks.test.ts`, `docs/features/golden-bullet.md`, `docs/features/send-governance.md` | **00060** | en curso |
 
 ## 3. Siguiente, en orden
 

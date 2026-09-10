@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 import { setWhatsappOptOut, clearWhatsappOptOut } from '@/services/customer.service'
 import { getTenantByWhatsappNumber } from '@/lib/tenant'
 import { resolveBranding, type Branding } from '@/lib/branding'
+import { detectClubButton, handleClubOptIn, handleClubOptOut } from '@/services/club-optin.service'
 import {
   logDeliveryIntakeFailure,
   processDeliveryMessage,
@@ -226,6 +227,28 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const from = params['From'] ?? ''
   const phone = normalizePhone(from)
+
+  // ── Los botones de Golden Bullet ──
+  //
+  // VA ANTES DEL BLOQUE DE PALABRAS CLAVE, Y NO ES CASUALIDAD.
+  //
+  // Cuando alguien toca un botón de respuesta rápida, WhatsApp manda el TEXTO
+  // del botón como si la persona lo hubiera escrito. Con el botón «No, gracias»
+  // eso no choca con nada —`OPT_OUT_KEYWORDS` compara el cuerpo ENTERO, y
+  // "NO, GRACIAS" no es "NO"—, pero tampoco lo atendería nadie: caería al
+  // catch-all de intenciones y le contestaríamos el menú a alguien que acaba de
+  // pedir que no le escribamos más. Este bloque lo atiende primero.
+  //
+  // Twilio manda `ButtonPayload` en las respuestas rápidas de plantilla; se usa
+  // ese cuando viene y el texto visible como respaldo (ver el servicio).
+  const boton = detectClubButton(body, params['ButtonPayload'])
+  if (boton && phone.length === 10) {
+    const respuesta =
+      boton === 'opt_in'
+        ? await handleClubOptIn(phone, tenant, body)
+        : await handleClubOptOut(phone, tenant, body)
+    return twimlResponse(respuesta)
+  }
 
   // Opt-out / opt-in. Por WhatsApp esto NO lo intercepta Twilio (ver el comentario de
   // OPT_OUT_KEYWORDS): la keyword llega hasta aquí y este bloque es lo único que la

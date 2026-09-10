@@ -15,7 +15,8 @@
 import { randomUUID } from 'crypto'
 import { createClient } from '@supabase/supabase-js'
 import { logDbFailure } from '@/lib/db-failure'
-import { sendTemplateMessage } from '@/services/whatsapp.service'
+import { enqueueSendBatch } from '@/services/send-queue.service'
+import { getLineBudget } from '@/services/line-budget.service'
 import { getSettingValue } from '@/services/settings.service'
 import { canSendBulk } from '@/services/wallet.service'
 import type { Tenant } from '@/types/tenant.types'
@@ -30,7 +31,6 @@ function getServiceClient() {
 // Tarifa por defecto (Meta + Twilio). Configurable en admin_settings.
 const DEFAULT_COST_PER_MESSAGE_USD = 0.0175
 const USD_TO_COP = 4200
-const SEND_BATCH_SIZE = 10
 
 /** Tarifa de mensajería leída de admin_settings (fallback a la constante). */
 export async function getCostPerMessageUsd(tenantId: string): Promise<number> {
@@ -214,6 +214,84 @@ export async function getExistingPhones(phones: string[], tenantId: string): Pro
   return found
 }
 
+// ─── El divisor de bloques (D-7) ────────────────────────────────
+
+/**
+ * Una base grande no se despierta en un día, y el techo no lo pone este
+ * sistema: lo pone Meta. Esta función traduce "tengo 25.000 contactos" a
+ * "salen N por día durante D días y termina el <fecha>", que es lo que el dueño
+ * tiene que ver ANTES de decir que sí — y lo que ventas tiene que saber para no
+ * prometer resultados el mismo día.
+ *
+ * Ref: REQUERIMIENTOS_AGOSTO_2026.md §20 / D-7.
+ *
+ * Es PURA a propósito: la aritmética de "cuántos días son" es justo lo que hay
+ * que poder probar sin base de datos ni proveedor.
+ */
+export interface BlockPlan {
+  totalContacts: number
+  /** Lo que pidió el operador. */
+  requestedBlockSize: number
+  /** Lo que de verdad va a salir por día: `LEAST(pedido, presupuesto)`. */
+  blockSize: number
+  /** Techo de la línea. `null` = no se conoce el límite de Meta todavía. */
+  campaignBudget: number | null
+  /** true = el bloque se recortó contra el cupo real. */
+  cappedByBudget: boolean
+  days: number
+  /** ISO. Cuándo sale el primer bloque (ya). */
+  startsAt: string
+  /** ISO. Cuándo sale el ÚLTIMO bloque, si la calidad aguanta verde. */
+  endsAt: string
+}
+
+export function planBlocks(
+  totalContacts: number,
+  requestedBlockSize: number,
+  campaignBudget: number | null,
+  now: Date = new Date()
+): BlockPlan {
+  const total = Math.max(0, Math.floor(totalContacts))
+  const pedido = Math.max(1, Math.floor(requestedBlockSize))
+
+  // `campaignBudget` null significa "no sabemos el límite de esta línea".
+  // Entonces NO hay con qué acotar y el tamaño que eligió el operador es el
+  // único freno que existe. La pantalla tiene que decirlo con todas las letras;
+  // encenderle un tope inventado le cortaría campañas a quien sí tenía cupo.
+  const tope = campaignBudget !== null && campaignBudget > 0 ? campaignBudget : null
+  const blockSize = tope !== null ? Math.min(pedido, tope) : pedido
+
+  const days = total === 0 ? 0 : Math.ceil(total / blockSize)
+
+  const startsAt = new Date(now)
+  const endsAt = new Date(now)
+  // El bloque 0 sale hoy, así que el último sale D-1 días después.
+  endsAt.setDate(endsAt.getDate() + Math.max(0, days - 1))
+
+  return {
+    totalContacts: total,
+    requestedBlockSize: pedido,
+    blockSize,
+    campaignBudget: tope,
+    cappedByBudget: tope !== null && pedido > tope,
+    days,
+    startsAt: startsAt.toISOString(),
+    endsAt: endsAt.toISOString(),
+  }
+}
+
+/**
+ * Cuánto vive un item de Golden Bullet en la cola antes de rendirse.
+ *
+ * DECISIÓN (2026-09-10, de la sesión que construyó esto — conviene revisarla):
+ * 30 días desde el día que le tocaba. Sin vencimiento, una base encolada podría
+ * gotear durante un año si la línea se congela; con un vencimiento corto, una
+ * semana de línea congelada evaporaría la base entera en silencio. 30 días es
+ * el punto donde un mensaje ya no tiene sentido (la promo que anuncia venció)
+ * pero un incidente normal de calidad no borra el trabajo.
+ */
+const IMPORT_TTL_DIAS = 30
+
 // ─── Confirmar e importar (envío) ───────────────────────────────
 
 export interface ConfirmImportParams {
@@ -226,22 +304,57 @@ export interface ConfirmImportParams {
   fallbackName?: string
   contacts: ParsedContact[]
   tenant: Tenant
+  /**
+   * Cuántos mensajes por día. LO ELIGE EL OPERADOR (D-7), no el sistema — el
+   * sistema solo lo acota al cupo real de la línea.
+   */
+  blockSize: number
+  /**
+   * El texto EXACTO de la advertencia que la persona aceptó al confirmar.
+   * Se guarda literal, no un booleano: las advertencias cambian de redacción y
+   * lo que hay que poder demostrar es qué decía la que esta persona leyó.
+   */
+  consentText?: string
+  /** Quién aceptó la advertencia. */
+  acceptedByEmail?: string
 }
 
 export interface ConfirmImportResult {
   campaign_id: string
+  /** Contactos escritos en `imported_contacts`. */
   inserted: number
-  sent: number
-  failed: number
+  /**
+   * Items que entraron de verdad en `send_queue`.
+   *
+   * OJO: NO es "enviados". Desde 2026-09-10 Golden Bullet NO envía dentro del
+   * request — encola y el drenador va sacando bloque por bloque. Antes sí
+   * enviaba en el mismo request, y con 25.000 contactos eso reventaba: a diez
+   * en paralelo son unos veinte minutos contra un `maxDuration` de 300s, así
+   * que la función moría a los cinco dejando miles de contactos a medias y la
+   * campaña sin cerrar.
+   */
+  queued: number
   blocked_auto: number
+  /** Costo del plan COMPLETO, no de lo que sale hoy. */
   total_cost_usd: number
-  /** Presente si se abortó por saldo insuficiente (spec W-D6). Nada se envió. */
+  /** El reparto en bloques. `null` si no se llegó a planificar nada. */
+  plan: BlockPlan | null
+  /** Presente si se abortó por saldo insuficiente (spec W-D6). Nada se encoló. */
   insufficient_balance?: {
     balanceCop: number
     pricePerMessage: number
     messagesAvailable: number
     recipients: number
     shortfallCop: number
+  }
+  /**
+   * Presente si la puerta de calidad lo frenó (spec §3.4.1). Nada se encoló.
+   * No es un error: es el sistema negándose a echarle una base fría encima a
+   * una línea que Meta ya tiene marcada.
+   */
+  blocked_by_quality?: {
+    lineStatus: string
+    qualityRating: string
   }
 }
 
@@ -257,19 +370,47 @@ export async function confirmImport(params: ConfirmImportParams): Promise<Confir
   const toImport = params.contacts.filter((c) => !existing.has(c.phone))
   const blockedAuto = params.contacts.length - toImport.length
 
+  // ─── Puerta de calidad (spec §3.4.1, conservada por D-7) ───
+  // Golden Bullet es la ÚNICA clase que le escribe a gente que no dio
+  // consentimiento, y por eso es la primera sospechosa de una caída de
+  // calidad. Si la línea ya está tocada, no se le suma una base fría encima.
+  //
+  // D-7 eliminó la puerta del escalón (`messaging_daily_limit > 250`): a 250
+  // también se puede, más lento. La de CALIDAD se conserva sin cambios.
+  const presupuesto = await getLineBudget(tenantId)
+  if (
+    presupuesto.lineStatus !== 'active' ||
+    presupuesto.qualityRating === 'yellow' ||
+    presupuesto.qualityRating === 'red'
+  ) {
+    return {
+      campaign_id: '',
+      inserted: 0,
+      queued: 0,
+      blocked_auto: blockedAuto,
+      total_cost_usd: 0,
+      plan: null,
+      blocked_by_quality: {
+        lineStatus: presupuesto.lineStatus,
+        qualityRating: presupuesto.qualityRating,
+      },
+    }
+  }
+
   // ─── Bloqueo por saldo (spec W-D6) ───
-  // Golden Bullet es un envío masivo de un disparo: se bloquea entero sin saldo,
-  // ANTES de crear la campaña o insertar contactos. No se envía parcial.
+  // Se cobra por la base ENTERA por adelantado, aunque salga goteando durante
+  // meses. Es el comportamiento que ya existía y no se cambia acá: cambiarlo es
+  // una decisión comercial, no un detalle de implementación.
   if (toImport.length > 0) {
     const budget = await canSendBulk(tenantId, toImport.length)
     if (!budget.ok) {
       return {
         campaign_id: '',
         inserted: 0,
-        sent: 0,
-        failed: 0,
+        queued: 0,
         blocked_auto: blockedAuto,
         total_cost_usd: 0,
+        plan: null,
         insufficient_balance: {
           balanceCop: budget.balanceCop,
           pricePerMessage: budget.pricePerMessage,
@@ -281,7 +422,14 @@ export async function confirmImport(params: ConfirmImportParams): Promise<Confir
     }
   }
 
+  // ─── El plan de bloques ───
+  const plan = planBlocks(toImport.length, params.blockSize, presupuesto.campaignBudget)
+
   // 1. Crear campaña (source 'manual' — 'imported' no está en el CHECK de campaigns.source)
+  //
+  // La campaña nace 'running' y se queda así mientras la cola gotee. La cierra
+  // `cerrarCampanasTerminadas()` del drenador cuando no le quedan items:
+  // marcarla 'completed' hoy, con 25.000 pendientes, le mentiría al operador.
   const { data: campaign, error: campaignError } = await supabase
     .from('campaigns')
     .insert({
@@ -290,7 +438,30 @@ export async function confirmImport(params: ConfirmImportParams): Promise<Confir
       source: 'manual',
       status: 'running',
       message_template: params.promoText,
-      filters: { golden_bullet: true, source_file: params.sourceFile, batch_id: params.batchId },
+      filters: {
+        golden_bullet: true,
+        source_file: params.sourceFile,
+        batch_id: params.batchId,
+        plan,
+        // La advertencia aceptada vive ACÁ y no en `consent_events`.
+        //
+        // El spec §3.4.1 pedía guardarla en `consent_events` con channel
+        // 'import'. No se hace, y la razón importa: `consent_events` es el
+        // libro de evidencia de que UNA PERSONA consintió, y estas personas NO
+        // consintieron — de eso trata todo el régimen especial de Golden
+        // Bullet. Escribir 25.000 filas 'opt_in' porque el OPERADOR marcó una
+        // casilla fabricaría exactamente la evidencia que el libro existe para
+        // poder demostrar. Lo que sí es cierto, y queda escrito, es que una
+        // persona identificada aceptó el riesgo tal día.
+        //
+        // `consent_events` sí recibe un opt_in REAL cuando alguien toca el
+        // botón «quiero ser parte» de la plantilla.
+        consent_warning: {
+          text: params.consentText ?? null,
+          accepted_by: params.acceptedByEmail ?? null,
+          accepted_at: new Date().toISOString(),
+        },
+      },
       executed_at: new Date().toISOString(),
       tenant_id: tenantId,
     })
@@ -301,8 +472,13 @@ export async function confirmImport(params: ConfirmImportParams): Promise<Confir
     throw new Error(`Error creando campaña: ${campaignError?.message}`)
   }
 
-  // 2. Insertar contactos válidos como status 'valid' (aún no enviados)
+  // 2. Insertar los contactos como 'queued': están en la cola, todavía sin salir.
+  //    Se piden de vuelta `id` y `phone` porque el item de la cola guarda
+  //    `imported_contact_id`, que es lo que después deja marcar el contacto
+  //    cuando el drenador lo envía de verdad.
   let inserted = 0
+  const idPorTelefono = new Map<string, string>()
+
   if (toImport.length > 0) {
     const rows = toImport.map((c) => ({
       phone: c.phone,
@@ -310,74 +486,136 @@ export async function confirmImport(params: ConfirmImportParams): Promise<Confir
       email: c.email,
       source_file: params.sourceFile,
       source_batch: params.batchId,
-      status: 'valid' as const,
+      status: 'queued' as const,
       campaign_id: campaign.id,
       tenant_id: tenantId,
     }))
-    // Insertar en chunks
     for (let i = 0; i < rows.length; i += 500) {
       const chunk = rows.slice(i, i + 500)
-      const { data, error } = await supabase.from('imported_contacts').insert(chunk).select('id')
+      const { data, error } = await supabase.from('imported_contacts').insert(chunk).select('id, phone')
       if (error) {
-        console.error('[GoldenBullet] Error insertando contactos:', error.message)
+        logDbFailure({
+          scope: 'GoldenBullet',
+          reason: 'insert_contacts_error',
+          error,
+          context: { tenant_id: tenantId, batch_id: params.batchId, chunk_start: i },
+        })
         continue
       }
+      for (const row of data ?? []) idPorTelefono.set(row.phone as string, row.id as string)
       inserted += data?.length ?? 0
     }
   }
 
-  // 3. Enviar en batches de 10 (igual que campañas manuales)
-  let sent = 0
-  let failed = 0
-  const now = new Date().toISOString()
+  // 3. Encolar, repartido en bloques.
+  //
+  // EL TRUCO, Y POR QUÉ ES ASÍ: los bloques NO se implementan con un contador
+  // ni con estado nuevo, sino escalonando `not_before` — el bloque k no se
+  // puede intentar antes del día k. El drenador YA ordena por `not_before` y ya
+  // respeta el presupuesto de la línea en cada vuelta, así que el divisor de
+  // bloques no le cambia una sola línea de código al drenador, y de paso queda
+  // visible y auditable: se puede mirar la cola y ver qué día le toca a cada uno.
+  //
+  // Golden Bullet es P4, la prioridad más baja, así que siempre cede el turno a
+  // las campañas de clientes que SÍ consintieron.
+  const items = toImport
+    .map((c, indice) => {
+      const idContacto = idPorTelefono.get(c.phone)
+      if (!idContacto) return null // no se pudo insertar: no se encola
 
-  for (let i = 0; i < toImport.length; i += SEND_BATCH_SIZE) {
-    const batch = toImport.slice(i, i + SEND_BATCH_SIZE)
-    const results = await Promise.all(
-      batch.map(async (c) => {
-        const variables: Record<string, string> = {
-          '1': c.name || fallbackName,
-          '2': params.promoText,
-        }
-        const res = await sendTemplateMessage(c.phone, params.templateSid, variables, params.tenant, {
-          customerId: null,
-          messageType: 'manual',
-        })
-        return { phone: c.phone, res }
-      })
-    )
+      const bloque = Math.floor(indice / plan.blockSize)
+      const notBefore = new Date(plan.startsAt)
+      notBefore.setDate(notBefore.getDate() + bloque)
 
-    for (const { phone, res } of results) {
-      if (res) {
-        sent++
-        await supabase
-          .from('imported_contacts')
-          .update({ status: 'sent', message_sent_at: now, twilio_sid: res.sid })
-          .eq('phone', phone)
-          .eq('source_batch', params.batchId)
-          .eq('tenant_id', tenantId)
-      } else {
-        failed++
-        await supabase
-          .from('imported_contacts')
-          .update({ status: 'bounced', validation_error: 'envio_fallido' })
-          .eq('phone', phone)
-          .eq('source_batch', params.batchId)
-          .eq('tenant_id', tenantId)
+      const expiresAt = new Date(notBefore)
+      expiresAt.setDate(expiresAt.getDate() + IMPORT_TTL_DIAS)
+
+      return {
+        tenantId,
+        phone: c.phone,
+        customerId: null,
+        importedContactId: idContacto,
+        campaignId: campaign.id as string,
+        // 'import' y no 'manual': es lo que lo hace P4 y lo que permite frenarlo
+        // aparte del resto de las campañas (spec §3.3).
+        messageType: 'import',
+        templateSid: params.templateSid,
+        variables: { '1': c.name || fallbackName, '2': params.promoText },
+        notBefore,
+        expiresAt,
       }
-    }
-  }
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null)
 
-  // 4. Cerrar campaña
-  await supabase.from('campaigns').update({ status: 'completed', total_sent: sent }).eq('id', campaign.id)
+  const { enqueued } = await enqueueSendBatch(items)
 
   return {
     campaign_id: campaign.id,
     inserted,
-    sent,
-    failed,
+    queued: enqueued,
     blocked_auto: blockedAuto,
-    total_cost_usd: Math.round(sent * costPerMsg * 100) / 100,
+    // El costo es del plan COMPLETO, no de lo que sale hoy: es la plata que esta
+    // importación va a gastar de acá a que termine.
+    total_cost_usd: Math.round(enqueued * costPerMsg * 100) / 100,
+    plan,
+  }
+}
+
+// ─── Marcado desde el drenador ──────────────────────────────────
+
+/**
+ * Cierra el círculo del goteo: el drenador envía y acá se anota el resultado.
+ *
+ * POR QUÉ EXISTE: desde que Golden Bullet encola en vez de enviar, quien manda
+ * de verdad el mensaje es `/api/cron/queue-drain`, horas o semanas después —
+ * y el drenador solo sabía escribir en `campaign_messages`, que exige
+ * `customer_id`. Un contacto importado NO es cliente, así que sin esta función
+ * los contactos se quedaban en 'queued' para siempre: el panel diría "0
+ * enviados" con la base entera ya despachada, y el ROI no tendría de dónde
+ * contar.
+ *
+ * Best-effort a propósito: un fallo acá no puede tumbar un drenaje que ya
+ * mandó los mensajes. Lo que se pierde es una etiqueta, no un envío.
+ */
+export async function markImportedContactsResult(
+  enviados: { id: string; sid: string | null }[],
+  rebotados: string[]
+): Promise<void> {
+  if (enviados.length === 0 && rebotados.length === 0) return
+
+  const supabase = getServiceClient()
+  const ahora = new Date().toISOString()
+
+  // Los enviados van de a uno porque cada cual lleva su propio SID del
+  // proveedor, que es el hilo para rastrear el mensaje si alguien reclama.
+  for (const { id, sid } of enviados) {
+    const { error } = await supabase
+      .from('imported_contacts')
+      .update({ status: 'sent', message_sent_at: ahora, twilio_sid: sid })
+      .eq('id', id)
+    if (error) {
+      logDbFailure({
+        scope: 'GoldenBullet',
+        reason: 'mark_sent_error',
+        error,
+        context: { imported_contact_id: id },
+      })
+    }
+  }
+
+  if (rebotados.length > 0) {
+    const { error } = await supabase
+      .from('imported_contacts')
+      .update({ status: 'bounced', validation_error: 'envio_fallido' })
+      .in('id', rebotados)
+    if (error) {
+      logDbFailure({
+        scope: 'GoldenBullet',
+        reason: 'mark_bounced_error',
+        error,
+        context: { count: rebotados.length },
+      })
+    }
   }
 }
 

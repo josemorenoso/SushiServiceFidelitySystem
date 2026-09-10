@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
-import { Upload, Download, Loader2, CheckCircle2, Send, FileText } from 'lucide-react'
+import { Upload, Download, Loader2, CheckCircle2, Send, FileText, CalendarClock, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 import { ImportedContactsCostEstimator } from './ImportedContactsCostEstimator'
 
@@ -36,6 +36,35 @@ interface TemplateItem {
   body: string
 }
 
+/** Lo que importa de `GET /api/dashboard/line-budget` para esta pantalla. */
+interface LineBudgetInfo {
+  available?: boolean
+  enforced?: boolean
+  campaignBudget?: number | null
+  campaignAvailable?: number | null
+  qualityRating?: string
+  lineStatus?: string
+}
+
+interface BlockPlan {
+  totalContacts: number
+  requestedBlockSize: number
+  blockSize: number
+  campaignBudget: number | null
+  cappedByBudget: boolean
+  days: number
+  startsAt: string
+  endsAt: string
+}
+
+interface ConfirmResult {
+  queued: number
+  inserted: number
+  blocked_auto: number
+  total_cost_usd: number
+  plan: BlockPlan | null
+}
+
 const REASON_LABEL: Record<string, string> = {
   formato_invalido: 'Formato inválido',
   no_es_movil_colombiano: 'No es móvil colombiano',
@@ -44,11 +73,27 @@ const REASON_LABEL: Record<string, string> = {
   sin_columna_telefono: 'Falta columna teléfono',
 }
 
-interface Props {
-  onSent?: () => void
+/**
+ * La frase que hay que ESCRIBIR para confirmar.
+ *
+ * Es una frase escrita y no una casilla porque una casilla se marca sin leer, y
+ * lo que se está aceptando acá es que una base sin consentimiento salga por la
+ * línea principal de atención del restaurante (spec §3.4.1, conservado por D-7).
+ */
+const FRASE_CONFIRMACION = 'ENTIENDO EL RIESGO'
+
+/** El texto exacto que se guarda como evidencia de lo que la persona aceptó. */
+const TEXTO_ADVERTENCIA =
+  'Estos contactos NO dieron consentimiento de marketing. El envío sale por la línea ' +
+  'principal de atención del restaurante, así que una restricción de Meta afectaría ' +
+  'también la atención a los clientes actuales. Cada contacto recibe UN solo mensaje y ' +
+  'quien pida salir no vuelve a ser contactado nunca.'
+
+function formatearFecha(iso: string): string {
+  return new Date(iso).toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
-export function ImportedContactsUploader({ onSent }: Props) {
+export function ImportedContactsUploader({ onSent }: { onSent?: () => void }) {
   const [validating, setValidating] = useState(false)
   const [sending, setSending] = useState(false)
   const [validation, setValidation] = useState<ValidationResult | null>(null)
@@ -56,11 +101,12 @@ export function ImportedContactsUploader({ onSent }: Props) {
   const [templateSid, setTemplateSid] = useState('')
   const [promoText, setPromoText] = useState('')
   const [fallbackName, setFallbackName] = useState('cliente')
-  const [consent, setConsent] = useState(false)
+  const [confirmacion, setConfirmacion] = useState('')
+  const [blockSize, setBlockSize] = useState<number | null>(null)
+  const [budget, setBudget] = useState<LineBudgetInfo | null>(null)
   const [twilioBalance, setTwilioBalance] = useState<{ balance: number | null; balanceCOP?: number } | null>(null)
-  const [result, setResult] = useState<{ sent: number; failed: number; blocked_auto: number; total_cost_usd: number } | null>(null)
+  const [result, setResult] = useState<ConfirmResult | null>(null)
 
-  // Cargar plantillas MARKETING aprobadas + saldo Twilio
   useEffect(() => {
     fetch('/api/dashboard/templates')
       .then((r) => r.json())
@@ -75,7 +121,41 @@ export function ImportedContactsUploader({ onSent }: Props) {
       .then((r) => r.json())
       .then(setTwilioBalance)
       .catch(() => setTwilioBalance(null))
+    fetch('/api/dashboard/line-budget')
+      .then((r) => r.json())
+      .then((d: LineBudgetInfo) => {
+        setBudget(d)
+        // Arranca en el cupo de la línea: el valor más alto que de verdad puede
+        // salir hoy. El operador lo baja si quiere ir más despacio.
+        if (typeof d.campaignBudget === 'number' && d.campaignBudget > 0) setBlockSize(d.campaignBudget)
+      })
+      .catch(() => setBudget(null))
   }, [])
+
+  const cupo = budget?.enforced ? (budget.campaignBudget ?? null) : null
+  const lineaTocada =
+    budget?.lineStatus === 'frozen' ||
+    budget?.lineStatus === 'throttled' ||
+    budget?.qualityRating === 'yellow' ||
+    budget?.qualityRating === 'red'
+
+  /**
+   * Proyección del plan, en el navegador.
+   *
+   * Es la MISMA aritmética que `planBlocks()` en el servidor, repetida acá a
+   * propósito: ese módulo arrastra el cliente de Supabase y no puede cruzar al
+   * navegador. Son dos líneas de división que no pueden divergir de forma
+   * interesante, y el plan que MANDA es el que devuelve `confirm` — que es el
+   * que se muestra al final.
+   */
+  const proyeccion = useMemo(() => {
+    if (!validation || !blockSize || blockSize < 1) return null
+    const efectivo = cupo !== null ? Math.min(blockSize, cupo) : blockSize
+    const dias = validation.valid === 0 ? 0 : Math.ceil(validation.valid / efectivo)
+    const fin = new Date()
+    fin.setDate(fin.getDate() + Math.max(0, dias - 1))
+    return { efectivo, dias, fin: fin.toISOString(), recortado: cupo !== null && blockSize > cupo }
+  }, [validation, blockSize, cupo])
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -103,7 +183,8 @@ export function ImportedContactsUploader({ onSent }: Props) {
   }
 
   const handleSend = async () => {
-    if (!validation || !templateSid || !promoText.trim() || !consent) return
+    if (!validation || !templateSid || !promoText.trim() || !blockSize) return
+    if (confirmacion.trim().toUpperCase() !== FRASE_CONFIRMACION) return
     setSending(true)
     try {
       const res = await fetch('/api/dashboard/imported-contacts/confirm', {
@@ -115,19 +196,21 @@ export function ImportedContactsUploader({ onSent }: Props) {
           template_sid: templateSid,
           promo_text: promoText.trim(),
           fallback_name: fallbackName.trim() || 'cliente',
+          block_size: blockSize,
+          consent_text: TEXTO_ADVERTENCIA,
           contacts: validation.valid_contacts,
         }),
       })
       const data = await res.json()
       if (!res.ok) {
-        toast.error(data.message || data.error || 'Error enviando')
+        toast.error(data.message || data.error || 'No se pudo programar el envío')
         return
       }
       setResult(data)
       setValidation(null)
-      setConsent(false)
+      setConfirmacion('')
       setPromoText('')
-      toast.success(`Golden Bullet enviado: ${data.sent} mensajes`)
+      toast.success(`${data.queued.toLocaleString('es-CO')} contactos programados`)
       onSent?.()
     } catch {
       toast.error('Error de conexión')
@@ -144,11 +227,18 @@ export function ImportedContactsUploader({ onSent }: Props) {
           <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-50">
             <CheckCircle2 className="h-8 w-8 text-green-500" />
           </div>
-          <h3 className="text-lg font-bold">Campaña enviada</h3>
+          <h3 className="text-lg font-bold">Campaña programada</h3>
+          {result.plan && (
+            <p className="mt-1 max-w-md text-sm text-muted-foreground">
+              Salen <strong>{result.plan.blockSize.toLocaleString('es-CO')} por día</strong> durante{' '}
+              <strong>{result.plan.days} {result.plan.days === 1 ? 'día' : 'días'}</strong>. El último bloque
+              sale el <strong>{formatearFecha(result.plan.endsAt)}</strong>, si la calidad de la línea aguanta.
+            </p>
+          )}
           <div className="mt-4 grid grid-cols-2 gap-x-8 gap-y-2 text-sm sm:grid-cols-4">
-            <div><p className="text-2xl font-bold">{result.sent}</p><p className="text-muted-foreground">Enviados</p></div>
-            <div><p className="text-2xl font-bold">{result.failed}</p><p className="text-muted-foreground">Fallidos</p></div>
-            <div><p className="text-2xl font-bold">{result.blocked_auto}</p><p className="text-muted-foreground">Bloqueados</p></div>
+            <div><p className="text-2xl font-bold">{result.queued.toLocaleString('es-CO')}</p><p className="text-muted-foreground">En cola</p></div>
+            <div><p className="text-2xl font-bold">{result.inserted.toLocaleString('es-CO')}</p><p className="text-muted-foreground">Importados</p></div>
+            <div><p className="text-2xl font-bold">{result.blocked_auto.toLocaleString('es-CO')}</p><p className="text-muted-foreground">Bloqueados</p></div>
             <div><p className="text-2xl font-bold">${result.total_cost_usd.toFixed(2)}</p><p className="text-muted-foreground">Costo USD</p></div>
           </div>
           <Button className="mt-6" variant="outline" onClick={() => setResult(null)}>Nueva importación</Button>
@@ -157,8 +247,21 @@ export function ImportedContactsUploader({ onSent }: Props) {
     )
   }
 
+  const confirmacionOk = confirmacion.trim().toUpperCase() === FRASE_CONFIRMACION
+
   return (
     <div className="space-y-5">
+      {lineaTocada && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <p>
+            <strong>La línea no está en verde.</strong> Golden Bullet es la única campaña que le escribe a
+            gente que no dio consentimiento, así que es la primera que se apaga cuando Meta marca el número.
+            La confirmación va a ser rechazada hasta que la línea vuelva a estar activa y en verde.
+          </p>
+        </div>
+      )}
+
       {/* Paso 1 — Subir CSV */}
       <Card>
         <CardHeader className="pb-3">
@@ -171,6 +274,7 @@ export function ImportedContactsUploader({ onSent }: Props) {
               <li>Columnas: <code>telefono</code> (requerido), <code>nombre</code> (opcional), <code>email</code> (opcional)</li>
               <li>Teléfono: móvil colombiano (ej. <code>3001234567</code> o <code>+573001234567</code>)</li>
               <li>Codificación UTF-8, delimitador coma</li>
+              <li>Máximo <strong>30.000</strong> contactos por archivo</li>
             </ul>
             <a href="/plantilla_golden_bullet.csv" download className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-[#E63946] hover:underline">
               <Download className="h-3.5 w-3.5" /> Descargar plantilla de ejemplo
@@ -277,7 +381,7 @@ export function ImportedContactsUploader({ onSent }: Props) {
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="promo" className="text-xs uppercase tracking-wide text-muted-foreground">Texto de la promo ({'{{2}}'})</Label>
-                <Input id="promo" value={promoText} onChange={(e) => setPromoText(e.target.value)} placeholder="Ej: 2x1 en sushi rolls esta semana" />
+                <Input id="promo" value={promoText} onChange={(e) => setPromoText(e.target.value)} placeholder="Ej: un postre gratis en tu próxima visita" />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="fallback" className="text-xs uppercase tracking-wide text-muted-foreground">Nombre genérico ({'{{1}}'} si el contacto no trae nombre)</Label>
@@ -286,26 +390,97 @@ export function ImportedContactsUploader({ onSent }: Props) {
             </CardContent>
           </Card>
 
-          {/* Paso 5 — Confirmar */}
+          {/* Paso 5 — Ritmo */}
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">5. Confirmar envío</CardTitle>
+              <CardTitle className="text-base flex items-center gap-2"><CalendarClock className="h-4 w-4" /> 5. Ritmo de envío</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Una base grande no se despierta en un día, y el techo no lo ponemos nosotros: lo pone Meta.
+                Elegí cuántos mensajes salen por día.
+              </p>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="bloque" className="text-xs uppercase tracking-wide text-muted-foreground">Mensajes por día</Label>
+                <Input
+                  id="bloque"
+                  type="number"
+                  min={1}
+                  value={blockSize ?? ''}
+                  onChange={(e) => setBlockSize(e.target.value ? Number(e.target.value) : null)}
+                  placeholder="180"
+                  className="max-w-40"
+                />
+                {cupo !== null ? (
+                  <p className="text-xs text-muted-foreground">
+                    El cupo de campaña de esta línea hoy es <strong>{cupo.toLocaleString('es-CO')}</strong> por día.
+                    Si pedís más, se recorta a ese número.
+                  </p>
+                ) : (
+                  <p className="text-xs text-amber-700">
+                    <strong>No conocemos el límite de Meta de esta línea todavía.</strong> Mientras no se sepa, el
+                    número que pongas acá es el único freno que existe. El sondeo de salud de línea lo averigua solo
+                    y actualiza este cupo.
+                  </p>
+                )}
+              </div>
+
+              {proyeccion && validation.valid > 0 && (
+                <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm">
+                  <p>
+                    <strong>{validation.valid.toLocaleString('es-CO')}</strong> contactos ·{' '}
+                    <strong>{proyeccion.efectivo.toLocaleString('es-CO')}</strong> por día ={' '}
+                    <strong>{proyeccion.dias} {proyeccion.dias === 1 ? 'día' : 'días'}</strong>
+                  </p>
+                  <p className="mt-1 text-muted-foreground">
+                    El último bloque saldría el <strong>{formatearFecha(proyeccion.fin)}</strong>.
+                  </p>
+                  {proyeccion.recortado && (
+                    <p className="mt-1 text-xs text-amber-700">
+                      Pediste {blockSize?.toLocaleString('es-CO')} por día, pero la línea solo da{' '}
+                      {proyeccion.efectivo.toLocaleString('es-CO')}.
+                    </p>
+                  )}
+                  {proyeccion.dias > 30 && (
+                    <p className="mt-1 text-xs text-amber-700">
+                      Son más de un mes de goteo. Los mensajes que no salgan en 30 días desde el día que les tocaba
+                      se descartan.
+                    </p>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Paso 6 — Confirmar */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">6. Confirmar</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <label className="flex items-start gap-2 text-sm">
-                <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-0.5" />
-                <span className="text-muted-foreground">
-                  Entiendo que estos contactos no han dado consentimiento de marketing y solo recibirán
-                  este único mensaje. Los que no respondan/vuelvan no serán contactados de nuevo.
-                </span>
-              </label>
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                {TEXTO_ADVERTENCIA}
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="frase" className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Escribí <strong>{FRASE_CONFIRMACION}</strong> para confirmar
+                </Label>
+                <Input
+                  id="frase"
+                  value={confirmacion}
+                  onChange={(e) => setConfirmacion(e.target.value)}
+                  placeholder={FRASE_CONFIRMACION}
+                  className="max-w-72"
+                />
+              </div>
               <Button
                 onClick={handleSend}
-                disabled={sending || !templateSid || !promoText.trim() || !consent || validation.valid === 0}
+                disabled={sending || !templateSid || !promoText.trim() || !confirmacionOk || !blockSize || validation.valid === 0}
                 className="gap-2"
               >
                 {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                {sending ? 'Enviando...' : `Enviar Golden Bullet (${validation.valid})`}
+                {sending ? 'Programando...' : `Programar envío (${validation.valid.toLocaleString('es-CO')})`}
               </Button>
             </CardContent>
           </Card>

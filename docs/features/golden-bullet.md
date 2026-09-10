@@ -1,74 +1,268 @@
 # Feature: Golden Bullet (Importación Masiva de Contactos)
 
-> **Versión:** v2.0.0 — 2026-06-12
+> **Versión:** v3.0.0 — 2026-09-10
 > **Estado:** ✅ Implementado (detrás de feature flag)
-> **Migración:** `00023_imported_contacts.sql`
+> **Migraciones:** `00023_imported_contacts.sql` · `00060_golden_bullet_bloques.sql`
+> **Ver también:** [`send-governance.md`](send-governance.md) · [`campaigns.md`](campaigns.md)
 
 ## Objetivo
-Importar bases de contactos externas (2.500–9.500 registros), validarlas, calcular el
-costo de envío y disparar **UN solo** mensaje de WhatsApp con una promo directa (no link
-de registro). Los contactos que no respondan/vuelvan quedan bloqueados para reenvío. Los
-que sí visitan se convierten automáticamente en `customers` y alimentan el ROI.
 
-**Principio clave:** estos contactos NO son clientes y NO han dado consentimiento de
-marketing. Por eso viven en `imported_contacts`, separados de `customers`, y reciben un
-único mensaje.
+Importar bases de contactos externas, validarlas, calcular el costo y despertarlas
+**a un ritmo que la línea aguante**, preguntándole a cada persona si quiere estar.
+
+## Qué cambió en la v3.0.0 (leer esto antes que nada)
+
+**Golden Bullet dejó de ser una bala.** Antes disparaba a toda la base dentro del mismo
+request HTTP. Con 25.000 contactos eso no funcionaba y no era un detalle de rendimiento:
+a diez envíos en paralelo son unos veinte minutos contra un `maxDuration` de 300 s, así
+que la función moría a los cinco dejando miles de contactos a medias, la campaña sin
+cerrar y ninguna forma de saber quién había recibido qué.
+
+Ahora **encola** (`send_queue`) y el drenador va sacando **bloque por bloque**, al ritmo
+del cupo real de la línea. Tres consecuencias que hay que decir en voz alta:
+
+| | Antes | Ahora |
+|---|---|---|
+| Cuándo sale | Todo en el momento de confirmar | Un bloque por día, el que elija el operador |
+| Qué devuelve `confirm` | `sent` | `queued` + el **plan** con fecha de fin |
+| Quién manda de verdad | El request del panel | `/api/cron/queue-drain`, cada 15 min |
+
+## El divisor de bloques (D-7)
+
+> *"debemos tomar el total de clientes y poder dividirlos en bloques de la cantidad que
+> queramos respetando siempre el límite de la cuenta […] hay restaurantes que van a
+> querer cargar hasta 7000 y a estos no van a poder despertarlos en un solo día"*
+> — el dueño, `REQUERIMIENTOS_AGOSTO_2026.md` §20 / D-7.
+
+1. El operador ve el total y **elige el tamaño del bloque diario**. No lo elige el sistema.
+2. El sistema lo **acota** al cupo real: `bloque = LEAST(elegido, presupuesto_de_campaña)`.
+3. La pantalla muestra **cuántos días son y en qué fecha termina**, antes de confirmar.
+
+### Cómo está implementado, y por qué así
+
+Los bloques **no** son un contador ni un estado nuevo: son un **`not_before` escalonado**.
+Al encolar, el contacto número *i* recibe `not_before = hoy + floor(i / tamaño_bloque)` días.
+
+Eso vale la pena entenderlo porque explica por qué el cambio es pequeño y seguro:
+
+- El drenador **ya** ordenaba por `not_before` y **ya** releía el presupuesto en cada
+  vuelta. No se le tocó una sola línea de su bucle.
+- El plan queda **visible y auditable en la tabla**: se puede mirar `send_queue` y ver
+  exactamente qué día le toca a cada teléfono.
+- Golden Bullet es **P4**, la prioridad más baja de las cinco. Siempre le cede el turno a
+  las campañas de clientes que **sí** consintieron.
+
+### La aritmética que hay que mirar antes de prometer nada
+
+| Escalón de Meta | Presupuesto de campaña | 25.000 contactos |
+|---|---|---|
+| 250 (línea nueva) | 180 | **139 días** |
+| 1.000 | ~930 | 27 días |
+| 10.000 | ~9.900 | 3 días |
+
+El presupuesto **no** es la constante 180: es `límite − reserva`, y la reserva se
+autocalibra contra el consumo transaccional real (ver `send-governance.md`).
+
+**Consecuencia comercial:** una base de 25.000 en una línea de 250 no se despierta —
+se despierta en cuatro meses y medio, y solo si la calidad aguanta verde todo ese tiempo.
+Ventas tiene que saberlo para no prometer resultados el mismo día.
+
+## La plantilla con botones
+
+La forma de despertar una base fría **no** es una promo a secas: es una **pregunta con dos
+botones**.
+
+No es una idea de conversión, es de supervivencia de la línea. Un botón «no me interesa»
+le da a la persona una salida de un toque, y eso es **mucho** más barato para la
+reputación del número que un «Bloquear» — que es lo que hace la gente cuando no tiene
+botón. Y el que toca «quiero ser parte» deja un **consentimiento explícito y fechado** que
+en una base heredada no existía en ningún lado.
+
+### El texto, listo para copiar
+
+Reemplazá `[MARCA]` por el nombre del restaurante y la línea de procedencia por la que sea
+**verdad** (ver la advertencia de abajo).
+
+```
+Hola {{1}} 👋
+
+Te escribimos de [MARCA]. [DE DÓNDE SALIÓ SU NÚMERO — una línea, y que sea cierta.]
+
+Estamos abriendo nuestro club de beneficios y queremos empezar contigo: {{2}}
+
+¿Querés hacer parte? Es gratis y salís cuando quieras.
+```
+
+**Botones (respuesta rápida):**
+
+| Texto visible | `id` / payload | Largo |
+|---|---|---|
+| `Quiero ser parte` | **`CLUB_SI`** | 16 / 20 |
+| `No, gracias` | **`CLUB_NO`** | 11 / 20 |
+
+> ⚠️ **Los payloads `CLUB_SI` y `CLUB_NO` son un contrato con el código.** Están escritos
+> en `src/services/club-optin.service.ts` (`CLUB_PAYLOAD_SI` / `CLUB_PAYLOAD_NO`). Si la
+> plantilla se crea con otro `id`, el respaldo por texto visible todavía la salva — pero
+> si además cambia el texto, el botón deja de hacer nada. Se cambian los dos lados o ninguno.
+
+### Cómo se crea en Twilio (Content Template Builder)
+
+Tipo **`twilio/quick-reply`**, categoría **MARKETING**, idioma **es**:
+
+```json
+{
+  "friendly_name": "golden_bullet_club_invite",
+  "language": "es",
+  "variables": { "1": "Juan", "2": "un postre gratis en tu próxima visita" },
+  "types": {
+    "twilio/quick-reply": {
+      "body": "Hola {{1}} 👋\n\nTe escribimos de [MARCA]. …",
+      "actions": [
+        { "id": "CLUB_SI", "title": "Quiero ser parte" },
+        { "id": "CLUB_NO", "title": "No, gracias" }
+      ]
+    }
+  }
+}
+```
+
+**El contrato de variables es fijo y lo impone el código** (`confirmImport()`):
+
+- `{{1}}` = nombre del contacto, o el genérico si el CSV no traía nombre.
+- `{{2}}` = el texto de la promo que se escribe en el asistente.
+
+Una plantilla con tres variables **no sirve**: la segunda no se rellenaría nunca.
+
+### Qué pasa cuando tocan cada botón
+
+| Botón | Qué ocurre |
+|---|---|
+| **Quiero ser parte** | Se registra un `opt_in` REAL en `consent_events` (canal `whatsapp_reply`) y se le contesta con el enlace de su tarjeta para que termine de registrarse. **No** se le crea el cliente: registrarse pide nombre y cumpleaños, y esos datos no vienen en un toque de botón — inventarlos ensucia la base para siempre. Pasa a `converted` cuando se registra de verdad, en `/api/check-in`, como siempre. |
+| **No, gracias** | `opt_out` en `consent_events`, `whatsapp_opt_out_at` si además era cliente, y `imported_contacts.status = 'opted_out'`. Se le confirma que no se le escribe más. |
+
+> **El agujero que esto tapó (2026-09-10):** `isPhoneOptedOut()` miraba **solo** la tabla
+> `customers`. Todo el que recibía un mensaje era cliente, así que alcanzaba. Golden
+> Bullet rompe esa suposición — le escribe a gente que no está en `customers` — y sin la
+> segunda consulta el "no" de esas personas **no lo miraba nadie**. Ahora mira los dos sitios.
+
+> ⚠️ **En Zernio el botón «sí» no recibe respuesta.** El webhook de Zernio solo puede
+> devolver un 2xx sin cuerpo, y la única salida de envío manda **plantillas aprobadas**: el
+> texto libre no es que sea difícil, es que no existe. El efecto de negocio sí ocurre
+> entero (queda el consentimiento, queda el opt-out), pero quien consiente **no recibe su
+> enlace**. Es hermano del 18.c y necesita una plantilla nueva aprobada por Meta.
+
+### Antes de mandarle esto a Meta
+
+**La línea de procedencia tiene que ser verdad.** Si la base es comprada o de origen
+desconocido, no se puede escribir "porque nos visitaste". En Colombia el tratamiento de
+datos personales lo rige la **Ley 1581 de 2012** y el consentimiento previo no es un
+formalismo. Esa es exactamente la razón por la que la plantilla pregunta en vez de
+promocionar: el botón convierte una base sin consentimiento en una lista de gente que sí
+lo dio, y deja constancia de quién dijo que no.
+
+## Las dos puertas que siguen cerradas
+
+**1 · Puerta de calidad** (spec §3.4.1, conservada por D-7). El asistente **bloquea** si:
+
+```
+line_status  ≠ 'active'   →  la línea está estrangulada o congelada
+quality_rating ∈ {yellow, red}  →  Meta ya la tiene marcada
+```
+
+Golden Bullet es la única clase que le escribe a gente sin consentimiento, así que es la
+primera sospechosa de una caída de calidad — y la primera que se apaga.
+
+D-7 **eliminó** la puerta del escalón (`messaging_daily_limit > 250`): a 250 también se
+puede, más lento.
+
+**2 · Saldo** (spec W-D6). Se cobra la base **entera por adelantado**, aunque salga
+goteando durante meses. Es el comportamiento que ya existía; cambiarlo es una decisión
+comercial, no un detalle de implementación.
 
 ## Modelo de datos
 
-### Tabla `imported_contacts`
-`phone` (único), `name?`, `email?`, `source_file`, `source_batch` (UUID del lote),
-`status` (`pending`|`valid`|`invalid`|`sent`|`delivered`|`bounced`|`converted`|`blocked`),
+### `imported_contacts`
+`phone` (único), `name?`, `email?`, `source_file`, `source_batch`, `status`,
 `validation_error?`, `message_sent_at?`, `twilio_sid?`, `converted_to_customer_id?`,
 `campaign_id?`.
 
-### Columna nueva en `customers`
-- `imported_contact_id uuid NULL` → trazabilidad cuando un contacto importado se registra.
+Estados (`00060` agregó los dos últimos):
 
-## Reglas anti-reenvío (CRÍTICO)
-- Un teléfono que **ya existe** en `imported_contacts` NUNCA se vuelve a contactar
-  (evita bloqueos de Twilio/Meta). Se excluye tanto en `validate` como (de nuevo) en `confirm`.
+| Estado | Significa |
+|---|---|
+| `pending` / `valid` / `invalid` | del parseo del CSV |
+| **`queued`** | en `send_queue`, esperando su bloque. Pueden ser semanas |
+| `sent` / `delivered` / `bounced` | resultado del envío |
+| `converted` | volvió y se registró: ya es customer |
+| `blocked` | no se le escribió por la regla anti-reenvío. **Decisión nuestra** |
+| **`opted_out`** | pidió salir. **Decisión suya** — es evidencia y no se mezcla con `blocked` |
+
+### Reglas anti-reenvío (CRÍTICO)
+- Un teléfono que **ya existe** en `imported_contacts` NUNCA se vuelve a contactar. Se
+  excluye en `validate` y **otra vez** en `confirm` (carrera entre dos importaciones).
 - Los duplicados dentro del mismo CSV se descartan (solo el primero cuenta).
 
-## Flujo (wizard de 5 pasos)
-1. **Subir CSV** — columnas `telefono` (req), `nombre`, `email`.
-2. **Validar** — `POST /validate` parsea y valida **sin insertar**; devuelve conteos, razones de invalidación, preview y la lista de válidos.
-3. **Costo** — `valid × tarifa` (USD/COP) + saldo Twilio.
-4. **Plantilla** — dropdown de plantillas Twilio `MARKETING` aprobadas. `{{1}}`=nombre, `{{2}}`=promo.
-5. **Confirmar** — checkbox de consentimiento → `POST /confirm`: inserta los válidos, crea campaña (`source='manual'`), envía en batches de 10, marca `sent`/`bounced`.
+## Flujo (asistente de 5 pasos)
 
-### Conversión (ROI)
-Cuando un contacto importado se registra (`/api/check-in` action `register`),
-`markConverted()` lo marca `converted` y guarda `customers.imported_contact_id`. El ROI
-se calcula con join `imported_contacts ↔ customers` (visitas × `avg_ticket` vs. costo).
+1. **Subir CSV** — columnas `telefono` (req), `nombre`, `email`.
+2. **Validar** — `POST /validate`, **sin insertar**; devuelve conteos, razones y la lista de válidos.
+3. **Costo** — `válidos × tarifa` + saldo.
+4. **Plantilla y bloque** — plantilla MARKETING aprobada + **cuántos por día**, con la
+   fecha de fin calculada.
+5. **Confirmar** — se acepta la advertencia → `POST /confirm`: inserta como `queued`,
+   crea la campaña y **encola** en bloques.
 
 ## Endpoints
 
-| Método | Ruta | Auth | Descripción |
-|--------|------|------|-------------|
-| POST | `/api/dashboard/imported-contacts/validate` | Admin + flag | Validar CSV (multipart `file`), sin insertar |
-| POST | `/api/dashboard/imported-contacts/confirm` | Admin + flag | Insertar + enviar. Body: `{ batch_id, source_file, template_sid, promo_text, fallback_name?, contacts[] }` |
-| GET | `/api/dashboard/imported-contacts` | Admin | Lotes (resumen) o contactos de un `batch_id` |
-| GET | `/api/dashboard/imported-contacts/stats` | Admin | Estadísticas por `batch_id` |
-| GET | `/api/dashboard/imported-contacts/roi` | Admin | ROI por `batch_id` |
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| POST | `/api/dashboard/imported-contacts/validate` | Validar CSV (multipart `file`), sin insertar |
+| POST | `/api/dashboard/imported-contacts/confirm` | Insertar + **encolar**. Body: `{ batch_id, source_file, template_sid, promo_text, block_size, consent_text?, fallback_name?, contacts[] }` |
+| GET | `/api/dashboard/imported-contacts` | Lotes o contactos de un `batch_id` |
+| GET | `/api/dashboard/imported-contacts/stats` | Estadísticas por `batch_id` |
+| GET | `/api/dashboard/imported-contacts/roi` | ROI por `batch_id` |
 
-> **Nota de implementación:** `confirm` recibe los `contacts` validados desde el cliente
-> (el paso `validate` no persiste nada, por requerimiento). Esto evita un store temporal
-> servidor; el bloqueo anti-reenvío se re-aplica en `confirm` contra la DB.
+**Topes de `confirm`:** `409` si la puerta de calidad frena · `409` si no hay saldo ·
+**`413` si el lote pasa de 30.000 contactos**. Ese último no es una regla de negocio: es
+el tamaño del cuerpo de la petición, porque `validate` no persiste y los contactos vuelven
+a viajar en el POST. Pasado ese número hay que partir el CSV — cada archivo conserva su
+propio plan y la regla anti-reenvío impide que un repetido reciba dos mensajes.
+
+## Dónde se anota el resultado
+
+El que manda de verdad es el **drenador**, semanas después, y solo sabía escribir en
+`campaign_messages` — que exige `customer_id`. Un contacto importado no es cliente, así
+que `markImportedContactsResult()` es lo que cierra el círculo: marca `sent` con su SID, o
+`bounced` **solo al rendirse** (3.er intento). Un fallo reintentable no marca nada: el
+contacto sigue en cola y todavía puede salir.
 
 ## Feature flag y costo
 - `admin_settings.golden_bullet_enabled` (`'true'`/`'false'`, default `false`).
-- `admin_settings.twilio_cost_per_message_usd` (default `0.0175`, Meta+Twilio).
+- `admin_settings.twilio_cost_per_message_usd` (default `0.0175`).
 
-## Plantilla WhatsApp
-Debe ser `MARKETING` aprobada por Meta y **sin link de registro**. `{{1}}`=nombre (o genérico),
-`{{2}}`=texto de la promo.
+## Decisiones tomadas en la v3.0.0 (revisables)
+
+- **TTL de 30 días por item** (`IMPORT_TTL_DIAS`). Sin vencimiento, una base encolada
+  gotearía un año si la línea se congela; con uno corto, una semana de línea congelada
+  evaporaría la base entera en silencio. 30 días es donde el mensaje ya no tiene sentido
+  (la promo que anuncia venció) pero un incidente normal de calidad no borra el trabajo.
+- **La advertencia aceptada NO va a `consent_events`.** El spec §3.4.1 lo pedía; no se
+  hizo. `consent_events` es el libro de que **una persona** consintió, y estas personas no
+  consintieron — de eso trata todo el régimen especial. Escribir 25.000 filas `opt_in`
+  porque el **operador** marcó una casilla fabricaría exactamente la evidencia que el libro
+  existe para poder demostrar. Vive en `campaigns.filters.consent_warning`, con el texto
+  exacto, quién lo aceptó y cuándo.
 
 ## Archivos
-- `supabase/migrations/00023_imported_contacts.sql`
-- `src/services/imported-contacts.service.ts`
+
+- `supabase/migrations/00023_imported_contacts.sql`, `00060_golden_bullet_bloques.sql`
+- `src/services/imported-contacts.service.ts` (`planBlocks()`, `confirmImport()`, `markImportedContactsResult()`)
+- `src/services/club-optin.service.ts` — los dos botones
 - `src/app/api/dashboard/imported-contacts/{route,validate,confirm,stats,roi}.ts`
 - `src/app/(dashboard)/dashboard/imported-contacts/page.tsx`
 - `src/components/dashboard/ImportedContactsUploader.tsx`, `ImportedContactsCostEstimator.tsx`, `ImportedContactsHistory.tsx`
 - `public/plantilla_golden_bullet.csv`
-- Wiring: `src/app/api/check-in/route.ts` (conversión), `src/components/layout/DashboardSidebar.tsx`
+- Wiring: `src/app/api/cron/queue-drain/route.ts` (envío y marcado),
+  `src/app/api/webhook/twilio-incoming/route.ts` y `webhook/zernio/route.ts` (botones),
+  `src/services/customer.service.ts` (`isPhoneOptedOut` mira los dos sitios),
+  `src/app/api/check-in/route.ts` (conversión)

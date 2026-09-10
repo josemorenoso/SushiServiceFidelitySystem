@@ -38,6 +38,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { validateCronSecret } from '@/lib/validators/cron'
+import { markImportedContactsResult } from '@/services/imported-contacts.service'
 import { getTenantById } from '@/lib/tenant'
 import { sendTemplateMessage } from '@/services/whatsapp.service'
 import { getLineBudget } from '@/services/line-budget.service'
@@ -259,6 +260,10 @@ async function drenarTenant(tenantId: string, res: Resultado): Promise<Resultado
   const permitidos = await filtrarPorGuardas(tenantId, items, res)
 
   const enviadosParaMarcar: string[] = []
+  // Golden Bullet: los contactos importados no son clientes, así que no caben
+  // en `campaign_messages`. Su resultado se anota en `imported_contacts`.
+  const importadosEnviados: { id: string; sid: string | null }[] = []
+  const importadosRebotados: string[] = []
   const registrosCampana: Array<{
     campaign_id: string
     customer_id: string
@@ -303,6 +308,9 @@ async function drenarTenant(tenantId: string, res: Resultado): Promise<Resultado
       if (item.customer_id && !NO_MARCAN_ULTIMA_CAMPANA.has(item.message_type)) {
         enviadosParaMarcar.push(item.customer_id)
       }
+      if (item.imported_contact_id) {
+        importadosEnviados.push({ id: item.imported_contact_id, sid: enviado.sid })
+      }
       if (item.campaign_id && item.customer_id) {
         registrosCampana.push({
           campaign_id: item.campaign_id,
@@ -325,6 +333,9 @@ async function drenarTenant(tenantId: string, res: Resultado): Promise<Resultado
       const destino = await markQueueItemFailed(item, motivo)
       if (destino === 'failed') {
         res.failed++
+        // Solo al RENDIRSE (3er intento). Un fallo reintentable no marca nada:
+        // el contacto sigue en cola y todavía puede salir.
+        if (item.imported_contact_id) importadosRebotados.push(item.imported_contact_id)
         if (item.campaign_id && item.customer_id) {
           registrosCampana.push({
             campaign_id: item.campaign_id,
@@ -348,6 +359,7 @@ async function drenarTenant(tenantId: string, res: Resultado): Promise<Resultado
   if (registrosCampana.length > 0) {
     await db.from('campaign_messages').insert(registrosCampana)
   }
+  await markImportedContactsResult(importadosEnviados, importadosRebotados)
 
   await cerrarCampanasVacias(campanasTocadas)
 

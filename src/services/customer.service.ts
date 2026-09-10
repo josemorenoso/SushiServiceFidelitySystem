@@ -277,7 +277,33 @@ export async function isPhoneOptedOut(phone: string, tenantId: string): Promise<
       console.error('[OptOut] Error consultando opt-out (se permite el envío):', error.message)
       return false
     }
-    return !!data?.whatsapp_opt_out_at
+    if (data?.whatsapp_opt_out_at) return true
+
+    // ── Quien pidió salir y NUNCA fue cliente (2026-09-10) ──
+    //
+    // Hasta hoy esta función miraba SOLO `customers`, y con eso alcanzaba:
+    // todo el que recibía un mensaje era cliente. Golden Bullet rompe esa
+    // suposición — le escribe a gente que no está en `customers`, y la
+    // plantilla nueva trae un botón de rechazo. Sin esta segunda consulta, el
+    // "no me interesa" de esas personas no lo miraba nadie.
+    //
+    // Solo se consulta cuando NO hay fila en `customers` (el caso raro), así
+    // que no le agrega un viaje a la base al camino normal de cada envío.
+    if (data) return false
+
+    const { data: importado, error: errImportado } = await supabase
+      .from('imported_contacts')
+      .select('id')
+      .eq('phone', normalized)
+      .eq('tenant_id', tenantId)
+      .eq('status', 'opted_out')
+      .maybeSingle()
+
+    if (errImportado) {
+      console.error('[OptOut] Error consultando contactos importados (se permite el envío):', errImportado.message)
+      return false
+    }
+    return !!importado
   } catch (err) {
     console.error('[OptOut] Excepción consultando opt-out (se permite el envío):', err instanceof Error ? err.message : err)
     return false

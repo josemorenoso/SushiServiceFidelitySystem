@@ -38,6 +38,8 @@ import { logDeliveryIntakeFailure, processDeliveryMessage } from '@/services/del
 // Mismos keywords que twilio-incoming/route.ts (duplicados a propósito: son
 // ~2 líneas estables y extraerlos a un módulo compartido es más cambio del
 // que amerita esta migración — ver docs/features/zernio-messaging.md).
+import { detectClubButton, handleClubOptIn, handleClubOptOut } from '@/services/club-optin.service'
+
 const OPT_OUT_KEYWORDS = ['STOP', 'STOPALL', 'UNSUBSCRIBE', 'CANCEL', 'CANCELAR', 'END', 'QUIT', 'BAJA', 'SALIR', 'SAL', 'SALI', 'FUERA', 'OPTOUT', 'NO']
 const OPT_IN_KEYWORDS = ['START', 'UNSTOP', 'YES', 'SI', 'ALTA', 'ACEPTO']
 
@@ -137,6 +139,38 @@ async function handleMessageReceived(payload: ZernioWebhookPayloadMessage): Prom
   const eventId = payload.id || message.id
   if (await isDuplicateZernioEvent(eventId)) {
     return NextResponse.json({ received: true, duplicate: true }, { status: 200 })
+  }
+
+  // ── Los botones de Golden Bullet ──
+  //
+  // Mismo criterio que en twilio-incoming: va ANTES del bloque de palabras
+  // clave. `message.text` trae el texto visible del botón; el payload viaja en
+  // `buttonPayload` SI Zernio lo manda — nunca se ha visto un entrante real por
+  // este canal (ver 0.IOTA en ESTADO.md), así que se lee con tolerancia y el
+  // texto visible queda de respaldo.
+  //
+  // ⚠️ LIMITACIÓN REAL, NO UN OLVIDO: acá NO se le contesta a la persona, por lo
+  // mismo que el opt-out de más abajo tampoco. Este webhook solo devuelve un
+  // 2xx sin cuerpo y la única salida de Zernio manda PLANTILLAS APROBADAS: el
+  // texto libre no es que sea difícil, es que no existe. El efecto de negocio sí
+  // ocurre entero (queda el consentimiento y queda el opt-out); lo que falta es
+  // el acuse. Para quien toca «quiero ser parte» eso duele de verdad: consiente
+  // y no recibe su enlace. Mandarle el enlace exige una plantilla nueva aprobada
+  // por Meta — es hermano del 18.c y está anotado en golden-bullet.md.
+  const boton = detectClubButton(
+    text,
+    (message as { buttonPayload?: string | null }).buttonPayload ?? null
+  )
+  if (boton && phone.length === 10) {
+    if (boton === 'opt_in') {
+      await handleClubOptIn(phone, tenant, text)
+      console.warn(
+        `[webhook/zernio] opt-in por botón de ${phone} en ${tenant.slug} — consentimiento registrado, SIN acuse (falta plantilla)`
+      )
+    } else {
+      await handleClubOptOut(phone, tenant, text)
+    }
+    return NextResponse.json({ received: true, club_button: boton }, { status: 200 })
   }
 
   // Opt-out / opt-in: réplica exacta del criterio de twilio-incoming — persistimos

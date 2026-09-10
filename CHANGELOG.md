@@ -8,6 +8,26 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [2026-09-10c] - Una base de 25.000 se despierta por bloques, no de un tiro
+
+**Qué:** Golden Bullet deja de enviar dentro del request —con 25.000 contactos moría a los 300s
+dejando miles a medias— y **encola** repartido en bloques diarios que **elige el operador** y el
+sistema acota al cupo (D-7). El reparto es un `not_before` escalonado, así que el drenador no
+cambió una línea y el plan queda auditable en `send_queue`. La pantalla dice en qué fecha termina
+**antes** de confirmar: 25.000 en una línea de 250 son **139 días**, y eso hay que verlo.
+Va con el **Bloque 3**: `/api/cron/line-health` escribe por fin `messaging_daily_limit` y
+`quality_rating` con el dato del proveedor (Twilio y Zernio, verificados). Estaban en NULL en las
+5 marcas: el freno de la 00037 existía y estaba **apagado**. El sondeo solo APRIETA, nunca reactiva.
+Y la plantilla nueva pregunta con dos botones: el «no» cuesta mucho menos que un «Bloquear» y el
+«sí» deja consentimiento fechado. De paso se tapó que `isPhoneOptedOut()` miraba **solo**
+`customers`, así que el "no" de quien nunca fue cliente no lo leía nadie.
+**Por qué:** «necesitábamos poder dividir las campañas por bloques […] mañana recibo una base de
+datos gigante» (dueño) + «asegúrate de que tenemos el límite real de cada mensaje».
+**Archivos:** `supabase/migrations/00060_*.sql`, `src/services/{line-health,club-optin,imported-contacts,customer}.service.ts`,
+`src/app/api/cron/{line-health,queue-drain}/`, `src/app/api/webhook/{twilio-incoming,zernio}/`,
+`src/components/dashboard/ImportedContactsUploader.tsx`, `vercel.json`, `docs/features/{golden-bullet,send-governance}.md`.
+**Ojo:** la 00060 va **antes** de desplegar, y la plantilla con botones la tiene que aprobar Meta (24-48h).
+
 ## [2026-09-10b] - La invitación a un evento, escrita contra el formulario del calendario
 
 **Qué:** un SOLO texto para `event_image` y `event_video` (`EVENT_INVITE_TEXTS`) — son dos

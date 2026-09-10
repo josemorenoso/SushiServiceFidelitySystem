@@ -32,10 +32,29 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
-| Golden Bullet por bloques + salud de línea real (Bloque 3 y Bloque 5) (dueño, 2026-09-10, noche) | Opus 5 | `src/services/line-health.service.ts`, `src/app/api/cron/line-health/`, `src/services/imported-contacts.service.ts`, `src/app/api/dashboard/imported-contacts/**`, `src/components/dashboard/ImportedContacts*.tsx`, `src/app/(dashboard)/dashboard/imported-contacts/page.tsx`, `src/app/api/webhook/twilio-incoming/route.ts`, `src/app/api/webhook/zernio/route.ts`, `src/services/send-queue.service.ts`, `src/app/api/cron/queue-drain/route.ts`, `vercel.json`, `tests/unit/line-health.test.ts`, `tests/unit/golden-bullet-blocks.test.ts`, `docs/features/golden-bullet.md`, `docs/features/send-governance.md` | **00060** | en curso |
 
 ## 3. Siguiente, en orden
 
+0.GB **Golden Bullet por bloques y sondeo de salud: construidos el 10, faltan CUATRO cosas del dueño.**
+   El código está en la rama (`640ae1f`). En este orden:
+   1. **Aplicar la `00060`** (va en el 0.quinquies, con las otras dos).
+   2. **Crear la plantilla con botones y mandarla a aprobar. Meta tarda 24-48 h**, así que
+      es lo primero del día: el texto exacto, los dos botones y su payload
+      (`CLUB_SI` / `CLUB_NO`) están listos para copiar en `docs/features/golden-bullet.md`.
+      El contrato de variables es fijo: `{{1}}`=nombre, `{{2}}`=promo. Una plantilla con
+      tres variables NO sirve.
+   3. **Correr el sondeo en modo ensayo ANTES de dejarlo suelto**:
+      `GET /api/cron/line-health?dry=1` con el `CRON_SECRET`. Devuelve el escalón y la
+      calidad que ESCRIBIRÍA en cada marca, sin escribir. Es la primera vez que algo va a
+      poner un número en `messaging_daily_limit`, y ese número es el freno de las campañas
+      de marcas en producción: vale la pena mirarlo una vez. **Ese dry-run es además la
+      respuesta a "¿de verdad tenemos el límite?"**, la pregunta del dueño del 10.
+   4. **Decidir de qué marca es la base de 25.000 y con qué escalón.** El punto 3 lo
+      contesta solo. La aritmética que hay que ver antes de prometer nada: a 250 son
+      **139 días**; a 1.000, 27; a 10.000, 3. Golden Bullet dejó de ser una bala.
+   ⚠️ **Si la base es comprada o de origen desconocido**, la línea de procedencia de la
+   plantilla no puede decir «porque nos visitaste». Por eso la plantilla PREGUNTA en vez de
+   promocionar: convierte una base sin consentimiento en una lista de gente que sí lo dio.
 0.ALFA **ANTES de habilitar la sede 2 de cualquier marca — auditoría adversarial 2026-09-09.**
    Lo que sigue está confirmado leyendo el código, no supuesto. En orden de ejecución:
    1. **En el AIOS, marcar el cliente como «grupo» ANTES de dar de alta las sedes 2..N.**
@@ -129,11 +148,13 @@
    (`34b30a6`), así que el coexistente por Twilio recibe su TwiML completo. Lo que SÍ falta para
    el de Zernio: **18.c** — su operador de domicilios manda el cuadro y **no recibe nada**, ni
    éxito ni fallo, y un reenvío humano **duplica cliente, visita y puntos** (nada deduplica eso).
-0.quinquies **Aplicar la `00058` y la `00059` en Supabase** (producto) y la **`00009` en el Supabase del AIOS**,
+0.quinquies **Aplicar la `00058`, la `00059` y la `00060` en Supabase** (producto) y la **`00009` en el Supabase del AIOS**,
    en ese orden y ANTES de desplegar. Sin la 00058, `/dashboard/sedes` responde **503** al guardar
    (`merge_location_config_deep()` no existe) y las columnas `location_id` de recompensas tampoco.
    Sin la 00009 del AIOS, guardar un cliente revienta con el CHECK viejo en cuanto alguien elija
-   «grupo» o «franquicia». Las dos son de RIESGO BAJO: no tocan una sola fila de historia.
+   «grupo» o «franquicia». Sin la `00060`, Golden Bullet responde error al confirmar (`imported_contacts.status` no
+   admite `'queued'`) y el sondeo de salud no puede guardar un snapshot de Twilio (CHECK de
+   `source`). Las tres son de RIESGO BAJO: no tocan una sola fila de historia.
 0.quater **Falta el autoservicio de contraseña** («olvidé mi contraseña» en `/login`). Ya se puede
    cambiar una clave desde «Accesos» y desde el AIOS, así que nadie queda encerrado — pero mientras
    no exista el autoservicio, cada olvido sigue pasando por una persona. Depende de que el SMTP del
@@ -207,6 +228,13 @@ para reseñas. Ninguna decisión de hoy cierra esa puerta (`config.integrations`
 
 ## 5. Hecho reciente
 
+- **Golden Bullet por bloques + el freno de línea encendido** (2026-09-10, migración `00060`):
+  encolaba nada y enviaba todo dentro del request — con 25.000 contactos moría a los 300 s.
+  Ahora reparte en bloques diarios con un `not_before` escalonado (el drenador no cambió) y
+  `/api/cron/line-health` escribe por fin `messaging_daily_limit`, que estaba en NULL en las
+  5 marcas: el freno de la 00037 llevaba desde agosto **medido y apagado**. De paso:
+  `isPhoneOptedOut()` miraba solo `customers`, así que el "no" de quien nunca fue cliente no
+  lo leía nadie.
 - **El píxel de Meta, y la política que lo dice** (2026-09-10, sin migración): las páginas públicas
   disparan `PageView`, `CompleteRegistration` (cliente nuevo) y `CheckIn` (el que vuelve; el
   duplicado NO cuenta). **Son DOS píxeles y no uno**, porque un píxel solo alimenta a la cuenta que

@@ -299,7 +299,7 @@ cumpleaños y una campaña manual.
 | `reactivation` | ❌ Todavía no | Variables volátiles (fecha límite del premio) y un efecto posterior: `grantReward()`. Si el envío se difiere, **¿cuándo se otorga el premio?** No está decidido. |
 | `reward_reminder` | ❌ Todavía no | `days_left` caduca: encolar hoy y enviar en dos días manda un número mentiroso. Y `markReminderSent()` tendría que moverse al drenaje. |
 | `calendar_event` | ✅ Sí (2026-09-06) | Envía lo que cabe en el presupuesto del día y encola el resto. La media provider-aware se resuelve al encolar: `media_url` guarda la URL pública COMPLETA (la que Zernio necesita como `headerMediaUrl`) y `{{6}}` viaja en `variables` solo para Twilio. `expiresAt` = fin del día del evento (P1). |
-| Golden Bullet (`import`) | ❌ No | Es el Bloque 5; depende de los Bloques 3 y 4. Además sigue registrando `messageType: 'manual'` en vez de `'import'`. |
+| Golden Bullet (`import`) | ✅ Sí (2026-09-10) | Es el Bloque 5. **Ya NO envía nada dentro del request**: encola la base entera repartida en bloques diarios (D-7) y el drenador la saca al ritmo del cupo. El reparto es un `not_before` escalonado, así que este bucle no cambió. Ya registra `messageType: 'import'` (P4). Ver [`golden-bullet.md`](golden-bullet.md). |
 
 **El drenador ya sabe enviar cualquiera de esos tipos** — lo que falta es decidir qué variables se
 congelan y cuáles se recalculan al drenar, y dónde van los efectos posteriores.
@@ -380,7 +380,9 @@ Corregido en el bloque 13 de `00037` (la migración **no estaba aplicada** todav
 - `src/services/whatsapp.service.ts` (guarda en ambas ramas + release en fallo)
 - `src/services/campaign.service.ts` (`passesFrequencyCap`, `isInRecoveryZone`)
 - `src/services/wallet.service.ts` (exención Zernio en `canSendBulk`)
-- `src/app/api/cron/queue-drain/route.ts`
+- `src/app/api/cron/queue-drain/route.ts` (+ marcado de contactos importados)
+- `src/services/line-health.service.ts`, `src/app/api/cron/line-health/route.ts` (Bloque 3)
+- `src/services/club-optin.service.ts` (los botones de la plantilla de Golden Bullet)
 - `src/app/api/dashboard/line-budget/route.ts`, `send-queue/route.ts`, `send-queue/[id]/route.ts`
 - `src/app/api/dashboard/campaigns/manual/route.ts` (split enviar-hoy / encolar)
 - `n8n/cron_queue-drain.json` (W4 — disparador vigente hasta que el despliegue con Pro encienda el cron
@@ -390,24 +392,58 @@ Corregido en el bloque 13 de `00037` (la migración **no estaba aplicada** todav
 
 ## Pendiente (bloques siguientes del spec)
 
-- **Bloque 3 — salud y frenos.** `line_health_snapshots` y `tenants.quality_rating` existen y
-  `line_budget()` ya respeta `throttled`/`frozen`, pero **nada los escribe todavía**: falta
-  `/api/cron/line-health` y el workflow W5.
+- ~~**Bloque 3 — salud y frenos.**~~ ✅ **HECHO (2026-09-10).**
+  `/api/cron/line-health`, cada hora, escribe `line_health_snapshots` y sincroniza
+  `tenants.messaging_daily_limit`, `quality_rating` y `line_status`.
 
-  > ⚠️ **El estado de las plantillas ya tiene dueño — no lo dupliques.** La v2.13.0 (§12, plantillas)
-  > implementó el detector de aprobación como el webhook `whatsapp.template.status_updated`, y toda la
-  > lógica de promoción vive detrás de **una sola función**:
-  > `applyProviderTemplateStatus()` en `src/services/template.service.ts`.
-  > Cuando `/api/cron/line-health` lea `GET /v1/whatsapp/templates` para llenar `paused_templates`,
-  > debe **llamar a esa función** con cada estado que reciba, no escribir su propia promoción: es el
-  > único código autorizado a mover `admin_settings.*_template_sid`.
-  > `refreshTemplateStatusFromProvider()` ya deja armado ese camino para una plantilla suelta.
-  > Ver `docs/features/whatsapp-templates.md`. **D-4 ya está resuelta:** Zernio expone
-  `quality_rating` y `messaging_limit_tier` por `GET /v1/whatsapp/number-info`, pero **no** emite
-  webhook de calidad — el poll es la única fuente. Ver §10 del spec.
+  **Por qué era el más urgente de los que quedaban:** las 5 marcas vivas tenían el límite
+  en `NULL`. O sea que todo el freno que construyó la 00037 estaba **medido y apagado**,
+  no porque fallara, sino porque nadie escribía esas dos columnas.
+
+  **De dónde sale el dato — verificado en los dos proveedores, no de memoria:**
+
+  | Proveedor | Ruta | Campos |
+  |---|---|---|
+  | Twilio | `GET /v2/Channels/Senders` (SDK v5.13.1, ya instalado) | `properties.qualityRating`, `properties.messagingLimit` |
+  | Zernio | `GET /v1/whatsapp/number-info?accountId=` | `phone.quality_rating`, `phone.messaging_limit_tier` (D-4) |
+
+  Twilio es la fuente de 4 de las 5 marcas. Se lista y se empareja por número porque el
+  repo **no guarda el SID del sender** en ninguna columna.
+
+  ⚠️ **De Zernio nunca se ha visto una respuesta real con un número conectado** — los
+  nombres de campo salen del OpenAPI. Por eso se parsea con tolerancia (las dos
+  convenciones de nombre) y se guarda la respuesta cruda en `line_health_snapshots.raw`:
+  el primer sondeo de verdad se audita mirando esa columna, no adivinando.
+
+  **La regla que gobierna el sondeo: solo puede APRETAR.** Rojo congela de inmediato;
+  dos amarillos seguidos estrangulan; **verde no reactiva a nadie**, ni desde `frozen` ni
+  desde `throttled`. Si la métrica mejoró porque la campaña dejó de enviar, reactivarla
+  automáticamente vuelve a poner en marcha exactamente lo que causó la caída. Volver a
+  `active` es siempre humano, con motivo escrito (`aios_set_line_status`). Esa asimetría
+  es lo que hace seguro correr esto cada hora sin supervisión.
+
+  **Lo que NO entiende, no lo escribe.** Un escalón que no se parsea queda en `null`, que
+  deja el freno apagado. Inventar un número le cortaría las campañas a una marca que sí
+  tenía cupo — el desastre exacto contra el que esta misma página advierte más arriba.
+
+  **Modo ensayo:** `GET /api/cron/line-health?dry=1` devuelve lo que escribiría, sin
+  escribir. Existe porque este endpoint toca el freno de marcas en producción; conviene
+  correrlo así la primera vez y mirar la salida antes de dejarlo suelto.
+
+  > ⚠️ **El estado de las plantillas sigue teniendo otro dueño — no se duplicó.** Toda la
+  > promoción vive detrás de `applyProviderTemplateStatus()` en `template.service.ts`, el
+  > único código autorizado a mover `admin_settings.*_template_sid`. Este sondeo escribe
+  > `paused_templates: []` y **no toca punteros**. Cuando se le agregue la lectura de
+  > plantillas, tiene que LLAMAR a esa función, no escribir su propia promoción.
+
 - **Bloque 4 — consentimiento.** `consent_events` existe; falta escribir en él desde check-in y
   webhooks, y el backfill.
-- **Bloque 5 — régimen de Golden Bullet** (§3.4.1 del spec).
+- ~~**Bloque 5 — régimen de Golden Bullet**~~ ✅ **HECHO (2026-09-10)**, en la forma que
+  fijó **D-7**, no en la del §3.4.1: el techo del bloque diario es el presupuesto de
+  campaña COMPLETO y el tamaño lo elige el operador; la puerta del escalón se eliminó; la
+  puerta de calidad, el congelamiento al primer amarillo y la frase escrita de
+  confirmación se conservan. `golden_bullet_pct` **no se implementó**, a propósito.
+  Ver [`golden-bullet.md`](golden-bullet.md).
 
 ### Pregunta abierta que este bloque deja sobre la mesa
 

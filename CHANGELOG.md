@@ -8,6 +8,26 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [2026-09-11c] - Invitaciones con premio: un enlace o QR que regala algo a quien venga
+
+**Qué:** el dueño crea «2x1 en sushi», le queda `/c/{slug}` y su QR, lo manda por WhatsApp o lo pone
+en redes. Quien lo abre se registra, **el premio le aparece en la tarjeta desde ese momento**, y lo
+reclama cuando **el mesero lo escanea** en el local. No hace falta «tarjeta provisional»: el premio es
+un `reward_grant` con `source='invite'`, y el reclamo es el gesto de siempre del mesero. La regla que
+lo hace seguro: quien llega por invitación **no** suma la visita #1 automática aunque la marca tenga
+«primera visita libre» — se registra desde su casa, no desde la mesa; se fuerza `pendingStaffScan`
+por el ORIGEN del registro, los del QR de la mesa siguen igual. Un cliente que ya existe también
+recibe el premio (en el `lookup`). **Recompensas** pasa a ser una pantalla con tres pestañas: Niveles
+y premios · Invitaciones · **Redenciones** (antes página aparte; `/dashboard/redemptions` redirige).
+Golden Bullet puede elegir una invitación como regalo de bienvenida.
+**Por qué:** «que el premio se muestre desde la tarjeta y creame un área […] para agregar estos premios
+y crear los links o un QR […] mete redenciones dentro de recompensas» (dueño).
+**Archivos:** `supabase/migrations/00063_*.sql`, `src/services/{qr-campaign,reward-grant,club-optin}.service.ts`,
+`src/app/api/dashboard/qr-campaigns/`, `src/app/api/invite/`, `src/app/(public)/c/`, `src/app/api/check-in/route.ts`,
+`src/components/features/check-in/CheckInForm*`, `src/components/features/staff/*`, `src/app/(dashboard)/dashboard/{rewards,redemptions}/`,
+`src/components/dashboard/{RewardsLevelsPanel,RedemptionsPanel,InviteCampaignsPanel}.tsx`, `docs/features/invite-campaigns.md`.
+**Decisión aceptada:** una invitación activa por cliente a la vez (índice único de la 00031). La 00063 va ANTES de desplegar.
+
 ## [2026-09-11b] - Meseros rotativos: «rota entre sedes» como estado explícito
 
 **Qué:** el panel obligaba a darle UNA sede a cada mesero (D11 + el CHECK de la 00046) y la

@@ -32,7 +32,6 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
-| Invitaciones con premio (link/QR → registro → premio en tarjeta → mesero valida) + Recompensas con pestañas (Redenciones adentro) (dueño, 2026-09-11) | Opus 5 | `supabase/migrations/00063_*`, `src/services/qr-campaign.service.ts`, `src/services/club-optin.service.ts`, `src/app/api/dashboard/qr-campaigns/**`, `src/app/api/invite/**`, `src/app/(public)/c/**`, `src/app/api/check-in/route.ts`, `src/components/features/check-in/CheckInForm.tsx` + `.types.ts`, `src/components/features/staff/{PendingRewardsList,RewardAlert}.tsx`, `src/types/database.types.ts`, `src/app/(dashboard)/dashboard/{rewards,redemptions}/page.tsx`, `src/components/dashboard/{RewardsLevelsPanel,RedemptionsPanel,InviteCampaignsPanel}.tsx`, `src/components/layout/DashboardSidebar.tsx`, `tests/unit/qr-campaigns.test.ts`, `docs/features/{invite-campaigns,reward-grants,referral-program,golden-bullet}.md` | **00063** | en curso |
 | AIOS: borrar propietario completo (AIOS + tenant del producto + usuarios), Twilio vs Zernio en la lista + recarga de mensajes Twilio, reset de WhatsApp (Tepuy), Embedded Signup real con retorno automático, simulación apagada por defecto (dueño, 2026-09-11) | Opus 5 | **Producto:** `supabase/migrations/00064_*`, `src/app/api/aios/tenant-delete/**`, `src/lib/aios-provision.ts`, `tests/unit/aios-provision.test.ts`, `docs/features/aios-borrado.md`. **AIOS (repo propio `Level 2.0/aios-constelarys`):** todo el repo | **00064** (producto) · 00010 (AIOS) | en curso |
 
 ## 3. Siguiente, en orden
@@ -153,12 +152,14 @@
    (`34b30a6`), así que el coexistente por Twilio recibe su TwiML completo. Lo que SÍ falta para
    el de Zernio: **18.c** — su operador de domicilios manda el cuadro y **no recibe nada**, ni
    éxito ni fallo, y un reenvío humano **duplica cliente, visita y puntos** (nada deduplica eso).
-0.quinquies **Aplicar la `00058` y la `00059` en Supabase** (producto) y la **`00009` en el Supabase del AIOS**,
+0.quinquies **Aplicar la `00058`, la `00059` y la `00063` en Supabase** (producto) y la **`00009` en el Supabase del AIOS**,
    en ese orden y ANTES de desplegar. Sin la 00058, `/dashboard/sedes` responde **503** al guardar
    (`merge_location_config_deep()` no existe) y las columnas `location_id` de recompensas tampoco.
    Sin la 00009 del AIOS, guardar un cliente revienta con el CHECK viejo en cuanto alguien elija
-   «grupo» o «franquicia». La `00060` ya la corrió el dueño el 10, antes del push. Las dos que quedan son de RIESGO
-   BAJO: no tocan una sola fila de historia. **Y la `00061`** (`tenant_integration_secrets`, el token de la API
+   «grupo» o «franquicia». La `00060` ya la corrió el dueño el 10, antes del push. **Sin la `00063`**, la pestaña
+   Invitaciones de Recompensas responde 500 al listar (`qr_campaigns` no existe) y el registro por
+   `/c/{slug}` se completa pero SIN premio (el INSERT del grant falla por el CHECK de `source`).
+   Las tres son de RIESGO BAJO: no tocan una sola fila de historia. **Y la `00061`** (`tenant_integration_secrets`, el token de la API
    de Conversiones por marca): tabla nueva, riesgo cero, puede ir después del código; hasta que corra, el panel
    responde 503 al guardar el token de una marca. La `00062` (meseros rotativos) ya está aplicada (11).
 0.quater **Falta el autoservicio de contraseña** («olvidé mi contraseña» en `/login`). Ya se puede
@@ -243,6 +244,14 @@ automatizaciones dentro del restaurante y **Google** para reseñas.
 
 ## 5. Hecho reciente
 
+- **Invitaciones con premio** (2026-09-11, migración `00063`): un enlace `/c/{slug}` o su QR que
+  regala algo a quien se registre; el premio le queda en la tarjeta desde el registro y **solo se
+  entrega cuando el mesero lo escanea**. No hay «tarjeta provisional»: el premio es un `reward_grant`
+  con `source='invite'`. Quien llega por invitación **no** suma la visita #1 hasta que viene — se
+  fuerza por el ORIGEN del registro, no con el interruptor global. Recompensas pasó a ser una
+  pantalla con tres pestañas (Niveles · Invitaciones · Redenciones); `/dashboard/redemptions`
+  redirige. Golden Bullet puede usar una invitación como regalo de bienvenida. Referidos (§2 del
+  diseño) sigue sin construir y se para encima de esto. → `docs/features/invite-campaigns.md`.
 - **Meseros rotativos** (2026-09-11, migración `00062`, **aplicada y desplegada**): el
   panel obligaba a UNA sede por mesero (D11) y «la mayoría son rotativos». Estado explícito
   `staff_users.works_any_location` —no se reinterpreta el NULL, que sigue siendo «sin sede

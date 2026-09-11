@@ -32,6 +32,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Golden Bullet: foto en el mensaje 1 (plantilla `twilio/card` con imagen + botones) — Opus 5, 2026-09-11 | Opus 5 | `src/services/golden-bullet-template.service.ts` · `src/app/api/dashboard/imported-contacts/{template,reply-image}/route.ts` · `src/app/api/dashboard/templates/route.ts` · `src/components/dashboard/ImportedContactsTemplate.tsx` · `tests/unit/golden-bullet-respuestas.test.ts` · `docs/features/golden-bullet.md` | — | en curso |
 
 ## 3. Siguiente, en orden
 

@@ -65,7 +65,11 @@ function variablesDe(body: string): Set<number> {
 /** Réplica de `renderClubReply()` para la vista previa. La que manda es la del servidor. */
 function previa(plantilla: string, nombre: string | null, enlace: string | null, marca: string): string {
   let t = plantilla
-  t = nombre ? t.replaceAll('{nombre}', nombre) : t.replace(/,?[ \t]*\{nombre\}/g, '')
+  t = nombre
+    ? t.replace(/\{nombre(?:\|[^}]*)?\}/g, nombre)
+    : t.replace(/(,?[ \t]*)\{nombre(?:\|([^}]*))?\}/g, (_m, coma: string, alt?: string) =>
+        alt?.trim() ? `${coma}${alt.trim()}` : ''
+      )
   t = enlace ? t.replaceAll('{enlace}', enlace) : t.replace(/^[^\n]*\{enlace\}[^\n]*\n?/gm, '').replaceAll('{enlace}', '')
   return t.replaceAll('{marca}', marca).replace(/\n{3,}/g, '\n\n').trim()
 }
@@ -374,6 +378,11 @@ export function ImportedContactsTemplate() {
             <code>{'{nombre}'}</code>, <code>{'{enlace}'}</code> (el de registro, solo en el sí) y{' '}
             <code>{'{marca}'}</code>. Si dejás un campo vacío sale el texto de defecto.
           </p>
+          <p className="text-xs text-muted-foreground">
+            Una de cada cuatro personas de la base no tiene nombre. Con <code>{'{nombre}'}</code> a secas, el
+            comodín se va con su coma («por aquí, {'{nombre}'}!» → «por aquí!»). Si preferís otra cosa, escribí
+            el alternativo adentro: <code>{'{nombre|¿cómo estás?}'}</code>. La vista previa muestra los dos casos.
+          </p>
 
           {config && (
             <div
@@ -430,8 +439,12 @@ export function ImportedContactsTemplate() {
                 </div>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs uppercase tracking-wide text-muted-foreground">Así le llega</Label>
+                <Label className="text-xs uppercase tracking-wide text-muted-foreground">Así le llega (con nombre)</Label>
                 <Burbuja texto={previa(textoSi, 'Juan', config?.enlace ?? null, marca)} foto={fotoSi || null} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs uppercase tracking-wide text-muted-foreground">Así le llega (sin nombre)</Label>
+                <Burbuja texto={previa(textoSi, null, config?.enlace ?? null, marca)} />
               </div>
             </div>
 

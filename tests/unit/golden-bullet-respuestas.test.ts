@@ -109,6 +109,20 @@ describe('renderClubReply — los comodines de las respuestas', () => {
     expect(t).toBe('¡Qué alegría tenerte por aquí!')
   })
 
+  it('sin nombre, {nombre|¿cómo estás?} usa el alternativo y conserva la coma', () => {
+    const t = renderClubReply('¡Qué alegría tenerte por aquí, {nombre|¿cómo estás?}', { ...ctx, nombre: null })
+    expect(t).toBe('¡Qué alegría tenerte por aquí, ¿cómo estás?')
+  })
+
+  it('con nombre, el alternativo no aparece', () => {
+    const t = renderClubReply('Hola, {nombre|¿cómo estás?}!', ctx)
+    expect(t).toBe('Hola, Daniela!')
+  })
+
+  it('un alternativo vacío se comporta como {nombre} a secas', () => {
+    expect(renderClubReply('Hola, {nombre|}!', { ...ctx, nombre: null })).toBe('Hola!')
+  })
+
   it('sin enlace, se va la línea entera del enlace', () => {
     const t = renderClubReply('Gracias.\nAbrí este enlace:\n{enlace}\nNos vemos.', { ...ctx, enlace: null })
     expect(t).toBe('Gracias.\nAbrí este enlace:\nNos vemos.')

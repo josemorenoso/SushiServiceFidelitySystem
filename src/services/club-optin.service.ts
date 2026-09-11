@@ -108,7 +108,12 @@ export const CLUB_SETTING_KEYS = {
 } as const
 
 /** Los comodines que acepta el texto. `{enlace}` solo tiene sentido en el Sí. */
-export const CLUB_PLACEHOLDERS = ['{nombre}', '{enlace}', '{marca}'] as const
+export const CLUB_PLACEHOLDERS = ['{nombre}', '{nombre|texto si no hay nombre}', '{enlace}', '{marca}'] as const
+
+/** `{nombre}` o `{nombre|alternativo}`. El segundo grupo es el alternativo. */
+const RE_NOMBRE = /\{nombre(?:\|[^}]*)?\}/g
+/** Lo mismo, capturando la coma y los espacios que lo preceden (para poder llevárselos). */
+const RE_NOMBRE_CON_COMA = /(,?[ \t]*)\{nombre(?:\|([^}]*))?\}/g
 
 export const RESPUESTA_SI_DEFECTO =
   '🎉 ¡Bienvenido al club de *{marca}*, y gracias por decir que sí, {nombre}!\n\n' +
@@ -134,8 +139,11 @@ export interface ClubReply {
 /**
  * Rellena los comodines de una respuesta.
  *
- * Cuando falta el dato, el comodín se va CON la coma que lo precedía:
- * «¡Qué alegría tenerte por aquí, {nombre}!» sin nombre queda «¡Qué alegría
+ * `{nombre}` admite un texto alternativo para cuando la persona no tiene
+ * nombre en la base (una de cada cuatro, en la de Sushi Service):
+ * `{nombre|¿cómo estás?}`. Con nombre sale el nombre; sin nombre sale el
+ * alternativo. Y sin alternativo, el comodín se va CON la coma que lo
+ * precedía: «¡Qué alegría tenerte por aquí, {nombre}!» queda «¡Qué alegría
  * tenerte por aquí!» y no «…por aquí, !». Un enlace que falta se va con la
  * línea entera en que estaba, para no dejar un renglón vacío que diga «Abrí
  * este enlace:» y nada.
@@ -144,8 +152,13 @@ export interface ClubReply {
  */
 export function renderClubReply(plantilla: string, ctx: ClubReplyContext): string {
   let texto = plantilla
-  if (ctx.nombre) texto = texto.replaceAll('{nombre}', ctx.nombre)
-  else texto = texto.replace(/,?[ \t]*\{nombre\}/g, '')
+  if (ctx.nombre) {
+    texto = texto.replace(RE_NOMBRE, ctx.nombre)
+  } else {
+    texto = texto.replace(RE_NOMBRE_CON_COMA, (_m, coma: string, alt?: string) =>
+      alt?.trim() ? `${coma}${alt.trim()}` : ''
+    )
+  }
 
   if (ctx.enlace) texto = texto.replaceAll('{enlace}', ctx.enlace)
   else texto = texto.replace(/^[^\n]*\{enlace\}[^\n]*\n?/gm, '').replaceAll('{enlace}', '')

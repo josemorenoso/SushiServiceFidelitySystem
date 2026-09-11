@@ -18,9 +18,11 @@ los tres textos: cuerpo y botones editables con sus topes (1.024 / 20), `{{2}}` 
 asistente solo pide la promo si la plantilla la usa), y las respuestas al «sí» y al «no» con
 `{nombre}`, `{enlace}`, `{marca}` y una foto que se sube desde ahí. Todo en `admin_settings`;
 vacío = el texto de defecto. La foto sale como `<Media>` en el TwiML; el nombre se busca en
-`imported_contacts`. Nada del mensaje del dueño quedó en código.
+`imported_contacts`. Nada del mensaje del dueño quedó en código. Una de cada cuatro personas de la
+base no tiene nombre: `{nombre|¿cómo estás?}` pone el alternativo (y `{nombre}` a secas se va con la
+coma); en el mensaje 1 lo cubre el «nombre genérico» del paso 4, porque `{{1}}` no puede ir vacía.
 **Verificado:** tsc limpio · lint limpio en lo tocado · `golden-bullet-{bloques,telefonos,respuestas}`
-47/47 · suite entera en verde (ver ESTADO §1).
+50/50 · suite entera en verde (ver ESTADO §1).
 **Archivos:** `src/components/dashboard/ImportedContacts{Template,Uploader}.tsx`,
 `src/services/{golden-bullet-template,club-optin,imported-contacts}.service.ts`,
 `src/app/api/dashboard/imported-contacts/{template,confirm,reply-image}/route.ts`,

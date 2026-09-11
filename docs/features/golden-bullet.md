@@ -243,8 +243,11 @@ plantilla guarda al crearla para que `detectClubButton()` los reconozca por text
 proveedor no manda payload. Vacío = el texto de defecto del servidor (`RESPUESTA_*_DEFECTO`).
 
 `renderClubReply()` rellena los comodines y es pura: sin nombre, `{nombre}` se va **con la
-coma** («por aquí, {nombre}!» → «por aquí!»); sin enlace, se va la línea entera. El nombre
-sale de `imported_contacts.name` y, si no, de `customers.name`. La foto viaja como `<Media>`
+coma** («por aquí, {nombre}!» → «por aquí!») y `{nombre|¿cómo estás?}` pone el alternativo en
+su lugar; sin enlace, se va la línea entera. El nombre sale de `imported_contacts.name` y, si
+no, de `customers.name`. **En el mensaje 1 no hay alternativo posible**: `{{1}}` es una
+variable de Meta y no puede ir vacía, así que los sin nombre reciben el «nombre genérico» que
+se escribe en el paso 4 del asistente (`fallback_name`; «¿cómo estás?» sirve). La foto viaja como `<Media>`
 en el TwiML de `twilio-incoming` (Zernio sigue sin poder contestar: ver arriba).
 
 > `POST /api/dashboard/imported-contacts/template` crea **y somete**. `GET` de la misma

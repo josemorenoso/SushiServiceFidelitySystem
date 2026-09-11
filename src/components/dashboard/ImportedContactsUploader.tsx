@@ -125,9 +125,21 @@ export function ImportedContactsUploader({ onSent }: { onSent?: () => void }) {
       .then((r) => r.json())
       .then((d: LineBudgetInfo) => {
         setBudget(d)
-        // Arranca en el cupo de la línea: el valor más alto que de verdad puede
-        // salir hoy. El operador lo baja si quiere ir más despacio.
-        if (typeof d.campaignBudget === 'number' && d.campaignBudget > 0) setBlockSize(d.campaignBudget)
+        // Arranca en la MITAD del cupo, no en el cupo entero.
+        //
+        // D-7 dejó el techo en el presupuesto completo y dijo, con todas las
+        // letras, cuál es el riesgo: un Golden Bullet a tope se come todo el
+        // cupo de campaña del día y deja sin mensaje a los clientes que SÍ
+        // consintieron. Los cumpleaños y los recordatorios de premio NO pasan
+        // por la cola —salen de su propio cron, a las 13:00 y 11:00 de
+        // Bogotá—, así que si el goteo vació el presupuesto de madrugada, esos
+        // mensajes fallan.
+        //
+        // El techo sigue siendo el cupo completo: el operador puede subirlo.
+        // Lo que cambia es qué se propone cuando nadie eligió nada.
+        if (typeof d.campaignBudget === 'number' && d.campaignBudget > 0) {
+          setBlockSize(Math.max(1, Math.floor(d.campaignBudget / 2)))
+        }
       })
       .catch(() => setBudget(null))
   }, [])
@@ -440,6 +452,14 @@ export function ImportedContactsUploader({ onSent }: { onSent?: () => void }) {
                     <p className="mt-1 text-xs text-amber-700">
                       Pediste {blockSize?.toLocaleString('es-CO')} por día, pero la línea solo da{' '}
                       {proyeccion.efectivo.toLocaleString('es-CO')}.
+                    </p>
+                  )}
+                  {cupo !== null && proyeccion.efectivo > cupo / 2 && (
+                    <p className="mt-1 text-xs text-amber-700">
+                      Este bloque se lleva {Math.round((proyeccion.efectivo / cupo) * 100)}% del cupo de
+                      campaña del día. Los cumpleaños y los recordatorios de premio salen de su propio
+                      cron y <strong>no</strong> pasan por esta cola: si el goteo vacía el presupuesto de
+                      madrugada, esos mensajes no salen.
                     </p>
                   )}
                   {proyeccion.dias > 30 && (

@@ -1,6 +1,6 @@
 # Feature: Golden Bullet (Importación Masiva de Contactos)
 
-> **Versión:** v3.0.0 — 2026-09-10
+> **Versión:** v3.1.0 — 2026-09-10
 > **Estado:** ✅ Implementado (detrás de feature flag)
 > **Migraciones:** `00023_imported_contacts.sql` · `00060_golden_bullet_bloques.sql`
 > **Ver también:** [`send-governance.md`](send-governance.md) · [`campaigns.md`](campaigns.md)
@@ -160,6 +160,73 @@ formalismo. Esa es exactamente la razón por la que la plantilla pregunta en vez
 promocionar: el botón convierte una base sin consentimiento en una lista de gente que sí
 lo dio, y deja constancia de quién dijo que no.
 
+## El tablero diario y el botón de parar (v3.1.0)
+
+Un goteo de semanas sin tablero es un goteo a ciegas. La pestaña **«En curso»** —que es la
+que abre la pantalla, antes que «Nueva campaña»— contesta tres preguntas:
+
+- **¿Cuánto cupo me comí hoy?** El número grande: mensajes de esta base que salieron hoy.
+- **¿Qué sigue?** Cuántos salen en el próximo bloque, qué día, y la fecha estimada de fin.
+- **¿Cómo lo paro?** Un botón.
+
+### Cómo está hecha la pausa, y por qué NO es un estado nuevo
+
+Lo obvio sería agregarle `paused` al CHECK de `send_queue.status`. **Sería un error caro.**
+El anti-duplicado de la 00038 es un índice único PARCIAL `WHERE status = 'queued'`: en
+cuanto un item sale de `queued` **libera su hueco**, así que una campaña pausada se podría
+volver a encolar entera y esa gente recibiría el mensaje **dos veces**.
+
+Pausar es poner `not_before` en el año 9999. El item sigue `queued` —el índice sigue
+protegiendo— y el drenador ni lo mira, porque `claim_send_queue()` filtra
+`not_before <= now()`. Cero estados nuevos, cero cambios en el drenador, cero migración.
+Es el mismo mecanismo con el que están hechos los bloques.
+
+| | Qué pasa |
+|---|---|
+| **Detener** | Lo que falta deja de salir. **No se cancela ni se pierde nada.** Lo que ya salió no se puede deshacer. |
+| **Reanudar** | Se reprograma **desde hoy**, y se puede elegir un ritmo **distinto** del original — sin volver a subir el CSV. |
+
+> **Por qué reanudar reprograma en vez de restaurar las fechas viejas:** si estuvo una
+> semana parado, esas fechas ya pasaron y **todo saldría de golpe el mismo día** — que es
+> exactamente lo que los bloques existen para evitar.
+
+### El control del cupo diario es el tamaño del bloque
+
+No hay un sub-cap aparte, y es deliberado: **D-7 eliminó `golden_bullet_pct` a propósito**.
+El freno es el número que elige el operador.
+
+Lo que sí cambió en la v3.1.0 es **qué se propone por defecto: la mitad del cupo, no el
+cupo entero.** El techo sigue siendo el presupuesto completo y se puede subir; lo que se
+evita es que el valor que aparece solo sea el más agresivo posible.
+
+⚠️ **La razón concreta, que hay que entender antes de subirlo:** los cumpleaños y los
+recordatorios de premio **no pasan por esta cola** — salen de su propio cron (13:00 y 11:00
+de Bogotá). Si el goteo vacía el presupuesto de campaña de madrugada, **esos mensajes
+fallan**. Golden Bullet es P4 y cede el turno dentro de la cola, pero contra un cron que
+envía directo no hay prioridad que valga: el cupo ya se gastó.
+
+Con una línea de 2.000 (Sushi Service): presupuesto ≈ 1.930, bloque propuesto ≈ 965, y
+quedan ~965 para todo lo demás. 15.000 contactos a ese ritmo son **16 días**.
+
+## Crear la plantilla desde el panel (v3.1.0)
+
+La pestaña **«Plantilla»** la crea en la cuenta Twilio del negocio y la manda a Meta sin
+que nadie copie un token a ninguna parte: las credenciales salen de la fila del tenant en
+el servidor, igual que en el resto del panel.
+
+Pide dos cosas:
+
+1. **De dónde salió su número.** No tiene valor por defecto **a propósito**: un
+   «porque nos visitaste» horneado haría que media docena de marcas mandaran una mentira
+   sin darse cuenta, justo en el mensaje cuyo propósito es pedir permiso.
+2. **Un ejemplo del regalo**, que es lo que Meta revisa junto al texto.
+
+Muestra la vista previa con los dos botones antes de crear nada, y avisa que la solicitud
+queda registrada en la WABA del negocio y tarda 24-48 h.
+
+> `POST /api/dashboard/imported-contacts/template` crea **y somete**. `GET` de la misma
+> ruta solo devuelve la vista previa y **no toca Twilio ni Meta**.
+
 ## Las dos puertas que siguen cerradas
 
 **1 · Puerta de calidad** (spec §3.4.1, conservada por D-7). El asistente **bloquea** si:
@@ -221,6 +288,9 @@ Estados (`00060` agregó los dos últimos):
 | GET | `/api/dashboard/imported-contacts` | Lotes o contactos de un `batch_id` |
 | GET | `/api/dashboard/imported-contacts/stats` | Estadísticas por `batch_id` |
 | GET | `/api/dashboard/imported-contacts/roi` | ROI por `batch_id` |
+| GET | `/api/dashboard/imported-contacts/progress` | Con `batch_id`, la foto de ese lote. **Sin** `batch_id`, todo lo que sigue goteando |
+| POST | `/api/dashboard/imported-contacts/pause` | `{ campaign_id, action: 'pause' \| 'resume', block_size? }` |
+| GET/POST | `/api/dashboard/imported-contacts/template` | `GET` = vista previa (no toca nada). `POST` = crea en Twilio y somete a Meta |
 
 **Topes de `confirm`:** `409` si la puerta de calidad frena · `409` si no hay saldo ·
 **`413` si el lote pasa de 30.000 contactos**. Ese último no es una regla de negocio: es
@@ -258,6 +328,9 @@ contacto sigue en cola y todavía puede salir.
 - `supabase/migrations/00023_imported_contacts.sql`, `00060_golden_bullet_bloques.sql`
 - `src/services/imported-contacts.service.ts` (`planBlocks()`, `confirmImport()`, `markImportedContactsResult()`)
 - `src/services/club-optin.service.ts` — los dos botones
+- `src/services/golden-bullet-template.service.ts` — crea la plantilla y la somete a Meta
+- `src/components/dashboard/ImportedContactsProgress.tsx` — el tablero diario y el botón de parar
+- `src/components/dashboard/ImportedContactsTemplate.tsx` — crear la plantilla sin salir del panel
 - `src/app/api/dashboard/imported-contacts/{route,validate,confirm,stats,roi}.ts`
 - `src/app/(dashboard)/dashboard/imported-contacts/page.tsx`
 - `src/components/dashboard/ImportedContactsUploader.tsx`, `ImportedContactsCostEstimator.tsx`, `ImportedContactsHistory.tsx`

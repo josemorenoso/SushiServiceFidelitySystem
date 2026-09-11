@@ -561,6 +561,334 @@ export async function confirmImport(params: ConfirmImportParams): Promise<Confir
   }
 }
 
+// ─── Control diario: mirar y parar ──────────────────────────────
+
+/**
+ * La fecha con la que se "aparca" un envío pausado.
+ *
+ * POR QUÉ UNA FECHA IMPOSIBLE Y NO UN ESTADO `paused`
+ * ───────────────────────────────────────────────────
+ * Tentador: agregarle 'paused' al CHECK de `send_queue.status`. Sería un error,
+ * y uno caro. El anti-duplicado de la 00038 es un índice único PARCIAL
+ * `WHERE status = 'queued'`: en cuanto un item sale de 'queued' **libera su
+ * hueco**, así que una campaña pausada se podría volver a encolar entera y esa
+ * gente recibiría el mensaje dos veces. Pausar no puede abrir esa puerta.
+ *
+ * Con `not_before` en el año 9999 el item sigue siendo 'queued' —el índice
+ * sigue protegiendo— y el drenador ni lo mira, porque `claim_send_queue()`
+ * filtra `not_before <= now()`. Cero cambios en el drenador, cero estados
+ * nuevos, cero migración. Es el mismo mecanismo con el que están hechos los
+ * bloques.
+ */
+const PAUSA_SENTINELA = '9999-12-31T00:00:00.000Z'
+
+export interface BatchProgress {
+  batchId: string
+  campaignId: string | null
+  sourceFile: string
+  /** Contactos de este lote que ya recibieron el mensaje. */
+  sent: number
+  /** Los que salieron HOY. Es el número que contesta "¿cuánto cupo me comí?". */
+  sentToday: number
+  /** Todavía en la cola. */
+  queued: number
+  /** El proveedor los rechazó tres veces. */
+  bounced: number
+  /** Pidieron salir por el botón. */
+  optedOut: number
+  /** Volvieron y se registraron. */
+  converted: number
+  total: number
+  paused: boolean
+  /** Cuándo sale el próximo bloque. `null` si no queda nada o está pausado. */
+  nextBlockAt: string | null
+  /** Cuántos salen en ese próximo bloque. */
+  nextBlockSize: number
+  /** Fecha estimada del último bloque, al ritmo actual. */
+  estimatedEndAt: string | null
+  blockSize: number | null
+}
+
+/**
+ * La foto de un lote HOY.
+ *
+ * Existe porque un goteo de semanas sin tablero es un goteo a ciegas: el dueño
+ * pidió "ir viendo a diario qué mensajes enviamos y poder detenerlo". Sin esto,
+ * la única forma de saber qué pasó ayer es contar filas a mano.
+ */
+export async function getBatchProgress(
+  batchId: string,
+  tenantId: string
+): Promise<BatchProgress | null> {
+  const supabase = getServiceClient()
+
+  const { data: contactos, error } = await supabase
+    .from('imported_contacts')
+    .select('status, message_sent_at, source_file, campaign_id')
+    .eq('source_batch', batchId)
+    .eq('tenant_id', tenantId)
+
+  if (error) {
+    logDbFailure({
+      scope: 'GoldenBullet',
+      reason: 'progress_lookup_error',
+      error,
+      context: { batch_id: batchId, tenant_id: tenantId },
+    })
+    throw new Error(`No se pudo leer el avance del lote: ${error.message}`)
+  }
+  if (!contactos || contactos.length === 0) return null
+
+  const inicioDeHoy = new Date()
+  inicioDeHoy.setHours(0, 0, 0, 0)
+
+  let sent = 0
+  let sentToday = 0
+  let bounced = 0
+  let optedOut = 0
+  let converted = 0
+
+  for (const c of contactos) {
+    const st = c.status as string
+    if (st === 'sent' || st === 'delivered' || st === 'converted') {
+      sent++
+      if (c.message_sent_at && new Date(c.message_sent_at as string) >= inicioDeHoy) sentToday++
+    }
+    if (st === 'bounced') bounced++
+    if (st === 'opted_out') optedOut++
+    if (st === 'converted') converted++
+  }
+
+  const campaignId = (contactos[0].campaign_id as string | null) ?? null
+
+  // El plan y la pausa viven en la campaña; la cola viva, en send_queue.
+  let blockSize: number | null = null
+  if (campaignId) {
+    const { data: campana } = await supabase
+      .from('campaigns')
+      .select('filters')
+      .eq('id', campaignId)
+      .eq('tenant_id', tenantId)
+      .maybeSingle()
+    const filtros = (campana?.filters ?? {}) as { plan?: { blockSize?: number } }
+    blockSize = filtros.plan?.blockSize ?? null
+  }
+
+  const { data: enCola } = await supabase
+    .from('send_queue')
+    .select('not_before')
+    .eq('tenant_id', tenantId)
+    .eq('campaign_id', campaignId ?? '')
+    .eq('status', 'queued')
+    .order('not_before', { ascending: true })
+
+  const filas = enCola ?? []
+  const queued = filas.length
+  const paused = queued > 0 && filas.every((f) => new Date(f.not_before as string).getFullYear() >= 9999)
+
+  let nextBlockAt: string | null = null
+  let nextBlockSize = 0
+  let estimatedEndAt: string | null = null
+
+  if (queued > 0 && !paused) {
+    nextBlockAt = filas[0].not_before as string
+    // El "próximo bloque" son los que comparten el mismo not_before que el
+    // primero: así el número que se muestra es el que de verdad va a salir,
+    // no el tamaño teórico del plan.
+    nextBlockSize = filas.filter((f) => f.not_before === filas[0].not_before).length
+    estimatedEndAt = filas[filas.length - 1].not_before as string
+  }
+
+  return {
+    batchId,
+    campaignId,
+    sourceFile: (contactos[0].source_file as string) ?? '',
+    sent,
+    sentToday,
+    queued,
+    bounced,
+    optedOut,
+    converted,
+    total: contactos.length,
+    paused,
+    nextBlockAt,
+    nextBlockSize,
+    estimatedEndAt,
+    blockSize,
+  }
+}
+
+/**
+ * Los lotes que TODAVÍA están goteando.
+ *
+ * Es la lista que abre el tablero diario: normalmente son cero o uno, así que
+ * llamar a `getBatchProgress()` por cada uno no es caro. Si algún día son
+ * muchos, esto es lo que hay que convertir en una sola consulta agregada.
+ */
+export async function getActiveBatches(tenantId: string): Promise<BatchProgress[]> {
+  const supabase = getServiceClient()
+
+  // Los batches con cola viva salen de `send_queue`, no de `imported_contacts`:
+  // la cola es la que sabe qué falta por salir.
+  const { data: enCola, error } = await supabase
+    .from('send_queue')
+    .select('campaign_id')
+    .eq('tenant_id', tenantId)
+    .eq('status', 'queued')
+    .eq('message_type', 'import')
+    .not('campaign_id', 'is', null)
+
+  if (error) {
+    logDbFailure({
+      scope: 'GoldenBullet',
+      reason: 'active_batches_error',
+      error,
+      context: { tenant_id: tenantId },
+    })
+    return []
+  }
+
+  const campanas = [...new Set((enCola ?? []).map((r) => r.campaign_id as string))]
+  if (campanas.length === 0) return []
+
+  const { data: contactos } = await supabase
+    .from('imported_contacts')
+    .select('source_batch, campaign_id')
+    .eq('tenant_id', tenantId)
+    .in('campaign_id', campanas)
+
+  const batches = [...new Set((contactos ?? []).map((c) => c.source_batch as string))]
+
+  const progresos: BatchProgress[] = []
+  for (const batchId of batches) {
+    const p = await getBatchProgress(batchId, tenantId)
+    if (p) progresos.push(p)
+  }
+  return progresos
+}
+
+export interface PauseResult {
+  affected: number
+  paused: boolean
+}
+
+/**
+ * Frena en seco lo que queda por salir de un lote.
+ *
+ * NO cancela nada y NO pierde nada: los items siguen 'queued' y vuelven a la
+ * vida con `resumeBatch()`. Lo ÚNICO que se pierde es el calendario original —
+ * al reanudar se reprograma desde hoy, que es lo que uno quiere de todos modos
+ * después de haber parado unos días.
+ *
+ * Lo que YA salió no se puede deshacer: un mensaje entregado es un mensaje
+ * entregado. Esto para el resto.
+ */
+export async function pauseBatch(campaignId: string, tenantId: string): Promise<PauseResult> {
+  const supabase = getServiceClient()
+
+  const { data, error } = await supabase
+    .from('send_queue')
+    .update({ not_before: PAUSA_SENTINELA })
+    .eq('campaign_id', campaignId)
+    .eq('tenant_id', tenantId)
+    .eq('status', 'queued')
+    .select('id')
+
+  if (error) {
+    logDbFailure({
+      scope: 'GoldenBullet',
+      reason: 'pause_error',
+      error,
+      context: { campaign_id: campaignId, tenant_id: tenantId },
+    })
+    throw new Error(`No se pudo pausar el envío: ${error.message}`)
+  }
+
+  const affected = data?.length ?? 0
+  console.warn(`[GoldenBullet] Lote pausado: ${affected} items de la campaña ${campaignId}`)
+  return { affected, paused: true }
+}
+
+/**
+ * Reanuda un lote pausado, reprogramándolo DESDE HOY al ritmo que se le indique.
+ *
+ * Se reprograma en vez de restaurar las fechas viejas a propósito: si estuvo
+ * una semana parado, las fechas originales ya pasaron y todo saldría de golpe
+ * el mismo día — que es exactamente lo que los bloques existen para evitar.
+ *
+ * Es también la puerta para CAMBIAR el ritmo: se puede reanudar con un bloque
+ * más chico si el primero resultó muy agresivo, sin volver a subir el CSV.
+ */
+export async function resumeBatch(
+  campaignId: string,
+  tenantId: string,
+  blockSize: number
+): Promise<PauseResult> {
+  const supabase = getServiceClient()
+  const tam = Math.max(1, Math.floor(blockSize))
+
+  const { data: filas, error } = await supabase
+    .from('send_queue')
+    .select('id')
+    .eq('campaign_id', campaignId)
+    .eq('tenant_id', tenantId)
+    .eq('status', 'queued')
+    .order('enqueued_at', { ascending: true })
+
+  if (error) {
+    logDbFailure({
+      scope: 'GoldenBullet',
+      reason: 'resume_lookup_error',
+      error,
+      context: { campaign_id: campaignId, tenant_id: tenantId },
+    })
+    throw new Error(`No se pudo leer la cola para reanudar: ${error.message}`)
+  }
+
+  const pendientes = filas ?? []
+  if (pendientes.length === 0) return { affected: 0, paused: false }
+
+  const hoy = new Date()
+  hoy.setHours(0, 0, 0, 0)
+
+  // Se agrupa por día y se actualiza un día por viaje, en vez de una fila por
+  // viaje: reanudar 15.000 items son ~15 UPDATE, no 15.000.
+  const porDia = new Map<number, string[]>()
+  pendientes.forEach((fila, indice) => {
+    const dia = Math.floor(indice / tam)
+    const lista = porDia.get(dia)
+    if (lista) lista.push(fila.id as string)
+    else porDia.set(dia, [fila.id as string])
+  })
+
+  let affected = 0
+  for (const [dia, ids] of porDia) {
+    const cuando = new Date(hoy)
+    cuando.setDate(cuando.getDate() + dia)
+    // En trozos: un `.in()` con 15.000 ids no pasa por PostgREST.
+    for (let i = 0; i < ids.length; i += 500) {
+      const { data: upd, error: errUpd } = await supabase
+        .from('send_queue')
+        .update({ not_before: cuando.toISOString() })
+        .in('id', ids.slice(i, i + 500))
+        .select('id')
+      if (errUpd) {
+        logDbFailure({
+          scope: 'GoldenBullet',
+          reason: 'resume_update_error',
+          error: errUpd,
+          context: { campaign_id: campaignId, dia },
+        })
+        continue
+      }
+      affected += upd?.length ?? 0
+    }
+  }
+
+  console.warn(`[GoldenBullet] Lote reanudado: ${affected} items a ${tam}/día desde hoy`)
+  return { affected, paused: false }
+}
+
 // ─── Marcado desde el drenador ──────────────────────────────────
 
 /**

@@ -6,10 +6,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Crosshair } from 'lucide-react'
 import { ImportedContactsUploader } from '@/components/dashboard/ImportedContactsUploader'
 import { ImportedContactsHistory } from '@/components/dashboard/ImportedContactsHistory'
+import { ImportedContactsProgress } from '@/components/dashboard/ImportedContactsProgress'
+import { ImportedContactsTemplate } from '@/components/dashboard/ImportedContactsTemplate'
 
 export default function ImportedContactsPage() {
   const [refreshKey, setRefreshKey] = useState(0)
-  const [tab, setTab] = useState('nueva')
+  const [tab, setTab] = useState('curso')
 
   return (
     <div className="space-y-6">
@@ -20,20 +22,32 @@ export default function ImportedContactsPage() {
         </h1>
       </div>
       <p className="text-sm text-muted-foreground -mt-3 max-w-2xl">
-        Importa bases de contactos externas y envía UN solo mensaje de promo directa. Los contactos
-        no son clientes hasta que vuelven y se registran — ahí se mide el ROI automáticamente.
+        Despierta bases de contactos externas preguntándoles si quieren estar, a un ritmo que la
+        línea aguante. No son clientes hasta que vuelven y se registran — ahí se mide el ROI solo.
       </p>
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
+          {/* «En curso» va primero a propósito: con un goteo de semanas, lo que
+              uno abre el panel a mirar es qué salió hoy, no a cargar otro CSV. */}
+          <TabsTrigger value="curso">En curso</TabsTrigger>
           <TabsTrigger value="nueva">Nueva campaña</TabsTrigger>
-          <TabsTrigger value="historial">Historial & ROI</TabsTrigger>
+          <TabsTrigger value="plantilla">Plantilla</TabsTrigger>
+          <TabsTrigger value="historial">Historial &amp; ROI</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="curso" className="mt-4">
+          <ImportedContactsProgress refreshKey={refreshKey} />
+        </TabsContent>
 
         <TabsContent value="nueva" className="mt-4">
           <ImportedContactsUploader
-            onSent={() => { setRefreshKey((k) => k + 1); setTab('historial') }}
+            onSent={() => { setRefreshKey((k) => k + 1); setTab('curso') }}
           />
+        </TabsContent>
+
+        <TabsContent value="plantilla" className="mt-4">
+          <ImportedContactsTemplate />
         </TabsContent>
 
         <TabsContent value="historial" className="mt-4">

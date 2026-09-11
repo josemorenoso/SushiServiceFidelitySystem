@@ -13,6 +13,7 @@
 import { describe, it, expect } from 'vitest'
 import { planBlocks } from '@/services/imported-contacts.service'
 import { detectClubButton, CLUB_PAYLOAD_SI, CLUB_PAYLOAD_NO } from '@/services/club-optin.service'
+import { buildClubInviteBody, BOTON_SI, BOTON_NO } from '@/services/golden-bullet-template.service'
 
 const AHORA = new Date('2026-09-10T12:00:00.000Z')
 
@@ -128,5 +129,50 @@ describe('detectClubButton — los dos botones de la plantilla', () => {
     // 'NO' pelado sigue siendo asunto de OPT_OUT_KEYWORDS, no de este detector:
     // meterlo acá le robaría el opt-out a la ruta que sí sabe contestarlo.
     expect(detectClubButton('NO')).toBeNull()
+  })
+})
+
+describe('la plantilla y el detector no pueden divergir', () => {
+  it('los textos de los botones que se CREAN son los que el detector reconoce', () => {
+    // Este es el espejo que se rompe primero si alguien "mejora" la redacción de
+    // un botón en un solo lado. Si el título creado deja de estar en la lista de
+    // respaldo del detector y el proveedor no manda payload, el botón se vuelve
+    // decorativo: la persona lo toca y no pasa absolutamente nada.
+    expect(detectClubButton(BOTON_SI)).toBe('opt_in')
+    expect(detectClubButton(BOTON_NO)).toBe('opt_out')
+  })
+
+  it('los títulos caben en el límite de 20 caracteres de WhatsApp', () => {
+    expect(BOTON_SI.length).toBeLessThanOrEqual(20)
+    expect(BOTON_NO.length).toBeLessThanOrEqual(20)
+  })
+
+  it('los payloads son los que el webhook espera', () => {
+    expect(CLUB_PAYLOAD_SI).toBe('CLUB_SI')
+    expect(CLUB_PAYLOAD_NO).toBe('CLUB_NO')
+  })
+})
+
+describe('buildClubInviteBody — el cuerpo de la plantilla', () => {
+  const cuerpo = buildClubInviteBody('Sushi Service', 'Nos dejaste tus datos en el local.')
+
+  it('lleva las DOS variables que el envío rellena, y solo esas', () => {
+    // El contrato lo impone confirmImport(): {{1}}=nombre, {{2}}=promo. Una
+    // tercera variable no se rellenaría nunca y Meta rechaza el envío.
+    expect(cuerpo).toContain('{{1}}')
+    expect(cuerpo).toContain('{{2}}')
+    expect(cuerpo).not.toContain('{{3}}')
+  })
+
+  it('dice de qué marca es — Meta exige que se sepa quién escribe', () => {
+    expect(cuerpo).toContain('Sushi Service')
+  })
+
+  it('incluye la procedencia tal cual la escribió el operador', () => {
+    expect(cuerpo).toContain('Nos dejaste tus datos en el local.')
+  })
+
+  it('pregunta en vez de solo promocionar', () => {
+    expect(cuerpo).toMatch(/¿Querés hacer parte\?/)
   })
 })

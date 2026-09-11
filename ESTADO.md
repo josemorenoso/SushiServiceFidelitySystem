@@ -1,6 +1,6 @@
 # ESTADO — RestaurantQR / Cada1
 
-> **Última actualización:** 2026-09-08, noche (cierre de la sesión de cambios pre-reunión, Fable 5.1)
+> **Última actualización:** 2026-09-10 (push de producto `069a12d` y AIOS `b6fd308`, Opus 5)
 > Toda sesión lo lee PRIMERO. Toda sesión que cierra un bloque lo ACTUALIZA al final. Límite: 150 líneas.
 > Lo obsoleto se **saca**, no se tacha: un ítem tachado sigue costando tokens cada vez que alguien lee esto.
 >
@@ -14,14 +14,14 @@
 
 | Qué | Estado |
 |-----|--------|
-| Código | **`main` = `origin/main` = `f99b7fb`, pusheado el 2026-09-10 (noche) por orden del dueño** — 14 commits de CUATRO sesiones: el píxel de Meta, tres de plantillas de evento, y las dos de Golden Bullet (bloques + salud de línea + tablero diario). **Migración `00060`, ya aplicada por el dueño antes del push.** ⚠️ Este despliegue **enciende el cron de salud de línea** (`0 * * * *`): desde la primera hora en punto escribe `messaging_daily_limit` y `quality_rating` en las 5 marcas, solo. Decisión del dueño, con el riesgo sobre la mesa. La carpeta sigue en `feat/multisede-aios` (= `main`). Sin mergear a propósito: `master`, `port/sushi-fun-2.8`, `sushi-sync` |
+| Código | **`main` = `origin/main` = `069a12d`, pusheado el 2026-09-10 por orden del dueño** — despliega en Vercel: un solo estilo de plantillas, la invitación a evento como marco, y el retiro de versiones que no revive. **Sin migración.** La carpeta sigue en `feat/multisede-aios` (= `main`). Sin mergear a propósito: `master`, `port/sushi-fun-2.8`, `sushi-sync` |
 | Verificación | ✅ 2026-09-08 (noche): `tsc` limpio · **vitest 35 archivos / 559 tests, TODOS en verde** · eslint **7 errores preexistentes** (hooks y gráficas del panel, ninguno en lo tocado). El rojo de `aios-health` era del RELOJ (el helper mete dos pedidos con `now() - 1h`/`- 2h`, así que entre medianoche y las 2 a.m. el segundo cae en el día anterior): a esta hora pasa. Sigue sin corregirse. `build` no se corrió |
 | Marcas vivas | **5**: sushi-service (542 clientes), demo-ventas (412), sushi-fun (251), don-alirio (244), cafe-frangal (8) |
 | Base de datos de producción | ✅ **Aplicadas hasta la `00056`** (dueño, 2026-09-08: `00047`, `00050`, `00051`, `00053`, `00054` y `00056`, todas). El esquema ya alcanza al código de `main`. La 00030 NUNCA aplicada (a propósito). La 00015 NO se aplica (reabre fuga). Huecos: `00048`, `00049`, `00052`, `00055` |
 | Migraciones: dónde están | El directorio muestra **solo la rama puesta**; el inventario real y el número de la próxima los da `node scripts/proxima-migracion.mjs`. **Desde el 07 la única reserva es la fila del tablero (§2)**: un número citado en cualquier otro doc no reserva nada. `00048`, `00049`, `00052` y `00055` son huecos: no se rellenan |
 | Crons | Los 5 en `vercel.json`, corriendo. `birthday` 18:00 y `reactivation` 20:00 UTC (= 13:00/15:00 Bogotá), verificado. ⚠️ **`reward-reminder` sigue en 16:00 UTC (11:00 Bogotá)**; la auditoría estimó ≈21:00 UTC. **Decisión del dueño** |
 | n8n | Apagado. `domicilios_whatsapp_v4.json` sigue en el VPS pero ya no dispara |
-| AIOS (`Level 2.0/aios-constelarys`) | **`main` = `origin/main` = `4a5e01b` (v1.7.0), pusheado el 2026-09-08** y desplegándose. Lleva la v1.6.0 (un negocio con varios locales es UNA marca) y la v1.7.0 (tarjeta «Usuario del panel»). Sus migraciones ya estaban aplicadas |
+| AIOS (`Level 2.0/aios-constelarys`) | **`main` = `origin/main` = `b6fd308` (v1.10.0), pusheado el 2026-09-10** y desplegándose: las 13 plantillas copiadas del producto (sin 🍣, emoji por rubro), media de muestra desde `ZERNIO_TEMPLATE_SAMPLE_{IMAGE,VIDEO}_URL` **del Vercel del AIOS** (las dos son obligatorias o el paso 4 no arranca), y nombres `_v2` cuando el base ya existe en la WABA |
 | Grafo | Hook post-commit instalado el 07 (`graphify hook status`): se actualiza solo en cada commit. ⚠️ 169 comunidades renombradas por su hub: `graphify label` las refresca (cuesta LLM, no se corrió) |
 | Deadline | ~2026-09-10 — onboarding de los 25 clientes de Zernio |
 

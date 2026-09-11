@@ -21,7 +21,7 @@
 | Migraciones: dónde están | El directorio muestra **solo la rama puesta**; el inventario real y el número de la próxima los da `node scripts/proxima-migracion.mjs`. **Desde el 07 la única reserva es la fila del tablero (§2)**: un número citado en cualquier otro doc no reserva nada. `00048`, `00049`, `00052` y `00055` son huecos: no se rellenan |
 | Crons | Los 5 en `vercel.json`, corriendo. `birthday` 18:00 y `reactivation` 20:00 UTC (= 13:00/15:00 Bogotá), verificado. ⚠️ **`reward-reminder` sigue en 16:00 UTC (11:00 Bogotá)**; la auditoría estimó ≈21:00 UTC. **Decisión del dueño** |
 | n8n | Apagado. `domicilios_whatsapp_v4.json` sigue en el VPS pero ya no dispara |
-| AIOS (`Level 2.0/aios-constelarys`) | **Local `c8a1917` (v1.11.0, 2026-09-11, SIN pushear)**: borrar propietario entero, lista Twilio \| Zernio con recarga, reinicio de WhatsApp, Embedded Signup que se anota solo (00010 del AIOS, sin aplicar), `ZERNIO_SIMULATE` solo con `true`. Necesita la **00064 del producto** aplicada y `ZERNIO_API_KEY` vigente en su Vercel. Antes: **`origin/main` = `b6fd308` (v1.10.0), pusheado el 2026-09-10**: las 13 plantillas copiadas del producto (sin 🍣, emoji por rubro), media de muestra desde `ZERNIO_TEMPLATE_SAMPLE_{IMAGE,VIDEO}_URL` **del Vercel del AIOS** (las dos son obligatorias o el paso 4 no arranca), y nombres `_v2` cuando el base ya existe en la WABA |
+| AIOS (`Level 2.0/aios-constelarys`) | **Local `1a9f558` (v1.11.1, 2026-09-11 23:50, SIN pushear)**: un `Gateway Timeout` de Supabase Auth ya no te saca al login en medio de una acción (pasó en el alta de Planeta Wings al apretar «Crear plantillas»: el paso 4 nunca corrió; es reintentar, no un bug del paso). Antes, `c8a1917` (v1.11.0): borrar propietario entero, lista Twilio \| Zernio con recarga, reinicio de WhatsApp, Embedded Signup que se anota solo (00010 del AIOS, sin aplicar), `ZERNIO_SIMULATE` solo con `true`. Necesita la **00064 del producto** aplicada y `ZERNIO_API_KEY` vigente en su Vercel. Antes: **`origin/main` = `b6fd308` (v1.10.0), pusheado el 2026-09-10**: las 13 plantillas copiadas del producto (sin 🍣, emoji por rubro), media de muestra desde `ZERNIO_TEMPLATE_SAMPLE_{IMAGE,VIDEO}_URL` **del Vercel del AIOS** (las dos son obligatorias o el paso 4 no arranca), y nombres `_v2` cuando el base ya existe en la WABA |
 | Grafo | Reconstruido a mano el 2026-09-11 04:30 (5.535 nodos, 539 comunidades). Hook post-commit instalado el 07 (`graphify hook status`): se actualiza solo en cada commit. ⚠️ 169 comunidades renombradas por su hub: `graphify label` las refresca (cuesta LLM, no se corrió) |
 | Deadline | ~2026-09-10 — onboarding de los 25 clientes de Zernio |
 
@@ -32,7 +32,6 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
-| Timeout de Supabase Auth te saca al login en medio del paso 4 del AIOS (Planeta Wings, 2026-09-11 23:45 UTC) · Opus 5 · 2026-09-11 | Opus 5 | AIOS: `src/lib/auth.ts`, `src/lib/supabase/proxy.ts`, `CHANGELOG.md` · producto: `ESTADO.md` | — | abierta |
 
 ## 3. Siguiente, en orden
 

@@ -65,3 +65,6 @@ graphify-out/
 
 # Worktrees de sesiones en paralelo (ver CLAUDE.md)
 .worktrees/
+
+# Datos personales de contactos (WhatsApp/Google) y backups cifrados: nunca al repo
+Contactos/

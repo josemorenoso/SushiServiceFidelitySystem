@@ -32,6 +32,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Golden Bullet: subir CSV devolvía 403 mudo (flag apagado + sin Toaster) y el normalizador de celular dejaba pasar extranjeros — Opus 5, 2026-09-11 | Opus 5 | `src/app/(dashboard)/dashboard/imported-contacts/page.tsx` · `src/components/dashboard/ImportedContactsUploader.tsx` · `src/app/api/dashboard/imported-contacts/{validate,confirm,template}/route.ts` · `src/services/imported-contacts.service.ts` · `tests/unit/golden-bullet-telefonos.test.ts` (nuevo) · `docs/features/golden-bullet.md` · `.gitignore` (`Contactos/`) | — | en curso |
 
 ## 3. Siguiente, en orden
 

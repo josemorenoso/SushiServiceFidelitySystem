@@ -99,8 +99,8 @@ export default async function PrivacidadPage() {
             <p>
               Tus datos se almacenan en servidores seguros con cifrado en tránsito y en reposo.
               No vendemos tu información ni la compartimos con terceros para fines ajenos a este
-              programa. La única transmisión a un tercero es la que describe el punto 7, y no
-              incluye tu nombre, tu celular ni tu correo.
+              programa. La única transmisión a un tercero es la que describe el punto 7: a Meta le
+              llega tu número de celular cifrado, y nada más de lo que nos diste.
             </p>
           </section>
 
@@ -114,14 +114,23 @@ export default async function PrivacidadPage() {
             </p>
             <p className="mb-2">
               <strong>Qué le mandamos a Meta:</strong> el hecho de que ocurrió una visita, un
-              registro o un check-in, junto con el establecimiento y la sede. Meta, por su cuenta y
-              como cualquier sitio web, recibe además tu dirección IP, tu tipo de dispositivo y las
-              cookies que ya tuvieras suyas.
+              registro o un check-in, junto con el establecimiento y la sede; y, cuando te registrás
+              o hacés check-in, <strong>tu número de celular cifrado</strong> (con el algoritmo
+              SHA-256, que no se puede deshacer). Meta compara ese cifrado con el de los números que
+              ya tiene y así reconoce que sos cliente de este establecimiento, aunque tu navegador
+              bloquee el píxel. Meta, por su cuenta y como cualquier sitio web, recibe además tu
+              dirección IP, tu tipo de dispositivo y las cookies que ya tuvieras suyas.
             </p>
             <p className="mb-2">
-              <strong>Qué NO le mandamos, nunca:</strong> tu nombre, tu número de celular, tu correo,
-              tu fecha de nacimiento, tu ciudad ni tu historial de puntos y premios. Esos datos se
-              quedan en el programa de fidelización.
+              <strong>Qué NO le mandamos:</strong> tu nombre, tu correo, tu fecha de nacimiento, tu
+              ciudad ni tu historial de puntos y premios. Esos datos se quedan en el programa de
+              fidelización.
+            </p>
+            <p className="mb-2">
+              <strong>Para qué:</strong> medir si nuestras campañas funcionan, mostrarte anuncios del
+              establecimiento en Facebook e Instagram, y encontrar personas con intereses parecidos a
+              los de nuestros clientes. Lo aceptás en la casilla al registrarte; sin esa aceptación no
+              te registramos, porque el programa y la medición van juntos.
             </p>
             <p className="mb-2">
               Meta trata esa información como responsable independiente, conforme a sus propias
@@ -145,10 +154,12 @@ export default async function PrivacidadPage() {
               </a>.
             </p>
             <p>
-              <strong>Cómo evitarlo:</strong> podés bloquear estas cookies desde la configuración de
-              tu navegador o con cualquier extensión de bloqueo, sin perder nada del programa — tus
-              puntos, tus visitas y tus premios funcionan igual. Las pantallas de uso interno del
-              personal del establecimiento no llevan píxel.
+              <strong>Cómo revocarlo:</strong> bloquear las cookies desde tu navegador apaga la parte
+              que corre en tu dispositivo, pero no la que enviamos nosotros con tu celular cifrado.
+              Para que dejemos de enviarla, pedinos la supresión de tus datos por el canal del punto 9:
+              al salir del programa dejamos de mandar cualquier cosa tuya a Meta. También podés pedirle
+              a Meta que borre lo que ya tiene desde tus preferencias de anuncios. Las pantallas de uso
+              interno del personal del establecimiento no llevan píxel ni envían nada.
             </p>
           </section>
 

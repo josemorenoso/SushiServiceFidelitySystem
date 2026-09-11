@@ -22,7 +22,7 @@ export default function CheckInPage() {
   const handleRegisterSuccess = useCallback((result: RegisterResult, phone: string) => {
     // Un cliente NUEVO. Es el evento con el que se optimiza una campaña de Meta.
     // No viaja ni el celular ni el nombre: solo la marca y la sede (meta-pixel.ts).
-    trackMetaEvent(META_EVENT_REGISTER, 'check-in')
+    trackMetaEvent(META_EVENT_REGISTER, 'check-in', result.meta_event_id)
     setState({
       view: 'success',
       type: 'welcome',
@@ -45,7 +45,7 @@ export default function CheckInPage() {
     // cliente en la misma visita apretando de nuevo, y contarlo infla la
     // audiencia de "los que vuelven" con gente que no volvió.
     if (resultType !== 'duplicate') {
-      trackMetaEvent(META_EVENT_CHECK_IN, 'check-in')
+      trackMetaEvent(META_EVENT_CHECK_IN, 'check-in', result.meta_event_id)
     }
 
     setState({

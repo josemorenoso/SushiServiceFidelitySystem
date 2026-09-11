@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { Loader2, Phone, User, MapPin, ArrowLeft } from 'lucide-react'
+import { metaEventIdForRegistration } from '@/lib/meta-pixel'
 import { RewardsPreview } from './RewardsPreview'
 import { CustomerCard } from './CustomerCard'
 import type { ActiveGrant } from './AvailableRewardBanner'
@@ -232,6 +233,9 @@ export function CheckInForm({
           if (isFirstVisit && !tierUnlocked) {
             const welcomeResult: RegisterResult = {
               message: 'welcome',
+              // El servidor mandó `CompleteRegistration` al registrarlo con el
+              // id derivado del cliente; el navegador dispara ahora con el mismo.
+              meta_event_id: metaEventIdForRegistration(data.customer.id),
               customer: {
                 name: data.customer.name,
                 total_visits: data.customer.total_visits,
@@ -246,6 +250,7 @@ export function CheckInForm({
 
           const result: CheckInResult = {
             message: tierUnlocked ? 'tier_unlocked' : 'points_earned',
+            meta_event_id: data.meta_event_id ?? null,
             customer: {
               name: data.customer.name,
               total_visits: data.customer.total_visits,
@@ -678,7 +683,9 @@ export function CheckInForm({
               className="text-xs leading-relaxed cursor-pointer"
               style={{ color: "var(--brand-ink-soft)" }}
             >
-              Acepto recibir regalos, recompensas y comunicaciones por WhatsApp. He leído y acepto la{' '}
+              Acepto recibir regalos, recompensas y comunicaciones por WhatsApp, y que mi celular se
+              comparta cifrado con Meta (Facebook e Instagram) para medir y mostrarme anuncios del
+              establecimiento. He leído y acepto la{' '}
             <a
               href="/privacidad"
               target="_blank"

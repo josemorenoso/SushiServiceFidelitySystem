@@ -1,7 +1,7 @@
 # Esquema de Base de Datos
 
 **Base de datos:** Supabase (PostgreSQL)
-**Última actualización:** 2026-07-11
+**Última actualización:** 2026-09-11 (tenant_integration_secrets, 00061)
 
 ---
 
@@ -159,6 +159,7 @@ erDiagram
 | 22 | [tenant_wallet_transactions](#tenant_wallet_transactions) | Billetera prepagada COP por tenant: recargas, ajustes y débitos | SI | Super admin: ALL |
 | 23 | [template_versions](#template_versions) | Versiones de cada plantilla del catálogo: la vigente, la pendiente de Meta y el historial | SI | Admin: CRUD (vía service role, filtrado por tenant en código) |
 | 24 | [delivery_intake_failures](#delivery_intake_failures) | El domicilio que NO llegó a la base, con su motivo real (00053, §24-B) | SI | SELECT por marca; UPDATE/DELETE revocados |
+| 25 | [tenant_integration_secrets](#tenant_integration_secrets) | Credenciales de terceros por marca: hoy el token de la API de Conversiones de Meta (00061) | SI | **Ninguna**: solo service role. `anon`/`authenticated` revocados |
 
 ---
 
@@ -1220,6 +1221,36 @@ definición. Una columna que nace casi siempre NULL es la deuda D13 otra vez.
 **RLS:** `tenant_read_delivery_failures` — SELECT donde `tenant_id = current_tenant_id() OR
 is_super_admin()`. `UPDATE` y `DELETE` revocados para `anon` y `authenticated`: el que puede maquillar
 el registro de fallos no tiene un registro.
+
+---
+
+### tenant_integration_secrets
+
+> Credenciales de terceros **por marca** (migración 00061). Hoy tiene un solo inquilino: el token de
+> la **API de Conversiones de Meta**. Lo escribe `PUT /api/dashboard/meta-conversions` y lo lee
+> `readBrandConversionsToken()` en `src/lib/meta-conversions-server.ts`. **Ningún endpoint devuelve
+> el secreto**: el panel solo sabe si existe y de cuándo es. Ver `docs/features/meta-pixel.md`.
+>
+> **Por qué una tabla y no `tenants.config`:** `config` es PÚBLICO por construcción
+> (`resolveBranding()` lo proyecta al navegador en cada página). El id del píxel vive ahí porque es
+> público; el token no, porque con él cualquiera manda eventos falsos a la cuenta publicitaria del
+> restaurante. Es la regla 1 del espacio `integrations` hecha tabla.
+
+| Columna | Tipo | Nullable | Default | Descripción |
+|---------|------|----------|---------|-------------|
+| `tenant_id` | `uuid` | NO | **ninguno** | FK → tenants(id) ON DELETE CASCADE. Sin DEFAULT puente: un INSERT sin marca FALLA |
+| `provider` | `text` | NO | - | CHECK `IN ('meta_conversions')`. Ampliarlo (Google) es una migración de una línea |
+| `secret` | `text` | NO | - | El token tal cual lo da Meta. CHECK 1..1024 caracteres |
+| `created_at` | `timestamptz` | NO | `now()` | - |
+| `updated_at` | `timestamptz` | NO | `now()` | Trigger `trg_tenant_integration_secrets_touch` |
+| `updated_by` | `uuid` | SI | `NULL` | `auth.users.id` de quien lo cargó desde el panel. Solo rastro |
+
+**PK:** `(tenant_id, provider)` — una marca, un secreto por proveedor.
+
+**RLS:** encendido y **sin políticas**. `REVOKE ALL … FROM PUBLIC, anon, authenticated`: para todo el
+mundo menos el service role, la tabla no existe. Es el mismo criterio que
+`tenants.twilio_subaccount_auth_token`, pero sin depender de que un tipo `TenantPublic` recorte la
+columna a mano.
 
 ---
 ---

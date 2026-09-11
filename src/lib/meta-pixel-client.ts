@@ -46,15 +46,25 @@ export function setMetaPixelContext(context: MetaPixelContext): void {
 /**
  * Manda un evento a TODOS los píxeles inicializados (el de Cada1 y, si la marca
  * cargó el suyo, también el de ella). Meta reparte solo: no hay que repetir.
+ *
+ * `eventId` es el MISMO que el servidor mandó por la API de Conversiones
+ * (`meta_event_id` en la respuesta del check-in). Con él, Meta cuenta el
+ * evento UNA vez aunque lleguen los dos; sin él, un check-in medido por los
+ * dos caminos vale doble. Si por lo que sea no vino, se dispara igual: mejor
+ * un posible doble que ninguno.
  */
-export function trackMetaEvent(event: MetaEventSpec, surface: MetaEventSurface): void {
+export function trackMetaEvent(event: MetaEventSpec, surface: MetaEventSurface, eventId?: string | null): void {
   if (typeof window === 'undefined') return
   const fbq = window.fbq
   if (typeof fbq !== 'function') return
 
   const params = buildMetaEventParams(window.__cada1MetaPixelContext ?? null, surface)
   try {
-    fbq(event.standard ? 'track' : 'trackCustom', event.name, params)
+    if (eventId) {
+      fbq(event.standard ? 'track' : 'trackCustom', event.name, params, { eventID: eventId })
+    } else {
+      fbq(event.standard ? 'track' : 'trackCustom', event.name, params)
+    }
   } catch {
     // Ver el comentario de arriba: medir jamás rompe el flujo del cliente.
   }

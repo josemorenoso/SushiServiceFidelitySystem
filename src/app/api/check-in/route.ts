@@ -1,5 +1,14 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { validatePhone } from '@/lib/validators/phone'
+import {
+  META_EVENT_CHECK_IN,
+  META_EVENT_REGISTER,
+  metaEventIdForRegistration,
+  metaEventIdForVisit,
+  type MetaEventSpec,
+} from '@/lib/meta-pixel'
+import { buildConversionEvent, readClientIp, readMetaCookies } from '@/lib/meta-conversions'
+import { sendConversionEvent } from '@/lib/meta-conversions-server'
 import { findCustomerByPhone, createCustomer, incrementVisit } from '@/services/customer.service'
 import { createVisit } from '@/services/visit.service'
 import { sendTemplateMessage } from '@/services/whatsapp.service'
@@ -128,6 +137,54 @@ async function sendCheckinTemplate(
     console.error(`[CheckIn] Error enviando plantilla ${templateType}:`, err)
     return { sent: false, templateType, reason: err instanceof Error ? err.message : 'unknown_error' }
   }
+}
+
+/**
+ * Programa el evento de la API de Conversiones de Meta para DESPUÉS de la
+ * respuesta (`after()`): el cliente recibe sus puntos primero y Meta se entera
+ * después. Nunca lanza.
+ *
+ * Las señales del navegador (IP, user-agent, cookies `_fbp`/`_fbc`) van SOLO
+ * cuando el pedido salió del navegador del CLIENTE: el registro siempre, y el
+ * check-in solo si no es por mesero. Con `source: 'staff_scan'` el pedido lo
+ * hace el celular del mesero, y esas señales serían las suyas — mandarlas con
+ * el celular hasheado del cliente le enseña a Meta que el mesero es cada
+ * cliente que escanea. El porqué largo está en `meta-conversions.ts`.
+ */
+function scheduleMetaConversion(args: {
+  request: NextRequest
+  tenant: Tenant
+  locationId: string | null
+  event: MetaEventSpec
+  eventId: string
+  phone: string
+  fromCustomerBrowser: boolean
+}) {
+  const { request, tenant, locationId, event, eventId, phone, fromCustomerBrowser } = args
+  const headers = request.headers
+  const browser = fromCustomerBrowser
+    ? {
+        ip: readClientIp(headers),
+        userAgent: headers.get('user-agent'),
+        ...readMetaCookies(headers.get('cookie')),
+      }
+    : null
+  // La URL de la pantalla del cliente. `referer` es lo más cercano que tiene
+  // una ruta de API; si no viene, se manda sin URL, que Meta acepta.
+  const sourceUrl = fromCustomerBrowser ? headers.get('referer') : null
+
+  const conversion = buildConversionEvent({
+    event,
+    eventId,
+    eventTime: Math.floor(Date.now() / 1000),
+    sourceUrl,
+    phone,
+    context: { tenant: tenant.slug ?? null, location: locationId },
+    surface: 'check-in',
+    browser,
+  })
+
+  after(() => sendConversionEvent({ tenantId: tenant.id, tenantConfig: tenant.config, event: conversion }))
 }
 
 export async function POST(request: NextRequest) {
@@ -450,6 +507,20 @@ export async function POST(request: NextRequest) {
         originLocationId: regLocation.locationId,
       })
 
+      // Meta: un cliente NUEVO. El registro siempre sale del navegador del
+      // cliente, así que sus señales van. El mismo id viaja en la respuesta
+      // para que el píxel del navegador dispare el suyo y Meta los una.
+      const regMetaEventId = metaEventIdForRegistration(customer.id)
+      scheduleMetaConversion({
+        request,
+        tenant,
+        locationId: regLocation.locationId,
+        event: META_EVENT_REGISTER,
+        eventId: regMetaEventId,
+        phone: cleaned,
+        fromCustomerBrowser: true,
+      })
+
       // ─── Conversión Golden Bullet ───
       // Si este teléfono provino de un contacto importado al que ya se le envió
       // el mensaje, lo marcamos como 'converted' y dejamos trazabilidad en
@@ -560,6 +631,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           {
             message: 'registered_pending_scan',
+            meta_event_id: regMetaEventId,
             qr_token: regQrToken,
             customer: {
               id: customer.id,
@@ -577,6 +649,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           message: 'welcome',
+          meta_event_id: regMetaEventId,
           customer: {
             name: customer.name,
             total_visits: customer.total_visits,
@@ -787,6 +860,27 @@ export async function POST(request: NextRequest) {
         location: visitLocation,
       })
 
+      // Meta: un cliente que VUELVE. Con mesero (`staff_scan`) el pedido viene
+      // del celular del mesero: va el celular hasheado del cliente y NINGUNA
+      // señal del navegador. El id lo devuelve también `/api/check-in/status`,
+      // que es por donde el navegador del cliente se entera del escaneo.
+      // La PRIMERA visita no es «volver»: es el final del registro (el navegador
+      // del cliente la muestra como bienvenida y dispara `CompleteRegistration`,
+      // que el servidor ya mandó al registrarlo). Contarla como `CheckIn`
+      // metería a todo cliente nuevo en la audiencia de «los que vuelven».
+      const visitMetaEventId = metaEventIdForVisit(visit.id)
+      if (updated.total_visits > 1) {
+        scheduleMetaConversion({
+          request,
+          tenant,
+          locationId: visitLocation.locationId,
+          event: META_EVENT_CHECK_IN,
+          eventId: visitMetaEventId,
+          phone: cleaned,
+          fromCustomerBrowser: source !== 'staff_scan',
+        })
+      }
+
       // Otorgar puntos aleatorios por la visita
       const previousPoints = customer.total_points ?? 0
       let pointsResult = { pointsAwarded: 0, newBalance: previousPoints }
@@ -905,6 +999,7 @@ export async function POST(request: NextRequest) {
       if (newTier) {
         return NextResponse.json({
           message: 'tier_unlocked',
+          meta_event_id: visitMetaEventId,
           customer: {
             name: updated.name,
             total_visits: updated.total_visits,
@@ -932,6 +1027,7 @@ export async function POST(request: NextRequest) {
       const allTiersForResponse = await getAllTiers(tenant.id, visitLocation.locationId)
       return NextResponse.json({
         message: 'points_earned',
+        meta_event_id: visitMetaEventId,
         customer: {
           name: updated.name,
           total_visits: updated.total_visits,

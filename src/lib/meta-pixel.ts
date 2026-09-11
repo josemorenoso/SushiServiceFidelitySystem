@@ -18,13 +18,20 @@
  * Meta acepta varios `fbq('init', …)` en la misma página y reparte cada `track`
  * a todos los píxeles inicializados. No hay que llamar a `track` dos veces.
  *
- * QUÉ NO VIAJA A META, NUNCA
- * ──────────────────────────
- * Ni el celular, ni el nombre, ni el correo, ni la fecha de nacimiento, ni el id
- * del cliente. `buildMetaEventParams()` es la ÚNICA fábrica de parámetros de
- * este módulo y su salida está acotada a mano a `tenant`, `location` y un
- * `content_category` de lista cerrada. Un evento que necesite un dato personal
- * no se agrega acá: se discute primero, porque cambia la política de privacidad
+ * QUÉ VIAJA DESDE EL NAVEGADOR, Y QUÉ NO
+ * ──────────────────────────────────────
+ * Desde el navegador NO viaja ningún dato personal: ni el celular, ni el
+ * nombre, ni el correo, ni la fecha de nacimiento, ni el id del cliente.
+ * `buildMetaEventParams()` es la ÚNICA fábrica de parámetros de este módulo y
+ * su salida está acotada a mano a `tenant`, `location` y un `content_category`
+ * de lista cerrada. Meta reconoce al cliente por las cookies que ya tenía.
+ *
+ * El CELULAR sí viaja, pero desde el SERVIDOR y hasheado, por la API de
+ * Conversiones (`meta-conversions.ts`, dueño 2026-09-11): es lo que hace que
+ * el evento cuente aunque un bloqueador haya apagado el píxel. Los dos
+ * eventos se unen por `event_id` (ver `metaEventIdForRegistration()` y
+ * `metaEventIdForVisit()` allá). Un dato personal NUEVO en cualquiera de los
+ * dos lados no se agrega solo: cambia la política de privacidad
  * (`src/app/(public)/privacidad/page.tsx` §7 es su espejo).
  *
  * Este archivo es PURO y no importa nada de Next: se prueba sin levantar nada
@@ -185,4 +192,31 @@ export function buildMetaEventParams(
   if (context?.tenant) params.tenant = context.tenant
   if (context?.location) params.location = context.location
   return params
+}
+
+// ─── Los ids de evento: deterministas, para que navegador y servidor coincidan ─
+//
+// Los usa el servidor (API de Conversiones) y el navegador (píxel) para el MISMO
+// evento: Meta los une por este id y lo cuenta una vez. Viven acá y no en
+// `meta-conversions.ts` porque aquel trae `node:crypto` y este archivo viaja al
+// cliente.
+
+/**
+ * Un registro tiene UN id de evento, derivado del id del cliente.
+ *
+ * Es determinista a propósito. El navegador del cliente dispara su
+ * `CompleteRegistration` a veces MUCHO después que el servidor: con check-in
+ * por mesero, el registro responde `registered_pending_scan`, el cliente
+ * muestra su QR, y recién cuando el mesero escanea la pantalla pasa a
+ * «bienvenido». Si el id fuera aleatorio habría que guardarlo en algún lado
+ * para que los dos coincidan; con el id del cliente adentro, los dos lo
+ * calculan solos y Meta los une (ventana de 48 h).
+ */
+export function metaEventIdForRegistration(customerId: string): string {
+  return `reg-${customerId}`
+}
+
+/** Idem para una visita: el id de la fila de `visits`. Una visita, un evento. */
+export function metaEventIdForVisit(visitId: string): string {
+  return `visit-${visitId}`
 }

@@ -48,6 +48,8 @@ export interface NextTierInfo {
 
 export interface RegisterResult {
   message: 'welcome' | 'registered_pending_scan'
+  /** Id del evento que el servidor mandó a Meta; el píxel dispara con el mismo (dedup). */
+  meta_event_id?: string | null
   qr_token?: string | null
   customer: {
     id?: string
@@ -61,6 +63,8 @@ export interface RegisterResult {
 
 export interface CheckInResult {
   message: 'welcome_back' | 'tier_unlocked' | 'points_earned' | 'duplicate'
+  /** Id del evento que el servidor mandó a Meta; el píxel dispara con el mismo (dedup). */
+  meta_event_id?: string | null
   customer: {
     name: string
     total_visits: number

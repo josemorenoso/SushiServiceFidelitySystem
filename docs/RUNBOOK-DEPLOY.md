@@ -50,6 +50,18 @@ plantillas y el número de Sushi Service). Si la variable falta, **nadie** las u
 Sushi Service lista cero plantillas y sus envíos por Twilio se registran como fallidos. Ponerla
 ANTES del push. Detalle: `docs/03-security.md` § "Cuenta Twilio master".
 
+### 1.b'' — Las tres de Meta (2026-09-11): sin ellas el píxel está entero pero APAGADO
+
+- `NEXT_PUBLIC_META_PIXEL_ID` — el id del píxel de Cada1 (solo el número). Sin él no se carga un
+  byte de Meta en ninguna marca (salvo las que carguen el suyo desde el panel).
+- `META_CONVERSIONS_ACCESS_TOKEN` — el token de la API de Conversiones de ESE píxel (Administrador
+  de eventos → píxel → Configuración → API de Conversiones → Generar token). Server-only. Con él,
+  cada registro y cada check-in se manda también desde el servidor con el celular hasheado.
+- `META_CONVERSIONS_TEST_EVENT_CODE` — **solo para probar**: manda los eventos del servidor a la
+  pestaña «Probar eventos» en vez de contarlos. Quitarla al terminar.
+
+No bloquean el deploy: sin ellas nada se rompe, nada se mide. Detalle: `docs/features/meta-pixel.md`.
+
 ### 1.c — El resto (deben existir ya; confírmalas de paso)
 
 `NEXT_PUBLIC_SUPABASE_URL` · `NEXT_PUBLIC_SUPABASE_ANON_KEY` · `SUPABASE_SERVICE_ROLE_KEY` ·
@@ -91,6 +103,11 @@ En el SQL Editor de Supabase, **el archivo completo, de una sola vez, uno despu�
 
 1. `supabase/migrations/00044_meseros_por_sede.sql`
 2. `supabase/migrations/00045_permisos_por_sede.sql`
+
+Y desde el 2026-09-11, **`00061_secretos_de_integracion.sql`** (`tenant_integration_secrets`, el
+token de la API de Conversiones por marca). Esta es de riesgo cero: tabla nueva, sin tocar una fila
+de historia. Puede ir DESPUÉS del código sin romper nada — el servidor falla cerrado si no existe —,
+pero hasta que corra, el panel responde 503 al guardar el token de una marca.
 
 La 00045 trae al final su propio bloque de autoverificación: si algo quedó a medias, aborta diciendo
 qué falta. Si las dos terminan sin error, están bien.

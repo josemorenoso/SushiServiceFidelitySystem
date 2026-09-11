@@ -1,6 +1,6 @@
 # ESTADO — RestaurantQR / Cada1
 
-> **Última actualización:** 2026-09-11 (cierre de la caída a la cuenta Twilio master, Opus 5; pendiente de push)
+> **Última actualización:** 2026-09-11 (cierre de la API de Conversiones de Meta, Opus 5; el push lo ordena el dueño)
 > Toda sesión lo lee PRIMERO. Toda sesión que cierra un bloque lo ACTUALIZA al final. Límite: 150 líneas.
 > Lo obsoleto se **saca**, no se tacha: un ítem tachado sigue costando tokens cada vez que alguien lee esto.
 >
@@ -14,10 +14,10 @@
 
 | Qué | Estado |
 |-----|--------|
-| Código | **`origin/main` = `069a12d`** (pusheado el 2026-09-10). **Local va UN commit adelante, sin pushear:** la caída a la cuenta Twilio master cerrada (un tenant nuevo del AIOS veía y podía usar las plantillas y el número de Sushi Service). **Sin migración, pero con variable NUEVA en Vercel: `TWILIO_MASTER_TENANT_ID`** (uuid de Sushi Service; sin ella Sushi Service deja de listar y enviar por Twilio — RUNBOOK §1.b'). Ponerla ANTES del push. La carpeta sigue en `feat/multisede-aios` (= `main`). Sin mergear a propósito: `master`, `port/sushi-fun-2.8`, `sushi-sync` |
-| Verificación | ✅ 2026-09-11 (madrugada): `tsc` limpio · **vitest 42 archivos / 662 tests, TODOS en verde** · eslint **7 errores preexistentes** (hooks y gráficas del panel, ninguno en lo tocado). El rojo de `aios-health` era del RELOJ (el helper mete dos pedidos con `now() - 1h`/`- 2h`, así que entre medianoche y las 2 a.m. el segundo cae en el día anterior): a esta hora pasa. Sigue sin corregirse. `build` no se corrió |
+| Código | **`origin/main` = `069a12d`** (pusheado el 2026-09-10). **Local va adelante, sin pushear, con DOS cosas:** (1) la caída a la cuenta Twilio master cerrada (`0b12e60`) — **sin migración, pero con variable NUEVA en Vercel: `TWILIO_MASTER_TENANT_ID`** (uuid de Sushi Service; sin ella Sushi Service deja de listar y enviar por Twilio — RUNBOOK §1.b'), **ponerla ANTES del push**; (2) la API de Conversiones de Meta — migración **`00061`** (riesgo cero, puede ir después del código) y tres variables que no bloquean nada (RUNBOOK §1.b''). La carpeta sigue en `feat/multisede-aios` (= `main`). Sin mergear a propósito: `master`, `port/sushi-fun-2.8`, `sushi-sync` |
+| Verificación | ✅ 2026-09-11 (madrugada): `tsc` limpio · **vitest 43 archivos / 679 tests, TODOS en verde** · eslint **7 errores preexistentes** (hooks y gráficas del panel, ninguno en lo tocado). El rojo de `aios-health` era del RELOJ (el helper mete dos pedidos con `now() - 1h`/`- 2h`, así que entre medianoche y las 2 a.m. el segundo cae en el día anterior): a esta hora pasa. Sigue sin corregirse. `build` no se corrió |
 | Marcas vivas | **5**: sushi-service (542 clientes), demo-ventas (412), sushi-fun (251), don-alirio (244), cafe-frangal (8) |
-| Base de datos de producción | ✅ **Aplicadas hasta la `00056`** (dueño, 2026-09-08: `00047`, `00050`, `00051`, `00053`, `00054` y `00056`, todas). El esquema ya alcanza al código de `main`. La 00030 NUNCA aplicada (a propósito). La 00015 NO se aplica (reabre fuga). Huecos: `00048`, `00049`, `00052`, `00055` |
+| Base de datos de producción | ✅ **Aplicadas hasta la `00056`** (dueño, 2026-09-08: `00047`, `00050`, `00051`, `00053`, `00054` y `00056`, todas). El esquema ya alcanza al código de `main`. La 00030 NUNCA aplicada (a propósito). La 00015 NO se aplica (reabre fuga). Huecos: `00048`, `00049`, `00052`, `00055`. **Escritas sin aplicar: `00058`, `00059`, `00061`** |
 | Migraciones: dónde están | El directorio muestra **solo la rama puesta**; el inventario real y el número de la próxima los da `node scripts/proxima-migracion.mjs`. **Desde el 07 la única reserva es la fila del tablero (§2)**: un número citado en cualquier otro doc no reserva nada. `00048`, `00049`, `00052` y `00055` son huecos: no se rellenan |
 | Crons | Los 5 en `vercel.json`, corriendo. `birthday` 18:00 y `reactivation` 20:00 UTC (= 13:00/15:00 Bogotá), verificado. ⚠️ **`reward-reminder` sigue en 16:00 UTC (11:00 Bogotá)**; la auditoría estimó ≈21:00 UTC. **Decisión del dueño** |
 | n8n | Apagado. `domicilios_whatsapp_v4.json` sigue en el VPS pero ya no dispara |
@@ -32,7 +32,6 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
-| API de Conversiones de Meta: celular hasheado + token por marca (dueño, 2026-09-11) | Opus 5 | `src/lib/meta-pixel*.ts`, `src/lib/meta-conversions*.ts`, `src/components/features/analytics/*`, `src/components/features/check-in/CheckInForm.tsx`, `src/app/(public)/check-in/page.tsx`, `src/app/(public)/privacidad/page.tsx`, `src/app/api/check-in/route.ts`, `src/app/api/customers/register/route.ts`, `src/app/api/dashboard/meta-conversions/*`, `src/app/(dashboard)/dashboard/settings/page.tsx`, `supabase/migrations/00061_*`, `tests/unit/meta-*.test.ts`, `docs/features/meta-pixel.md`, `docs/DB_SCHEMA.md`, `.env.example`, `CHANGELOG.md` | **00061** | en curso |
 
 ## 3. Siguiente, en orden
 
@@ -156,7 +155,9 @@
    (`merge_location_config_deep()` no existe) y las columnas `location_id` de recompensas tampoco.
    Sin la 00009 del AIOS, guardar un cliente revienta con el CHECK viejo en cuanto alguien elija
    «grupo» o «franquicia». La `00060` ya la corrió el dueño el 10, antes del push. Las dos que quedan son de RIESGO
-   BAJO: no tocan una sola fila de historia.
+   BAJO: no tocan una sola fila de historia. **Y la `00061`** (`tenant_integration_secrets`, el token de la API
+   de Conversiones por marca): tabla nueva, riesgo cero, puede ir después del código; hasta que corra, el panel
+   responde 503 al guardar el token de una marca.
 0.quater **Falta el autoservicio de contraseña** («olvidé mi contraseña» en `/login`). Ya se puede
    cambiar una clave desde «Accesos» y desde el AIOS, así que nadie queda encerrado — pero mientras
    no exista el autoservicio, cada olvido sigue pasando por una persona. Depende de que el SMTP del
@@ -216,9 +217,15 @@ para reseñas. Ninguna decisión de hoy cierra esa puerta (`config.integrations`
 
 ## 4. Bloqueado: solo lo puede destrabar el dueño
 
-- **`NEXT_PUBLIC_META_PIXEL_ID` en Vercel** — el id del píxel de Cada1 (solo el número, 15 o 16 dígitos, del
-  Administrador de eventos de Meta). Sin ella el código está entero pero **apagado**: no se carga un byte de Meta
-  salvo en las marcas que hayan cargado el suyo desde el panel. `docs/features/meta-pixel.md`.
+- **Las tres de Meta en Vercel** (RUNBOOK §1.b''): `NEXT_PUBLIC_META_PIXEL_ID` (el id del píxel de Cada1),
+  `META_CONVERSIONS_ACCESS_TOKEN` (su token de la API de Conversiones) y, solo para probar,
+  `META_CONVERSIONS_TEST_EVENT_CODE`. Sin las dos primeras el código está entero pero **apagado**. Y **mirar el
+  Administrador de eventos** con el código de prueba: es la única verificación real que esta feature no tuvo.
+  `docs/features/meta-pixel.md` § Cómo se verifica.
+- **Decidir qué pasa con los clientes que ya existían.** La casilla nueva (celular cifrado a Meta) la aceptan
+  los que se registran desde hoy; los anteriores aceptaron WhatsApp y nada más, y sus check-ins **sí** se mandan
+  con el celular hasheado. Separarlos cuesta guardar la versión del consentimiento por cliente y filtrar en
+  `scheduleMetaConversion()`. Es una decisión, no un bug.
 - **Borrar las ramas locales ya mergeadas** (`feat/salud-aios`, `feat/domicilios`, `feat/conexiones`, `feat/visual`,
   `preview/capa-visual`) y el **stash** olvidado de `fix/opt-out-visible` (`git stash show -p stash@{0}` para mirarlo).
 - **Borrar el Supabase de Sushi Fun.** Esperar a un fin de semana de operación normal. El respaldo son los
@@ -249,6 +256,15 @@ para reseñas. Ninguna decisión de hoy cierra esa puerta (`config.integrations`
   5 marcas: el freno de la 00037 llevaba desde agosto **medido y apagado**. De paso:
   `isPhoneOptedOut()` miraba solo `customers`, así que el "no" de quien nunca fue cliente no
   lo leía nadie.
+- **La API de Conversiones de Meta** (2026-09-11, **migración `00061`, SIN aplicar**): cada registro y
+  cada check-in se manda también desde el servidor (`after()` en `POST /api/check-in`) con el celular
+  **hasheado SHA-256**, a los dos píxeles, cada uno con SU token (Cada1: env; la marca:
+  `tenant_integration_secrets`, solo service role, ningún endpoint lo devuelve). Navegador y servidor
+  comparten un `event_id` **determinista** (`reg-<customer.id>` / `visit-<visit.id>`) porque el
+  navegador dispara a veces mucho después (el QR del mesero); `status` lo devuelve. **Con mesero no
+  viajan IP, user-agent ni `_fbp`**: serían del mesero y Meta aprendería que su celular es cada
+  cliente. La primera visita no es `CheckIn`. La casilla del check-in y `/privacidad` §7 dicen que el
+  celular sale cifrado y que cifrado no es anónimo. → `docs/features/meta-pixel.md`.
 - **El píxel de Meta, y la política que lo dice** (2026-09-10, sin migración): las páginas públicas
   disparan `PageView`, `CompleteRegistration` (cliente nuevo) y `CheckIn` (el que vuelve; el
   duplicado NO cuenta). **Son DOS píxeles y no uno**, porque un píxel solo alimenta a la cuenta que

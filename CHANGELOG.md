@@ -8,6 +8,24 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [2026-09-11] - La API de Conversiones de Meta: el celular hasheado, desde el servidor
+
+**Qué:** cada registro y cada check-in se manda TAMBIÉN desde `POST /api/check-in` (en `after()`)
+a los dos píxeles, con el celular del cliente **hasheado SHA-256** (`ph`) + `country`, para que cuente
+aunque un bloqueador apague el píxel del navegador. Navegador y servidor comparten `event_id`
+(`reg-<customer.id>` / `visit-<visit.id>`, determinista; `status` lo devuelve) y Meta cuenta una vez.
+Con check-in por mesero **no viajan IP, user-agent ni `_fbp`**: serían del mesero. La primera visita
+no es «volver». Token de Cada1 en `META_CONVERSIONS_ACCESS_TOKEN`; el de cada marca en
+`tenant_integration_secrets` (**00061**, RLS sin políticas, solo service role, ningún endpoint lo
+devuelve) desde Configuración → Píxel de Meta. Casilla del check-in y `/privacidad` §7 lo dicen con
+esas palabras. **Por qué:** «Envía los celulares con la identificación … no tiene sentido estar
+cargando csv si tenemos nuestra api de conversión aquí activa» (dueño).
+**Archivos:** `src/lib/meta-conversions{,-server}.ts`, `api/check-in/{route,status/route}.ts`,
+`api/dashboard/meta-conversions/route.ts`, `CheckInForm{,.types}.tsx`, `settings/page.tsx`, `privacidad/page.tsx`.
+**Verificado:** `tsc` · 679 tests (17 nuevos; la suite de base aplicó la 00061 en Postgres real) · lint sin
+errores nuevos. **NO verificado:** nada contra Meta ni en el navegador. **Migración:** 00061, escrita sin aplicar.
+**Decisión:** «hasheado» no es «anónimo» y así se le dice al cliente; los clientes anteriores no aceptaron esto.
+
 ## [2026-09-10e] - La cuenta Twilio master es de UNA marca
 
 **Qué:** un tenant recién creado en el AIOS (sin subcuenta, sin paso 4) abría Plantillas y veía

@@ -183,6 +183,12 @@ export default function SettingsPage() {
   const [pixelSaving, setPixelSaving] = useState(false)
   const [pixelSaved, setPixelSaved] = useState(false)
   const [pixelError, setPixelError] = useState<string | null>(null)
+  // El token de la API de Conversiones (00061). NUNCA se lee de vuelta: el
+  // panel solo sabe si hay uno y de cuándo es. El campo siempre arranca vacío.
+  const [capiToken, setCapiToken] = useState('')
+  const [capiConfigured, setCapiConfigured] = useState<boolean | null>(null)
+  const [capiUpdatedAt, setCapiUpdatedAt] = useState<string | null>(null)
+  const [capiUnavailable, setCapiUnavailable] = useState<string | null>(null)
 
   const [locationLat, setLocationLat] = useState('')
   const [locationLon, setLocationLon] = useState('')
@@ -491,6 +497,24 @@ export default function SettingsPage() {
     }
   }
 
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/dashboard/meta-conversions')
+      .then(async (r) => {
+        const data = await r.json().catch(() => ({}))
+        if (cancelled) return
+        if (!r.ok) {
+          // 503 = la 00061 no corrió todavía. Se muestra tal cual, en la tarjeta.
+          setCapiUnavailable(typeof data.error === 'string' ? data.error : 'No se pudo consultar el token')
+          return
+        }
+        setCapiConfigured(Boolean(data.configured))
+        setCapiUpdatedAt(typeof data.updated_at === 'string' ? data.updated_at : null)
+      })
+      .catch(() => { if (!cancelled) setCapiUnavailable('No se pudo consultar el token') })
+    return () => { cancelled = true }
+  }, [])
+
   const handleSavePixel = async () => {
     const raw = metaPixelId.trim()
     setPixelError(null)
@@ -516,10 +540,52 @@ export default function SettingsPage() {
         throw new Error(data.error ?? 'Error guardando el píxel')
       }
       setMetaPixelId(normalizeMetaPixelId(raw) ?? '')
+
+      // El token va aparte y SOLO si escribieron algo: un campo vacío no borra
+      // el token guardado (para borrarlo está el botón «Quitar token»).
+      const token = capiToken.trim()
+      if (token !== '') {
+        const resToken = await fetch('/api/dashboard/meta-conversions', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token }),
+        })
+        if (!resToken.ok) {
+          const data = await resToken.json().catch(() => ({}))
+          throw new Error(data.error ?? 'Error guardando el token')
+        }
+        setCapiToken('')
+        setCapiConfigured(true)
+        setCapiUpdatedAt(new Date().toISOString())
+        setCapiUnavailable(null)
+      }
+
       setPixelSaved(true)
       setTimeout(() => setPixelSaved(false), 3000)
     } catch (err) {
       setPixelError(err instanceof Error ? err.message : 'Error guardando')
+    } finally {
+      setPixelSaving(false)
+    }
+  }
+
+  const handleRemoveCapiToken = async () => {
+    setPixelError(null)
+    setPixelSaving(true)
+    try {
+      const res = await fetch('/api/dashboard/meta-conversions', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: '' }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error ?? 'Error quitando el token')
+      }
+      setCapiConfigured(false)
+      setCapiUpdatedAt(null)
+    } catch (err) {
+      setPixelError(err instanceof Error ? err.message : 'Error quitando el token')
     } finally {
       setPixelSaving(false)
     }
@@ -1103,10 +1169,34 @@ export default function SettingsPage() {
           </p>
         </div>
 
+        <div className="mt-4 space-y-1">
+          <label className="text-[11px] font-semibold" style={{ color: '#6b7280' }}>Token de la API de Conversiones</label>
+          <Input
+            type="password"
+            autoComplete="off"
+            value={capiToken}
+            onChange={(e) => setCapiToken(e.target.value)}
+            disabled={loading || Boolean(capiUnavailable)}
+            placeholder={capiConfigured ? '•••••••• (ya hay uno guardado; pegá otro para reemplazarlo)' : 'EAAG…'}
+          />
+          <p className="text-[10px]" style={{ color: '#b0b0b0' }}>
+            Mismo Administrador de eventos → tu píxel → <em>Configuración</em> → <em>API de Conversiones</em> → <span className="font-semibold">Generar token de acceso</span>. Con él, tus check-ins se miden aunque el cliente tenga un bloqueador de anuncios. <span className="font-semibold">No se vuelve a mostrar</span>: si lo perdés, generás otro.
+          </p>
+          {capiUnavailable && (
+            <p className="text-[10px] font-medium" style={{ color: '#d97706' }}>{capiUnavailable}</p>
+          )}
+          {capiConfigured && !capiUnavailable && (
+            <p className="text-[10px]" style={{ color: '#6b7280' }}>
+              Token guardado{capiUpdatedAt ? ` el ${new Date(capiUpdatedAt).toLocaleDateString('es-CO')}` : ''}.{' '}
+              <button type="button" onClick={handleRemoveCapiToken} disabled={pixelSaving} className="underline">Quitar token</button>
+            </p>
+          )}
+        </div>
+
         <div className="mt-4 rounded-xl p-3 text-[11px] leading-relaxed" style={{ background: 'rgba(24, 119, 242, 0.06)', color: '#4b5563' }}>
-          <p className="mb-1"><span className="font-semibold">Qué se le manda a Meta:</span> que alguien vio la página, se registró o hizo check-in, con tu marca y tu sede.</p>
-          <p className="mb-1"><span className="font-semibold">Qué NO se le manda, nunca:</span> el celular, el nombre, el correo, el cumpleaños ni los puntos de tus clientes.</p>
-          <p>Las pantallas del {'mesero'} no se miden — si no, tu propio personal entraría a la audiencia como si fuera tu mejor cliente. Y tus clientes ven un aviso con enlace a la <a href="/privacidad" target="_blank" rel="noopener noreferrer" className="underline">política de privacidad</a>.</p>
+          <p className="mb-1"><span className="font-semibold">Qué se le manda a Meta:</span> que alguien vio la página, se registró o hizo check-in, con tu marca y tu sede; y, desde el servidor, <span className="font-semibold">el celular del cliente cifrado</span> (SHA-256) para que Meta lo reconozca aunque el píxel del navegador esté bloqueado.</p>
+          <p className="mb-1"><span className="font-semibold">Qué NO se le manda:</span> el nombre, el correo, el cumpleaños, la ciudad ni los puntos de tus clientes.</p>
+          <p>Las pantallas del {'mesero'} no se miden — si no, tu propio personal entraría a la audiencia como si fuera tu mejor cliente. Tus clientes lo aceptan al registrarse y ven un aviso con enlace a la <a href="/privacidad" target="_blank" rel="noopener noreferrer" className="underline">política de privacidad</a>.</p>
         </div>
 
         {pixelError && (

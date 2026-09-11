@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { metaEventIdForVisit } from '@/lib/meta-pixel'
 import { validatePhone } from '@/lib/validators/phone'
 import { findCustomerByPhone } from '@/services/customer.service'
 import { getNextTier, getAllTiers, elegirNivelSinReclamar } from '@/services/reward-tiers.service'
@@ -234,6 +235,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       found: true,
       hasRecentVisit: visitReady,
+      // El id con el que el servidor mandó esta visita a la API de Conversiones
+      // de Meta (`metaEventIdForVisit`): el píxel del navegador dispara con el
+      // mismo y Meta cuenta una vez. `null` mientras no haya visita.
+      meta_event_id: visitReady && recentVisit ? metaEventIdForVisit(recentVisit.id) : null,
       customer: {
         id: customer.id,
         name: customer.name || 'Cliente',

@@ -1,7 +1,7 @@
 # Esquema de Base de Datos
 
 **Base de datos:** Supabase (PostgreSQL)
-**Última actualización:** 2026-09-11 (tenant_integration_secrets, 00061)
+**Última actualización:** 2026-09-11 (meseros rotativos, 00062)
 
 ---
 
@@ -637,7 +637,7 @@ existente: Postgres calcula `(T ∨ S) ∧ (S ∨ C) ≡ S ∨ (T ∧ C)`, que e
 |---------|------|----------|---------|-------------|
 | `id` | `uuid` | NO | `gen_random_uuid()` | PK |
 | `name` | `text` | NO | - | Nombre del mesero |
-| `phone` | `text` | NO | - | Número celular (único) |
+| `phone` | `text` | SI | `NULL` | Celular. **NULLABLE desde la 00046** (§19.2): un mesero se da de alta solo con nombre; el UNIQUE `(phone, tenant_id)` sigue cubriendo a quien lo tiene |
 | `pin` | `text` | SI | `NULL` | PIN hasheado (bcrypt 10 rounds). NULL = deshabilitado. |
 | `role` | `text` | NO | `'waiter'` | `waiter`, `supervisor`, `admin` |
 | `is_active` | `boolean` | NO | `true` | Si puede hacer login |
@@ -646,6 +646,7 @@ existente: Postgres calcula `(T ∨ S) ∧ (S ∨ C) ≡ S ∨ (T ∧ C)`, que e
 | `updated_at` | `timestamptz` | NO | `now()` | Última actualización |
 | `tenant_id` | `uuid` | **NO** | ⚠️ ver nota | **00025 + 00028.** La marca. ⚠️ Arrastra el **DEFAULT puente** de la 00028 (apunta a Sushi Service) porque la **00030 nunca se aplicó** en producción: un INSERT que lo omita se va callado al tenant equivocado. Pasarlo SIEMPRE explícito |
 | `location_id` | `uuid` | SI | `NULL` | **Nueva (00044).** Sede a la que pertenece el mesero (**D11**: *"cada mesero es de cada sede, no se juntan jamás"*). NULL = **mesero sin sede asignada**, y SE MUESTRA: no se adivina ni se reparte. Es la **vía 1 —la más fuerte—** de la precedencia del §3.1, por encima del host. Vive en la FILA y **nunca en el JWT** del mesero (§5.3): el JWT dura 8h, así que reasignar de sede tardaría hasta 8 horas en verse. FK **compuesta** `(location_id, tenant_id)` → `restaurant_locations(id, tenant_id)` ON DELETE **RESTRICT** |
+| `works_any_location` | `boolean` | NO | `false` | **Nueva (00062).** «Rota entre sedes» (revisión de D11, dueño 2026-09-11). `true` exige `location_id` NULL (CHECK `staff_users_rotativo_sin_sede`): no aporta señal a la precedencia y la visita se atribuye a la sede del APARATO. Sale en la lista de todos los escáneres de la marca. `false` + `location_id` NULL sigue siendo «sin sede asignada»: nada se reinterpreta ni se backfillea |
 
 **Índices y constraints:**
 
@@ -657,6 +658,11 @@ existente: Postgres calcula `(T ∨ S) ∧ (S ∨ C) ≡ S ∨ (T ∧ C)`, que e
 | `idx_staff_users_active` | `is_active` | btree |
 | `idx_staff_users_tenant` | `tenant_id` | btree (00025) |
 | `idx_staff_users_location_id` | `(tenant_id, location_id)` | btree **parcial** `WHERE location_id IS NOT NULL` (00044). Postgres indexa el lado referenciado, nunca el que referencia: sin él, desactivar una sede haría seq scan |
+| `staff_users_identidad_minima` | CHECK | `phone IS NOT NULL OR location_id IS NOT NULL OR works_any_location` (00046, ampliado en 00062). Sin teléfono, hace falta sede **o** rotación: si no, la fila queda fuera de TODAS las llaves de nombre (los NULL no colisionan) |
+| `staff_users_nombre_sede_key` | `(tenant_id, location_id, lower(trim(name)))` | UNIQUE **parcial** `WHERE location_id IS NOT NULL` (00046): dos «Ana» en la misma sede son indistinguibles en el selector |
+| `staff_users_rotativo_sin_sede` | CHECK | `NOT works_any_location OR location_id IS NULL` (00062) |
+| `staff_users_nombre_rotativo_key` | `(tenant_id, lower(trim(name)))` | UNIQUE **parcial** `WHERE works_any_location AND location_id IS NULL` (00062): los rotativos salen en todas las listas |
+| `trg_staff_users_nombre_sin_cruce` | trigger BEFORE INSERT/UPDATE | (00062) un rotativo y un mesero de sede no comparten nombre en la marca, en las dos direcciones. `23505` con `staff_users_nombre_rotativo_cruce` en el mensaje |
 
 **Foreign Keys:**
 

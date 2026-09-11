@@ -5,6 +5,11 @@ import { useState, useEffect } from 'react'
 export interface Waiter {
   id: string
   name: string
+  /**
+   * «Rota entre sedes» (00062): sale en la lista de todos los aparatos de la marca. Solo
+   * para etiquetarlo en el selector; la sede de la visita la pone el aparato igual.
+   */
+  rotates?: boolean
 }
 
 export interface UseWaitersResult {
@@ -20,7 +25,7 @@ export interface UseWaitersResult {
 }
 
 /**
- * Los meseros de la sede del aparato (§19).
+ * Los meseros de la sede del aparato, más los que rotan entre sedes (§19 + 00062).
  *
  * NUNCA devuelve "todos los de la marca". Si la sede no se puede resolver, la ruta responde
  * 409 y esto lo traduce a `sedeSinAsignar` — la lista se queda vacía a propósito. Textual del

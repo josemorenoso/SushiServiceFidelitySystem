@@ -8,6 +8,24 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [2026-09-11b] - Meseros rotativos: «rota entre sedes» como estado explícito
+
+**Qué:** el panel obligaba a darle UNA sede a cada mesero (D11 + el CHECK de la 00046) y la
+mayoría trabaja por turnos en varias. Nuevo `staff_users.works_any_location` (**00062**): un
+rotativo tiene `location_id` NULL (CHECK) y sale en la lista de **todos** los aparatos de la
+marca además de los de cada sede; la visita se atribuye a la sede del **aparato**, porque el
+rotativo no aporta señal a la precedencia. `location_id` NULL sin la bandera sigue siendo «sin
+sede asignada» (nada se reinterpreta ni se backfillea). Cuarta llave de identidad: UNIQUE
+parcial de nombre entre rotativos + trigger que impide que un rotativo y un mesero de sede
+compartan nombre (saldrían juntos en la misma lista). En Crear, Editar y «Asignar sede a
+varios» el selector de Sede ofrece «Rota entre sedes». **Por qué:** «la mayoría son
+rotativos» (dueño, 2026-09-11; eligió esta salida entre tres). **Archivos:**
+`00062_meseros_rotativos.sql`, `api/staff/waiters/route.ts`, `api/dashboard/staff/route.ts`,
+`dashboard/staff/page.tsx`, `WaiterPicker.tsx`, `useWaiters.ts`, `database.types.ts`.
+**Verificado:** `tsc` · `tests/db/meseros-rotativos.test.ts` (16 nuevos, Postgres real con la
+00062). **NO verificado:** en el navegador. **Migración:** 00062, escrita sin aplicar — **va ANTES
+del deploy** (sin la columna el picker responde 503 en todas las sedes).
+
 ## [2026-09-11] - La API de Conversiones de Meta: el celular hasheado, desde el servidor
 
 **Qué:** cada registro y cada check-in se manda TAMBIÉN desde `POST /api/check-in` (en `after()`)

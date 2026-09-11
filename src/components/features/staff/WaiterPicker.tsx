@@ -25,8 +25,9 @@ interface WaiterPickerProps {
  * a hacer porque es una estupidez regalar tu premio a otro"*— y para la redención se decidió
  * que basta el nombre. Está escrito acá para que nadie lo trate como un olvido.
  *
- * La lista solo trae los de la sede del aparato. Los tres estados vacíos son distintos y se
- * dicen distinto: sin sede (tiene arreglo), sin meseros (falta darlos de alta), o falló la
+ * La lista trae los de la sede del aparato y los que rotan entre sedes (00062), que llevan
+ * su etiqueta para que un rotativo no se confunda con un compañero fijo. Los tres estados
+ * vacíos son distintos y se dicen distinto: sin sede (tiene arreglo), sin meseros (falta darlos de alta), o falló la
  * base (reintentar). Un selector vacío y mudo haría que el mesero registrara sin atribuir.
  */
 export function WaiterPicker({
@@ -92,7 +93,14 @@ export function WaiterPicker({
                   : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
               }`}
             >
-              <span>{w.name}</span>
+              <span className="flex items-center gap-2">
+                {w.name}
+                {w.rotates && (
+                  <span className="rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[10px] font-normal uppercase tracking-wide text-gray-500">
+                    Rota entre sedes
+                  </span>
+                )}
+              </span>
               {value === w.id && <Check className="h-5 w-5 flex-shrink-0 text-red-500" />}
             </button>
           ))}

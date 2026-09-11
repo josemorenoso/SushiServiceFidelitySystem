@@ -72,6 +72,25 @@ function timeAgo(dateStr: string | null): string {
   return `hace ${Math.floor(days / 30)} mes(es)`
 }
 
+/**
+ * Valor del selector de Sede que significa «rota entre sedes» (00062). No es una sede: al
+ * guardar se traduce a `location_id: null` + `works_any_location: true`. Un uuid nunca vale
+ * esto, así que no puede chocar con una sede real.
+ */
+const ROTA = 'rota'
+
+/** Lo que el selector de Sede manda al API, en los tres formularios. */
+function sedeAPayload(valor: string): { location_id: string | null; works_any_location: boolean } {
+  return valor === ROTA
+    ? { location_id: null, works_any_location: true }
+    : { location_id: valor || null, works_any_location: false }
+}
+
+/** «Sin sede» de verdad: ni sede ni rotativo. Es lo que NO aparece en ningún escáner. */
+function sinSedeNiRotacion(s: StaffUser): boolean {
+  return !s.location_id && !s.works_any_location
+}
+
 function roleLabel(role: string): string {
   switch (role) {
     case 'admin': return 'Admin'
@@ -241,7 +260,7 @@ export default function StaffPage() {
       toast.error(
         assignableLocations.length === 0
           ? 'Esta marca no tiene sedes activas todavía. Sin sede solo se puede crear un supervisor o un admin, y con celular.'
-          : 'Elige la sede: es lo que hace que aparezca en el escáner de ese local.'
+          : 'Elige la sede, o márcalo como rotativo: es lo que hace que aparezca en el escáner.'
       )
       return
     }
@@ -255,7 +274,7 @@ export default function StaffPage() {
           phone: phone || null,
           pin: pin || null,
           role: newRole,
-          location_id: newLocationId || null,
+          ...sedeAPayload(newLocationId),
         }),
       })
       const json = await res.json()
@@ -288,7 +307,7 @@ export default function StaffPage() {
     setEditName(staff.name)
     setEditRole(staff.role as 'waiter' | 'supervisor' | 'admin')
     setEditPin('')
-    setEditLocationId(staff.location_id ?? '')
+    setEditLocationId(staff.works_any_location ? ROTA : (staff.location_id ?? ''))
   }
 
   const handleEditSave = async () => {
@@ -296,7 +315,7 @@ export default function StaffPage() {
     // Guardar es la vía por la que se arregla el parque viejo (todos con `location_id`
     // NULL): dejar salir a un mesero sin sede sería reponer el mismo problema.
     if (!rolUsaCredenciales(editRole) && !editLocationId && assignableLocations.length > 0) {
-      toast.error('Elige la sede: sin ella este mesero no aparece en ningún escáner.')
+      toast.error('Elige la sede o márcalo como rotativo: sin eso este mesero no aparece en ningún escáner.')
       return
     }
     setSavingEdit(true)
@@ -305,7 +324,10 @@ export default function StaffPage() {
         id: editingStaff.id,
         name: editName.trim(),
         role: editRole,
-        location_id: editLocationId || null,
+        // Las dos claves SIEMPRE juntas: marcar rotativo sin quitar la sede lo rechaza el
+        // CHECK `staff_users_rotativo_sin_sede`, y quitar la rotación sin dar sede lo
+        // rechaza `staff_users_identidad_minima` si no tiene celular.
+        ...sedeAPayload(editLocationId),
       }
       if (editPin.trim()) payload.pin = editPin.trim()
 
@@ -441,7 +463,7 @@ export default function StaffPage() {
         const res = await fetch('/api/dashboard/staff', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: s.id, location_id: bulkLocationId }),
+          body: JSON.stringify({ id: s.id, ...sedeAPayload(bulkLocationId) }),
         })
         const json = await res.json().catch(() => ({}))
         if (!res.ok) {
@@ -461,11 +483,8 @@ export default function StaffPage() {
     await fetchData()
 
     if (ok > 0) {
-      toast.success(
-        ok === 1
-          ? `1 mesero asignado a ${locationName(bulkLocationId)}`
-          : `${ok} meseros asignados a ${locationName(bulkLocationId)}`
-      )
+      const destino = bulkLocationId === ROTA ? 'rotativos entre sedes' : `asignados a ${locationName(bulkLocationId)}`
+      toast.success(ok === 1 ? `1 mesero ${destino.replace('asignados', 'asignado').replace('rotativos', 'rotativo')}` : `${ok} meseros ${destino}`)
     }
     if (fallaron.length > 0) {
       toast.error(
@@ -486,13 +505,14 @@ export default function StaffPage() {
     if (filterRole !== 'all' && s.role !== filterRole) return false
     if (filterActive === 'active' && !s.is_active) return false
     if (filterActive === 'inactive' && s.is_active) return false
-    if (onlySinSede && s.location_id) return false
+    if (onlySinSede && !sinSedeNiRotacion(s)) return false
     return true
   })
 
   // Los invisibles del escáner. `location_id` NULL no se adivina NUNCA (D11): se marca, se
-  // cuenta y se le pide al dueño que la asigne. Ver `SQL-PARA-CORRER/meseros-sin-sede/`.
-  const sinSede = data.staff.filter((s) => s.is_active && !s.location_id)
+  // cuenta y se le pide al dueño que la asigne — o que lo marque como rotativo (00062), que
+  // es la otra salida y NO es la que se propone por defecto. Ver `SQL-PARA-CORRER/meseros-sin-sede/`.
+  const sinSede = data.staff.filter((s) => s.is_active && sinSedeNiRotacion(s))
 
   return (
     <div className="space-y-6">
@@ -536,7 +556,7 @@ export default function StaffPage() {
                 <p className="mt-0.5 text-xs text-amber-800">
                   {assignableLocations.length === 0
                     ? 'Esta marca todavía no tiene sedes activas. Hasta que exista una, la lista del escáner sale vacía.'
-                    : 'La lista del escáner se arma con la sede del aparato. Asígnalas con el lápiz de cada fila — nadie las adivina.'}
+                    : 'La lista del escáner se arma con la sede del aparato. Asígnales sede, o márcalos como rotativos si trabajan por turnos en varias — nadie lo adivina por ti.'}
                 </p>
               </div>
               {assignableLocations.length > 0 && (
@@ -563,8 +583,8 @@ export default function StaffPage() {
               <p className="text-sm font-medium">Asignar sede a varios a la vez</p>
               <p className="mt-0.5 text-xs text-muted-foreground">
                 Marca en la tabla a los que trabajan en un mismo local, elige la sede y
-                aplícala. Nadie adivina la sede por ti: si no marcas a alguien, se queda como
-                está.
+                aplícala. Si rotan por turnos, la opción es «Rota entre sedes». Nadie adivina
+                por ti: si no marcas a alguien, se queda como está.
               </p>
               <div className="mt-2.5 flex flex-wrap items-center gap-2">
                 <Button
@@ -576,7 +596,7 @@ export default function StaffPage() {
                     // El atajo marca a los que la tabla está mostrando AHORA (respeta la
                     // búsqueda y los filtros): marcar en silencio a gente que no se ve es
                     // justo la manera de asignarle una sede equivocada a alguien.
-                    const visiblesSinSede = filteredStaff.filter((s) => s.is_active && !s.location_id)
+                    const visiblesSinSede = filteredStaff.filter((s) => s.is_active && sinSedeNiRotacion(s))
                     setBulkSelected((prev) =>
                       visiblesSinSede.every((s) => prev.has(s.id)) && visiblesSinSede.length > 0
                         ? new Set()
@@ -584,7 +604,7 @@ export default function StaffPage() {
                     )
                   }}
                 >
-                  {filteredStaff.filter((s) => s.is_active && !s.location_id).every((s) => bulkSelected.has(s.id)) &&
+                  {filteredStaff.filter((s) => s.is_active && sinSedeNiRotacion(s)).every((s) => bulkSelected.has(s.id)) &&
                   bulkSelected.size > 0
                     ? 'Desmarcar todos'
                     : 'Marcar los sin sede que estoy viendo'}
@@ -601,6 +621,9 @@ export default function StaffPage() {
                   {assignableLocations.map((l) => (
                     <option key={l.id} value={l.id}>{l.name}</option>
                   ))}
+                  {/* 00062: la mayoría rota (dueño, 2026-09-11). Sigue sin proponerse sola:
+                      se elige igual que una sede, y a las personas se las marca. */}
+                  <option value={ROTA}>Rota entre sedes (sale en todos los escáneres)</option>
                 </select>
 
                 <Button
@@ -674,7 +697,7 @@ export default function StaffPage() {
                 {data.staff.length === 0 ? 'Aún no hay meseros registrados' : 'Sin resultados para la búsqueda'}
               </p>
               {data.staff.length === 0 && (
-                <p className="text-xs mt-1">Crea el primero: le basta su nombre y su sede.</p>
+                <p className="text-xs mt-1">Crea el primero: le basta su nombre y su sede (o que rote entre sedes).</p>
               )}
             </div>
           ) : (
@@ -705,7 +728,7 @@ export default function StaffPage() {
                         {/* Solo se marca a quien NO tiene sede. Esta herramienta llena
                             huecos; MUDAR a alguien que ya está en un local se hace con su
                             lápiz, donde se ve de dónde sale y qué aparatos arrastra. */}
-                        {s.is_active && !s.location_id ? (
+                        {s.is_active && sinSedeNiRotacion(s) ? (
                           <input
                             type="checkbox"
                             className="h-4 w-4 cursor-pointer accent-amber-600"
@@ -728,7 +751,16 @@ export default function StaffPage() {
                       <TableCell>
                         {/* NULL se muestra, nunca se adivina (D11) — y se muestra COMO EL
                             PROBLEMA QUE ES: ese mesero no sale en ninguna lista del escáner. */}
-                        {s.location_id ? (
+                        {s.works_any_location ? (
+                          <div className="flex flex-col items-start gap-0.5">
+                            <Badge variant="secondary" className="text-[10px]">
+                              Rota entre sedes
+                            </Badge>
+                            <span className="text-[10px] leading-tight text-muted-foreground">
+                              Sale en todos los escáneres
+                            </span>
+                          </div>
+                        ) : s.location_id ? (
                           <Badge variant="secondary" className="text-[10px]">
                             {locationName(s.location_id)}
                           </Badge>
@@ -1019,11 +1051,14 @@ export default function StaffPage() {
                     {assignableLocations.map((loc) => (
                       <option key={loc.id} value={loc.id}>{loc.name}</option>
                     ))}
+                    <option value={ROTA}>Rota entre sedes (sale en todos los escáneres)</option>
                   </select>
                   <p className="text-[10px] text-muted-foreground">
                     {rolUsaCredenciales(newRole)
                       ? 'Un supervisor puede quedarse sin sede: lo identifica su celular.'
-                      : 'Un mesero es de UNA sede (D11), y es la que decide en qué escáner aparece.'}
+                      : newLocationId === ROTA
+                        ? 'Sale en la lista de todos los aparatos. Cada visita se atribuye a la sede del aparato donde escanea.'
+                        : 'La sede decide en qué escáner aparece. Si trabaja por turnos en varias, elige «Rota entre sedes».'}
                   </p>
                 </>
               )}
@@ -1167,11 +1202,18 @@ export default function StaffPage() {
                     {assignableLocations.map((loc) => (
                       <option key={loc.id} value={loc.id}>{loc.name}</option>
                     ))}
+                    <option value={ROTA}>Rota entre sedes (sale en todos los escáneres)</option>
                   </select>
+                  {editLocationId === ROTA && (
+                    <p className="text-[10px] text-muted-foreground">
+                      Sale en la lista de todos los aparatos. Cada visita se atribuye a la sede
+                      del aparato donde escanea, no a una sede «de casa».
+                    </p>
+                  )}
                   {!rolUsaCredenciales(editRole) && editLocationId === '' && (
                     <p className="text-[10px] text-amber-700">
-                      Hoy no aparece en ninguna lista del escáner. Elige su sede para que sus
-                      compañeros lo vean al registrar una visita.
+                      Hoy no aparece en ninguna lista del escáner. Elige su sede —o «Rota entre
+                      sedes»— para que sus compañeros lo vean al registrar una visita.
                     </p>
                   )}
                   {devicesForStaff(editingStaff?.id ?? '').length > 0 && (

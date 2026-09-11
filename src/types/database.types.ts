@@ -113,6 +113,11 @@ export interface StaffUser {
   updated_at: string
   /** Multi-sede F4/D11. NULL = sin sede asignada — se muestra, no se adivina. */
   location_id: string | null
+  /**
+   * 00062: «rota entre sedes». true exige `location_id` NULL (CHECK) y lo pone en la lista
+   * de todos los aparatos de la marca. false + NULL sigue siendo «sin sede asignada».
+   */
+  works_any_location: boolean
 }
 
 export interface StaffDevice {

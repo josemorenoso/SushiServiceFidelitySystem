@@ -19,6 +19,12 @@ import { isDbFailure, logDbFailure } from '@/lib/db-failure'
  * no tendría forma de notar que el filtro no se aplicó. El 409 manda al aparato a asignarse
  * una sede, que se hace una sola vez.
  *
+ * ROTATIVOS (00062, dueño 2026-09-11): la lista es «los de la sede del aparato + los que
+ * rotan entre sedes» (`works_any_location`, siempre con `location_id` NULL). Sigue siendo
+ * corta —que era la razón de D11— y sigue exigiendo la sede del aparato, porque de ahí
+ * sale la sede de la VISITA: un rotativo no aporta señal a la precedencia del §3.1.
+ * El NULL a secas (sin la bandera) sigue fuera de toda lista: es «sin sede asignada».
+ *
  * Ref: docs/features/staff-qr-scan.md · spec 2026-09-05-staff-scanner-19-design.md
  */
 
@@ -81,12 +87,14 @@ export async function GET(request: NextRequest) {
     }
 
     const supabase = getServiceClient()
+    // El `.or` va DESPUÉS del `.eq('tenant_id')`: PostgREST los une con AND, así que el
+    // aislamiento por marca cubre a las dos ramas. Un rotativo de la marca B no entra.
     const { data, error } = await supabase
       .from('staff_users')
-      .select('id, name')
+      .select('id, name, works_any_location')
       .eq('tenant_id', tenant.id)
-      .eq('location_id', locationId)
       .eq('is_active', true)
+      .or(`location_id.eq.${locationId},works_any_location.eq.true`)
       .order('name', { ascending: true })
 
     // Sin esto, un timeout del pooler deja `data` en `null` —indistinguible de "esta sede no
@@ -112,7 +120,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       ok: true,
       location_id: locationId,
-      waiters: (data ?? []).map((w) => ({ id: w.id, name: w.name })),
+      // `rotates` solo para MOSTRARLO (una etiqueta en el selector): la atribución no lo
+      // lee, y la sede de la visita sigue siendo la del aparato de todos modos.
+      waiters: (data ?? []).map((w) => ({
+        id: w.id,
+        name: w.name,
+        rotates: w.works_any_location === true,
+      })),
     })
   } catch (error) {
     console.error('[StaffWaiters] Error:', error)

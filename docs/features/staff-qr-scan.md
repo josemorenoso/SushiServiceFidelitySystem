@@ -102,7 +102,8 @@ de él cuelga el resto del formulario:
 | `waiter` | **Nombre + Sede** | No inicia sesión: se elige de la lista del escáner. El celular y el PIN no se dibujan y **se mandan vacíos**, aunque hayan quedado escritos por haber pasado antes por otro rol |
 | `supervisor` / `admin` | Nombre + Sede **+ Celular + PIN** | Son la llave que activa un aparato del local (`/mesero` pide celular + PIN una sola vez por aparato) |
 
-**La Sede se pide siempre**, con dos reglas que antes no estaban:
+**La Sede se pide siempre** (desde el 2026-09-11 el selector también ofrece «Rota entre
+sedes», ver la sección de abajo), con dos reglas que antes no estaban:
 
 - Si la marca tiene **una sola sede activa**, viene **preseleccionada**. Con una sola sede,
   «Sin sede» no era una elección: era un olvido.
@@ -126,7 +127,59 @@ botón «Ver solo esos»— y el trabajo de asignarlas está preparado en
 `SQL-PARA-CORRER/meseros-sin-sede/`.
 
 **No se backfillean.** `location_id` NULL es «sede desconocida», no «la principal»: adivinarla
-le atribuiría a un local las visitas de alguien que quizá atiende en el otro.
+le atribuiría a un local las visitas de alguien que quizá atiende en el otro. Desde la 00062
+la salida para los que trabajan por turnos en varias es marcarlos «Rota entre sedes» —desde el
+lápiz o desde «Asignar sede a varios a la vez»—, y tampoco se propone sola.
+
+## Meseros rotativos — «rota entre sedes» (00062, dueño 2026-09-11)
+
+> **Decisión del dueño:** *«la mayoría son rotativos»*. Es la revisión de D11
+> (`multi-sede.md` §3.ter): un mesero es de UNA sede **o rota entre todas**, nunca de dos.
+
+### Qué es
+
+`staff_users.works_any_location = true`. Un rotativo:
+
+| | |
+|---|---|
+| **Sede** | `location_id` **NULL**, y lo exige el CHECK `staff_users_rotativo_sin_sede`. No es un detalle: la sede del mesero es la **vía 1** de la precedencia del §3.1, la más fuerte. Con una sede «de casa», cada visita que registrara en OTRA sede se atribuiría a la de casa y el reporte por sede mentiría. Con NULL no aporta señal, la precedencia cae al **aparato** (vía 2) y la visita queda donde ocurrió |
+| **Lista del escáner** | `/api/staff/waiters` devuelve *los de la sede del aparato + los rotativos* (`.or('location_id.eq.X,works_any_location.eq.true')`, después del `.eq('tenant_id')`). Sigue corta —que era la razón de producto de D11— y sigue **fail-closed**: sin sede del aparato, 409, porque de ahí sale la sede de la visita. En el selector el rotativo lleva la etiqueta «Rota entre sedes» |
+| **NULL a secas** | `location_id` NULL con la bandera en `false` sigue siendo **«sin sede asignada»**: fuera de toda lista, marcado en ámbar en el panel, nunca backfilleado. La 00062 no reinterpreta nada: `works_any_location` nace en `false` para todo el parque |
+
+### Las cuatro llaves de identidad (19.f + 00062)
+
+La 00046 dejó tres piezas que solo valen juntas (teléfono · «sin teléfono → con sede» ·
+nombre único por sede). Un rotativo sin teléfono y sin sede quedaría fuera de las tres —la
+trampa de los NULL, otra vez—, así que la 00062 añade la cuarta:
+
+- `staff_users_identidad_minima` pasa a `phone IS NOT NULL OR location_id IS NOT NULL OR works_any_location`.
+- `staff_users_nombre_rotativo_key`: UNIQUE parcial `(tenant_id, lower(trim(name))) WHERE works_any_location AND location_id IS NULL`. Dos «Ana» rotativas saldrían juntas en **todas** las listas.
+- `trg_staff_users_nombre_sin_cruce`: un rotativo y un mesero de sede **no comparten nombre** dentro de la marca, en las dos direcciones. Ningún índice lo cubre porque las dos filas viven en índices parciales distintos. Falla con `23505` y el mensaje lleva `staff_users_nombre_rotativo_cruce`, que `/api/dashboard/staff` traduce.
+
+### El panel
+
+En Crear, Editar y «Asignar sede a varios a la vez», el selector de Sede tiene una opción más:
+**«Rota entre sedes (sale en todos los escáneres)»**. Al guardar se traduce a
+`location_id: null` + `works_any_location: true` **en la misma llamada** — las dos claves van
+siempre juntas porque marcar rotativo sin quitar la sede lo rechaza el CHECK, y quitar la
+rotación sin dar sede lo rechaza la identidad mínima si no hay celular. La tabla lo pinta
+con el badge «Rota entre sedes · Sale en todos los escáneres», y el aviso de «sin sede» y la
+asignación en masa **no lo cuentan** como problema.
+
+### Lo que NO cambia
+
+- El check-in y la redención **no exigen** que la sede del mesero coincida con la del aparato
+  (nunca lo hicieron: el actor es el cliente, y una discrepancia se registra, no se bloquea).
+- `staff_devices` no se toca: el aparato sigue siendo del local y sigue eligiendo su sede al
+  activarse.
+- `staff_users_phone_tenant_key` y `staff_users_nombre_sede_key` siguen intactos.
+
+### Cómo se verifica
+
+`tests/db/meseros-rotativos.test.ts` (16 pruebas contra el Postgres embebido con la 00062
+aplicada): la cuarta llave, el CHECK rotativo-sin-sede en INSERT y UPDATE, los nombres en las
+dos direcciones y entre marcas, y un **espejo SQL del predicado de `/api/staff/waiters`** —si
+la ruta cambia su filtro, el espejo tiene que cambiar con ella, a la vista.
 
 ---
 

@@ -1,6 +1,6 @@
 # ESTADO — RestaurantQR / Cada1
 
-> **Última actualización:** 2026-09-11 (cierre de la API de Conversiones de Meta, Opus 5; el push lo ordena el dueño)
+> **Última actualización:** 2026-09-11 (cierre de meseros rotativos, Opus 5; el push lo ordena el dueño)
 > Toda sesión lo lee PRIMERO. Toda sesión que cierra un bloque lo ACTUALIZA al final. Límite: 150 líneas.
 > Lo obsoleto se **saca**, no se tacha: un ítem tachado sigue costando tokens cada vez que alguien lee esto.
 >
@@ -14,10 +14,10 @@
 
 | Qué | Estado |
 |-----|--------|
-| Código | **`origin/main` = `069a12d`** (pusheado el 2026-09-10). **Local va adelante, sin pushear, con DOS cosas:** (1) la caída a la cuenta Twilio master cerrada (`0b12e60`) — **sin migración, pero con variable NUEVA en Vercel: `TWILIO_MASTER_TENANT_ID`** (uuid de Sushi Service; sin ella Sushi Service deja de listar y enviar por Twilio — RUNBOOK §1.b'), **ponerla ANTES del push**; (2) la API de Conversiones de Meta — migración **`00061`** (riesgo cero, puede ir después del código) y tres variables que no bloquean nada (RUNBOOK §1.b''). La carpeta sigue en `feat/multisede-aios` (= `main`). Sin mergear a propósito: `master`, `port/sushi-fun-2.8`, `sushi-sync` |
-| Verificación | ✅ 2026-09-11 (madrugada): `tsc` limpio · **vitest 43 archivos / 679 tests, TODOS en verde** · eslint **7 errores preexistentes** (hooks y gráficas del panel, ninguno en lo tocado). El rojo de `aios-health` era del RELOJ (el helper mete dos pedidos con `now() - 1h`/`- 2h`, así que entre medianoche y las 2 a.m. el segundo cae en el día anterior): a esta hora pasa. Sigue sin corregirse. `build` no se corrió |
+| Código | **`origin/main` = `069a12d`** (pusheado el 2026-09-10). **Local va adelante, sin pushear, con TRES cosas:** (1) la caída a la cuenta Twilio master cerrada (`0b12e60`) — **sin migración, pero con variable NUEVA en Vercel: `TWILIO_MASTER_TENANT_ID`** (uuid de Sushi Service; sin ella Sushi Service deja de listar y enviar por Twilio — RUNBOOK §1.b'), **ponerla ANTES del push**; (2) la API de Conversiones de Meta — migración **`00061`** (riesgo cero, puede ir después del código) y tres variables que no bloquean nada (RUNBOOK §1.b''); (3) los meseros rotativos — migración **`00062`**, que **va ANTES del push**: sin la columna, `/api/staff/waiters` responde 503 y el escáner se queda sin lista en todas las sedes. La carpeta sigue en `feat/multisede-aios` (= `main`). Sin mergear a propósito: `master`, `port/sushi-fun-2.8`, `sushi-sync` |
+| Verificación | ✅ 2026-09-11 (00:41): `tsc` limpio · **vitest 44 archivos / 695 tests, TODOS en verde** · eslint **7 errores preexistentes** (hooks y gráficas del panel, ninguno en lo tocado). El rojo de `aios-health` era del RELOJ (el helper mete dos pedidos con `now() - 1h`/`- 2h`, así que entre medianoche y las 2 a.m. el segundo cae en el día anterior): a esta hora pasa. Sigue sin corregirse. `build` no se corrió |
 | Marcas vivas | **5**: sushi-service (542 clientes), demo-ventas (412), sushi-fun (251), don-alirio (244), cafe-frangal (8) |
-| Base de datos de producción | ✅ **Aplicadas hasta la `00056`** (dueño, 2026-09-08: `00047`, `00050`, `00051`, `00053`, `00054` y `00056`, todas). El esquema ya alcanza al código de `main`. La 00030 NUNCA aplicada (a propósito). La 00015 NO se aplica (reabre fuga). Huecos: `00048`, `00049`, `00052`, `00055`. **Escritas sin aplicar: `00058`, `00059`, `00061`** |
+| Base de datos de producción | ✅ **Aplicadas hasta la `00056`** (dueño, 2026-09-08: `00047`, `00050`, `00051`, `00053`, `00054` y `00056`, todas). El esquema ya alcanza al código de `main`. La 00030 NUNCA aplicada (a propósito). La 00015 NO se aplica (reabre fuga). Huecos: `00048`, `00049`, `00052`, `00055`. **Escritas sin aplicar: `00058`, `00059`, `00061`, `00062`** |
 | Migraciones: dónde están | El directorio muestra **solo la rama puesta**; el inventario real y el número de la próxima los da `node scripts/proxima-migracion.mjs`. **Desde el 07 la única reserva es la fila del tablero (§2)**: un número citado en cualquier otro doc no reserva nada. `00048`, `00049`, `00052` y `00055` son huecos: no se rellenan |
 | Crons | Los 5 en `vercel.json`, corriendo. `birthday` 18:00 y `reactivation` 20:00 UTC (= 13:00/15:00 Bogotá), verificado. ⚠️ **`reward-reminder` sigue en 16:00 UTC (11:00 Bogotá)**; la auditoría estimó ≈21:00 UTC. **Decisión del dueño** |
 | n8n | Apagado. `domicilios_whatsapp_v4.json` sigue en el VPS pero ya no dispara |
@@ -32,7 +32,6 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
-| Meseros rotativos: estado «rota entre sedes» (dueño, 2026-09-11) | Opus 5 | `supabase/migrations/00062_*`, `src/app/api/staff/waiters/route.ts`, `src/app/api/dashboard/staff/route.ts`, `src/app/(dashboard)/dashboard/staff/page.tsx`, `src/app/(public)/mesero/**` (solo el picker), `docs/features/staff-qr-scan.md`, `docs/features/multi-sede.md` §3.ter, `docs/DB_SCHEMA.md`, `tests/**/meseros-rotativos*` | **00062** | en curso |
 
 ## 3. Siguiente, en orden
 
@@ -66,11 +65,12 @@
    2. **Darle subdominio propio a CADA sede, incluida la primera.** `aios_add_location` rechaza
       la sede 2 con `sede_previa_sin_subdominio` si la sede 1 vive del dominio raíz (00056).
       Elegir para la MARCA un host raíz distinto del de toda sede.
-   3. **Asignarle sede a cada mesero.** Todos los vivos tienen `location_id` NULL y
-      `/api/staff/waiters` filtra por sede (`waiters/route.ts:88`): con 2+ sedes, **los escáneres
+   3. **Asignarle sede a cada mesero — o marcarlo «Rota entre sedes».** Todos los vivos tienen
+      `location_id` NULL y `/api/staff/waiters` filtra por sede: con 2+ sedes, **los escáneres
       salen vacíos**. Sigue siendo una DECISIÓN, persona por persona — pero ya no cuesta doce
-      formularios: `/dashboard/staff` → «Asignar sede a varios a la vez» (casilla, sede, aplicar).
-      Para varias marcas de una sentada, `SQL-PARA-CORRER/meseros-sin-sede/`.
+      formularios: `/dashboard/staff` → «Asignar sede a varios a la vez» (casilla, sede **o
+      «Rota entre sedes»**, aplicar). Con la `00062` aplicada (dueño, 11: «la mayoría son
+      rotativos»). Para varias marcas de una sentada, `SQL-PARA-CORRER/meseros-sin-sede/`.
    4. **`authorized_numbers.location_id` por cada sede.** Ya se escribe desde el panel
       (`/dashboard/authorized-numbers`, columna «Sede»); lo que YA existe sigue en NULL y hay que
       asignarlo: esa pantalla o `SQL-PARA-CORRER/authorized-numbers-sin-sede/`. ⚠️ Un celular
@@ -158,7 +158,8 @@
    «grupo» o «franquicia». La `00060` ya la corrió el dueño el 10, antes del push. Las dos que quedan son de RIESGO
    BAJO: no tocan una sola fila de historia. **Y la `00061`** (`tenant_integration_secrets`, el token de la API
    de Conversiones por marca): tabla nueva, riesgo cero, puede ir después del código; hasta que corra, el panel
-   responde 503 al guardar el token de una marca.
+   responde 503 al guardar el token de una marca. **Y la `00062`** (meseros rotativos): columna + CHECK + índice +
+   trigger sobre `staff_users`, sin tocar una fila; **ANTES del código**, porque el picker del escáner la lee.
 0.quater **Falta el autoservicio de contraseña** («olvidé mi contraseña» en `/login`). Ya se puede
    cambiar una clave desde «Accesos» y desde el AIOS, así que nadie queda encerrado — pero mientras
    no exista el autoservicio, cada olvido sigue pasando por una persona. Depende de que el SMTP del
@@ -188,9 +189,10 @@
    su `/tarjeta` en un celular. Sin config nueva, ninguna marca cambia.
 2. **Smoke test** del `docs/RUNBOOK-DEPLOY.md` §5 con Sushi Service real, apenas terminen las cinco:
    crear un evento con enlace, abrir Conexiones, y mirar la tarjeta en un celular.
-3. **Asignarle sede a los meseros que ya existen.** Todos tienen `location_id` NULL, así que **no aparecen
-   en ningún escáner**. Falta solo la DECISIÓN, persona por persona: la herramienta ya está en
-   `/dashboard/staff` («Asignar sede a varios a la vez») y en `SQL-PARA-CORRER/meseros-sin-sede/`.
+3. **Asignarle sede a los meseros que ya existen, o marcarlos rotativos.** Todos tienen `location_id` NULL, así
+   que **no aparecen en ningún escáner**. Falta solo la DECISIÓN, persona por persona: la herramienta ya está en
+   `/dashboard/staff` («Asignar sede a varios a la vez», con la opción «Rota entre sedes» desde la `00062`) y en
+   `SQL-PARA-CORRER/meseros-sin-sede/`.
 4. **Zernio E2E** con la cuenta ya limpia → desbloquea al primer cliente nuevo bajo coexistencia. ⚠️ **Se intentó
    el 08 y no se puede desde esta máquina**: la `ZERNIO_API_KEY` de `.env.local` responde **401** a todo GET
    (`/v1/profiles`, `/v1/phone-numbers`, `/v1/api-keys`), `.env.local` no tiene credenciales de Supabase, y no
@@ -238,6 +240,15 @@ para reseñas. Ninguna decisión de hoy cierra esa puerta (`config.integrations`
 
 ## 5. Hecho reciente
 
+- **Meseros rotativos** (2026-09-11, **migración `00062`, SIN aplicar, va ANTES del deploy**): el
+  panel obligaba a UNA sede por mesero (D11) y «la mayoría son rotativos». Estado explícito
+  `staff_users.works_any_location` —no se reinterpreta el NULL, que sigue siendo «sin sede
+  asignada» y sigue sin backfillearse—: el rotativo tiene sede NULL (CHECK), sale en la lista de
+  TODOS los aparatos de la marca además de los de cada sede, y la visita se atribuye a la sede
+  del APARATO. Cuarta llave de identidad (UNIQUE de nombre entre rotativos + trigger anti-cruce
+  con los de sede). Selector de Sede con «Rota entre sedes» en Crear, Editar y en masa. D11
+  revisada, no derogada: una fila, una persona, una sede por visita; lo prohibido sigue siendo
+  «de dos». → `docs/features/staff-qr-scan.md` § «Meseros rotativos».
 - **El asistente dejó de ofrecer plantillas que romperían el envío entero** (2026-09-10, sin
   migración): las MARKETING del catálogo llevan 3 o 4 variables y Golden Bullet solo rellena dos,
   así que elegir una mandaba un envío con variables faltantes que el proveedor rechaza al 100% de

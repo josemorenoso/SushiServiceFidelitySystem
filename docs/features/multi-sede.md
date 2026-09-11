@@ -466,6 +466,16 @@ las dos se separan, se separen a la vista.
 
 > Spec: §4 (bloque 00044) y §5.3. Migración: `supabase/migrations/00044_meseros_por_sede.sql`.
 > **Literal del dueño (D11):** *«cada mesero es de cada sede, no se juntan jamás»*.
+>
+> ⚠️ **Revisada el 2026-09-11 (dueño, migración `00062`): existe el mesero ROTATIVO.**
+> *«La mayoría son rotativos»*. Un mesero es de UNA sede **o rota entre todas**
+> (`staff_users.works_any_location = true`, siempre con `location_id` NULL) — lo que sigue
+> prohibido es que sea de DOS: una fila, una persona, y cada visita atribuida a UNA sede,
+> la del aparato. Lo que D11 conserva: la lista del escáner sigue siendo corta (su sede +
+> rotativos, no la marca entera), y `location_id` NULL sin la bandera sigue siendo «sin sede
+> asignada». Todo lo de abajo sigue vigente para el mesero fijo. El detalle del rotativo
+> —las cuatro llaves de identidad, el trigger anti-cruce, el panel— vive en
+> `docs/features/staff-qr-scan.md` § «Meseros rotativos».
 
 ### Lo que la 00044 pone en la base
 

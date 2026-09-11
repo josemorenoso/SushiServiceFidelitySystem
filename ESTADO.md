@@ -32,6 +32,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Decisión sobre el píxel de Cada1: apagado por ley de datos, solo docs (dueño, 2026-09-11) | Opus 5 | `docs/features/meta-pixel.md`, `CLAUDE.md`, `.env.example`, `CHANGELOG.md`, `ESTADO.md` §3/§4/§5 | — | en curso |
 
 ## 3. Siguiente, en orden
 

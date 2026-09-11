@@ -22,6 +22,7 @@ import {
   PlugZap,
   Store,
   KeyRound,
+  Trophy,
 } from 'lucide-react'
 import { useBranding } from '@/lib/branding-context'
 
@@ -32,6 +33,9 @@ export function DashboardSidebar({ isSuperAdmin = false }: { isSuperAdmin?: bool
   const navItems = [
     { href: '/dashboard', label: 'Métricas', icon: LayoutDashboard },
     { href: '/dashboard/customers', label: 'Clientes', icon: Users },
+    // Rendimiento va junto a Métricas y Clientes: es la vista del EQUIPO (escaneos y
+    // premios por mesero, nuevos vs frecuentes, mesas), no la administración de meseros.
+    { href: '/dashboard/rendimiento', label: 'Rendimiento', icon: Trophy },
     // Redenciones vive DENTRO de Recompensas desde el 2026-09-11 (pestaña). La
     // ruta vieja redirige, así que no hace falta entrada propia.
     { href: '/dashboard/rewards', label: 'Recompensas', icon: Gift },

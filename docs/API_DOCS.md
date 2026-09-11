@@ -107,6 +107,7 @@ impide al rol `aios_constelarys` tocar `auth.users` — ver `docs/features/alta-
 | GET | /api/admin/wallets | Estado de la billetera de todos los tenants (saldo, consumo, última recarga) | **Super-admin** |
 | GET | /api/dashboard/redemptions | Listar redenciones con filtros **(sede — no-op hoy, deuda #13)** | Admin Cookie |
 | GET | /api/dashboard/redemptions/summary | Resumen de redenciones (premio/hora/mesero) **(sede — no-op hoy, deuda #13)** | Admin Cookie |
+| GET | /api/dashboard/staff-activity | **Rendimiento del equipo** (00065): escaneos y premios por mesero, nuevos vs frecuentes, mesas que más piden. `from`/`to` ISO obligatorios (400 si faltan o `from > to`); `location_id` opcional. 503 con el nombre de la migración si `staff_activity_report()` no existe. → `docs/features/staff-activity.md` | Admin Cookie |
 | GET | /api/dashboard/campaign-rewards | Listar catálogo de premios de campaña (`?active=true` opcional) | Admin Cookie |
 | POST | /api/dashboard/campaign-rewards | Crear premio de campaña | Admin Cookie |
 | PATCH | /api/dashboard/campaign-rewards | Actualizar premio (título, descripción, `is_active`) | Admin Cookie |

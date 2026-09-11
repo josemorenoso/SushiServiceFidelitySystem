@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useDemo } from '@/contexts/DemoContext'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
-import { LogOut, Menu, QrCode, LayoutDashboard, Users, Gift, Megaphone, UtensilsCrossed, FileText, Settings, CalendarDays, UserCog, ShieldCheck, Crosshair, Palette, Store, KeyRound } from 'lucide-react'
+import { LogOut, Menu, QrCode, LayoutDashboard, Users, Gift, Megaphone, UtensilsCrossed, FileText, Settings, CalendarDays, UserCog, ShieldCheck, Crosshair, Palette, Store, KeyRound, Trophy } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
@@ -21,6 +21,9 @@ export function DashboardHeader() {
   const navItems = [
     { href: '/dashboard', label: 'Métricas', icon: LayoutDashboard },
     { href: '/dashboard/customers', label: 'Clientes', icon: Users },
+    // Rendimiento va junto a Métricas y Clientes: es la vista del EQUIPO (escaneos y
+    // premios por mesero, nuevos vs frecuentes, mesas), no la administración de meseros.
+    { href: '/dashboard/rendimiento', label: 'Rendimiento', icon: Trophy },
     { href: '/dashboard/rewards', label: 'Recompensas', icon: Gift },
     { href: '/dashboard/campaigns', label: 'Campañas', icon: Megaphone },
     { href: '/dashboard/imported-contacts', label: 'Golden Bullet', icon: Crosshair },

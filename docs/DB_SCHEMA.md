@@ -1,7 +1,7 @@
 # Esquema de Base de Datos
 
 **Base de datos:** Supabase (PostgreSQL)
-**Última actualización:** 2026-09-11 (meseros rotativos, 00062)
+**Última actualización:** 2026-09-11 (rendimiento del equipo, 00065)
 
 ---
 
@@ -265,6 +265,10 @@ CREATE POLICY "admin_update_customers" ON customers
 | `customer_id` | `customers(id)` | CASCADE |
 | `registered_by_staff_id` | `staff_users(id)` | SET NULL |
 | `(location_id, tenant_id)` | `restaurant_locations(id, tenant_id)` | **RESTRICT** |
+
+**Índices que importan:** `idx_visits_customer_id` (00001), `idx_visits_table_number` parcial (00009, «which tables sell most»),
+`idx_visits_registered_by` (00018) e **`idx_visits_customer_created (tenant_id, customer_id, created_at)`** (00065): es el que
+usa `staff_activity_report()` para decidir si una visita es la PRIMERA del cliente sin recorrer toda su historia.
 
 ---
 
@@ -1358,6 +1362,8 @@ columna a mano.
 
 | 48 | `00047_identidad_visual.sql` | 2026-09-06 | **Identidad visual por marca (§5 pantalla + tarjeta, §6 logo y paleta, §3 config del QR Studio).** NO crea tablas, NO agrega columnas y NO toca una sola fila. Dos cosas: (1) **`jsonb_deep_merge(a, b)`** (recursiva, `LANGUAGE plpgsql` — una función `LANGUAGE sql` valida su cuerpo al crearse y la autorreferencia fallaría) + **`merge_tenant_config_deep(uuid, jsonb)`**, porque `tenants.config` pasa a tener **espacios con nombre** (`branding`, `qr_studio`, y el reservado `integrations`) y el `\|\|` de jsonb mezcla **solo el primer nivel**: guardar `{branding:{primary}}` con el merge superficial **borraría el logo**, sin error y sin aviso. ⚠️ Es una función con **NOMBRE NUEVO**, no una sobrecarga: `merge_tenant_config()` (00032) se conserva con su misma firma — agregarle un parámetro habría dejado ambigua (42725) toda llamada vieja, la trampa que ya costó `log_review_shown_deduped()`. (2) Bucket **`brand-assets`** + sus 4 policies, calcado del patrón de `event-media` (00012). **Reaplicable**: todo es `CREATE OR REPLACE`, `ON CONFLICT DO NOTHING` o `IF NOT EXISTS`. **Va ANTES del código**: sin ella, todo guardado desde `/dashboard/marca` y desde el QR Studio devuelve error. Su orden en la cola: después de la 00044, la 00045 y la 00046. | Pendiente |
 
+| 65 | `00065_staff_activity_report.sql` | 2026-09-11 | **Rendimiento del equipo** (`docs/features/staff-activity.md`). NO crea tablas, NO agrega columnas y NO toca una sola fila. Función **`staff_activity_report(tenant, from, to, location_ids uuid[], include_unassigned)`** → `jsonb` con `totals`, `by_staff` y `by_table`: escaneos (`visits.source='staff_scan'`) y premios entregados (`reward_redemptions`) por mesero y por mesa, y **nuevo vs frecuente decidido por la HISTORIA** (nueva = no existe `visits` anterior de ese cliente; ni `total_visits` ni `created_at`). El alcance de sede calca `applyLocationFilter()` rama por rama (NULL = marca entera · `[]`+true = solo el cubo NULL · ids = esas sedes · `[]`+false = nada). Un escaneo sin mesero o sin mesa es una FILA propia del resultado: no se esconde. `SECURITY INVOKER`, `REVOKE` a `anon`/`authenticated`, solo `service_role`. Índice `idx_visits_customer_created`. Va ANTES del código: sin ella `/api/dashboard/staff-activity` responde 503 nombrándola. | Pendiente |
+
 ### `tenant_id` en las 18 tablas de negocio
 
 Las migraciones 00025/00028 agregan `tenant_id uuid NOT NULL REFERENCES tenants(id)` a: `customers,
@@ -1389,6 +1395,12 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 ```
+
+---
+
+### staff_activity_report(uuid, timestamptz, timestamptz, uuid[], boolean)
+> (00065) Rendimiento del equipo para `/dashboard/rendimiento`. Devuelve `jsonb` con `totals`, `by_staff` y `by_table`.
+> Solo `service_role`; el `tenant_id` sale del JWT del panel. Detalle en `docs/features/staff-activity.md` y en la fila 65 del historial.
 
 ---
 

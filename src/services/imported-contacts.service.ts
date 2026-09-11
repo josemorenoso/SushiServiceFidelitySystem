@@ -327,9 +327,19 @@ export interface ConfirmImportParams {
   consentText?: string
   /** Quién aceptó la advertencia. */
   acceptedByEmail?: string
+  /**
+   * Cuántos contactos entran en ESTA tanda (los primeros N del archivo, en su
+   * orden). El resto no se inserta ni se encola: vuelve a subirse el mismo CSV
+   * cuando se quiera seguir, y la regla anti-reenvío deja pasar solo a los que
+   * todavía no se programaron. Existe porque la billetera cobra la base entera
+   * por adelantado (W-D6) y el dueño quiere pagar de a tandas (2026-09-11).
+   */
+  maxContacts?: number
 }
 
 export interface ConfirmImportResult {
+  /** Contactos válidos que quedaron fuera de esta tanda por el tope. Se mandan subiendo el mismo CSV otra vez. */
+  left_out?: number
   campaign_id: string
   /** Contactos escritos en `imported_contacts`. */
   inserted: number
@@ -377,8 +387,14 @@ export async function confirmImport(params: ConfirmImportParams): Promise<Confir
   // Re-filtrar contra DB por seguridad (carrera entre dos importaciones).
   const phones = params.contacts.map((c) => c.phone)
   const existing = await getExistingPhones(phones, tenantId)
-  const toImport = params.contacts.filter((c) => !existing.has(c.phone))
-  const blockedAuto = params.contacts.length - toImport.length
+  const sinRepetidos = params.contacts.filter((c) => !existing.has(c.phone))
+  const blockedAuto = params.contacts.length - sinRepetidos.length
+
+  // La tanda: los primeros N que quedaron, en el orden del archivo. Los que
+  // quedan fuera NO son bloqueados: son los de la próxima subida.
+  const tope = Number.isInteger(params.maxContacts) && (params.maxContacts as number) > 0 ? (params.maxContacts as number) : null
+  const leftOut = tope !== null && sinRepetidos.length > tope ? sinRepetidos.length - tope : 0
+  const toImport = leftOut > 0 ? sinRepetidos.slice(0, tope as number) : sinRepetidos
 
   // ─── Puerta de calidad (spec §3.4.1, conservada por D-7) ───
   // Golden Bullet es la ÚNICA clase que le escribe a gente que no dio
@@ -569,6 +585,7 @@ export async function confirmImport(params: ConfirmImportParams): Promise<Confir
     inserted,
     queued: enqueued,
     blocked_auto: blockedAuto,
+    left_out: leftOut,
     // El costo es del plan COMPLETO, no de lo que sale hoy: es la plata que esta
     // importación va a gastar de acá a que termine.
     total_cost_usd: Math.round(enqueued * costPerMsg * 100) / 100,

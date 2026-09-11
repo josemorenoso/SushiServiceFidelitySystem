@@ -63,7 +63,11 @@ interface ConfirmResult {
   blocked_auto: number
   total_cost_usd: number
   plan: BlockPlan | null
+  left_out?: number
 }
+
+/** Lo que la billetera de Cada1 cobra por mensaje (00033, `price_per_message_cop`, default 100). */
+const PRECIO_BILLETERA_COP = 100
 
 const REASON_LABEL: Record<string, string> = {
   formato_invalido: 'Formato inválido',
@@ -145,6 +149,9 @@ export function ImportedContactsUploader({ onSent, apagado = false }: { onSent?:
   const [fallbackName, setFallbackName] = useState('cliente')
   const [confirmacion, setConfirmacion] = useState('')
   const [blockSize, setBlockSize] = useState<number | null>(null)
+  // Cuántos van en ESTA tanda. Arranca en todos los válidos; el dueño lo baja
+  // para pagar de a partes. El resto se manda subiendo el mismo CSV otra vez.
+  const [tanda, setTanda] = useState<number | null>(null)
   const [budget, setBudget] = useState<LineBudgetInfo | null>(null)
   const [twilioBalance, setTwilioBalance] = useState<{ balance: number | null; balanceCOP?: number } | null>(null)
   const [result, setResult] = useState<ConfirmResult | null>(null)
@@ -232,14 +239,30 @@ export function ImportedContactsUploader({ onSent, apagado = false }: { onSent?:
    * interesante, y el plan que MANDA es el que devuelve `confirm` — que es el
    * que se muestra al final.
    */
+  // Cuántos salen de verdad en esta tanda: lo que pidió el dueño, acotado a los válidos.
+  const enTanda = validation ? Math.max(0, Math.min(tanda ?? validation.valid, validation.valid)) : 0
+  const quedanFuera = validation ? validation.valid - enTanda : 0
+
   const proyeccion = useMemo(() => {
     if (!validation || !blockSize || blockSize < 1) return null
     const efectivo = cupo !== null ? Math.min(blockSize, cupo) : blockSize
-    const dias = validation.valid === 0 ? 0 : Math.ceil(validation.valid / efectivo)
+    const dias = enTanda === 0 ? 0 : Math.ceil(enTanda / efectivo)
     const fin = new Date()
     fin.setDate(fin.getDate() + Math.max(0, dias - 1))
     return { efectivo, dias, fin: fin.toISOString(), recortado: cupo !== null && blockSize > cupo }
-  }, [validation, blockSize, cupo])
+  }, [validation, blockSize, cupo, enTanda])
+
+  // La plata que esta tanda necesita, en los dos sitios donde se cobra:
+  //  · Twilio (USD), mensaje a mensaje, el día que sale — es la plata real;
+  //  · la billetera de Cada1 (COP), la tanda ENTERA por adelantado al confirmar (W-D6).
+  const costoTwilioUsd = validation ? enTanda * validation.twilio_cost_per_message : 0
+  const costoBilleteraCop = enTanda * PRECIO_BILLETERA_COP
+  const saldoTwilio = twilioBalance?.balance ?? null
+  const alcanzaTwilio = saldoTwilio === null ? null : saldoTwilio >= costoTwilioUsd
+  const mensajesQueCubreTwilio =
+    saldoTwilio !== null && validation && validation.twilio_cost_per_message > 0
+      ? Math.floor(saldoTwilio / validation.twilio_cost_per_message)
+      : null
 
   const plantillaPrueba = todasPlantillas.find((t) => t.sid === pruebaSid) ?? null
   const pruebaPidePromo = plantillaPrueba ? plantillaUsaPromo(plantillaPrueba.body) : false
@@ -291,6 +314,7 @@ export function ImportedContactsUploader({ onSent, apagado = false }: { onSent?:
         return
       }
       setValidation(data)
+      setTanda(data.valid > 0 ? data.valid : null)
       if (data.valid === 0) toast.warning('No hay contactos válidos para enviar')
     } catch {
       toast.error('Error procesando el archivo')
@@ -301,8 +325,21 @@ export function ImportedContactsUploader({ onSent, apagado = false }: { onSent?:
   }
 
   const handleSend = async () => {
-    if (!validation || !templateSid || !promoLista || !blockSize) return
+    if (!validation || !templateSid || !promoLista || !blockSize || enTanda < 1) return
     if (confirmacion.trim().toUpperCase() !== FRASE_CONFIRMACION) return
+    // La pregunta que pidió el dueño: ¿tenés saldo? Si Twilio no cubre la tanda
+    // entera se puede programar igual (se recarga mientras gotea), pero se
+    // confirma con los números a la vista. Sin saldo, el drenador quema el
+    // contacto al tercer intento: por eso la advertencia es explícita.
+    if (alcanzaTwilio === false) {
+      const ok = window.confirm(
+        `Twilio tiene US$${(saldoTwilio ?? 0).toFixed(2)} y esta tanda necesita US$${costoTwilioUsd.toFixed(2)} ` +
+          `(alcanza para ${(mensajesQueCubreTwilio ?? 0).toLocaleString('es-CO')} de ${enTanda.toLocaleString('es-CO')}).\n\n` +
+          'Si el saldo se acaba a mitad de un bloque, los mensajes que fallen se pierden para siempre. ' +
+          '¿Programar igual y recargar antes de que salga?'
+      )
+      if (!ok) return
+    }
     setSending(true)
     try {
       const res = await fetch('/api/dashboard/imported-contacts/confirm', {
@@ -316,6 +353,7 @@ export function ImportedContactsUploader({ onSent, apagado = false }: { onSent?:
           fallback_name: fallbackName.trim() || 'cliente',
           block_size: blockSize,
           consent_text: TEXTO_ADVERTENCIA,
+          max_contacts: enTanda,
           contacts: validation.valid_contacts,
         }),
       })
@@ -359,6 +397,12 @@ export function ImportedContactsUploader({ onSent, apagado = false }: { onSent?:
             <div><p className="text-2xl font-bold">{result.blocked_auto.toLocaleString('es-CO')}</p><p className="text-muted-foreground">Bloqueados</p></div>
             <div><p className="text-2xl font-bold">${result.total_cost_usd.toFixed(2)}</p><p className="text-muted-foreground">Costo USD</p></div>
           </div>
+          {(result.left_out ?? 0) > 0 && (
+            <p className="mt-4 max-w-md rounded-lg border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
+              Quedaron <strong>{(result.left_out ?? 0).toLocaleString('es-CO')}</strong> sin programar. Cuando quieras
+              seguir, subí <strong>el mismo CSV</strong>: los de esta tanda se excluyen solos y entran los que faltan.
+            </p>
+          )}
           <Button className="mt-6" variant="outline" onClick={() => setResult(null)}>Nueva importación</Button>
         </CardContent>
       </Card>
@@ -372,6 +416,7 @@ export function ImportedContactsUploader({ onSent, apagado = false }: { onSent?:
   // cuando lo que faltaba era la plantilla del paso 4, que Meta no había aprobado.
   const faltantes: string[] = []
   if (validation && validation.valid === 0) faltantes.push('un CSV con contactos válidos')
+  if (validation && validation.valid > 0 && enTanda < 1) faltantes.push('cuántos van en esta tanda (paso 5)')
   if (!templateSid) {
     faltantes.push(
       compatibles.length === 0
@@ -648,8 +693,31 @@ export function ImportedContactsUploader({ onSent, apagado = false }: { onSent?:
             <CardContent className="space-y-3">
               <p className="text-sm text-muted-foreground">
                 Una base grande no se despierta en un día, y el techo no lo ponemos nosotros: lo pone Meta.
-                Elegí cuántos mensajes salen por día.
+                Elegí cuántos van en esta tanda y cuántos salen por día.
               </p>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="tanda" className="text-xs uppercase tracking-wide text-muted-foreground">Cuántos en esta tanda</Label>
+                <Input
+                  id="tanda"
+                  type="number"
+                  min={1}
+                  max={validation.valid}
+                  value={tanda ?? ''}
+                  onChange={(e) => setTanda(e.target.value ? Number(e.target.value) : null)}
+                  className="max-w-40"
+                />
+                <p className="text-xs text-muted-foreground">
+                  De los <strong>{validation.valid.toLocaleString('es-CO')}</strong> válidos, los primeros{' '}
+                  <strong>{enTanda.toLocaleString('es-CO')}</strong> del archivo.
+                  {quedanFuera > 0 && (
+                    <>
+                      {' '}Los otros <strong>{quedanFuera.toLocaleString('es-CO')}</strong> quedan para después: subís el
+                      mismo CSV y entran solos (los ya programados se excluyen).
+                    </>
+                  )}
+                </p>
+              </div>
 
               <div className="space-y-1.5">
                 <Label htmlFor="bloque" className="text-xs uppercase tracking-wide text-muted-foreground">Mensajes por día</Label>
@@ -676,10 +744,10 @@ export function ImportedContactsUploader({ onSent, apagado = false }: { onSent?:
                 )}
               </div>
 
-              {proyeccion && validation.valid > 0 && (
+              {proyeccion && enTanda > 0 && (
                 <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm">
                   <p>
-                    <strong>{validation.valid.toLocaleString('es-CO')}</strong> contactos ·{' '}
+                    <strong>{enTanda.toLocaleString('es-CO')}</strong> contactos ·{' '}
                     <strong>{proyeccion.efectivo.toLocaleString('es-CO')}</strong> por día ={' '}
                     <strong>{proyeccion.dias} {proyeccion.dias === 1 ? 'día' : 'días'}</strong>
                   </p>
@@ -717,6 +785,37 @@ export function ImportedContactsUploader({ onSent, apagado = false }: { onSent?:
               <CardTitle className="text-base">6. Confirmar</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* La plata, antes de la frase: es lo primero que hay que saber. */}
+              <div
+                className={`rounded-lg border p-3 text-sm ${
+                  alcanzaTwilio === false ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-border bg-muted/40'
+                }`}
+              >
+                <p className="font-medium">Preparate: esta tanda necesita</p>
+                <ul className="mt-1 list-disc pl-5 text-xs sm:text-sm">
+                  <li>
+                    <strong>Twilio: US${costoTwilioUsd.toFixed(2)}</strong> ({enTanda.toLocaleString('es-CO')} × US$
+                    {validation.twilio_cost_per_message}), que se cobran mensaje a mensaje, el día que sale cada bloque.
+                    {saldoTwilio !== null && (
+                      <>
+                        {' '}Hoy hay <strong>US${saldoTwilio.toFixed(2)}</strong>
+                        {alcanzaTwilio ? ': alcanza.' : (
+                          <>
+                            : alcanza para <strong>{(mensajesQueCubreTwilio ?? 0).toLocaleString('es-CO')}</strong>. Faltan{' '}
+                            <strong>US${(costoTwilioUsd - saldoTwilio).toFixed(2)}</strong>: recargá antes de que salga el bloque
+                            que no cubre, o bajá la tanda a {(mensajesQueCubreTwilio ?? 0).toLocaleString('es-CO')}.
+                          </>
+                        )}
+                      </>
+                    )}
+                  </li>
+                  <li>
+                    <strong>Billetera de Cada1: ${costoBilleteraCop.toLocaleString('es-CO')} COP</strong>, la tanda entera al
+                    confirmar. Si no alcanza, el sistema no programa nada y te dice el faltante.
+                  </li>
+                </ul>
+              </div>
+
               <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
                 {TEXTO_ADVERTENCIA}
               </div>
@@ -738,7 +837,7 @@ export function ImportedContactsUploader({ onSent, apagado = false }: { onSent?:
                 className="gap-2"
               >
                 {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                {sending ? 'Programando...' : `Programar envío (${validation.valid.toLocaleString('es-CO')})`}
+                {sending ? 'Programando...' : `Programar envío (${enTanda.toLocaleString('es-CO')})`}
               </Button>
               {faltantes.length > 0 && (
                 <p className="text-xs text-amber-700">

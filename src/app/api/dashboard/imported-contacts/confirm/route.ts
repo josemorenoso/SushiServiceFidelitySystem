@@ -35,6 +35,8 @@ interface ConfirmBody {
   block_size: number
   /** Texto EXACTO de la advertencia que se aceptó. */
   consent_text?: string
+  /** Cuántos de `contacts` entran en esta tanda (los primeros N). Vacío = todos. */
+  max_contacts?: number
   contacts: ParsedContact[]
 }
 
@@ -110,6 +112,7 @@ export async function POST(request: NextRequest) {
       blockSize,
       consentText: body.consent_text,
       acceptedByEmail: user.email ?? undefined,
+      maxContacts: typeof body.max_contacts === 'number' ? Math.floor(body.max_contacts) : undefined,
       contacts: body.contacts,
       tenant,
     })

@@ -145,7 +145,7 @@ Una plantilla con tres variables **no sirve**, y el asistente ya no la ofrece.
 
 | Botón | Qué ocurre |
 |---|---|
-| **Quiero ser parte** | Se registra un `opt_in` REAL en `consent_events` (canal `whatsapp_reply`) y se le contesta con el enlace de su tarjeta para que termine de registrarse. **No** se le crea el cliente: registrarse pide nombre y cumpleaños, y esos datos no vienen en un toque de botón — inventarlos ensucia la base para siempre. Pasa a `converted` cuando se registra de verdad, en `/api/check-in`, como siempre. |
+| **Quiero ser parte** | Se registra un `opt_in` REAL en `consent_events` (canal `whatsapp_reply`) y se le contesta con un enlace. **Desde el 2026-09-11 ese enlace es una [invitación con premio](invite-campaigns.md)** si el dueño eligió una (Recompensas → Invitaciones → «Usar en Golden Bullet», `admin_settings.golden_bullet_invite_slug`): al registrarse le queda el regalo en la tarjeta y **no** suma la visita #1 hasta que el mesero lo escanea. Sin invitación elegida, el enlace general de la tarjeta, como antes. **No** se le crea el cliente: registrarse pide nombre y cumpleaños, y esos datos no vienen en un toque de botón — inventarlos ensucia la base para siempre. Pasa a `converted` cuando se registra de verdad, en `/api/check-in`, como siempre. |
 | **No, gracias** | `opt_out` en `consent_events`, `whatsapp_opt_out_at` si además era cliente, y `imported_contacts.status = 'opted_out'`. Se le confirma que no se le escribe más. |
 
 > **El agujero que esto tapó (2026-09-10):** `isPhoneOptedOut()` miraba **solo** la tabla

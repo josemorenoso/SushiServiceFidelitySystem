@@ -34,7 +34,7 @@ Dos tipos:
 | Tipo | Origen | Vence |
 |------|--------|-------|
 | `tier_prize` | El cliente cruzó el umbral de puntos y eligió Mystery Box o "a la segura". | No |
-| `campaign_prize` | Se lo otorgó una campaña (hoy: reactivación agresiva). | Sí, `expires_at` |
+| `campaign_prize` | Se lo otorgó una campaña: reactivación agresiva, o una **invitación con premio** (`source='invite'`, 00063, [`invite-campaigns.md`](invite-campaigns.md)). | Sí, `expires_at` (la invitación puede no vencer: `window_days` NULL) |
 
 ## Modelo de datos
 

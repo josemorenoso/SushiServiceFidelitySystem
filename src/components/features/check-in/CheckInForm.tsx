@@ -66,6 +66,7 @@ export function CheckInForm({
   onRegisterSuccess,
   onCheckInSuccess,
   onError,
+  campaignSlug = null,
 }: CheckInFormProps) {
   const [step, setStep] = useState<CheckInStep>('phone')
   const [phone, setPhone] = useState('')
@@ -289,7 +290,14 @@ export function CheckInForm({
       const res = await fetch('/api/check-in', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, action: 'lookup', table_number: tableNumber }),
+        body: JSON.stringify({
+          phone,
+          action: 'lookup',
+          table_number: tableNumber,
+          // Invitación con premio (00063): si el cliente ya existe, el premio se le
+          // otorga acá mismo, sin pasar por el registro.
+          ...(campaignSlug ? { campaign_slug: campaignSlug } : {}),
+        }),
       })
 
       const data = (await res.json()) as LookupResult & { error?: string; message?: string }
@@ -343,6 +351,8 @@ export function CheckInForm({
           city: city.trim() || null,
           accepts_marketing: acceptsMarketing,
           table_number: tableNumber,
+          // Invitación con premio (00063). Solo viaja cuando la hay.
+          ...(campaignSlug ? { campaign_slug: campaignSlug } : {}),
           // lat/lon standby — desactivado v1.0.5-3
         }),
       })

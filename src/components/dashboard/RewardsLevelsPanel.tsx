@@ -24,7 +24,6 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import {
-  Gift,
   Plus,
   Trash2,
   ToggleLeft,
@@ -54,7 +53,7 @@ function emptyPrize(): MysteryPrize {
 // ═══════════════════════════════════════════════════════════════
 // Main Page
 // ═══════════════════════════════════════════════════════════════
-export default function RewardsPage() {
+export function RewardsLevelsPanel() {
   const [tiers, setTiers] = useState<RewardTier[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -304,12 +303,8 @@ export default function RewardsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Gift className="h-6 w-6" />
-          Tiers de Recompensas
-        </h1>
+      {/* El título lo pone la página de Recompensas (pestañas); acá solo la acción. */}
+      <div className="flex items-center justify-end">
         <Button onClick={openCreate} className="gap-2" disabled={heredando || soloLectura}>
           <Plus className="h-4 w-4" />
           Nuevo Tier

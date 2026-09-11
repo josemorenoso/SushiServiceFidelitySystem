@@ -42,6 +42,8 @@ export interface GrantRewardParams {
   mysteryBoxResultId?: string | null
   campaignRewardId?: string | null
   campaignId?: string | null
+  /** Invitación con premio que lo otorgó (source = 'invite', 00063). */
+  qrCampaignId?: string | null
   /** Días de ventana desde ahora. Omitir (null/undefined) → el premio NO vence.
    *  Un número (incluido 0) SÍ define una ventana: 0 o negativo = vence de inmediato. */
   windowDays?: number | null
@@ -81,6 +83,7 @@ export async function grantReward(
       source: params.source,
       prize_title: params.prizeTitle,
       tier_id: params.tierId ?? null,
+      qr_campaign_id: params.qrCampaignId ?? null,
       mystery_box_result_id: params.mysteryBoxResultId ?? null,
       campaign_reward_id: params.campaignRewardId ?? null,
       campaign_id: params.campaignId ?? null,

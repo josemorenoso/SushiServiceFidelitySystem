@@ -3,6 +3,12 @@ export interface CheckInFormProps {
   onRegisterSuccess: (result: RegisterResult, phone: string) => void
   onCheckInSuccess: (result: CheckInResult, phone: string) => void
   onError: (message: string) => void
+  /**
+   * Invitación con premio por la que llegó la persona (`/c/{slug}`, 00063). Viaja
+   * en el `register` y hace dos cosas del lado del servidor: la visita #1 queda
+   * pendiente del mesero y se le otorga el premio de la invitación.
+   */
+  campaignSlug?: string | null
 }
 
 export interface LookupResult {
@@ -10,6 +16,8 @@ export interface LookupResult {
   checkin_mode?: 'auto' | 'staff_verified'
   checkin_first_visit_free?: boolean
   qr_token?: string | null
+  /** Premio de la invitación otorgado en este lookup a un cliente que ya existía. */
+  invite_grant?: { reward_title: string } | null
   customer?: {
     id: string
     name: string
@@ -59,6 +67,8 @@ export interface RegisterResult {
   }
   points_awarded?: number
   tiers?: unknown[]
+  /** Premio de la invitación por la que se registró, si hubo. */
+  invite_grant?: { reward_title: string; expires_at: string | null } | null
 }
 
 export interface CheckInResult {

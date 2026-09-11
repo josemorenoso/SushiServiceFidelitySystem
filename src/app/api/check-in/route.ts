@@ -19,6 +19,7 @@ import { awardVisitPoints, awardWelcomeBonus } from '@/services/points.service'
 import { evaluateNewTier, getNextTier, buildTiersRoadmap, updateCustomerTier, getAllTiers } from '@/services/reward-tiers.service'
 import { verifyCustomerQRToken, generateCustomerQRToken } from '@/lib/utils/qrcode'
 import { markConverted } from '@/services/imported-contacts.service'
+import { grantFromInvite } from '@/services/qr-campaign.service'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { jwtVerify } from 'jose'
 import { resolveHostContext } from '@/lib/tenant'
@@ -84,6 +85,12 @@ interface CheckInRequestBody {
   birthday?: string | null
   city?: string | null
   accepts_marketing?: boolean
+  /**
+   * Invitación con premio por la que llegó (`/c/{slug}`, 00063). Cuando viene, la
+   * visita #1 NO se acredita sola —se registró desde su casa, no desde la mesa— y
+   * se le otorga el premio de la invitación, pendiente del escaneo del mesero.
+   */
+  campaign_slug?: string
   table_number?: number | null
   lat?: number | null
   lon?: number | null
@@ -320,6 +327,29 @@ export async function POST(request: NextRequest) {
       const firstVisitFree = settings.checkin_first_visit_free !== 'false'
 
       if (customer) {
+        // ─── Invitación con premio para un cliente que YA existe ───
+        // El caso principal de un "2x1 por WhatsApp" son los propios clientes, y
+        // esos no pasan por `register`: el formulario los reconoce acá. Se le
+        // otorga el premio igual —pendiente del escaneo del mesero, como
+        // siempre— y `duplicate_active` (ya tiene uno) simplemente no hace nada.
+        // NO se le acredita ninguna visita: eso lo hace el mesero.
+        let inviteGrant: { reward_title: string } | null = null
+        const lookupSlug =
+          typeof body.campaign_slug === 'string' && body.campaign_slug.trim()
+            ? body.campaign_slug.trim().toLowerCase()
+            : null
+        if (lookupSlug) {
+          try {
+            const res = await grantFromInvite(lookupSlug, customer.id, tenant.id)
+            if (res.ok) inviteGrant = { reward_title: res.rewardTitle }
+            else if (res.reason !== 'duplicate_active') {
+              console.warn(`[CheckIn] Invitación "${lookupSlug}" sin premio para ${customer.id}: ${res.reason}`)
+            }
+          } catch (err) {
+            console.error('[CheckIn] Error otorgando el premio de la invitación (lookup):', err)
+          }
+        }
+
         let qr_token: string | null = null
         try {
           console.log('[CheckIn] Generando QR token para cliente:', customer.id, customer.name)
@@ -342,6 +372,7 @@ export async function POST(request: NextRequest) {
           checkin_mode: checkinMode,
           checkin_first_visit_free: firstVisitFree,
           qr_token,
+          invite_grant: inviteGrant,
           customer: {
             id: customer.id,
             name: customer.name || 'Cliente',
@@ -361,6 +392,10 @@ export async function POST(request: NextRequest) {
     // ─── REGISTER: crear cliente nuevo + primera visita ───
     if (action === 'register') {
       const { name, birthday, city } = body
+      const campaignSlug =
+        typeof body.campaign_slug === 'string' && body.campaign_slug.trim()
+          ? body.campaign_slug.trim().toLowerCase()
+          : null
 
       if (!name || name.trim().length < 2) {
         return NextResponse.json(
@@ -483,6 +518,19 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      // ─── Invitación con premio: la visita #1 NUNCA es automática ───
+      // `checkin_first_visit_free` supone que quien se registra está sentado en la
+      // mesa (escaneó el QR físico). Quien llega por un enlace `/c/{slug}` se
+      // registra desde su casa: acreditarle la visita —y los puntos de bienvenida—
+      // desde el sofá sería regalar lo que el premio existe para hacer ganar. Se
+      // registra igual, con su premio en la tarjeta, y la visita #1 la cuenta el
+      // mesero cuando lo escanea: ese mismo escaneo le entrega el regalo.
+      // Va DESPUÉS del bloque de arriba a propósito: pisa la decisión de la marca,
+      // no la consulta.
+      if (campaignSlug) {
+        pendingStaffScan = true
+      }
+
       // ─── SEDE DEL REGISTRO (multi-sede, precedencia del §3.1) ───
       // El registro en modo `auto` nunca pasa por auth de mesero, así que ahí las dos vías
       // fuertes llegan vacías y la precedencia cae al host — que es justo el argumento por el
@@ -535,6 +583,26 @@ export async function POST(request: NextRequest) {
         }
       } catch (err) {
         console.error('[CheckIn] Error marcando conversión Golden Bullet:', err)
+      }
+
+      // ─── El premio de la invitación ───
+      // Best-effort respecto del registro: el cliente YA existe y eso es lo
+      // correcto; si esto falla, lo único que no recibe es el premio, y queda en
+      // el log por qué (cupo agotado, vencida, ya tenía uno activo).
+      let inviteGrant: { reward_title: string; expires_at: string | null } | null = null
+      if (campaignSlug) {
+        try {
+          const res = await grantFromInvite(campaignSlug, customer.id, tenant.id)
+          if (res.ok) {
+            inviteGrant = { reward_title: res.rewardTitle, expires_at: null }
+          } else {
+            console.warn(
+              `[CheckIn] Invitación "${campaignSlug}" sin premio para ${customer.id}: ${res.reason}`
+            )
+          }
+        } catch (err) {
+          console.error('[CheckIn] Error otorgando el premio de la invitación:', err)
+        }
       }
 
       // Visita (best-effort — no debe bloquear el registro)
@@ -633,6 +701,7 @@ export async function POST(request: NextRequest) {
             message: 'registered_pending_scan',
             meta_event_id: regMetaEventId,
             qr_token: regQrToken,
+            invite_grant: inviteGrant,
             customer: {
               id: customer.id,
               name: customer.name,

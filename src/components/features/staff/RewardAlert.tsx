@@ -7,7 +7,7 @@ interface ActiveGrant {
   id: string
   prize_title: string
   grant_type: 'tier_prize' | 'campaign_prize'
-  source: 'mystery_box' | 'safe_choice' | 'reactivation' | 'review' | 'manual'
+  source: 'mystery_box' | 'safe_choice' | 'reactivation' | 'review' | 'manual' | 'invite'
   expires_at: string | null
   granted_at: string
   tier_id: string | null

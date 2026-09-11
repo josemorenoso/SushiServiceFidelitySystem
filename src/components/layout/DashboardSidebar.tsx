@@ -17,7 +17,6 @@ import {
   CalendarDays,
   UserCog,
   Crosshair,
-  Ticket,
   Wallet,
   Bike,
   PlugZap,
@@ -33,8 +32,9 @@ export function DashboardSidebar({ isSuperAdmin = false }: { isSuperAdmin?: bool
   const navItems = [
     { href: '/dashboard', label: 'Métricas', icon: LayoutDashboard },
     { href: '/dashboard/customers', label: 'Clientes', icon: Users },
+    // Redenciones vive DENTRO de Recompensas desde el 2026-09-11 (pestaña). La
+    // ruta vieja redirige, así que no hace falta entrada propia.
     { href: '/dashboard/rewards', label: 'Recompensas', icon: Gift },
-    { href: '/dashboard/redemptions', label: 'Redenciones', icon: Ticket },
     { href: '/dashboard/campaigns', label: 'Campañas', icon: Megaphone },
     { href: '/dashboard/imported-contacts', label: 'Golden Bullet', icon: Crosshair },
     { href: '/dashboard/calendar', label: 'Calendario', icon: CalendarDays },

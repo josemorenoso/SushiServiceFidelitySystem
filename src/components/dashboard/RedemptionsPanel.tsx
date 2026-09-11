@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Gift, Download } from 'lucide-react'
+import { Download } from 'lucide-react'
 import { toast } from 'sonner'
 import { RedemptionSummaryCards, type RedemptionSummaryData } from '@/components/dashboard/RedemptionSummaryCards'
 import { GrantMetricsCards, type GrantMetricsData } from '@/components/dashboard/GrantMetricsCards'
@@ -20,7 +20,7 @@ function todayISO() {
   return new Date().toLocaleDateString('en-CA')
 }
 
-export default function RedemptionsPage() {
+export function RedemptionsPanel() {
   const [from, setFrom] = useState(todayISO())
   const [to, setTo] = useState(todayISO())
   const [summary, setSummary] = useState<RedemptionSummaryData | null>(null)
@@ -140,11 +140,7 @@ export default function RedemptionsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Gift className="h-6 w-6" />
-          Redenciones
-        </h1>
+      <div className="flex items-center justify-end">
         <Button variant="outline" size="sm" className="gap-1.5" onClick={handleExportPOS}>
           <Download className="h-3.5 w-3.5" />
           Cuadrar con POS (CSV)

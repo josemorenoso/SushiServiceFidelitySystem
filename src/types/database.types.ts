@@ -283,8 +283,11 @@ export interface RewardRedemption {
 
 export type GrantType = 'tier_prize' | 'campaign_prize'
 
-/** De dónde salió el premio. `manual` queda reservado para referidos y promos. */
-export type GrantSource = 'mystery_box' | 'safe_choice' | 'reactivation' | 'review' | 'manual'
+/**
+ * De dónde salió el premio. `invite` = una invitación con premio (enlace/QR, 00063).
+ * `manual` queda reservado para referidos.
+ */
+export type GrantSource = 'mystery_box' | 'safe_choice' | 'reactivation' | 'review' | 'manual' | 'invite'
 
 export type GrantStatus = 'active' | 'redeemed' | 'expired'
 

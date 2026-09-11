@@ -36,6 +36,7 @@
 import { createClient } from '@supabase/supabase-js'
 import type { Tenant } from '@/types/tenant.types'
 import { resolveBranding } from '@/lib/branding'
+import { getSettingValue } from '@/services/settings.service'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -117,7 +118,17 @@ export async function handleClubOptIn(
   const branding = resolveBranding(tenant.config)
   await registrarConsentimiento(tenant.id, phone, 'opt_in', textoDelBoton)
 
-  const enlace = tenant.domain ? `https://${tenant.domain}` : null
+  // El enlace que recibe es el de una INVITACIÓN CON PREMIO (00063), si el dueño
+  // eligió una en Recompensas → Invitaciones → «Usar en Golden Bullet». Así el
+  // "regalo de bienvenida" no es una promesa en un texto: es un reward_grant que
+  // le aparece en la tarjeta al registrarse y que el mesero entrega al escanearlo.
+  // Sin invitación elegida, el enlace general de la tarjeta, como antes.
+  const slugInvitacion = (await getSettingValue('golden_bullet_invite_slug', tenant.id))?.trim() || null
+  const enlace = tenant.domain
+    ? slugInvitacion
+      ? `https://${tenant.domain}/c/${encodeURIComponent(slugInvitacion)}`
+      : `https://${tenant.domain}`
+    : null
 
   const bienvenida =
     `🎉 ¡Bienvenido al club de *${branding.name}*, y gracias por decir que sí!\n\n` +

@@ -1,6 +1,6 @@
 # Feature: Programa de Referidos + QR Dinámicos (Influencers / Promos)
 
-> **Estado:** 📋 PLAN — NO IMPLEMENTADO (aprobado para diseño, pendiente de desarrollo)
+> **Estado:** 📋 PLAN — §2 (referidos) NO IMPLEMENTADO · §3 (QR dinámicos) ✅ construido el 2026-09-11 como [`invite-campaigns.md`](invite-campaigns.md)
 > **Prerequisito ya implementado (v1.6.0):** `checkin_first_visit_free = 'false'` — todo cliente nuevo debe ser validado por el mesero escaneando su QR. Esto es la base anti-fraude de los referidos y promos.
 > **Dependencias previstas:** infraestructura existente (staff scan, points, Twilio, dashboard). Sin librerías nuevas.
 
@@ -63,6 +63,14 @@ Además: panel de métricas (referidos totales, conversión registro→visita, t
 ---
 
 ## 3. QR Dinámicos de Campaña (influencers / promos)
+
+> ✅ **CONSTRUIDO el 2026-09-11 como «Invitaciones con premio»** — ver
+> [`invite-campaigns.md`](invite-campaigns.md). Vive en `/dashboard/rewards` → Invitaciones.
+> Dos diferencias con lo que dice abajo, las dos a favor: (1) **no hay tabla
+> `qr_campaign_redemptions`** — el premio es un `reward_grant` con `source='invite'` y
+> `qr_campaign_id`, así que «registrado / vino / venció» sale de su `status`; (2) la tabla se llama
+> `qr_campaigns` como acá, pero el cupo es `max_grants` (premios otorgados), no de redenciones.
+> El **programa de referidos (§2) sigue sin construir** y se para encima de esto.
 
 ### 3.1 Flujo
 1. Admin crea campaña en `/dashboard/qr-campaigns`: nombre ("Influencer @maria", "Promo Apertura"), recompensa (puntos/producto), fecha inicio/fin, cupo máximo de redenciones, slug del link.

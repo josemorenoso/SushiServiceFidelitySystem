@@ -32,6 +32,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Meseros rotativos: estado «rota entre sedes» (dueño, 2026-09-11) | Opus 5 | `supabase/migrations/00062_*`, `src/app/api/staff/waiters/route.ts`, `src/app/api/dashboard/staff/route.ts`, `src/app/(dashboard)/dashboard/staff/page.tsx`, `src/app/(public)/mesero/**` (solo el picker), `docs/features/staff-qr-scan.md`, `docs/features/multi-sede.md` §3.ter, `docs/DB_SCHEMA.md`, `tests/**/meseros-rotativos*` | **00062** | en curso |
 
 ## 3. Siguiente, en orden
 

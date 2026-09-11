@@ -32,6 +32,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Golden Bullet: bloquear plantillas incompatibles en el asistente (dueño, 2026-09-10) | Opus 5 | `src/components/dashboard/ImportedContactsUploader.tsx`, `tests/unit/golden-bullet-bloques.test.ts`, `docs/features/golden-bullet.md` | — | en curso |
 
 ## 3. Siguiente, en orden
 

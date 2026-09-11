@@ -10,7 +10,7 @@
 
 ## [2026-09-11e] - Rendimiento del equipo: escaneos y premios por mesero, nuevos vs frecuentes, mesas (00065)
 
-**Tipo:** feature · **Migración:** `00065` (SIN aplicar) · **Doc:** `docs/features/staff-activity.md`
+**Tipo:** feature · **Migración:** `00065` (aplicada el 2026-09-11, antes del push) · **Doc:** `docs/features/staff-activity.md`
 **Request:** «¿Redenciones trackea por mesero? ¿Dónde vemos cuántos clientes escaneó cada mesero? Agregame un
 apartado: premios total y por mesero, clientes nuevos vs frecuentes, escaneos por mesero, y qué mesas piden más».
 - Lo que había: los premios por mesero SÍ (Redenciones, `by_staff`); los escaneos por mesero y las mesas se
@@ -21,7 +21,7 @@ apartado: premios total y por mesero, clientes nuevos vs frecuentes, escaneos po
   Sede con la semántica exacta de `applyLocationFilter()`. Sin mesero / sin mesa = fila propia, nunca se esconde.
 - `GET /api/dashboard/staff-activity` (503 nombrando la 00065 si falta). Nada en pesos: no hay ticket.
 **Verificado:** tsc · lint · `tests/db/staff-activity.test.ts` 13/13 contra Postgres real. **NO verificado en el
-navegador**: la 00065 no está aplicada en producción.
+navegador** por esta sesión: queda para el dueño abrir `/dashboard/rendimiento` con Sushi Service.
 
 ## [2026-09-11d] - El AIOS puede borrar una marca, deshacer WhatsApp y recargar Twilio (00064)
 

@@ -1,5 +1,5 @@
 # Rendimiento del equipo (escaneos, premios y mesas)
-> **Estado:** viva en el código (2026-09-11), **00065 sin aplicar** · **Ruta:** `/dashboard/rendimiento` · **Migración:** `00065_staff_activity_report.sql`
+> **Estado:** viva (2026-09-11; 00065 aplicada y desplegada; falta la mirada del dueño en el navegador) · **Ruta:** `/dashboard/rendimiento` · **Migración:** `00065_staff_activity_report.sql`
 
 ## Qué hace y para quién
 Le muestra al dueño, en un solo apartado del panel, cómo va cada mesero y cada mesa: cuántos clientes

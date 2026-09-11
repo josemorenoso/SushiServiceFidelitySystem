@@ -14,10 +14,10 @@
 
 | Qué | Estado |
 |-----|--------|
-| Código | **`origin/main` = `3278f66`** (pusheado el 2026-09-11, noche: invitaciones con premio, 00063 **aplicada antes**). ⚠️ **Local ≠ remoto:** quedan sin pushear `74a85d6` (plantillas), `678499a` (AIOS + **00064**) y el cierre de rendimiento del equipo (**00065**); ese push es del dueño, **después de aplicar la 00064 y la 00065**. La carpeta sigue en `feat/multisede-aios` (= `main`). Sin mergear a propósito: `master`, `port/sushi-fun-2.8`, `sushi-sync`. **Variables que el código desplegado espera en Vercel:** `TWILIO_MASTER_TENANT_ID` (RUNBOOK §1.b'; sin ella Sushi Service deja de enviar por Twilio) y las tres de Meta (§1.b'', no bloquean) |
+| Código | **`origin/main` = `d47ade8` + el commit de docs que lo cierra** (pusheado el 2026-09-11, 02:30: rendimiento del equipo, 00065 **aplicada antes**). Antes, en el mismo día: `76d99b7` (AIOS + 00064, plantillas) y `3278f66` (invitaciones, 00063). **Local = remoto.** La carpeta sigue en `feat/multisede-aios` (= `main`). Sin mergear a propósito: `master`, `port/sushi-fun-2.8`, `sushi-sync`. **Variables que el código desplegado espera en Vercel:** `TWILIO_MASTER_TENANT_ID` (RUNBOOK §1.b'; sin ella Sushi Service deja de enviar por Twilio) y las tres de Meta (§1.b'', no bloquean) |
 | Verificación | ✅ 2026-09-11 (02:10): `tsc` limpio · lint limpio en lo tocado · `tests/db/staff-activity.test.ts` 13/13 (la suite entera no se recorrió esta vez; la última corrida completa, 00:41: **44 archivos / 695 tests en verde**) · eslint **7 errores preexistentes** (hooks y gráficas del panel, ninguno en lo tocado). El rojo de `aios-health` era del RELOJ (el helper mete dos pedidos con `now() - 1h`/`- 2h`, así que entre medianoche y las 2 a.m. el segundo cae en el día anterior): a esta hora pasa. Sigue sin corregirse. `build` no se corrió |
 | Marcas vivas | **5**: sushi-service (542 clientes), demo-ventas (412), sushi-fun (251), don-alirio (244), cafe-frangal (8) |
-| Base de datos de producción | ✅ **Aplicadas hasta la `00056`** (dueño, 2026-09-08: `00047`, `00050`, `00051`, `00053`, `00054` y `00056`, todas). El esquema ya alcanza al código de `main`. La 00030 NUNCA aplicada (a propósito). La 00015 NO se aplica (reabre fuga). Huecos: `00048`, `00049`, `00052`, `00055`. **`00062` aplicada** (dueño, 2026-09-11, antes del push). **Escritas sin aplicar: `00058`, `00059`, `00061`, `00064`, `00065`** |
+| Base de datos de producción | ✅ **Aplicadas hasta la `00056`** (dueño, 2026-09-08: `00047`, `00050`, `00051`, `00053`, `00054` y `00056`, todas). El esquema ya alcanza al código de `main`. La 00030 NUNCA aplicada (a propósito). La 00015 NO se aplica (reabre fuga). Huecos: `00048`, `00049`, `00052`, `00055`. **`00062` aplicada** (dueño, 2026-09-11, antes del push). **`00065` aplicada** (dueño, 2026-09-11, antes del push). **Escritas sin aplicar: `00058`, `00059`, `00061`, `00064`** |
 | Migraciones: dónde están | El directorio muestra **solo la rama puesta**; el inventario real y el número de la próxima los da `node scripts/proxima-migracion.mjs`. **Desde el 07 la única reserva es la fila del tablero (§2)**: un número citado en cualquier otro doc no reserva nada. `00048`, `00049`, `00052` y `00055` son huecos: no se rellenan |
 | Crons | Los 5 en `vercel.json`, corriendo. `birthday` 18:00 y `reactivation` 20:00 UTC (= 13:00/15:00 Bogotá), verificado. ⚠️ **`reward-reminder` sigue en 16:00 UTC (11:00 Bogotá)**; la auditoría estimó ≈21:00 UTC. **Decisión del dueño** |
 | n8n | Apagado. `domicilios_whatsapp_v4.json` sigue en el VPS pero ya no dispara |
@@ -174,7 +174,7 @@
    «grupo» o «franquicia». La `00060` (10) y la `00063` (11) ya las corrió el dueño antes de cada push. Las dos que
    quedan son de RIESGO BAJO: no tocan una sola fila de historia. **Y la `00061`** (`tenant_integration_secrets`, el token de la API
    de Conversiones por marca): tabla nueva, riesgo cero, puede ir después del código; hasta que corra, el panel
-   responde 503 al guardar el token de una marca. La `00062` (meseros rotativos) ya está aplicada (11). **Y la `00065`** (`staff_activity_report()`, rendimiento del equipo): una función y un índice, riesgo cero, ANTES del código o `/dashboard/rendimiento` responde 503 nombrándola.
+   responde 503 al guardar el token de una marca. La `00062` (meseros rotativos) ya está aplicada (11). La `00065` (rendimiento del equipo) ya está aplicada (11).
 0.quater **Falta el autoservicio de contraseña** («olvidé mi contraseña» en `/login`). Ya se puede
    cambiar una clave desde «Accesos» y desde el AIOS, así que nadie queda encerrado — pero mientras
    no exista el autoservicio, cada olvido sigue pasando por una persona. Depende de que el SMTP del
@@ -257,7 +257,7 @@ automatizaciones dentro del restaurante y **Google** para reseñas.
 
 ## 5. Hecho reciente
 
-- **Rendimiento del equipo** (2026-09-11, migración `00065`, **SIN aplicar**): el dueño preguntó dónde se
+- **Rendimiento del equipo** (2026-09-11, migración `00065`, **aplicada y desplegada**): el dueño preguntó dónde se
   veía cuántos clientes escaneó cada mesero y qué mesas piden más, y la respuesta era «en ningún lado»: los
   datos se guardaban desde la 00009/00018 y nadie los leía. Apartado nuevo **«Rendimiento»**
   (`/dashboard/rendimiento`): escaneos · nuevos · frecuentes · premios por mesero, y mesas por escaneos y premios.

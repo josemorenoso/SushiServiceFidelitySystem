@@ -17,11 +17,11 @@
 | Código | **`origin/main` = `88ccb8f`** (pusheado el 2026-09-11). Local = remoto. La carpeta sigue en `feat/multisede-aios` (= `main`). Sin mergear a propósito: `master`, `port/sushi-fun-2.8`, `sushi-sync`. **Variables que el código desplegado espera en Vercel:** `TWILIO_MASTER_TENANT_ID` (RUNBOOK §1.b'; sin ella Sushi Service deja de enviar por Twilio) y las tres de Meta (§1.b'', no bloquean) |
 | Verificación | ✅ 2026-09-11 (00:41): `tsc` limpio · **vitest 44 archivos / 695 tests, TODOS en verde** · eslint **7 errores preexistentes** (hooks y gráficas del panel, ninguno en lo tocado). El rojo de `aios-health` era del RELOJ (el helper mete dos pedidos con `now() - 1h`/`- 2h`, así que entre medianoche y las 2 a.m. el segundo cae en el día anterior): a esta hora pasa. Sigue sin corregirse. `build` no se corrió |
 | Marcas vivas | **5**: sushi-service (542 clientes), demo-ventas (412), sushi-fun (251), don-alirio (244), cafe-frangal (8) |
-| Base de datos de producción | ✅ **Aplicadas hasta la `00056`** (dueño, 2026-09-08: `00047`, `00050`, `00051`, `00053`, `00054` y `00056`, todas). El esquema ya alcanza al código de `main`. La 00030 NUNCA aplicada (a propósito). La 00015 NO se aplica (reabre fuga). Huecos: `00048`, `00049`, `00052`, `00055`. **`00062` aplicada** (dueño, 2026-09-11, antes del push). **Escritas sin aplicar: `00058`, `00059`, `00061`** |
+| Base de datos de producción | ✅ **Aplicadas hasta la `00056`** (dueño, 2026-09-08: `00047`, `00050`, `00051`, `00053`, `00054` y `00056`, todas). El esquema ya alcanza al código de `main`. La 00030 NUNCA aplicada (a propósito). La 00015 NO se aplica (reabre fuga). Huecos: `00048`, `00049`, `00052`, `00055`. **`00062` aplicada** (dueño, 2026-09-11, antes del push). **Escritas sin aplicar: `00058`, `00059`, `00061`, `00064`** |
 | Migraciones: dónde están | El directorio muestra **solo la rama puesta**; el inventario real y el número de la próxima los da `node scripts/proxima-migracion.mjs`. **Desde el 07 la única reserva es la fila del tablero (§2)**: un número citado en cualquier otro doc no reserva nada. `00048`, `00049`, `00052` y `00055` son huecos: no se rellenan |
 | Crons | Los 5 en `vercel.json`, corriendo. `birthday` 18:00 y `reactivation` 20:00 UTC (= 13:00/15:00 Bogotá), verificado. ⚠️ **`reward-reminder` sigue en 16:00 UTC (11:00 Bogotá)**; la auditoría estimó ≈21:00 UTC. **Decisión del dueño** |
 | n8n | Apagado. `domicilios_whatsapp_v4.json` sigue en el VPS pero ya no dispara |
-| AIOS (`Level 2.0/aios-constelarys`) | **`main` = `origin/main` = `b6fd308` (v1.10.0), pusheado el 2026-09-10** y desplegándose: las 13 plantillas copiadas del producto (sin 🍣, emoji por rubro), media de muestra desde `ZERNIO_TEMPLATE_SAMPLE_{IMAGE,VIDEO}_URL` **del Vercel del AIOS** (las dos son obligatorias o el paso 4 no arranca), y nombres `_v2` cuando el base ya existe en la WABA |
+| AIOS (`Level 2.0/aios-constelarys`) | **Local `c8a1917` (v1.11.0, 2026-09-11, SIN pushear)**: borrar propietario entero, lista Twilio \| Zernio con recarga, reinicio de WhatsApp, Embedded Signup que se anota solo (00010 del AIOS, sin aplicar), `ZERNIO_SIMULATE` solo con `true`. Necesita la **00064 del producto** aplicada y `ZERNIO_API_KEY` vigente en su Vercel. Antes: **`origin/main` = `b6fd308` (v1.10.0), pusheado el 2026-09-10**: las 13 plantillas copiadas del producto (sin 🍣, emoji por rubro), media de muestra desde `ZERNIO_TEMPLATE_SAMPLE_{IMAGE,VIDEO}_URL` **del Vercel del AIOS** (las dos son obligatorias o el paso 4 no arranca), y nombres `_v2` cuando el base ya existe en la WABA |
 | Grafo | Hook post-commit instalado el 07 (`graphify hook status`): se actualiza solo en cada commit. ⚠️ 169 comunidades renombradas por su hub: `graphify label` las refresca (cuesta LLM, no se corrió) |
 | Deadline | ~2026-09-10 — onboarding de los 25 clientes de Zernio |
 
@@ -32,10 +32,22 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
-| AIOS: borrar propietario completo (AIOS + tenant del producto + usuarios), Twilio vs Zernio en la lista + recarga de mensajes Twilio, reset de WhatsApp (Tepuy), Embedded Signup real con retorno automático, simulación apagada por defecto (dueño, 2026-09-11) | Opus 5 | **Producto:** `supabase/migrations/00064_*`, `src/app/api/aios/tenant-delete/**`, `src/lib/aios-provision.ts`, `tests/unit/aios-provision.test.ts`, `docs/features/aios-borrado.md`. **AIOS (repo propio `Level 2.0/aios-constelarys`):** todo el repo | **00064** (producto) · 00010 (AIOS) | en curso |
 
 ## 3. Siguiente, en orden
 
+0.AIOS **Antes de que el dueño registre el número real de Tepuy (mañana, 2026-09-12).** En orden:
+   1. **Aplicar la `00064`** en el Supabase del producto (borrado, `aios_deactivate_whatsapp`,
+      `aios_wallet_topup`; riesgo nulo salvo la primera, que lleva tres candados) y la **`00010`** en
+      el Supabase del AIOS (el retorno del Embedded Signup se anota solo).
+   2. **Vercel del AIOS:** `ZERNIO_API_KEY` vigente (la de `.env.local` da 401), **`ZERNIO_SIMULATE`
+      fuera** (desde v1.11.0 solo simula con `true`), y `AIOS_ADMIN_PROVISION_SECRET` igual al del producto.
+   3. Desplegar producto (`tenant-delete`) y AIOS (v1.11.0). En el AIOS: Tepuy → «Reiniciar el alta de
+      WhatsApp» (deja el producto en `twilio` sin el `+573000000000`) → borrar los dos propietarios de
+      prueba → rehacer el alta de Tepuy de verdad: el link ya no dice `client_id=sim` y el paso 3 se
+      cierra solo cuando la clienta termina.
+   ⚠️ `clubtepuy.constelarys.com` (raíz) con DOS sedes activas **no debe llevar a Envigado**: por D21
+   responde 409 con la lista de sedes. Si lleva a Envigado, o Laureles está inactiva en el producto, o
+   Envigado tiene el dominio raíz como propio. Se mira en `/dashboard/sedes` de Tepuy.
 0.GB **Golden Bullet por bloques y sondeo de salud: construidos el 10, faltan CUATRO cosas del dueño.**
    El código está en la rama (`640ae1f`). En este orden:
    1. ✅ **La `00060` ya está aplicada** (dueño, 2026-09-10, antes del push).
@@ -247,6 +259,13 @@ automatizaciones dentro del restaurante y **Google** para reseñas.
 
 ## 5. Hecho reciente
 
+- **El AIOS borra, deshace y recarga** (2026-09-11, migración `00064`, **SIN aplicar**; AIOS v1.11.0
+  local): `aios_delete_tenant` (toda tabla con `tenant_id`, por pasadas, nunca el puente ni >100
+  comensales, `dry_run` por defecto) detrás de `POST /api/aios/tenant-delete`, que además borra los
+  usuarios de Auth por GoTrue; `aios_deactivate_whatsapp` (Tepuy tenía el número del simulador);
+  `aios_wallet_topup` solo Twilio. En el AIOS: lista en dos grupos Twilio \| Zernio, «Simulado» en
+  vez de un cupo inventado, y el retorno del Embedded Signup escribe solo por una función `anon`
+  con candado (00010). → `docs/features/aios-borrado.md`.
 - **Invitaciones con premio** (2026-09-11, migración `00063`): un enlace `/c/{slug}` o su QR que
   regala algo a quien se registre; el premio le queda en la tarjeta desde el registro y **solo se
   entrega cuando el mesero lo escanea**. No hay «tarjeta provisional»: el premio es un `reward_grant`

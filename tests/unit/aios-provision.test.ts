@@ -3,6 +3,7 @@ import {
   MIN_PASSWORD_LENGTH,
   matchesProvisionSecret,
   parseTenantAdminBody,
+  parseTenantDeleteBody,
 } from '@/lib/aios-provision'
 
 /**
@@ -135,5 +136,38 @@ describe('parseTenantAdminBody — qué se acepta', () => {
     const si = parseTenantAdminBody({ ...VALIDO, reset_password: true })
     expect(si.ok).toBe(true)
     if (si.ok) expect(si.body.resetPassword).toBe(true)
+  })
+})
+
+describe('parseTenantDeleteBody — borrar exige los dos candados', () => {
+  it('sin dry_run:false ni confirm_slug es inventario, no error', () => {
+    const r = parseTenantDeleteBody({ tenant_slug: 'prueba-uno' })
+    expect(r).toEqual({ ok: true, body: { tenantSlug: 'prueba-uno', dryRun: true } })
+  })
+
+  it('dry_run:false SIN confirm_slug sigue siendo inventario', () => {
+    const r = parseTenantDeleteBody({ tenant_slug: 'prueba-uno', dry_run: false })
+    expect(r.ok && r.body.dryRun).toBe(true)
+  })
+
+  it('confirm_slug con OTRO slug sigue siendo inventario', () => {
+    const r = parseTenantDeleteBody({ tenant_slug: 'prueba-uno', dry_run: false, confirm_slug: 'prueba-dos' })
+    expect(r.ok && r.body.dryRun).toBe(true)
+  })
+
+  it('dry_run:false + confirm_slug exacto = borrar', () => {
+    const r = parseTenantDeleteBody({ tenant_slug: 'prueba-uno', dry_run: false, confirm_slug: 'prueba-uno' })
+    expect(r).toEqual({ ok: true, body: { tenantSlug: 'prueba-uno', dryRun: false } })
+  })
+
+  it('dry_run "false" como texto NO borra', () => {
+    const r = parseTenantDeleteBody({ tenant_slug: 'prueba-uno', dry_run: 'false', confirm_slug: 'prueba-uno' })
+    expect(r.ok && r.body.dryRun).toBe(true)
+  })
+
+  it('rechaza un slug con forma que ningún tenant tiene', () => {
+    expect(parseTenantDeleteBody({ tenant_slug: 'Con Espacios' }).ok).toBe(false)
+    expect(parseTenantDeleteBody({}).ok).toBe(false)
+    expect(parseTenantDeleteBody(null).ok).toBe(false)
   })
 })

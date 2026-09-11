@@ -8,6 +8,23 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [2026-09-11d] - El AIOS puede borrar una marca, deshacer WhatsApp y recargar Twilio (00064)
+
+**Tipo:** feature · **Migración:** `00064` (SIN aplicar) · **Doc:** `docs/features/aios-borrado.md`
+**Request:** el dueño creó dos marcas de prueba desde el AIOS y no había cómo sacarlas del producto;
+Tepuy quedó activado con el número del SIMULADOR (`+573000000000`); los clientes Twilio pagan y hay
+que cargarles mensajes desde donde se ve el cobro.
+- `aios_delete_tenant(slug, dry_run)`: toda tabla con `tenant_id` + la fila de `tenants`, en una
+  transacción y por pasadas (las FK RESTRICT de la 00025). Candados: nunca el tenant PUENTE de la
+  00028, nunca más de 100 comensales, `dry_run` por defecto.
+- `POST /api/aios/tenant-delete` (`x-aios-secret`): borra los usuarios de Auth de la marca por GoTrue
+  y después llama a la función. Borrar exige `dry_run:false` **y** `confirm_slug` (6 tests nuevos).
+- `aios_deactivate_whatsapp(slug)`: espejo de `aios_activate_whatsapp` + retira los `*_template_sid`.
+- `aios_wallet_topup(slug, cop, nota)`: `topup` solo en tenants Twilio; rechaza Zernio y > $5.000.000.
+- AIOS v1.11.0 (repo propio): borrar propietario, lista Twilio | Zernio, recarga, reinicio de WhatsApp,
+  retorno del Embedded Signup que se anota solo (00010 del AIOS), `ZERNIO_SIMULATE` solo con `true`.
+**NO verificado en el flujo real**: la 00064 no está aplicada; tsc y lint limpios, test del parser en verde.
+
 ## [2026-09-11c] - Invitaciones con premio: un enlace o QR que regala algo a quien venga
 
 **Qué:** el dueño crea «2x1 en sushi», le queda `/c/{slug}` y su QR, lo manda por WhatsApp o lo pone

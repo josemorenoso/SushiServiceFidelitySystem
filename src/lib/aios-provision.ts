@@ -108,3 +108,39 @@ export function parseTenantAdminBody(
 
   return { ok: true, body: { tenantSlug, email, password, resetPassword, scopeRole, locationIds } }
 }
+
+// ─── Borrado de una marca (POST /api/aios/tenant-delete) ────────────────────
+
+export interface TenantDeleteBody {
+  tenantSlug: string
+  /**
+   * `true` = solo el inventario (qué se borraría, tabla por tabla, y cuántos
+   * usuarios del panel). Es el default: borrar exige `dry_run: false` explícito
+   * Y `confirm_slug` igual al slug, las dos cosas. Una ruta que borra una marca
+   * no puede tener un cuerpo «vacío» que borre.
+   */
+  dryRun: boolean
+}
+
+/**
+ * Valida el cuerpo del borrado. Dos candados a propósito, uno de forma y otro de
+ * intención: `dry_run` tiene que ser exactamente `false` para borrar, y
+ * `confirm_slug` tiene que repetir el slug letra por letra. Un cuerpo que trae
+ * solo uno de los dos vuelve como `dry_run: true`, nunca como error — el
+ * inventario es inofensivo y es lo que el operador quiere ver primero.
+ */
+export function parseTenantDeleteBody(
+  raw: unknown,
+): { ok: true; body: TenantDeleteBody } | { ok: false; error: string } {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return { ok: false, error: 'Cuerpo inválido.' }
+  }
+  const r = raw as Record<string, unknown>
+  const tenantSlug = typeof r.tenant_slug === 'string' ? r.tenant_slug.trim() : ''
+  if (!tenantSlug) return { ok: false, error: 'Falta tenant_slug.' }
+  if (!/^[a-z0-9-]+$/.test(tenantSlug)) return { ok: false, error: 'tenant_slug inválido.' }
+
+  const confirmSlug = typeof r.confirm_slug === 'string' ? r.confirm_slug.trim() : ''
+  const wantsDelete = r.dry_run === false && confirmSlug === tenantSlug
+  return { ok: true, body: { tenantSlug, dryRun: !wantsDelete } }
+}

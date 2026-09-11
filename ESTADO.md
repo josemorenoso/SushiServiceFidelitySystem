@@ -32,6 +32,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Drenador: 240 s de presupuesto y 20 en paralelo (un bloque de 1.400 tardaba 3 h) — Opus 5, 2026-09-11 | Opus 5 | `src/app/api/cron/queue-drain/route.ts` · `docs/features/send-governance.md` | — | en curso |
 
 ## 3. Siguiente, en orden
 

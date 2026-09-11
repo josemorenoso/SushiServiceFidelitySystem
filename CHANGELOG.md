@@ -8,6 +8,19 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [2026-09-11l] - Drenador: 240 s por corrida y 20 en paralelo (un bloque de 1.400 tardaba 3 h)
+
+**Qué:** la primera campaña real de Golden Bullet (Sushi Service, 2026-09-11) tardó ~3 horas en sacar el
+bloque del día. Los logs de Vercel lo explican: el drenador corre cada 15 min con un presupuesto de
+**50 s** (el techo de Hobby) y 10 envíos en paralelo, y sacaba ~110-250 por corrida; dos corridas se
+perdieron por «Gateway Timeout» de Supabase en `claim_send_queue` / `expire_send_queue`. El freno de
+verdad es el bloque DIARIO (D-7), no la hora del día: en Pro (`maxDuration = 300`) el presupuesto pasa
+a **240 s** y la tanda a **20** (Meta acepta 80 msg/s). Un bloque de 1.400 sale ahora en una o dos corridas.
+**Verificado:** tsc limpio · lint limpio · `tests/db/send-queue.test.ts` 21/21. **NO verificado:** la
+corrida real de 240 s (se ve en los logs del próximo cron).
+**Pendiente:** los «Gateway Timeout» de Supabase en los RPC de la cola no se investigaron.
+**Archivos:** `src/app/api/cron/queue-drain/route.ts`, `docs/features/send-governance.md`.
+
 ## [2026-09-11k] - Golden Bullet: tandas, y la plata que necesita cada una antes de confirmar
 
 **Qué:** la billetera cobra la base entera al confirmar y el dueño quiere mandar 2.000 hoy y el resto

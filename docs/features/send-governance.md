@@ -226,10 +226,11 @@ Orden de trabajo de cada invocación:
    primero la prioridad más alta y, a igualdad, el de cola más corta — así un tenant con 5.000 items
    no deja sin drenar a los demás.
 3. **Round-robin**: una tanda pequeña de cada tenant por vuelta, hasta agotar el presupuesto de
-   tiempo (~50 s) o la cola.
+   tiempo (**240 s** desde el 2026-09-11; era 50 s, el techo de Hobby, y con eso un bloque de
+   1.400 de Golden Bullet tardaba tres horas: ~200 por corrida) o la cola.
 4. Por tenant: leer el presupuesto de línea **en cada vuelta** (entre tanda y tanda pueden haber
-   salido bienvenidas que consumieron límite), reclamar `min(disponible, 10)` items, re-evaluar las
-   guardas, enviar, aplicar los efectos posteriores.
+   salido bienvenidas que consumieron límite), reclamar `min(disponible, 20)` items (era 10; Meta
+   acepta 80 msg/s por número), re-evaluar las guardas, enviar, aplicar los efectos posteriores.
 5. **Podar** las tablas de retención.
 
 Devuelve `{ processed, sent, failed, skipped, expired, tenants, has_more, cursor }`.

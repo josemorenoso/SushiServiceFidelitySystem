@@ -79,12 +79,18 @@ function getServiceClient() {
 /**
  * Presupuesto de tiempo por invocación (spec §3.4). Se corta solo y devuelve
  * `has_more`; la siguiente corrida del cron (15 min después) sigue donde quedó.
+ *
+ * Era 50 s (el techo del plan Hobby). En Pro, con `maxDuration = 300`, ese
+ * número hacía que un bloque de Golden Bullet de 1.400 saliera en ~7 corridas
+ * —tres horas— cuando el freno de verdad es el bloque DIARIO (D-7), no la
+ * hora del día. 240 s deja 60 s de margen para cerrar limpio (2026-09-11).
  */
-const TIME_BUDGET_MS = 50_000
+const TIME_BUDGET_MS = 240_000
 
-/** Items por tenant y por vuelta del round-robin. Igual que el BATCH_SIZE de
- *  las campañas: concurrencia contra el proveedor, no un tope de volumen. */
-const SLICE = 10
+/** Items por tenant y por vuelta del round-robin. Es concurrencia contra el
+ *  proveedor, no un tope de volumen: Meta acepta 80 msg/s por número, así que
+ *  20 en paralelo sigue muy por debajo. Era 10 (2026-09-11). */
+const SLICE = 20
 
 /**
  * Cuánto drenar de un tenant cuyo límite de Meta NO se conoce

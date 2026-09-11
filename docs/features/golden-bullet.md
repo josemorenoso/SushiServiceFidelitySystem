@@ -246,8 +246,16 @@ proveedor no manda payload. Vacío = el texto de defecto del servidor (`RESPUEST
 coma** («por aquí, {nombre}!» → «por aquí!») y `{nombre|¿cómo estás?}` pone el alternativo en
 su lugar; sin enlace, se va la línea entera. El nombre sale de `imported_contacts.name` y, si
 no, de `customers.name`. **En el mensaje 1 no hay alternativo posible**: `{{1}}` es una
-variable de Meta y no puede ir vacía, así que los sin nombre reciben el «nombre genérico» que
-se escribe en el paso 4 del asistente (`fallback_name`; «¿cómo estás?» sirve). La foto viaja como `<Media>`
+variable de Meta y no puede ir vacía, así que los sin nombre reciben el **nombre genérico**, que
+se escribe **al lado del mensaje 1** en la pestaña Plantilla y queda en la marca
+(`admin_settings.golden_bullet_fallback_name`; «¿cómo estás?» sirve). El paso 4 del asistente
+arranca con ese valor y puede cambiarlo solo para esa campaña (`fallback_name`); sin ninguno de
+los dos, «cliente». La vista previa del mensaje 1 muestra las dos versiones.
+
+**Enlaces en el texto del mensaje 1**: se puede escribir una URL completa (Meta rechaza los
+acortadores y revisa el destino). Pero el botón «sí» tiene que tocarse **en este chat**: el
+consentimiento y el mensaje 2 salen por la línea de Twilio, no por otra; un `wa.me` a otra línea
+va como «también podés escribirnos a…», nunca como el llamado principal. La foto viaja como `<Media>`
 en el TwiML de `twilio-incoming` (Zernio sigue sin poder contestar: ver arriba).
 
 > `POST /api/dashboard/imported-contacts/template` crea **y somete**. `GET` de la misma

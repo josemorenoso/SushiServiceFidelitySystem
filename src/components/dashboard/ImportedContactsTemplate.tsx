@@ -47,6 +47,8 @@ interface Config {
   }
   invitacion_slug: string | null
   enlace: string | null
+  nombre_generico: string
+  nombre_generico_default: string
 }
 
 const TEXTAREA =
@@ -108,6 +110,8 @@ export function ImportedContactsTemplate() {
   const [botonSi, setBotonSi] = useState('')
   const [botonNo, setBotonNo] = useState('')
   const [promo, setPromo] = useState('un postre gratis en tu próxima visita')
+  const [nombreGenerico, setNombreGenerico] = useState('')
+  const [guardandoNombre, setGuardandoNombre] = useState(false)
   const [creando, setCreando] = useState(false)
   const [creada, setCreada] = useState<Creada | null>(null)
 
@@ -130,6 +134,7 @@ export function ImportedContactsTemplate() {
       setRespSi(d.respuestas.si)
       setRespNo(d.respuestas.no)
       setFotoSi(d.respuestas.foto_si)
+      setNombreGenerico(d.nombre_generico)
     } catch {
       /* la pantalla se pinta igual, con los campos vacíos */
     }
@@ -161,9 +166,30 @@ export function ImportedContactsTemplate() {
         : null
 
   const marca = config?.brand_name ?? 'la marca'
-  const previaMensaje1 = body
-    .replaceAll(/\{\{\s*1\s*\}\}/g, 'Juan')
-    .replaceAll(/\{\{\s*2\s*\}\}/g, promo.trim() || '[regalo]')
+  const generico = nombreGenerico.trim() || config?.nombre_generico_default || 'cliente'
+  const previaMensaje1 = (nombre: string) =>
+    body.replaceAll(/\{\{\s*1\s*\}\}/g, nombre).replaceAll(/\{\{\s*2\s*\}\}/g, promo.trim() || '[regalo]')
+
+  const guardarNombreGenerico = async () => {
+    setGuardandoNombre(true)
+    try {
+      const res = await fetch('/api/dashboard/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'golden_bullet_fallback_name', value: nombreGenerico.trim() }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        toast.error(data.message || data.error || 'No se pudo guardar')
+        return
+      }
+      toast.success('Guardado: es lo que dirá {{1}} cuando no haya nombre')
+    } catch {
+      toast.error('Error de conexión')
+    } finally {
+      setGuardandoNombre(false)
+    }
+  }
 
   const crear = async () => {
     if (errorCuerpo || errorBotones) return
@@ -336,6 +362,29 @@ export function ImportedContactsTemplate() {
               </div>
             </div>
 
+            <div className="space-y-1.5">
+              <Label htmlFor="nombre-generico" className="text-xs uppercase tracking-wide text-muted-foreground">
+                Si la persona no tiene nombre, {'{{1}}'} dice
+              </Label>
+              <div className="flex flex-wrap items-center gap-2">
+                <Input
+                  id="nombre-generico"
+                  value={nombreGenerico}
+                  onChange={(e) => setNombreGenerico(e.target.value)}
+                  placeholder={config?.nombre_generico_default ?? 'cliente'}
+                  className="max-w-xs"
+                />
+                <Button variant="outline" size="sm" onClick={guardarNombreGenerico} disabled={guardandoNombre} className="gap-1.5">
+                  {guardandoNombre ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                  Guardar
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Una de cada cuatro personas de la base no tiene nombre, y {'{{1}}'} no puede ir vacía (es una variable
+                de Meta). Queda guardado en la marca; el paso 4 de «Nueva campaña» arranca con este valor.
+              </p>
+            </div>
+
             {usaPromo && (
               <div className="space-y-1.5">
                 <Label htmlFor="promo-ej" className="text-xs uppercase tracking-wide text-muted-foreground">
@@ -346,9 +395,15 @@ export function ImportedContactsTemplate() {
             )}
 
             {body.trim() && (
-              <div className="space-y-2">
-                <Label className="text-xs uppercase tracking-wide text-muted-foreground">Vista previa</Label>
-                <Burbuja texto={previaMensaje1} botones={[botonSi || '…', botonNo || '…']} />
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div className="space-y-2">
+                  <Label className="text-xs uppercase tracking-wide text-muted-foreground">Así le llega (con nombre)</Label>
+                  <Burbuja texto={previaMensaje1('Juan')} botones={[botonSi || '…', botonNo || '…']} />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs uppercase tracking-wide text-muted-foreground">Así le llega (sin nombre)</Label>
+                  <Burbuja texto={previaMensaje1(generico)} botones={[botonSi || '…', botonNo || '…']} />
+                </div>
               </div>
             )}
 

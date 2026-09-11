@@ -17,6 +17,7 @@ import {
   CLUB_PLACEHOLDERS,
   RESPUESTA_SI_DEFECTO,
   RESPUESTA_NO_DEFECTO,
+  NOMBRE_GENERICO_DEFECTO,
 } from '@/services/club-optin.service'
 import { resolveBranding } from '@/lib/branding'
 
@@ -85,6 +86,8 @@ export async function GET() {
       boton_si: ajustes[CLUB_SETTING_KEYS.botonSi] ?? '',
       boton_no: ajustes[CLUB_SETTING_KEYS.botonNo] ?? '',
     },
+    nombre_generico: ajustes[CLUB_SETTING_KEYS.nombreGenerico] ?? '',
+    nombre_generico_default: NOMBRE_GENERICO_DEFECTO,
     // El enlace que va en {enlace}: el de la invitación con premio si eligió
     // una (Recompensas → Invitaciones), si no el general de la tarjeta.
     invitacion_slug: slug,

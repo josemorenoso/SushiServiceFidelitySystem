@@ -20,7 +20,9 @@ asistente solo pide la promo si la plantilla la usa), y las respuestas al «sí�
 vacío = el texto de defecto. La foto sale como `<Media>` en el TwiML; el nombre se busca en
 `imported_contacts`. Nada del mensaje del dueño quedó en código. Una de cada cuatro personas de la
 base no tiene nombre: `{nombre|¿cómo estás?}` pone el alternativo (y `{nombre}` a secas se va con la
-coma); en el mensaje 1 lo cubre el «nombre genérico» del paso 4, porque `{{1}}` no puede ir vacía.
+coma); en el mensaje 1 lo cubre el **nombre genérico**, que ahora se escribe al lado del mensaje y queda
+en la marca (`golden_bullet_fallback_name`; el paso 4 arranca con él), porque `{{1}}` no puede ir vacía.
+La vista previa del mensaje 1 muestra las dos versiones.
 **Verificado:** tsc limpio · lint limpio en lo tocado · `golden-bullet-{bloques,telefonos,respuestas}`
 50/50 · suite entera en verde (ver ESTADO §1).
 **Archivos:** `src/components/dashboard/ImportedContacts{Template,Uploader}.tsx`,

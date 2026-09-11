@@ -32,7 +32,6 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
-| Golden Bullet: el «nombre genérico» de `{{1}}` se escribe al lado del mensaje 1 y se guarda en la marca — Opus 5, 2026-09-11 | Opus 5 | `src/components/dashboard/ImportedContacts{Template,Uploader}.tsx` · `src/services/club-optin.service.ts` · `src/app/api/dashboard/imported-contacts/{template,confirm}/route.ts` · `docs/features/golden-bullet.md` | — | en curso |
 
 ## 3. Siguiente, en orden
 

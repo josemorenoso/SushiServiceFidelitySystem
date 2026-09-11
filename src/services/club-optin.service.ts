@@ -105,7 +105,16 @@ export const CLUB_SETTING_KEYS = {
   botonSi: 'golden_bullet_button_si',
   botonNo: 'golden_bullet_button_no',
   invitacion: 'golden_bullet_invite_slug',
+  /**
+   * Lo que dice `{{1}}` del mensaje 1 cuando la persona no tiene nombre. Es
+   * de la MARCA (se escribe al lado del mensaje, en la pestaña Plantilla) y el
+   * paso 4 del asistente arranca con este valor. `{{1}}` es una variable de
+   * Meta y no puede ir vacía: por eso existe.
+   */
+  nombreGenerico: 'golden_bullet_fallback_name',
 } as const
+
+export const NOMBRE_GENERICO_DEFECTO = 'cliente'
 
 /** Los comodines que acepta el texto. `{enlace}` solo tiene sentido en el Sí. */
 export const CLUB_PLACEHOLDERS = ['{nombre}', '{nombre|texto si no hay nombre}', '{enlace}', '{marca}'] as const

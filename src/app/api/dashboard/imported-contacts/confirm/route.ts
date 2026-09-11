@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { requireTenantId, getTenantById } from '@/lib/tenant'
 import { confirmImport, type ParsedContact } from '@/services/imported-contacts.service'
 import { getSettingValue } from '@/services/settings.service'
+import { CLUB_SETTING_KEYS, NOMBRE_GENERICO_DEFECTO } from '@/services/club-optin.service'
 
 export const dynamic = 'force-dynamic'
 // Ya NO envía dentro del request: inserta los contactos y los encola. Lo que
@@ -100,7 +101,12 @@ export async function POST(request: NextRequest) {
       sourceFile: body.source_file || 'import.csv',
       templateSid: body.template_sid,
       promoText: (body.promo_text ?? '').trim(),
-      fallbackName: body.fallback_name,
+      // El del asistente (que arranca con el de la marca), si no el de la marca,
+      // si no «cliente». `{{1}}` no puede ir vacía.
+      fallbackName:
+        body.fallback_name?.trim() ||
+        (await getSettingValue(CLUB_SETTING_KEYS.nombreGenerico, tenantId))?.trim() ||
+        NOMBRE_GENERICO_DEFECTO,
       blockSize,
       consentText: body.consent_text,
       acceptedByEmail: user.email ?? undefined,

@@ -163,6 +163,14 @@ export function ImportedContactsUploader({ onSent, apagado = false }: { onSent?:
       .then((r) => r.json())
       .then(setTwilioBalance)
       .catch(() => setTwilioBalance(null))
+    // El nombre genérico de {{1}} se escribe al lado del mensaje 1 (pestaña
+    // Plantilla) y queda en la marca; acá solo se arranca con ese valor.
+    fetch('/api/dashboard/settings')
+      .then((r) => (r.ok ? r.json() : {}))
+      .then((d: Record<string, string>) => {
+        if (d.golden_bullet_fallback_name?.trim()) setFallbackName(d.golden_bullet_fallback_name.trim())
+      })
+      .catch(() => undefined)
     fetch('/api/dashboard/line-budget')
       .then((r) => r.json())
       .then((d: LineBudgetInfo) => {
@@ -471,8 +479,9 @@ export function ImportedContactsUploader({ onSent, apagado = false }: { onSent?:
                 </div>
               )}
               <div className="space-y-1.5">
-                <Label htmlFor="fallback" className="text-xs uppercase tracking-wide text-muted-foreground">Nombre genérico ({'{{1}}'} si el contacto no trae nombre)</Label>
+                <Label htmlFor="fallback" className="text-xs uppercase tracking-wide text-muted-foreground">Si el contacto no trae nombre, {'{{1}}'} dice</Label>
                 <Input id="fallback" value={fallbackName} onChange={(e) => setFallbackName(e.target.value)} placeholder="cliente" />
+                <p className="text-xs text-muted-foreground">Arranca con lo que guardaste en la pestaña Plantilla. Cambiarlo acá vale solo para esta campaña.</p>
               </div>
             </CardContent>
           </Card>

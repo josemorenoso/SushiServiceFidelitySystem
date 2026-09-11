@@ -8,6 +8,23 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [2026-09-11g] - Golden Bullet: el CSV «no cargaba» — flag apagado, 403 mudo y extranjeros colados
+
+**Qué:** subir un CSV en `/dashboard/imported-contacts` no hacía nada. Los logs de Vercel lo
+dicen: `POST /validate → 403`, el feature flag `golden_bullet_enabled` sigue en `'false'` (semilla
+de la 00023) y el toast que lo explicaba no se veía porque la página no montaba `<Toaster>`. El 403
+mandaba a «Ajustes», donde nunca hubo casilla. Ahora la página monta el Toaster, muestra un aviso
+«Golden Bullet está apagado en esta marca» con el botón que lo enciende (`PUT /api/dashboard/settings`)
+y deshabilita el selector mientras siga apagado; las tres rutas dicen la verdad en el 403.
+De paso, `normalizePhone()` dejaba pasar extranjeros: miraba los últimos diez dígitos, y `+33 6…` o
+`+39 3…` pasaban por colombianos. Ahora mira el número entero (`3` + 9, solo o tras `57`/`0057`).
+**Verificado:** tsc limpio · lint limpio en lo tocado · `golden-bullet-{bloques,telefonos}` 29/29 ·
+los dos CSV reales (7.438 y 6.688 filas) pasan por `validateCSV()` con la base simulada.
+**Archivos:** `src/app/(dashboard)/dashboard/imported-contacts/page.tsx`,
+`src/components/dashboard/ImportedContactsUploader.tsx`, `src/services/imported-contacts.service.ts`,
+`src/app/api/dashboard/imported-contacts/{validate,confirm,template}/route.ts`,
+`tests/unit/golden-bullet-telefonos.test.ts`, `docs/features/golden-bullet.md`, `.gitignore`.
+
 ## [2026-09-11f] - Plantillas: diagnóstico del sistema entero, guardado como pendiente (solo docs)
 
 **Tipo:** docs · **Origen:** el dueño ("me está causando mucha fricción el temita de las plantillas") · **Sin migración, sin código**

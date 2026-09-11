@@ -315,8 +315,19 @@ que `markImportedContactsResult()` es lo que cierra el círculo: marca `sent` co
 contacto sigue en cola y todavía puede salir.
 
 ## Feature flag y costo
-- `admin_settings.golden_bullet_enabled` (`'true'`/`'false'`, default `false`).
+- `admin_settings.golden_bullet_enabled` (`'true'`/`'false'`, default `false`). **Se enciende
+  desde la propia pantalla** (`/dashboard/imported-contacts`, el aviso ámbar de arriba tiene el
+  botón «Encender Golden Bullet», que hace `PUT /api/dashboard/settings`). Mientras esté en
+  `false`, `validate`, `confirm` y `template` responden **403** y el selector de archivo está
+  deshabilitado. Hasta el 2026-09-11 el 403 decía «actívalo en Ajustes», Ajustes no tenía la
+  casilla y la página no montaba `<Toaster>`: el CSV «no cargaba» y nadie veía por qué.
 - `admin_settings.twilio_cost_per_message_usd` (default `0.0175`).
+
+## Qué acepta como celular (`normalizePhone()`)
+Exactamente `3` + 9 dígitos, solo o detrás del indicativo (`+57`, `57`, `0057`). Mira el número
+**entero**: la versión anterior se quedaba con los últimos diez dígitos y un móvil francés
+(`+33 6…`), italiano (`+39 3…`) o cualquier extranjero cuyos últimos diez empezaran por 3 pasaba
+como colombiano. El test que lo fija: `tests/unit/golden-bullet-telefonos.test.ts`.
 
 ## Decisiones tomadas en la v3.0.0 (revisables)
 
@@ -342,6 +353,7 @@ contacto sigue en cola y todavía puede salir.
 - `src/app/api/dashboard/imported-contacts/{route,validate,confirm,stats,roi}.ts`
 - `src/app/(dashboard)/dashboard/imported-contacts/page.tsx`
 - `src/components/dashboard/ImportedContactsUploader.tsx`, `ImportedContactsCostEstimator.tsx`, `ImportedContactsHistory.tsx`
+- `tests/unit/golden-bullet-bloques.test.ts`, `tests/unit/golden-bullet-telefonos.test.ts`
 - `public/plantilla_golden_bullet.csv`
 - Wiring: `src/app/api/cron/queue-drain/route.ts` (envío y marcado),
   `src/app/api/webhook/twilio-incoming/route.ts` y `webhook/zernio/route.ts` (botones),

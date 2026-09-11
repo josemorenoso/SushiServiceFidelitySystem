@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
   const enabled = await getSettingValue('golden_bullet_enabled', tenantId)
   if (enabled !== 'true') {
     return NextResponse.json(
-      { error: 'Función desactivada', message: 'Golden Bullet no está habilitado. Actívalo en Ajustes.' },
+      { error: 'Función desactivada', message: 'Golden Bullet está apagado en esta marca. Encendelo con el botón de la pantalla Golden Bullet.' },
       { status: 403 }
     )
   }

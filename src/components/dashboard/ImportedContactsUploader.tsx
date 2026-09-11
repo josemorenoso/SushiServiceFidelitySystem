@@ -120,7 +120,13 @@ function formatearFecha(iso: string): string {
   return new Date(iso).toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
-export function ImportedContactsUploader({ onSent }: { onSent?: () => void }) {
+/**
+ * `apagado`: el flag `golden_bullet_enabled` de la marca no está en `'true'`.
+ * El servidor responde 403 a todo mientras siga así, así que el selector de
+ * archivo se deshabilita en vez de dejar que el CSV «no cargue» sin explicación.
+ * El botón para encenderlo vive en la página (`imported-contacts/page.tsx`).
+ */
+export function ImportedContactsUploader({ onSent, apagado = false }: { onSent?: () => void; apagado?: boolean }) {
   const [validating, setValidating] = useState(false)
   const [sending, setSending] = useState(false)
   const [validation, setValidation] = useState<ValidationResult | null>(null)
@@ -323,10 +329,14 @@ export function ImportedContactsUploader({ onSent }: { onSent?: () => void }) {
               <Download className="h-3.5 w-3.5" /> Descargar plantilla de ejemplo
             </a>
           </div>
-          <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md border border-input bg-background px-4 h-10 text-sm font-medium hover:bg-accent">
+          <label
+            className={`inline-flex items-center justify-center gap-2 rounded-md border border-input bg-background px-4 h-10 text-sm font-medium ${
+              apagado ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-accent'
+            }`}
+          >
             {validating ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
-            {validating ? 'Validando...' : 'Seleccionar archivo CSV'}
-            <input type="file" accept=".csv" className="hidden" onChange={handleFile} disabled={validating} />
+            {validating ? 'Validando...' : apagado ? 'Golden Bullet apagado' : 'Seleccionar archivo CSV'}
+            <input type="file" accept=".csv" className="hidden" onChange={handleFile} disabled={validating || apagado} />
           </label>
         </CardContent>
       </Card>

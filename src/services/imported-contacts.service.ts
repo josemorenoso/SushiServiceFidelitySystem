@@ -39,11 +39,21 @@ export async function getCostPerMessageUsd(tenantId: string): Promise<number> {
   return Number.isFinite(n) && n > 0 ? n : DEFAULT_COST_PER_MESSAGE_USD
 }
 
-/** Normaliza a 10 dígitos colombianos (quita +57, espacios, etc.). */
-function normalizePhone(raw: string): string | null {
-  const digits = raw.replace(/\D/g, '')
-  const last10 = digits.slice(-10)
-  return /^3\d{9}$/.test(last10) ? last10 : null
+/**
+ * Normaliza a 10 dígitos colombianos (quita +57, 0057, espacios, etc.).
+ *
+ * Mira el número ENTERO, no los últimos diez dígitos. La versión anterior
+ * hacía `digits.slice(-10)` y con eso un móvil francés (+33 6…), italiano
+ * (+39 3…) o español (+34 6…) cuyos últimos diez dígitos empiezan por 3 pasaba
+ * como colombiano: la campaña le escribía a otro país, pagando la tarifa
+ * internacional y sin que el CSV lo delatara. Un móvil colombiano es
+ * exactamente `3` + 9 dígitos, solo o detrás del indicativo 57.
+ */
+export function normalizePhone(raw: string): string | null {
+  let digits = raw.replace(/\D/g, '')
+  if (digits.startsWith('0057')) digits = digits.slice(4)
+  else if (digits.startsWith('57') && digits.length === 12) digits = digits.slice(2)
+  return /^3\d{9}$/.test(digits) ? digits : null
 }
 
 // ─── CSV parsing ────────────────────────────────────────────────

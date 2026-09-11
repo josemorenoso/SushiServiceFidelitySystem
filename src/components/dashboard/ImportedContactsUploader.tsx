@@ -110,10 +110,19 @@ function variablesDe(body: string): Set<number> {
   return encontradas
 }
 
-/** Una plantilla sirve para Golden Bullet si usa {{1}} y {{2}}, y ninguna más. */
+/**
+ * Una plantilla sirve para Golden Bullet si usa {{1}}, opcionalmente {{2}},
+ * y ninguna más. Hasta el 2026-09-11 {{2}} también era obligatoria; un mensaje
+ * que nombra el regalo en el propio texto no la necesita.
+ */
 export function plantillaCompatible(body: string): boolean {
   const vars = variablesDe(body)
-  return vars.has(1) && vars.has(2) && [...vars].every((n) => n === 1 || n === 2)
+  return vars.has(1) && [...vars].every((n) => n === 1 || n === 2)
+}
+
+/** ¿La plantilla elegida pide el texto de la promo? */
+export function plantillaUsaPromo(body: string): boolean {
+  return variablesDe(body).has(2)
 }
 
 function formatearFecha(iso: string): string {
@@ -180,6 +189,10 @@ export function ImportedContactsUploader({ onSent, apagado = false }: { onSent?:
   // Solo se ofrecen las que Golden Bullet puede rellenar de verdad. Ver `plantillaCompatible`.
   const compatibles = templates.filter((t) => plantillaCompatible(t.body))
   const incompatibles = templates.filter((t) => !plantillaCompatible(t.body))
+  const elegida = compatibles.find((t) => t.sid === templateSid) ?? null
+  // La promo ({{2}}) solo se pide si la plantilla elegida la usa.
+  const pidePromo = elegida ? plantillaUsaPromo(elegida.body) : false
+  const promoLista = !pidePromo || promoText.trim().length > 0
 
   const cupo = budget?.enforced ? (budget.campaignBudget ?? null) : null
   const lineaTocada =
@@ -232,7 +245,7 @@ export function ImportedContactsUploader({ onSent, apagado = false }: { onSent?:
   }
 
   const handleSend = async () => {
-    if (!validation || !templateSid || !promoText.trim() || !blockSize) return
+    if (!validation || !templateSid || !promoLista || !blockSize) return
     if (confirmacion.trim().toUpperCase() !== FRASE_CONFIRMACION) return
     setSending(true)
     try {
@@ -243,7 +256,7 @@ export function ImportedContactsUploader({ onSent, apagado = false }: { onSent?:
           batch_id: validation.batch_id,
           source_file: validation.source_file,
           template_sid: templateSid,
-          promo_text: promoText.trim(),
+          promo_text: pidePromo ? promoText.trim() : '',
           fallback_name: fallbackName.trim() || 'cliente',
           block_size: blockSize,
           consent_text: TEXTO_ADVERTENCIA,
@@ -420,8 +433,8 @@ export function ImportedContactsUploader({ onSent, apagado = false }: { onSent?:
                   <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
                     <p>
                       <strong>Ninguna de tus plantillas aprobadas sirve para esto.</strong> Golden Bullet rellena
-                      exactamente dos variables ({'{{1}}'} nombre y {'{{2}}'} promo), y las que tenés usan otra
-                      cantidad — un envío con variables faltantes lo rechaza el proveedor entero.
+                      {'{{1}}'} (nombre) y, si está, {'{{2}}'} (promo); las que tenés usan otras variables — un
+                      envío con variables faltantes lo rechaza el proveedor entero.
                     </p>
                     <p className="mt-2">
                       Creá la de los dos botones en la pestaña <strong>Plantilla</strong>. Meta tarda 24-48 h y
@@ -446,15 +459,17 @@ export function ImportedContactsUploader({ onSent, apagado = false }: { onSent?:
                 {incompatibles.length > 0 && (
                   <p className="text-xs text-muted-foreground">
                     No se ofrecen {incompatibles.length}{' '}
-                    {incompatibles.length === 1 ? 'plantilla aprobada' : 'plantillas aprobadas'} porque no usan
-                    exactamente {'{{1}}'} y {'{{2}}'}: {incompatibles.map((t) => t.name).join(', ')}.
+                    {incompatibles.length === 1 ? 'plantilla aprobada' : 'plantillas aprobadas'} porque usan
+                    variables distintas de {'{{1}}'} y {'{{2}}'}: {incompatibles.map((t) => t.name).join(', ')}.
                   </p>
                 )}
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="promo" className="text-xs uppercase tracking-wide text-muted-foreground">Texto de la promo ({'{{2}}'})</Label>
-                <Input id="promo" value={promoText} onChange={(e) => setPromoText(e.target.value)} placeholder="Ej: un postre gratis en tu próxima visita" />
-              </div>
+              {pidePromo && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="promo" className="text-xs uppercase tracking-wide text-muted-foreground">Texto de la promo ({'{{2}}'})</Label>
+                  <Input id="promo" value={promoText} onChange={(e) => setPromoText(e.target.value)} placeholder="Ej: un postre gratis en tu próxima visita" />
+                </div>
+              )}
               <div className="space-y-1.5">
                 <Label htmlFor="fallback" className="text-xs uppercase tracking-wide text-muted-foreground">Nombre genérico ({'{{1}}'} si el contacto no trae nombre)</Label>
                 <Input id="fallback" value={fallbackName} onChange={(e) => setFallbackName(e.target.value)} placeholder="cliente" />
@@ -556,7 +571,7 @@ export function ImportedContactsUploader({ onSent, apagado = false }: { onSent?:
               </div>
               <Button
                 onClick={handleSend}
-                disabled={sending || !templateSid || !promoText.trim() || !confirmacionOk || !blockSize || validation.valid === 0}
+                disabled={sending || !templateSid || !promoLista || !confirmacionOk || !blockSize || validation.valid === 0}
                 className="gap-2"
               >
                 {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}

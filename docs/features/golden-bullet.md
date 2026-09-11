@@ -126,10 +126,13 @@ Tipo **`twilio/quick-reply`**, categoría **MARKETING**, idioma **es**:
 }
 ```
 
-**El contrato de variables es fijo y lo impone el código** (`confirmImport()`):
+**El contrato de variables lo impone el código** (`confirmImport()`):
 
-- `{{1}}` = nombre del contacto, o el genérico si el CSV no traía nombre.
-- `{{2}}` = el texto de la promo que se escribe en el asistente.
+- `{{1}}` = nombre del contacto, o el genérico si el CSV no traía nombre. **Obligatoria.**
+- `{{2}}` = el texto de la promo que se escribe en el asistente. **Opcional desde el
+  2026-09-11**: un mensaje que dice «tenemos un regalo preparado para ti» no la necesita, y
+  el asistente solo pide el texto de la promo si la plantilla elegida la usa. Si no la usa,
+  `{{2}}` no viaja en las variables (mandar una que la plantilla no declara también es rechazo).
 
 Una plantilla con tres variables **no sirve**, y el asistente ya no la ofrece.
 
@@ -138,7 +141,7 @@ Una plantilla con tres variables **no sirve**, y el asistente ya no la ofrece.
 > variables — saldo de puntos, camino de niveles. Elegir una de esas manda un envío con
 > variables faltantes que el proveedor rechaza **entero**: fallaría en el 100% de los
 > destinatarios, y recién se vería después de confirmar. Desde el 2026-09-10 el paso 4
-> **solo ofrece las que usan exactamente `{{1}}` y `{{2}}`** y lista aparte las que
+> **solo ofrece las que usan `{{1}}` (y a lo sumo `{{2}}`)** y lista aparte las que
 > descartó, con el motivo (`plantillaCompatible()` en el asistente).
 
 ### Qué pasa cuando tocan cada botón
@@ -216,24 +219,38 @@ envía directo no hay prioridad que valga: el cupo ya se gastó.
 Con una línea de 2.000 (Sushi Service): presupuesto ≈ 1.930, bloque propuesto ≈ 965, y
 quedan ~965 para todo lo demás. 15.000 contactos a ese ritmo son **16 días**.
 
-## Crear la plantilla desde el panel (v3.1.0)
+## Los tres textos se escriben en el panel (2026-09-11)
 
-La pestaña **«Plantilla»** la crea en la cuenta Twilio del negocio y la manda a Meta sin
-que nadie copie un token a ninguna parte: las credenciales salen de la fila del tenant en
-el servidor, igual que en el resto del panel.
+La pestaña **«Plantilla»** tiene los tres mensajes del flujo, y **ninguno está horneado**:
 
-Pide dos cosas:
+1. **Mensaje 1 — la plantilla con botones.** Se escribe el cuerpo entero (`{{1}}`
+   obligatoria, `{{2}}` opcional, tope 1.024) y los títulos de los dos botones (tope 20,
+   contados como los cuenta WhatsApp: «Sí, quiero mi regalo» cabe justo; con un emoji
+   delante, no). Se crea en la cuenta Twilio del negocio y se somete a Meta sin que nadie
+   copie un token. Lo que antes era un campo aparte —**de dónde salió su número, y tiene que
+   ser verdad**— ahora es parte del texto: el panel lo recuerda, el servidor no puede
+   verificarlo. Sin texto propio sale el de defecto (`buildClubInviteBody()`).
+2. **Mensaje 2 — la respuesta al «sí».** Texto con `{nombre}`, `{enlace}` y `{marca}`, más
+   una **foto** (la del regalo) que se sube desde ahí mismo. El enlace es el de la
+   invitación con premio si hay una elegida; la pantalla avisa en ámbar cuando no la hay,
+   porque entonces **quien se registra no recibe regalo**.
+3. **La respuesta al «no».** Texto con `{marca}`.
 
-1. **De dónde salió su número.** No tiene valor por defecto **a propósito**: un
-   «porque nos visitaste» horneado haría que media docena de marcas mandaran una mentira
-   sin darse cuenta, justo en el mensaje cuyo propósito es pedir permiso.
-2. **Un ejemplo del regalo**, que es lo que Meta revisa junto al texto.
+Todo vive en `admin_settings` de la marca (`CLUB_SETTING_KEYS` en `club-optin.service.ts`):
+`golden_bullet_reply_si_text`, `golden_bullet_reply_no_text`, `golden_bullet_reply_si_image_url`,
+y los títulos `golden_bullet_button_si` / `golden_bullet_button_no`, que el `POST` de la
+plantilla guarda al crearla para que `detectClubButton()` los reconozca por texto cuando el
+proveedor no manda payload. Vacío = el texto de defecto del servidor (`RESPUESTA_*_DEFECTO`).
 
-Muestra la vista previa con los dos botones antes de crear nada, y avisa que la solicitud
-queda registrada en la WABA del negocio y tarda 24-48 h.
+`renderClubReply()` rellena los comodines y es pura: sin nombre, `{nombre}` se va **con la
+coma** («por aquí, {nombre}!» → «por aquí!»); sin enlace, se va la línea entera. El nombre
+sale de `imported_contacts.name` y, si no, de `customers.name`. La foto viaja como `<Media>`
+en el TwiML de `twilio-incoming` (Zernio sigue sin poder contestar: ver arriba).
 
 > `POST /api/dashboard/imported-contacts/template` crea **y somete**. `GET` de la misma
-> ruta solo devuelve la vista previa y **no toca Twilio ni Meta**.
+> ruta devuelve los defectos, los topes y las respuestas guardadas, y **no toca Twilio ni Meta**.
+> La foto sube por `POST /api/dashboard/imported-contacts/reply-image` (bucket `brand-assets`,
+> path con `tenant_id` delante, recomprimida a JPEG) y el panel guarda la URL en el ajuste.
 
 ## Las dos puertas que siguen cerradas
 
@@ -292,13 +309,14 @@ Estados (`00060` agregó los dos últimos):
 | Método | Ruta | Descripción |
 |--------|------|-------------|
 | POST | `/api/dashboard/imported-contacts/validate` | Validar CSV (multipart `file`), sin insertar |
-| POST | `/api/dashboard/imported-contacts/confirm` | Insertar + **encolar**. Body: `{ batch_id, source_file, template_sid, promo_text, block_size, consent_text?, fallback_name?, contacts[] }` |
+| POST | `/api/dashboard/imported-contacts/confirm` | Insertar + **encolar**. Body: `{ batch_id, source_file, template_sid, promo_text?, block_size, consent_text?, fallback_name?, contacts[] }` (`promo_text` solo si la plantilla usa `{{2}}`) |
 | GET | `/api/dashboard/imported-contacts` | Lotes o contactos de un `batch_id` |
 | GET | `/api/dashboard/imported-contacts/stats` | Estadísticas por `batch_id` |
 | GET | `/api/dashboard/imported-contacts/roi` | ROI por `batch_id` |
 | GET | `/api/dashboard/imported-contacts/progress` | Con `batch_id`, la foto de ese lote. **Sin** `batch_id`, todo lo que sigue goteando |
 | POST | `/api/dashboard/imported-contacts/pause` | `{ campaign_id, action: 'pause' \| 'resume', block_size? }` |
-| GET/POST | `/api/dashboard/imported-contacts/template` | `GET` = vista previa (no toca nada). `POST` = crea en Twilio y somete a Meta |
+| GET/POST | `/api/dashboard/imported-contacts/template` | `GET` = defectos, topes y respuestas guardadas (no toca nada). `POST` = crea en Twilio y somete a Meta. Body: `{ body, boton_si?, boton_no?, promo_ejemplo? }` |
+| POST | `/api/dashboard/imported-contacts/reply-image` | Sube la foto de la respuesta al «sí» (multipart `file`, JPG/PNG/WebP) y devuelve su URL pública |
 
 **Topes de `confirm`:** `409` si la puerta de calidad frena · `409` si no hay saldo ·
 **`413` si el lote pasa de 30.000 contactos**. Ese último no es una regla de negocio: es
@@ -353,7 +371,8 @@ como colombiano. El test que lo fija: `tests/unit/golden-bullet-telefonos.test.t
 - `src/app/api/dashboard/imported-contacts/{route,validate,confirm,stats,roi}.ts`
 - `src/app/(dashboard)/dashboard/imported-contacts/page.tsx`
 - `src/components/dashboard/ImportedContactsUploader.tsx`, `ImportedContactsCostEstimator.tsx`, `ImportedContactsHistory.tsx`
-- `tests/unit/golden-bullet-bloques.test.ts`, `tests/unit/golden-bullet-telefonos.test.ts`
+- `tests/unit/golden-bullet-bloques.test.ts`, `tests/unit/golden-bullet-telefonos.test.ts`, `tests/unit/golden-bullet-respuestas.test.ts`
+- `src/app/api/dashboard/imported-contacts/reply-image/route.ts` — la foto del mensaje 2
 - `public/plantilla_golden_bullet.csv`
 - Wiring: `src/app/api/cron/queue-drain/route.ts` (envío y marcado),
   `src/app/api/webhook/twilio-incoming/route.ts` y `webhook/zernio/route.ts` (botones),

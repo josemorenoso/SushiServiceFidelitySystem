@@ -1,21 +1,61 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { requireTenantId, getTenantById } from '@/lib/tenant'
-import { getSettingValue } from '@/services/settings.service'
+import { getSettingValue, getMultipleSettings } from '@/services/settings.service'
 import {
   createClubInviteTemplate,
   buildClubInviteBody,
+  BOTON_SI,
+  BOTON_NO,
+  BOTON_MAX,
+  CUERPO_MAX,
   GoldenBulletTemplateError,
 } from '@/services/golden-bullet-template.service'
+import {
+  CLUB_SETTING_KEYS,
+  CLUB_PLACEHOLDERS,
+  RESPUESTA_SI_DEFECTO,
+  RESPUESTA_NO_DEFECTO,
+} from '@/services/club-optin.service'
 import { resolveBranding } from '@/lib/branding'
 
 export const dynamic = 'force-dynamic'
 
+function getServiceClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) throw new Error('Missing Supabase env vars')
+  return createServiceClient(url, key)
+}
+
+/** Upsert de las dos etiquetas en `admin_settings`, con `tenant_id` explícito. */
+async function guardarEtiquetas(tenantId: string, botonSi: string, botonNo: string): Promise<void> {
+  try {
+    const db = getServiceClient()
+    const ahora = new Date().toISOString()
+    const { error } = await db.from('admin_settings').upsert(
+      [
+        { key: CLUB_SETTING_KEYS.botonSi, value: botonSi, updated_at: ahora, tenant_id: tenantId },
+        { key: CLUB_SETTING_KEYS.botonNo, value: botonNo, updated_at: ahora, tenant_id: tenantId },
+      ],
+      { onConflict: 'key,tenant_id' }
+    )
+    if (error) console.error('[GoldenBullet] No se pudieron guardar las etiquetas de los botones:', error.message)
+  } catch (err) {
+    console.error('[GoldenBullet] Excepción guardando etiquetas:', err)
+  }
+}
+
 /**
- * GET — vista previa. NO toca Twilio ni Meta.
- * Sirve para leer el mensaje exacto antes de mandarlo a aprobar.
+ * GET — lo que la pestaña necesita para pintarse. NO toca Twilio ni Meta.
+ *
+ * Devuelve el cuerpo de defecto (por si el operador no quiere escribir el
+ * suyo), los límites, y las respuestas a los botones tal como están guardadas
+ * en `admin_settings` (vacías = las de defecto, que también viajan para que
+ * la pantalla las muestre).
  */
-export async function GET(request: NextRequest) {
+export async function GET() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
@@ -24,12 +64,31 @@ export async function GET(request: NextRequest) {
   const tenant = await getTenantById(tenantId)
   if (!tenant) return NextResponse.json({ error: 'Tenant no encontrado' }, { status: 404 })
 
-  const procedencia = new URL(request.url).searchParams.get('procedencia') ?? ''
   const brandName = resolveBranding(tenant.config).name
+  const ajustes = await getMultipleSettings(Object.values(CLUB_SETTING_KEYS), tenantId)
+  const slug = ajustes[CLUB_SETTING_KEYS.invitacion]?.trim() || null
 
   return NextResponse.json({
     brand_name: brandName,
-    body: buildClubInviteBody(brandName, procedencia || '[de dónde salió su número]'),
+    body_default: buildClubInviteBody(brandName, '[de dónde salió su número — y tiene que ser verdad]'),
+    boton_si_default: BOTON_SI,
+    boton_no_default: BOTON_NO,
+    boton_max: BOTON_MAX,
+    cuerpo_max: CUERPO_MAX,
+    placeholders: CLUB_PLACEHOLDERS,
+    respuestas: {
+      si: ajustes[CLUB_SETTING_KEYS.respuestaSi] ?? '',
+      no: ajustes[CLUB_SETTING_KEYS.respuestaNo] ?? '',
+      si_default: RESPUESTA_SI_DEFECTO,
+      no_default: RESPUESTA_NO_DEFECTO,
+      foto_si: ajustes[CLUB_SETTING_KEYS.fotoSi] ?? '',
+      boton_si: ajustes[CLUB_SETTING_KEYS.botonSi] ?? '',
+      boton_no: ajustes[CLUB_SETTING_KEYS.botonNo] ?? '',
+    },
+    // El enlace que va en {enlace}: el de la invitación con premio si eligió
+    // una (Recompensas → Invitaciones), si no el general de la tarjeta.
+    invitacion_slug: slug,
+    enlace: tenant.domain ? (slug ? `https://${tenant.domain}/c/${encodeURIComponent(slug)}` : `https://${tenant.domain}`) : null,
   })
 }
 
@@ -61,13 +120,26 @@ export async function POST(request: NextRequest) {
     const tenant = await getTenantById(tenantId)
     if (!tenant) return NextResponse.json({ error: 'Tenant no encontrado' }, { status: 404 })
 
-    const body = (await request.json()) as { procedencia?: string; promo_ejemplo?: string }
+    const body = (await request.json()) as {
+      body?: string
+      boton_si?: string
+      boton_no?: string
+      promo_ejemplo?: string
+    }
 
-    const result = await createClubInviteTemplate(
-      tenant,
-      body.procedencia ?? '',
-      body.promo_ejemplo ?? ''
-    )
+    const result = await createClubInviteTemplate(tenant, {
+      body: body.body ?? '',
+      botonSi: body.boton_si,
+      botonNo: body.boton_no,
+      promoEjemplo: body.promo_ejemplo,
+    })
+
+    // Los títulos con los que quedó creada se guardan para el respaldo por
+    // texto del detector (ver `detectClubButton`). Best-effort: la plantilla ya
+    // existe en Twilio y eso es lo que importa; si esto falla, el payload del
+    // botón sigue reconociéndolo.
+    await guardarEtiquetas(tenantId, result.botonSi, result.botonNo)
+
     return NextResponse.json(result)
   } catch (error) {
     if (error instanceof GoldenBulletTemplateError) {

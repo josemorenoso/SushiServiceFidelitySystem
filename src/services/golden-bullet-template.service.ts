@@ -25,9 +25,17 @@ import type { Tenant } from '@/types/tenant.types'
 const TWILIO_CONTENT_API = 'https://content.twilio.com/v1/Content'
 const LANGUAGE = 'es'
 
-/** Los textos visibles. WhatsApp corta los botones a 20 caracteres. */
+/**
+ * Los textos visibles POR DEFECTO. Desde el 2026-09-11 el operador puede
+ * escribir los suyos en el panel («Sí, quiero mi regalo»); estos son los que
+ * salen si no escribe nada. WhatsApp corta los botones a 20 caracteres.
+ */
 export const BOTON_SI = 'Quiero ser parte'
 export const BOTON_NO = 'No, gracias'
+export const BOTON_MAX = 20
+
+/** Tope de Meta para el cuerpo de una plantilla. */
+export const CUERPO_MAX = 1024
 
 export class GoldenBulletTemplateError extends Error {
   constructor(message: string, public readonly status: number) {
@@ -54,6 +62,46 @@ export function buildClubInviteBody(brandName: string, procedencia: string): str
   )
 }
 
+/** Qué variables `{{n}}` usa un cuerpo. Espejo de `variablesDe()` en el asistente. */
+export function variablesDelCuerpo(body: string): Set<number> {
+  const vars = new Set<number>()
+  for (const m of (body ?? '').matchAll(/\{\{\s*(\d+)\s*\}\}/g)) vars.add(Number(m[1]))
+  return vars
+}
+
+/**
+ * Lo que tiene que cumplir un cuerpo escrito a mano para que el envío no
+ * reviente después de que Meta lo apruebe.
+ *
+ * `{{1}}` (el nombre) es OBLIGATORIO y `{{2}}` (la promo) es OPCIONAL: el
+ * drenador rellena exactamente esas dos, y una tercera dejaría un envío con
+ * variables faltantes que el proveedor rechaza entero. Hasta el 2026-09-11
+ * `{{2}}` era obligatoria también; un mensaje que dice «tenemos un regalo
+ * preparado para ti» sin variable es perfectamente válido, así que dejó de serlo.
+ *
+ * PURA: es lo que se prueba sin Twilio.
+ */
+export function validarCuerpoClub(body: string): string | null {
+  const texto = body.trim()
+  if (!texto) return 'El mensaje está vacío.'
+  if (texto.length > CUERPO_MAX) return `El mensaje tiene ${texto.length} caracteres y Meta acepta hasta ${CUERPO_MAX}.`
+  const vars = variablesDelCuerpo(texto)
+  if (!vars.has(1)) return 'Falta {{1}}: es donde va el nombre de la persona.'
+  const extra = [...vars].filter((n) => n !== 1 && n !== 2)
+  if (extra.length > 0) {
+    return `El mensaje usa {{${extra[0]}}} y el envío solo rellena {{1}} (nombre) y {{2}} (regalo).`
+  }
+  return null
+}
+
+/** Lo mismo para el texto visible de un botón. */
+export function validarBoton(titulo: string, cual: 'sí' | 'no'): string | null {
+  const t = titulo.trim()
+  if (!t) return `El botón del ${cual} está vacío.`
+  if ([...t].length > BOTON_MAX) return `El botón del ${cual} tiene ${[...t].length} caracteres y WhatsApp acepta hasta ${BOTON_MAX}.`
+  return null
+}
+
 /** Nombre para Meta: minúsculas, números y guiones bajos. Lo exige Meta. */
 function metaName(brandName: string): string {
   const slug = brandName
@@ -70,8 +118,20 @@ export interface CreateClubTemplateResult {
   contentSid: string
   friendlyName: string
   body: string
+  botonSi: string
+  botonNo: string
   approvalSubmitted: boolean
   approvalError: string | null
+}
+
+export interface ClubTemplateInput {
+  /** El cuerpo ENTERO, escrito por el operador. Tiene que pasar `validarCuerpoClub()`. */
+  body: string
+  /** Textos visibles de los botones. Vacíos = los de defecto. */
+  botonSi?: string
+  botonNo?: string
+  /** Ejemplo de `{{2}}` para Meta. Solo importa si el cuerpo la usa. */
+  promoEjemplo?: string
 }
 
 /**
@@ -83,8 +143,7 @@ export interface CreateClubTemplateResult {
  */
 export async function createClubInviteTemplate(
   tenant: Tenant,
-  procedencia: string,
-  promoEjemplo: string
+  input: ClubTemplateInput
 ): Promise<CreateClubTemplateResult> {
   if (tenant.messaging_provider === 'zernio') {
     throw new GoldenBulletTemplateError(
@@ -92,13 +151,19 @@ export async function createClubInviteTemplate(
       409
     )
   }
-  if (!procedencia.trim()) {
-    throw new GoldenBulletTemplateError(
-      'Falta la línea que explica de dónde salió el número de estas personas, y tiene que ser verdad: ' +
-        'es lo que separa una invitación de un mensaje no solicitado.',
-      400
-    )
-  }
+
+  // El cuerpo lo escribe el operador. Lo que ANTES era un campo aparte —la
+  // línea de «de dónde salió su número», que tiene que ser verdad— ahora es
+  // parte del texto que escribe; el panel se lo recuerda, pero no se puede
+  // verificar desde acá. Lo que sí se verifica es lo que rompería el envío.
+  const body = input.body.trim()
+  const errorCuerpo = validarCuerpoClub(body)
+  if (errorCuerpo) throw new GoldenBulletTemplateError(errorCuerpo, 400)
+
+  const botonSi = (input.botonSi ?? '').trim() || BOTON_SI
+  const botonNo = (input.botonNo ?? '').trim() || BOTON_NO
+  const errorBoton = validarBoton(botonSi, 'sí') ?? validarBoton(botonNo, 'no')
+  if (errorBoton) throw new GoldenBulletTemplateError(errorBoton, 400)
 
   const creds = await getTenantTwilioCredentials(tenant.id)
   if (!creds) {
@@ -106,8 +171,8 @@ export async function createClubInviteTemplate(
   }
 
   const brandName = resolveBranding(tenant.config).name
-  const body = buildClubInviteBody(brandName, procedencia)
   const friendlyName = metaName(brandName)
+  const usaPromo = variablesDelCuerpo(body).has(2)
 
   const headers = {
     Authorization: creds.basicAuth,
@@ -122,16 +187,21 @@ export async function createClubInviteTemplate(
       language: LANGUAGE,
       // Los ejemplos son lo que Meta revisa junto al texto. `{{1}}` es el
       // nombre y `{{2}}` la promo: el mismo contrato que arma `confirmImport()`.
-      variables: { '1': 'Juan', '2': promoEjemplo.trim() || 'un postre gratis en tu próxima visita' },
+      // `{{2}}` solo se declara si el cuerpo la usa: declarar una variable que
+      // no aparece es motivo de rechazo.
+      variables: usaPromo
+        ? { '1': 'Juan', '2': (input.promoEjemplo ?? '').trim() || 'un postre gratis en tu próxima visita' }
+        : { '1': 'Juan' },
       types: {
         'twilio/quick-reply': {
           body,
           // Los `id` son el CONTRATO con `club-optin.service.ts`: es lo que
           // llega en `ButtonPayload` cuando alguien toca el botón. Si cambian
-          // acá y no allá, el botón deja de hacer nada.
+          // acá y no allá, el botón deja de hacer nada. El TÍTULO sí lo elige
+          // el operador; el detector lo recibe desde `admin_settings`.
           actions: [
-            { type: 'QUICK_REPLY', title: BOTON_SI, id: CLUB_PAYLOAD_SI },
-            { type: 'QUICK_REPLY', title: BOTON_NO, id: CLUB_PAYLOAD_NO },
+            { type: 'QUICK_REPLY', title: botonSi, id: CLUB_PAYLOAD_SI },
+            { type: 'QUICK_REPLY', title: botonNo, id: CLUB_PAYLOAD_NO },
           ],
         },
       },
@@ -165,5 +235,5 @@ export async function createClubInviteTemplate(
     approvalError = error instanceof Error ? error.message : 'Error desconocido'
   }
 
-  return { contentSid: created.sid, friendlyName, body, approvalSubmitted, approvalError }
+  return { contentSid: created.sid, friendlyName, body, botonSi, botonNo, approvalSubmitted, approvalError }
 }

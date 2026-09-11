@@ -193,8 +193,12 @@ describe('plantillaCompatible — la guarda que evita perder 15.000 mensajes de 
     expect(plantillaCompatible('Hola {{1}}, {{2}} puntos, ganaste {{3}}. {{4}}')).toBe(false)
   })
 
-  it('rechaza la que le falta alguna de las dos', () => {
-    expect(plantillaCompatible('Hola {{1}}, vuelve pronto')).toBe(false)
+  it('acepta la que solo usa {{1}}: el regalo puede ir escrito en el texto (2026-09-11)', () => {
+    // «tenemos un regalo especial preparado para ti» no necesita variable.
+    expect(plantillaCompatible('Hola {{1}} ❤️, tenemos un regalo preparado para ti')).toBe(true)
+  })
+
+  it('rechaza la que no lleva el nombre, o no lleva nada', () => {
     expect(plantillaCompatible('Te damos {{2}}')).toBe(false)
     expect(plantillaCompatible('Sin variables')).toBe(false)
     expect(plantillaCompatible('')).toBe(false)

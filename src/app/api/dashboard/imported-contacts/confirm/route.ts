@@ -27,7 +27,8 @@ interface ConfirmBody {
   batch_id: string
   source_file: string
   template_sid: string
-  promo_text: string
+  /** Texto de `{{2}}`. Vacío si la plantilla no la usa. */
+  promo_text?: string
   fallback_name?: string
   /** Mensajes por día. Lo elige el operador (D-7); el servicio lo acota al cupo. */
   block_size: number
@@ -65,12 +66,9 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-    if (!body.promo_text) {
-      return NextResponse.json(
-        { error: 'Datos inválidos', message: 'Se requiere promo_text (texto de la promo)' },
-        { status: 400 }
-      )
-    }
+    // `promo_text` es OPCIONAL desde el 2026-09-11: solo hace falta si la
+    // plantilla usa `{{2}}`, y eso lo sabe el asistente, que la pide solo en
+    // ese caso. Acá se acepta vacía.
 
     if (body.contacts.length > MAX_CONTACTOS_POR_CONFIRMACION) {
       return NextResponse.json(
@@ -101,7 +99,7 @@ export async function POST(request: NextRequest) {
       batchId: body.batch_id,
       sourceFile: body.source_file || 'import.csv',
       templateSid: body.template_sid,
-      promoText: body.promo_text,
+      promoText: (body.promo_text ?? '').trim(),
       fallbackName: body.fallback_name,
       blockSize,
       consentText: body.consent_text,

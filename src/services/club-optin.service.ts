@@ -36,7 +36,7 @@
 import { createClient } from '@supabase/supabase-js'
 import type { Tenant } from '@/types/tenant.types'
 import { resolveBranding } from '@/lib/branding'
-import { getSettingValue } from '@/services/settings.service'
+import { getMultipleSettings } from '@/services/settings.service'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -56,21 +56,129 @@ const TEXTO_NO = ['NO, GRACIAS', 'NO GRACIAS']
 export type ClubButton = 'opt_in' | 'opt_out' | null
 
 /**
+ * Los textos que el operador eligió para SUS botones (los guarda el panel al
+ * crear la plantilla). Van al respaldo por texto: si el proveedor no manda el
+ * payload, el título exacto del botón todavía lo reconoce.
+ */
+export interface ClubButtonLabels {
+  si?: string | null
+  no?: string | null
+}
+
+/**
  * ¿Este mensaje entrante es uno de los dos botones?
  *
  * PURA a propósito: es la única parte que hay que poder probar contra los
  * cuerpos raros que manda un proveedor sin levantar nada.
  */
-export function detectClubButton(body: string, buttonPayload?: string | null): ClubButton {
+export function detectClubButton(
+  body: string,
+  buttonPayload?: string | null,
+  labels?: ClubButtonLabels
+): ClubButton {
   const payload = (buttonPayload ?? '').trim().toUpperCase()
   if (payload === CLUB_PAYLOAD_SI) return 'opt_in'
   if (payload === CLUB_PAYLOAD_NO) return 'opt_out'
 
   const texto = (body ?? '').trim().toUpperCase()
   if (!texto) return null
+  const si = (labels?.si ?? '').trim().toUpperCase()
+  const no = (labels?.no ?? '').trim().toUpperCase()
+  if (si && texto === si) return 'opt_in'
+  if (no && texto === no) return 'opt_out'
   if (TEXTO_SI.includes(texto)) return 'opt_in'
   if (TEXTO_NO.includes(texto)) return 'opt_out'
   return null
+}
+
+// ─── Las respuestas a los botones ───────────────────────────────
+
+/**
+ * Las claves de `admin_settings` donde el operador escribe SUS respuestas.
+ * Vacías = los textos de defecto de abajo. Se editan en Golden Bullet →
+ * Plantilla → «Respuestas a los botones».
+ */
+export const CLUB_SETTING_KEYS = {
+  respuestaSi: 'golden_bullet_reply_si_text',
+  respuestaNo: 'golden_bullet_reply_no_text',
+  fotoSi: 'golden_bullet_reply_si_image_url',
+  botonSi: 'golden_bullet_button_si',
+  botonNo: 'golden_bullet_button_no',
+  invitacion: 'golden_bullet_invite_slug',
+} as const
+
+/** Los comodines que acepta el texto. `{enlace}` solo tiene sentido en el Sí. */
+export const CLUB_PLACEHOLDERS = ['{nombre}', '{enlace}', '{marca}'] as const
+
+export const RESPUESTA_SI_DEFECTO =
+  '🎉 ¡Bienvenido al club de *{marca}*, y gracias por decir que sí, {nombre}!\n\n' +
+  'Te guardamos tu regalo de bienvenida. Abrí este enlace para activarlo y llevarte tu tarjeta:\n{enlace}\n\n' +
+  'Si en algún momento no querés más mensajes, respondé *SALIR*.'
+
+export const RESPUESTA_NO_DEFECTO =
+  'Listo, no te escribimos más. Gracias por avisarnos 🙏\n\n' +
+  'Si algún día querés los beneficios de *{marca}*, escaneá el código QR en el local.'
+
+export interface ClubReplyContext {
+  nombre: string | null
+  enlace: string | null
+  marca: string
+}
+
+/** Lo que se le contesta a la persona: el texto y, si hay, una foto. */
+export interface ClubReply {
+  body: string
+  mediaUrl: string | null
+}
+
+/**
+ * Rellena los comodines de una respuesta.
+ *
+ * Cuando falta el dato, el comodín se va CON la coma que lo precedía:
+ * «¡Qué alegría tenerte por aquí, {nombre}!» sin nombre queda «¡Qué alegría
+ * tenerte por aquí!» y no «…por aquí, !». Un enlace que falta se va con la
+ * línea entera en que estaba, para no dejar un renglón vacío que diga «Abrí
+ * este enlace:» y nada.
+ *
+ * PURA: es lo que se prueba contra los textos que escriba el operador.
+ */
+export function renderClubReply(plantilla: string, ctx: ClubReplyContext): string {
+  let texto = plantilla
+  if (ctx.nombre) texto = texto.replaceAll('{nombre}', ctx.nombre)
+  else texto = texto.replace(/,?[ \t]*\{nombre\}/g, '')
+
+  if (ctx.enlace) texto = texto.replaceAll('{enlace}', ctx.enlace)
+  else texto = texto.replace(/^[^\n]*\{enlace\}[^\n]*\n?/gm, '').replaceAll('{enlace}', '')
+
+  texto = texto.replaceAll('{marca}', ctx.marca)
+  return texto.replace(/\n{3,}/g, '\n\n').trim()
+}
+
+/**
+ * El nombre con el que se le habla. Primero la base importada (es de donde
+ * salió), después la ficha de cliente si ya la tiene. Best-effort: sin nombre
+ * el texto se acomoda solo (ver `renderClubReply`).
+ */
+async function nombreDe(phone: string, tenantId: string): Promise<string | null> {
+  try {
+    const db = getServiceClient()
+    const { data: importado } = await db
+      .from('imported_contacts')
+      .select('name')
+      .eq('phone', phone)
+      .eq('tenant_id', tenantId)
+      .maybeSingle()
+    if (importado?.name?.trim()) return importado.name.trim()
+    const { data: cliente } = await db
+      .from('customers')
+      .select('name')
+      .eq('phone', phone)
+      .eq('tenant_id', tenantId)
+      .maybeSingle()
+    return cliente?.name?.trim() || null
+  } catch {
+    return null
+  }
 }
 
 /** Deja constancia en el libro de consentimiento. Best-effort: nunca rompe la respuesta. */
@@ -114,33 +222,35 @@ export async function handleClubOptIn(
   phone: string,
   tenant: Tenant,
   textoDelBoton: string
-): Promise<string> {
+): Promise<ClubReply> {
   const branding = resolveBranding(tenant.config)
   await registrarConsentimiento(tenant.id, phone, 'opt_in', textoDelBoton)
+
+  const ajustes = await getMultipleSettings(
+    [CLUB_SETTING_KEYS.invitacion, CLUB_SETTING_KEYS.respuestaSi, CLUB_SETTING_KEYS.fotoSi],
+    tenant.id
+  )
 
   // El enlace que recibe es el de una INVITACIÓN CON PREMIO (00063), si el dueño
   // eligió una en Recompensas → Invitaciones → «Usar en Golden Bullet». Así el
   // "regalo de bienvenida" no es una promesa en un texto: es un reward_grant que
   // le aparece en la tarjeta al registrarse y que el mesero entrega al escanearlo.
   // Sin invitación elegida, el enlace general de la tarjeta, como antes.
-  const slugInvitacion = (await getSettingValue('golden_bullet_invite_slug', tenant.id))?.trim() || null
+  const slugInvitacion = ajustes[CLUB_SETTING_KEYS.invitacion]?.trim() || null
   const enlace = tenant.domain
     ? slugInvitacion
       ? `https://${tenant.domain}/c/${encodeURIComponent(slugInvitacion)}`
       : `https://${tenant.domain}`
     : null
 
-  const bienvenida =
-    `🎉 ¡Bienvenido al club de *${branding.name}*, y gracias por decir que sí!\n\n` +
-    'Te guardamos tu regalo de bienvenida. '
+  // El texto es del operador (panel) o el de defecto. La foto, si la subió.
+  const plantilla = ajustes[CLUB_SETTING_KEYS.respuestaSi]?.trim() || RESPUESTA_SI_DEFECTO
+  const foto = ajustes[CLUB_SETTING_KEYS.fotoSi]?.trim() || null
 
-  return enlace
-    ? bienvenida +
-        `Abrí este enlace para activarlo y llevarte tu tarjeta:\n${enlace}\n\n` +
-        'Si en algún momento no querés más mensajes, respondé *SALIR*.'
-    : bienvenida +
-        'Escaneá el código QR en el local para activarlo.\n\n' +
-        'Si en algún momento no querés más mensajes, respondé *SALIR*.'
+  return {
+    body: renderClubReply(plantilla, { nombre: await nombreDe(phone, tenant.id), enlace, marca: branding.name }),
+    mediaUrl: foto,
+  }
 }
 
 /**
@@ -155,7 +265,7 @@ export async function handleClubOptOut(
   phone: string,
   tenant: Tenant,
   textoDelBoton: string
-): Promise<string> {
+): Promise<ClubReply> {
   const branding = resolveBranding(tenant.config)
   const db = getServiceClient()
   const ahora = new Date().toISOString()
@@ -190,8 +300,10 @@ export async function handleClubOptOut(
   const tocadas = cliente?.length ?? 0
   console.warn(`[Club] opt-out por botón de ${phone} en ${tenant.slug} — ${tocadas} ficha(s) de cliente`)
 
-  return (
-    `Listo, no te escribimos más. Gracias por avisarnos 🙏\n\n` +
-    `Si algún día querés los beneficios de *${branding.name}*, escaneá el código QR en el local.`
-  )
+  const ajustes = await getMultipleSettings([CLUB_SETTING_KEYS.respuestaNo], tenant.id)
+  const plantilla = ajustes[CLUB_SETTING_KEYS.respuestaNo]?.trim() || RESPUESTA_NO_DEFECTO
+  return {
+    body: renderClubReply(plantilla, { nombre: null, enlace: null, marca: branding.name }),
+    mediaUrl: null,
+  }
 }

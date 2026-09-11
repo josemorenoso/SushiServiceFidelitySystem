@@ -308,7 +308,7 @@ export interface ConfirmImportParams {
   batchId: string
   sourceFile: string
   templateSid: string
-  /** Texto de la promo que va en {{2}} de la plantilla */
+  /** Texto de la promo que va en {{2}} de la plantilla. Vacío si la plantilla no la usa. */
   promoText: string
   /** Nombre genérico para {{1}} cuando el contacto no trae nombre */
   fallbackName?: string
@@ -447,7 +447,8 @@ export async function confirmImport(params: ConfirmImportParams): Promise<Confir
       type: 'manual',
       source: 'manual',
       status: 'running',
-      message_template: params.promoText,
+      // NOT NULL en la tabla. Si la plantilla no usa {{2}}, queda el SID.
+      message_template: params.promoText || `plantilla ${params.templateSid}`,
       filters: {
         golden_bullet: true,
         source_file: params.sourceFile,
@@ -550,7 +551,11 @@ export async function confirmImport(params: ConfirmImportParams): Promise<Confir
         // aparte del resto de las campañas (spec §3.3).
         messageType: 'import',
         templateSid: params.templateSid,
-        variables: { '1': c.name || fallbackName, '2': params.promoText },
+        // `{{2}}` solo viaja si hay promo: mandar una variable que la
+        // plantilla no declara es tan rechazable como que falte una.
+        variables: (params.promoText
+          ? { '1': c.name || fallbackName, '2': params.promoText }
+          : { '1': c.name || fallbackName }) as Record<string, string>,
         notBefore,
         expiresAt,
       }

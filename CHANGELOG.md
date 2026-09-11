@@ -8,6 +8,25 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [2026-09-11h] - Golden Bullet: los tres textos del flujo se escriben en el panel, con foto en el «sí»
+
+**Qué:** el dueño quiere su propio mensaje 1 («Hola, {{1}} ❤️ Somos Sushi Service 🍣…», botón
+«Sí, quiero mi regalo»), y un mensaje 2 al «sí» con agradecimiento, enlace de registro y foto del
+regalo. Nada de eso podía escribirse: el cuerpo lo armaba el código, los botones eran fijos, `{{2}}`
+era obligatoria y las respuestas a los botones estaban horneadas. Ahora la pestaña «Plantilla» tiene
+los tres textos: cuerpo y botones editables con sus topes (1.024 / 20), `{{2}}` opcional (y el
+asistente solo pide la promo si la plantilla la usa), y las respuestas al «sí» y al «no» con
+`{nombre}`, `{enlace}`, `{marca}` y una foto que se sube desde ahí. Todo en `admin_settings`;
+vacío = el texto de defecto. La foto sale como `<Media>` en el TwiML; el nombre se busca en
+`imported_contacts`. Nada del mensaje del dueño quedó en código.
+**Verificado:** tsc limpio · lint limpio en lo tocado · `golden-bullet-{bloques,telefonos,respuestas}`
+47/47 · suite entera en verde (ver ESTADO §1).
+**Archivos:** `src/components/dashboard/ImportedContacts{Template,Uploader}.tsx`,
+`src/services/{golden-bullet-template,club-optin,imported-contacts}.service.ts`,
+`src/app/api/dashboard/imported-contacts/{template,confirm,reply-image}/route.ts`,
+`src/app/api/webhook/twilio-incoming/route.ts`, `tests/unit/golden-bullet-respuestas.test.ts`,
+`docs/features/golden-bullet.md`.
+
 ## [2026-09-11g] - Golden Bullet: el CSV «no cargaba» — flag apagado, 403 mudo y extranjeros colados
 
 **Qué:** subir un CSV en `/dashboard/imported-contacts` no hacía nada. Los logs de Vercel lo

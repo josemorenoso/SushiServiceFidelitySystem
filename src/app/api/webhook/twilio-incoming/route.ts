@@ -4,7 +4,8 @@ import { createClient } from '@supabase/supabase-js'
 import { setWhatsappOptOut, clearWhatsappOptOut } from '@/services/customer.service'
 import { getTenantByWhatsappNumber } from '@/lib/tenant'
 import { resolveBranding, type Branding } from '@/lib/branding'
-import { detectClubButton, handleClubOptIn, handleClubOptOut } from '@/services/club-optin.service'
+import { detectClubButton, handleClubOptIn, handleClubOptOut, CLUB_SETTING_KEYS } from '@/services/club-optin.service'
+import { getMultipleSettings } from '@/services/settings.service'
 import {
   logDeliveryIntakeFailure,
   processDeliveryMessage,
@@ -149,12 +150,20 @@ const OPT_OUT_ERROR_REPLY =
   '❌ Tuvimos un problema técnico y no pude registrar tu salida. Por favor inténtalo de ' +
   'nuevo en unos minutos.'
 
-function twimlResponse(message: string): NextResponse {
-  const escaped = message
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-  const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Message>${escaped}</Message>\n</Response>`
+function escapeXml(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+/**
+ * `mediaUrl` adjunta una foto al mensaje (`<Media>` dentro de `<Message>`).
+ * Solo la usa la respuesta al botón «sí» de Golden Bullet, que puede llevar la
+ * imagen del regalo; el resto de las respuestas de esta ruta son texto.
+ */
+function twimlResponse(message: string, mediaUrl?: string | null): NextResponse {
+  const cuerpo = mediaUrl
+    ? `<Message>\n    <Body>${escapeXml(message)}</Body>\n    <Media>${escapeXml(mediaUrl)}</Media>\n  </Message>`
+    : `<Message>${escapeXml(message)}</Message>`
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  ${cuerpo}\n</Response>`
   return new NextResponse(xml, {
     status: 200,
     headers: { 'Content-Type': 'text/xml' },
@@ -240,14 +249,22 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // pedir que no le escribamos más. Este bloque lo atiende primero.
   //
   // Twilio manda `ButtonPayload` en las respuestas rápidas de plantilla; se usa
-  // ese cuando viene y el texto visible como respaldo (ver el servicio).
-  const boton = detectClubButton(body, params['ButtonPayload'])
+  // ese cuando viene y el texto visible como respaldo (ver el servicio). Los
+  // títulos que el operador eligió para sus botones viven en `admin_settings`
+  // y solo hacen falta para ese respaldo, así que se leen únicamente cuando
+  // no vino payload.
+  const etiquetas = params['ButtonPayload']
+    ? undefined
+    : await getMultipleSettings([CLUB_SETTING_KEYS.botonSi, CLUB_SETTING_KEYS.botonNo], tenant.id)
+        .then((a) => ({ si: a[CLUB_SETTING_KEYS.botonSi], no: a[CLUB_SETTING_KEYS.botonNo] }))
+        .catch(() => undefined)
+  const boton = detectClubButton(body, params['ButtonPayload'], etiquetas)
   if (boton && phone.length === 10) {
     const respuesta =
       boton === 'opt_in'
         ? await handleClubOptIn(phone, tenant, body)
         : await handleClubOptOut(phone, tenant, body)
-    return twimlResponse(respuesta)
+    return twimlResponse(respuesta.body, respuesta.mediaUrl)
   }
 
   // Opt-out / opt-in. Por WhatsApp esto NO lo intercepta Twilio (ver el comentario de

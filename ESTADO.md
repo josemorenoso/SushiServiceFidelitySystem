@@ -32,6 +32,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Un solo estilo (cálido) + el AIOS se copia el catálogo del software (dueño, 2026-09-10) | Opus 5 | `src/types/template.types.ts`, `src/constants/template-{texts,catalog}.ts`, `src/services/template.service.ts`, `src/app/api/dashboard/templates/style/` (se borra), `src/components/dashboard/templates/{StyleSelector,TemplateCatalogEditor}.tsx`, `tests/unit/template-catalog.test.ts`, `docs/PLANTILLAS.md`, `docs/features/whatsapp-templates.md` · **AIOS**: `src/lib/zernio/templates-catalog.ts`, `src/lib/actions/provisioning.ts`, `.env.example` | — | en curso |
 
 ## 3. Siguiente, en orden
 

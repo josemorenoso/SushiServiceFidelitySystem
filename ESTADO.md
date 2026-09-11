@@ -32,6 +32,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Golden Bullet: mensaje 1 con cuerpo y botones editables (`{{2}}` opcional), respuestas del Sí/No editables en el panel con `{nombre}`/`{enlace}` y foto en el Sí — Opus 5, 2026-09-11 | Opus 5 | `src/components/dashboard/ImportedContacts{Template,Uploader}.tsx` · `src/services/{golden-bullet-template,club-optin,imported-contacts}.service.ts` · `src/app/api/dashboard/imported-contacts/{template,confirm}/route.ts` · `src/app/api/dashboard/imported-contacts/reply-image/route.ts` (nuevo) · `src/app/api/webhook/{twilio-incoming,zernio}/route.ts` · `tests/unit/golden-bullet-{bloques,respuestas}.test.ts` · `docs/features/golden-bullet.md` | — | en curso |
 
 ## 3. Siguiente, en orden
 

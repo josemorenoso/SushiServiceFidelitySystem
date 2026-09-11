@@ -32,6 +32,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Invitaciones con premio (link/QR → registro → premio en tarjeta → mesero valida) + Recompensas con pestañas (Redenciones adentro) (dueño, 2026-09-11) | Opus 5 | `supabase/migrations/00063_*`, `src/services/qr-campaign.service.ts`, `src/services/club-optin.service.ts`, `src/app/api/dashboard/qr-campaigns/**`, `src/app/api/invite/**`, `src/app/(public)/c/**`, `src/app/api/check-in/route.ts`, `src/components/features/check-in/CheckInForm.tsx` + `.types.ts`, `src/components/features/staff/{PendingRewardsList,RewardAlert}.tsx`, `src/types/database.types.ts`, `src/app/(dashboard)/dashboard/{rewards,redemptions}/page.tsx`, `src/components/dashboard/{RewardsLevelsPanel,RedemptionsPanel,InviteCampaignsPanel}.tsx`, `src/components/layout/DashboardSidebar.tsx`, `tests/unit/qr-campaigns.test.ts`, `docs/features/{invite-campaigns,reward-grants,referral-program,golden-bullet}.md` | **00063** | en curso |
 | Decisión sobre el píxel de Cada1: apagado por ley de datos, solo docs (dueño, 2026-09-11) | Opus 5 | `docs/features/meta-pixel.md`, `CLAUDE.md`, `.env.example`, `CHANGELOG.md`, `ESTADO.md` §3/§4/§5 | — | en curso |
 
 ## 3. Siguiente, en orden

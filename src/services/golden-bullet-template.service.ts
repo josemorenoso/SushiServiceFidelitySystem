@@ -120,6 +120,7 @@ export interface CreateClubTemplateResult {
   body: string
   botonSi: string
   botonNo: string
+  imageUrl: string | null
   approvalSubmitted: boolean
   approvalError: string | null
 }
@@ -132,6 +133,53 @@ export interface ClubTemplateInput {
   botonNo?: string
   /** Ejemplo de `{{2}}` para Meta. Solo importa si el cuerpo la usa. */
   promoEjemplo?: string
+  /**
+   * URL pública (https) de la foto que va ARRIBA del texto. Con foto la
+   * plantilla se crea como `whatsapp/card` (cabecera de imagen + cuerpo +
+   * botones); sin foto, como `twilio/quick-reply`. La URL queda horneada en
+   * la plantilla: es la imagen que Meta revisa y la que sale en cada envío.
+   */
+  imageUrl?: string | null
+}
+
+/** Lo que Twilio recibe en `types`. Espejo de `construirTiposPlantilla()`. */
+export type TiposPlantillaClub =
+  | { 'twilio/quick-reply': { body: string; actions: { type: 'QUICK_REPLY'; title: string; id: string }[] } }
+  | { 'whatsapp/card': { body: string; media: string[]; actions: { type: 'QUICK_REPLY'; title: string; id: string }[] } }
+
+/**
+ * Arma el `types` de la plantilla según haya foto o no.
+ *
+ * `whatsapp/card` es el tipo nativo de WhatsApp con cabecera de media, cuerpo
+ * de hasta 1.024 y botones de respuesta rápida; `twilio/card` NO sirve para
+ * esto porque su `title` es lo que WhatsApp muestra como cuerpo y su
+ * `subtitle` cae al pie (60 caracteres). Los `id` de los botones son el
+ * contrato con `club-optin.service.ts` en los dos casos.
+ *
+ * PURA: es lo que se prueba sin Twilio.
+ */
+export function construirTiposPlantilla(
+  body: string,
+  botonSi: string,
+  botonNo: string,
+  imageUrl?: string | null
+): TiposPlantillaClub {
+  const actions = [
+    { type: 'QUICK_REPLY' as const, title: botonSi, id: CLUB_PAYLOAD_SI },
+    { type: 'QUICK_REPLY' as const, title: botonNo, id: CLUB_PAYLOAD_NO },
+  ]
+  const foto = imageUrl?.trim()
+  return foto
+    ? { 'whatsapp/card': { body, media: [foto], actions } }
+    : { 'twilio/quick-reply': { body, actions } }
+}
+
+/** Una foto de plantilla tiene que ser una URL https pública: Meta la descarga para revisarla. */
+export function validarFotoPlantilla(url: string | null | undefined): string | null {
+  const u = (url ?? '').trim()
+  if (!u) return null
+  if (!/^https:\/\/\S+$/i.test(u)) return 'La foto tiene que ser una URL pública que empiece por https://.'
+  return null
 }
 
 /**
@@ -165,13 +213,18 @@ export async function createClubInviteTemplate(
   const errorBoton = validarBoton(botonSi, 'sí') ?? validarBoton(botonNo, 'no')
   if (errorBoton) throw new GoldenBulletTemplateError(errorBoton, 400)
 
+  const imageUrl = input.imageUrl?.trim() || null
+  const errorFoto = validarFotoPlantilla(imageUrl)
+  if (errorFoto) throw new GoldenBulletTemplateError(errorFoto, 400)
+
   const creds = await getTenantTwilioCredentials(tenant.id)
   if (!creds) {
     throw new GoldenBulletTemplateError('Este negocio no tiene credenciales de Twilio configuradas.', 400)
   }
 
   const brandName = resolveBranding(tenant.config).name
-  const friendlyName = metaName(brandName)
+  // Con foto el nombre cambia: Meta no deja reenviar el mismo nombre con otro tipo.
+  const friendlyName = imageUrl ? `${metaName(brandName)}_foto` : metaName(brandName)
   const usaPromo = variablesDelCuerpo(body).has(2)
 
   const headers = {
@@ -192,19 +245,11 @@ export async function createClubInviteTemplate(
       variables: usaPromo
         ? { '1': 'Juan', '2': (input.promoEjemplo ?? '').trim() || 'un postre gratis en tu próxima visita' }
         : { '1': 'Juan' },
-      types: {
-        'twilio/quick-reply': {
-          body,
-          // Los `id` son el CONTRATO con `club-optin.service.ts`: es lo que
-          // llega en `ButtonPayload` cuando alguien toca el botón. Si cambian
-          // acá y no allá, el botón deja de hacer nada. El TÍTULO sí lo elige
-          // el operador; el detector lo recibe desde `admin_settings`.
-          actions: [
-            { type: 'QUICK_REPLY', title: botonSi, id: CLUB_PAYLOAD_SI },
-            { type: 'QUICK_REPLY', title: botonNo, id: CLUB_PAYLOAD_NO },
-          ],
-        },
-      },
+      // Los `id` de los botones son el CONTRATO con `club-optin.service.ts`:
+      // es lo que llega en `ButtonPayload` cuando alguien toca el botón. Si
+      // cambian acá y no allá, el botón deja de hacer nada. El TÍTULO sí lo
+      // elige el operador; el detector lo recibe desde `admin_settings`.
+      types: construirTiposPlantilla(body, botonSi, botonNo, imageUrl),
     }),
   })
 
@@ -235,5 +280,5 @@ export async function createClubInviteTemplate(
     approvalError = error instanceof Error ? error.message : 'Error desconocido'
   }
 
-  return { contentSid: created.sid, friendlyName, body, botonSi, botonNo, approvalSubmitted, approvalError }
+  return { contentSid: created.sid, friendlyName, body, botonSi, botonNo, imageUrl, approvalSubmitted, approvalError }
 }

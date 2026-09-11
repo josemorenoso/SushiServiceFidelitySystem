@@ -224,7 +224,14 @@ quedan ~965 para todo lo demás. 15.000 contactos a ese ritmo son **16 días**.
 La pestaña **«Plantilla»** tiene los tres mensajes del flujo, y **ninguno está horneado**:
 
 1. **Mensaje 1 — la plantilla con botones.** Se escribe el cuerpo entero (`{{1}}`
-   obligatoria, `{{2}}` opcional, tope 1.024) y los títulos de los dos botones (tope 20,
+   obligatoria, `{{2}}` opcional, tope 1.024), los títulos de los dos botones y, si se quiere,
+   **una foto arriba del texto**: se sube desde ahí al bucket `brand-assets` (`uso=mensaje1`),
+   queda en `golden_bullet_template_image_url`, y al crear la plantilla la URL se hornea en un
+   `whatsapp/card` (cabecera de imagen + cuerpo + botones; `construirTiposPlantilla()`). Sin foto
+   sigue siendo `twilio/quick-reply`. Los `id` de los botones son los mismos en los dos tipos, así
+   que el webhook no sabe ni necesita saber cuál se usó. Meta revisa la foto con el texto y es la
+   misma en cada envío: otra foto es otra plantilla (el nombre lleva `_foto`). Los títulos van al
+   tope de 20,
    contados como los cuenta WhatsApp: «Sí, quiero mi regalo» cabe justo; con un emoji
    delante, no). Se crea en la cuenta Twilio del negocio y se somete a Meta sin que nadie
    copie un token. Lo que antes era un campo aparte —**de dónde salió su número, y tiene que

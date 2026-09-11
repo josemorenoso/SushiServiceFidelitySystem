@@ -8,6 +8,22 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [2026-09-11j] - Golden Bullet: foto arriba del mensaje 1
+
+**Qué:** el dueño quiere que el mensaje 1 lleve una imagen. En la pestaña Plantilla se sube (misma ruta
+que la foto del «sí», con `uso=mensaje1`, al bucket `brand-assets`), queda en
+`golden_bullet_template_image_url` y se ve en las dos vistas previas; al crear la plantilla la URL se
+hornea en un `whatsapp/card` (cabecera de imagen + cuerpo + los mismos dos botones, con los mismos
+`id`: el webhook no cambia). Sin foto sigue siendo `twilio/quick-reply`. `construirTiposPlantilla()` es
+pura y tiene test. Las fotos del mensaje 1 **no se barren** al subir otra: la URL vive en una plantilla
+aprobada y WhatsApp la descarga en cada envío. Con foto el nombre en Meta lleva `_foto`.
+**Verificado:** tsc limpio · lint limpio · suite entera 48 archivos / 755 tests. **NO verificado:** la
+creación real del `whatsapp/card` en Twilio ni su aprobación en Meta (todavía no se creó ninguna).
+**Archivos:** `src/services/{golden-bullet-template,club-optin}.service.ts`,
+`src/app/api/dashboard/imported-contacts/{template,reply-image}/route.ts`,
+`src/app/api/dashboard/templates/route.ts`, `src/components/dashboard/ImportedContactsTemplate.tsx`,
+`tests/unit/golden-bullet-respuestas.test.ts`, `docs/features/golden-bullet.md`.
+
 ## [2026-09-11i] - Golden Bullet: probar el mensaje en un celular antes de programar la base
 
 **Qué:** el dueño quiere ver el mensaje 1 en un celular antes de mandarlo a 7.438 personas. Arriba del

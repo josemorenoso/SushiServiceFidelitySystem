@@ -68,6 +68,8 @@ export async function GET() {
         || t.types?.['twilio/media']?.body
         || t.types?.['twilio/quick-reply']?.body
         || t.types?.['twilio/card']?.body
+        // Golden Bullet con foto (2026-09-11): cabecera de imagen + cuerpo + botones.
+        || t.types?.['whatsapp/card']?.body
         || t.types?.['twilio/list-picker']?.body
         || '(tipo no textual)'
 

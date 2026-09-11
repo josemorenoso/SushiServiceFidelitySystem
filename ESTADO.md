@@ -15,7 +15,7 @@
 | Qué | Estado |
 |-----|--------|
 | Código | **`origin/main` = `cc13745`** (pusheado el 2026-09-11, 04:25, por orden del dueño: Golden Bullet con los tres textos editables y `{nombre|alternativo}`; antes, `a55f574` a las 03:45: el flag, el Toaster y el normalizador de celulares). Antes, `d47ade8` + su commit de docs (02:30: rendimiento del equipo, 00065 **aplicada antes**). Antes, en el mismo día: `76d99b7` (AIOS + 00064, plantillas) y `3278f66` (invitaciones, 00063). **Local = remoto.** La carpeta sigue en `feat/multisede-aios` (= `main`). Sin mergear a propósito: `master`, `port/sushi-fun-2.8`, `sushi-sync`. **Variables que el código desplegado espera en Vercel:** `TWILIO_MASTER_TENANT_ID` (RUNBOOK §1.b'; sin ella Sushi Service deja de enviar por Twilio) y las tres de Meta (§1.b'', no bloquean) |
-| Verificación | ✅ 2026-09-11 (04:05): `tsc` limpio · lint limpio en lo tocado · **suite entera: 48 archivos / 748 tests en verde** · eslint **7 errores preexistentes** (hooks y gráficas del panel, ninguno en lo tocado). El rojo de `aios-health` era del RELOJ (el helper mete dos pedidos con `now() - 1h`/`- 2h`, así que entre medianoche y las 2 a.m. el segundo cae en el día anterior): a esta hora pasa. Sigue sin corregirse. `build` no se corrió |
+| Verificación | ✅ 2026-09-11 (05:10): `tsc` limpio · lint limpio en lo tocado · **suite entera: 48 archivos / 755 tests en verde** · eslint **7 errores preexistentes** (hooks y gráficas del panel, ninguno en lo tocado). El rojo de `aios-health` era del RELOJ (el helper mete dos pedidos con `now() - 1h`/`- 2h`, así que entre medianoche y las 2 a.m. el segundo cae en el día anterior): a esta hora pasa. Sigue sin corregirse. `build` no se corrió |
 | Marcas vivas | **5**: sushi-service (542 clientes), demo-ventas (412), sushi-fun (251), don-alirio (244), cafe-frangal (8) |
 | Base de datos de producción | ✅ **Aplicadas hasta la `00056`** (dueño, 2026-09-08: `00047`, `00050`, `00051`, `00053`, `00054` y `00056`, todas). El esquema ya alcanza al código de `main`. La 00030 NUNCA aplicada (a propósito). La 00015 NO se aplica (reabre fuga). Huecos: `00048`, `00049`, `00052`, `00055`. **`00062` aplicada** (dueño, 2026-09-11, antes del push). **`00065` aplicada** (dueño, 2026-09-11, antes del push). **Escritas sin aplicar: `00058`, `00059`, `00061`, `00064`** |
 | Migraciones: dónde están | El directorio muestra **solo la rama puesta**; el inventario real y el número de la próxima los da `node scripts/proxima-migracion.mjs`. **Desde el 07 la única reserva es la fila del tablero (§2)**: un número citado en cualquier otro doc no reserva nada. `00048`, `00049`, `00052` y `00055` son huecos: no se rellenan |
@@ -32,7 +32,6 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
-| Golden Bullet: foto en el mensaje 1 (plantilla `twilio/card` con imagen + botones) — Opus 5, 2026-09-11 | Opus 5 | `src/services/golden-bullet-template.service.ts` · `src/app/api/dashboard/imported-contacts/{template,reply-image}/route.ts` · `src/app/api/dashboard/templates/route.ts` · `src/components/dashboard/ImportedContactsTemplate.tsx` · `tests/unit/golden-bullet-respuestas.test.ts` · `docs/features/golden-bullet.md` | — | en curso |
 
 ## 3. Siguiente, en orden
 
@@ -68,7 +67,9 @@
    2. **Escribir los tres textos y crear la plantilla. Meta tarda 24-48 h**, así que es lo
       primero del día. `/dashboard/imported-contacts` → «Plantilla»: el mensaje 1 entero con
       sus botones (desde el 11 se escribe ahí, `{{1}}` obligatoria y `{{2}}` opcional), la
-      respuesta al «sí» con `{nombre}`/`{enlace}` y la **foto del regalo**, y la del «no».
+      respuesta al «sí» con `{nombre}`/`{enlace}` y la **foto del regalo**, y la del «no». El mensaje 1
+      admite **foto arriba** (se sube ahí; la plantilla sale como `whatsapp/card`). Arriba del paso 1 de
+      «Nueva campaña» se puede **mandar el mensaje 1 a un celular tipeado** antes de programar nada.
       Antes del «sí»: crear la invitación con premio en Recompensas → Invitaciones y marcar
       «Usar en Golden Bullet» — sin eso, quien se registra **no recibe regalo** (la pantalla lo
       avisa en ámbar). El texto tiene que decir de dónde salió el número, **y ser verdad**.

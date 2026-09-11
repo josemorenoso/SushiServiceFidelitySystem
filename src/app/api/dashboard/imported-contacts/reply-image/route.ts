@@ -1,11 +1,13 @@
 /**
  * POST /api/dashboard/imported-contacts/reply-image
  *
- * La foto que acompaña la respuesta al botón «sí» de Golden Bullet (la del
- * regalo). Sube un JPEG/PNG, lo recomprime y devuelve la URL pública del bucket
- * `brand-assets` (00047). NO escribe `admin_settings`: eso lo hace el panel con
- * un PUT a `/api/dashboard/settings` sobre `golden_bullet_reply_si_image_url`,
- * igual que con el resto de las respuestas.
+ * Las fotos de Golden Bullet: la que acompaña la respuesta al botón «sí» (la
+ * del regalo; por defecto) y, con `uso=mensaje1` en el multipart, la que va
+ * ARRIBA del mensaje 1 (se hornea en la plantilla al crearla). Sube un
+ * JPEG/PNG, lo recomprime y devuelve la URL pública del bucket `brand-assets`
+ * (00047). NO escribe `admin_settings`: eso lo hace el panel con un PUT a
+ * `/api/dashboard/settings` (`golden_bullet_reply_si_image_url` o
+ * `golden_bullet_template_image_url`), igual que con el resto de los textos.
  *
  * El path lleva el `tenant_id` por delante (`brand-assets/<tenant_id>/…`) y ese
  * `tenant_id` sale de `requireTenantId()`, nunca del cuerpo: es lo que hace
@@ -59,6 +61,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'La imagen pesa más de 15 MB.' }, { status: 413 })
     }
 
+    // Dos fotos con dos prefijos, para que subir una no borre la otra. La del
+    // sí conserva el prefijo con el que nació (`golden-bullet-<ts>`).
+    const uso = formData.get('uso') === 'mensaje1' ? 'mensaje1' : 'si'
+    const prefijo = uso === 'mensaje1' ? 'golden-bullet-m1-' : 'golden-bullet-'
+
     const jpeg = await sharp(Buffer.from(await file.arrayBuffer()))
       .rotate()
       .resize(1600, 1600, { fit: 'inside', withoutEnlargement: true })
@@ -66,7 +73,7 @@ export async function POST(request: NextRequest) {
       .toBuffer()
 
     const db = getServiceClient()
-    const path = `${tenantId}/golden-bullet-${Date.now()}.jpg`
+    const path = `${tenantId}/${prefijo}${Date.now()}.jpg`
     const { error: uploadError } = await db.storage
       .from(BUCKET_ID)
       .upload(path, new Uint8Array(jpeg), { contentType: 'image/jpeg', upsert: false })
@@ -75,15 +82,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No se pudo subir la foto' }, { status: 500 })
     }
 
-    // Barrido de las fotos anteriores de ESTE tenant para este uso. Igual que
-    // con el logo: el bucket no es un archivo de versiones.
-    const { data: previous } = await db.storage.from(BUCKET_ID).list(tenantId)
-    const stale = (previous ?? [])
-      .filter((f) => f.name.startsWith('golden-bullet-') && `${tenantId}/${f.name}` !== path)
-      .map((f) => `${tenantId}/${f.name}`)
-    if (stale.length > 0) {
-      const { error: removeError } = await db.storage.from(BUCKET_ID).remove(stale)
-      if (removeError) console.warn('[GoldenBullet] No se pudieron borrar fotos viejas:', removeError.message)
+    // Barrido de las fotos anteriores del «sí» de ESTE tenant. Igual que con
+    // el logo: el bucket no es un archivo de versiones, y la URL se lee del
+    // ajuste en cada respuesta, así que la vieja ya no la usa nadie.
+    //
+    // Las del mensaje 1 NO se barren: su URL queda horneada en una plantilla
+    // que Meta aprobó y WhatsApp la descarga en cada envío. Borrar la foto de
+    // una plantilla viva rompería la campaña que está goteando con ella.
+    if (uso === 'si') {
+      const { data: previous } = await db.storage.from(BUCKET_ID).list(tenantId)
+      const stale = (previous ?? [])
+        .filter((f) => f.name.startsWith('golden-bullet-') && !f.name.startsWith('golden-bullet-m1-') && `${tenantId}/${f.name}` !== path)
+        .map((f) => `${tenantId}/${f.name}`)
+      if (stale.length > 0) {
+        const { error: removeError } = await db.storage.from(BUCKET_ID).remove(stale)
+        if (removeError) console.warn('[GoldenBullet] No se pudieron borrar fotos viejas:', removeError.message)
+      }
     }
 
     const { data: publicData } = db.storage.from(BUCKET_ID).getPublicUrl(path)

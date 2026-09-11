@@ -88,6 +88,7 @@ export async function GET() {
     },
     nombre_generico: ajustes[CLUB_SETTING_KEYS.nombreGenerico] ?? '',
     nombre_generico_default: NOMBRE_GENERICO_DEFECTO,
+    foto_mensaje1: ajustes[CLUB_SETTING_KEYS.fotoMensaje1] ?? '',
     // El enlace que va en {enlace}: el de la invitación con premio si eligió
     // una (Recompensas → Invitaciones), si no el general de la tarjeta.
     invitacion_slug: slug,
@@ -128,6 +129,7 @@ export async function POST(request: NextRequest) {
       boton_si?: string
       boton_no?: string
       promo_ejemplo?: string
+      image_url?: string
     }
 
     const result = await createClubInviteTemplate(tenant, {
@@ -135,6 +137,7 @@ export async function POST(request: NextRequest) {
       botonSi: body.boton_si,
       botonNo: body.boton_no,
       promoEjemplo: body.promo_ejemplo,
+      imageUrl: body.image_url,
     })
 
     // Los títulos con los que quedó creada se guardan para el respaldo por

@@ -12,7 +12,9 @@ import { describe, it, expect } from 'vitest'
 import {
   validarCuerpoClub,
   validarBoton,
+  validarFotoPlantilla,
   variablesDelCuerpo,
+  construirTiposPlantilla,
   BOTON_MAX,
   CUERPO_MAX,
 } from '@/services/golden-bullet-template.service'
@@ -60,6 +62,43 @@ describe('validarCuerpoClub — lo que tiene que cumplir el mensaje 1', () => {
       expect(plantillaCompatible(body)).toBe(validarCuerpoClub(body) === null)
     }
     expect([...variablesDelCuerpo('{{ 1 }} y {{2}}')]).toEqual([1, 2])
+  })
+})
+
+describe('construirTiposPlantilla — con foto es whatsapp/card, sin foto quick-reply', () => {
+  const FOTO = 'https://xyz.supabase.co/storage/v1/object/public/brand-assets/t1/golden-bullet-m1-1.jpg'
+
+  it('sin foto: twilio/quick-reply con los dos botones y sus payloads', () => {
+    const tipos = construirTiposPlantilla('Hola {{1}}', 'Sí, quiero mi regalo', 'No, gracias')
+    expect('twilio/quick-reply' in tipos).toBe(true)
+    if ('twilio/quick-reply' in tipos) {
+      expect(tipos['twilio/quick-reply'].body).toBe('Hola {{1}}')
+      expect(tipos['twilio/quick-reply'].actions.map((a) => a.id)).toEqual([CLUB_PAYLOAD_SI, 'CLUB_NO'])
+      expect(tipos['twilio/quick-reply'].actions.map((a) => a.title)).toEqual(['Sí, quiero mi regalo', 'No, gracias'])
+    }
+  })
+
+  it('con foto: whatsapp/card con la imagen en la cabecera y los MISMOS botones', () => {
+    const tipos = construirTiposPlantilla('Hola {{1}}', 'Sí, quiero mi regalo', 'No, gracias', FOTO)
+    expect('whatsapp/card' in tipos).toBe(true)
+    if ('whatsapp/card' in tipos) {
+      expect(tipos['whatsapp/card'].body).toBe('Hola {{1}}')
+      expect(tipos['whatsapp/card'].media).toEqual([FOTO])
+      // El contrato de los botones no cambia por el tipo: el webhook no sabe cuál se usó.
+      expect(tipos['whatsapp/card'].actions.map((a) => a.id)).toEqual([CLUB_PAYLOAD_SI, 'CLUB_NO'])
+    }
+  })
+
+  it('una foto vacía o con espacios es «sin foto»', () => {
+    expect('twilio/quick-reply' in construirTiposPlantilla('Hola {{1}}', 'a', 'b', '   ')).toBe(true)
+    expect('twilio/quick-reply' in construirTiposPlantilla('Hola {{1}}', 'a', 'b', null)).toBe(true)
+  })
+
+  it('la foto tiene que ser https pública: Meta la descarga', () => {
+    expect(validarFotoPlantilla(FOTO)).toBeNull()
+    expect(validarFotoPlantilla('')).toBeNull()
+    expect(validarFotoPlantilla('http://inseguro.com/a.jpg')).not.toBeNull()
+    expect(validarFotoPlantilla('C:\\fotos\\amor.jpg')).not.toBeNull()
   })
 })
 

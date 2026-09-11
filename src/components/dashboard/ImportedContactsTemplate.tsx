@@ -49,6 +49,7 @@ interface Config {
   enlace: string | null
   nombre_generico: string
   nombre_generico_default: string
+  foto_mensaje1: string
 }
 
 const TEXTAREA =
@@ -112,6 +113,8 @@ export function ImportedContactsTemplate() {
   const [promo, setPromo] = useState('un postre gratis en tu próxima visita')
   const [nombreGenerico, setNombreGenerico] = useState('')
   const [guardandoNombre, setGuardandoNombre] = useState(false)
+  const [fotoM1, setFotoM1] = useState('')
+  const [subiendoM1, setSubiendoM1] = useState(false)
   const [creando, setCreando] = useState(false)
   const [creada, setCreada] = useState<Creada | null>(null)
 
@@ -135,6 +138,7 @@ export function ImportedContactsTemplate() {
       setRespNo(d.respuestas.no)
       setFotoSi(d.respuestas.foto_si)
       setNombreGenerico(d.nombre_generico)
+      setFotoM1(d.foto_mensaje1)
     } catch {
       /* la pantalla se pinta igual, con los campos vacíos */
     }
@@ -170,6 +174,50 @@ export function ImportedContactsTemplate() {
   const previaMensaje1 = (nombre: string) =>
     body.replaceAll(/\{\{\s*1\s*\}\}/g, nombre).replaceAll(/\{\{\s*2\s*\}\}/g, promo.trim() || '[regalo]')
 
+  /** Guarda la URL de la foto del mensaje 1 en la marca (vacío = sin foto). */
+  const guardarFotoM1 = async (url: string) => {
+    const res = await fetch('/api/dashboard/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'golden_bullet_template_image_url', value: url }),
+    })
+    if (!res.ok) throw new Error('No se pudo guardar la foto')
+  }
+
+  const subirFotoM1 = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setSubiendoM1(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('uso', 'mensaje1')
+      const res = await fetch('/api/dashboard/imported-contacts/reply-image', { method: 'POST', body: fd })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error || 'No se pudo subir la foto')
+        return
+      }
+      await guardarFotoM1(data.url)
+      setFotoM1(data.url)
+      toast.success('Foto del mensaje 1 lista: se hornea en la plantilla al crearla')
+    } catch {
+      toast.error('Error subiendo la foto')
+    } finally {
+      setSubiendoM1(false)
+      e.target.value = ''
+    }
+  }
+
+  const quitarFotoM1 = async () => {
+    try {
+      await guardarFotoM1('')
+      setFotoM1('')
+    } catch {
+      toast.error('No se pudo quitar la foto')
+    }
+  }
+
   const guardarNombreGenerico = async () => {
     setGuardandoNombre(true)
     try {
@@ -203,6 +251,7 @@ export function ImportedContactsTemplate() {
           boton_si: botonSi.trim(),
           boton_no: botonNo.trim(),
           promo_ejemplo: usaPromo ? promo.trim() : '',
+          image_url: fotoM1.trim(),
         }),
       })
       const data = await res.json()
@@ -363,6 +412,26 @@ export function ImportedContactsTemplate() {
             </div>
 
             <div className="space-y-1.5">
+              <Label className="text-xs uppercase tracking-wide text-muted-foreground">Foto arriba del mensaje (opcional)</Label>
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 h-9 text-sm font-medium hover:bg-accent">
+                  {subiendoM1 ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
+                  {subiendoM1 ? 'Subiendo...' : fotoM1 ? 'Cambiar foto' : 'Subir foto'}
+                  <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={subirFotoM1} disabled={subiendoM1} />
+                </label>
+                {fotoM1 && (
+                  <Button variant="ghost" size="sm" onClick={quitarFotoM1}>
+                    Quitar
+                  </Button>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Con foto, la plantilla se crea con cabecera de imagen + texto + botones. Meta revisa la foto junto
+                con el texto y es la misma para todos los envíos: si después querés otra, se crea otra plantilla.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
               <Label htmlFor="nombre-generico" className="text-xs uppercase tracking-wide text-muted-foreground">
                 Si la persona no tiene nombre, {'{{1}}'} dice
               </Label>
@@ -398,11 +467,11 @@ export function ImportedContactsTemplate() {
               <div className="grid gap-4 lg:grid-cols-2">
                 <div className="space-y-2">
                   <Label className="text-xs uppercase tracking-wide text-muted-foreground">Así le llega (con nombre)</Label>
-                  <Burbuja texto={previaMensaje1('Juan')} botones={[botonSi || '…', botonNo || '…']} />
+                  <Burbuja texto={previaMensaje1('Juan')} foto={fotoM1 || null} botones={[botonSi || '…', botonNo || '…']} />
                 </div>
                 <div className="space-y-2">
                   <Label className="text-xs uppercase tracking-wide text-muted-foreground">Así le llega (sin nombre)</Label>
-                  <Burbuja texto={previaMensaje1(generico)} botones={[botonSi || '…', botonNo || '…']} />
+                  <Burbuja texto={previaMensaje1(generico)} foto={fotoM1 || null} botones={[botonSi || '…', botonNo || '…']} />
                 </div>
               </div>
             )}

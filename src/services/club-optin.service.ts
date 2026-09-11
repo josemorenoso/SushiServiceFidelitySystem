@@ -112,6 +112,8 @@ export const CLUB_SETTING_KEYS = {
    * Meta y no puede ir vacía: por eso existe.
    */
   nombreGenerico: 'golden_bullet_fallback_name',
+  /** La foto que va arriba del mensaje 1 (URL pública del bucket). Se hornea en la plantilla al crearla. */
+  fotoMensaje1: 'golden_bullet_template_image_url',
 } as const
 
 export const NOMBRE_GENERICO_DEFECTO = 'cliente'

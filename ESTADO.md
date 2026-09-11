@@ -32,7 +32,6 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
-| Un solo estilo (cálido) + el AIOS se copia el catálogo del software (dueño, 2026-09-10) | Opus 5 | `src/types/template.types.ts`, `src/constants/template-{texts,catalog}.ts`, `src/services/template.service.ts`, `src/app/api/dashboard/templates/style/` (se borra), `src/components/dashboard/templates/{StyleSelector,TemplateCatalogEditor}.tsx`, `tests/unit/template-catalog.test.ts`, `docs/PLANTILLAS.md`, `docs/features/whatsapp-templates.md` · **AIOS**: `src/lib/zernio/templates-catalog.ts`, `src/lib/actions/provisioning.ts`, `.env.example` | — | en curso |
 
 ## 3. Siguiente, en orden
 
@@ -141,11 +140,12 @@
       que prueban Zernio: nunca a un cliente, nunca a un número ajeno.
    5. **Los dos nacen con `messaging_daily_limit = 250`** (DEFAULT de la 00037). Es el punto 5
       del 0.ALFA y aplica igual con una sola sede.
-   6. **`ZERNIO_TEMPLATE_SAMPLE_IMAGE_URL` apunta a un archivo que Meta no puede bajar.** El alta
-      del catálogo del 09 creó 12 de 13: `evento_imagen` murió con `502 Media upload failed:
-      fetch failed` mientras `evento_video` pasaba. Abrir la URL en incógnito; si no muestra la
-      foto, el objeto no está en el bucket `event-media`. El texto de las dos de evento ya se
-      rehízo (10): antes de recrearlas, `SQL-PARA-CORRER/plantillas-evento-viejas/`.
+   6. **Las 12 plantillas que el AIOS creó el 09 llevan 🍣 y hay que rehacerlas.** El botón es
+      del AIOS, no de este repo; su copia del catálogo tenía sushi horneado y la media de muestra
+      escrita a mano (`via.placeholder.com`, muerto → el 502 de `evento_imagen`). Arreglado el 10
+      (AIOS v1.10.0, sin desplegar). El camino completo, en orden, está en
+      `SQL-PARA-CORRER/plantillas-evento-viejas/LEEME.md`: subir JPG + MP4 al bucket, las dos
+      env en el Vercel **del AIOS**, reset del paso 4, «Crear plantillas» → salen como `_v2`.
    Lo que YA no bloquea: la firma de Twilio se valida con el token del tenant dueño del número
    (`34b30a6`), así que el coexistente por Twilio recibe su TwiML completo. Lo que SÍ falta para
    el de Zernio: **18.c** — su operador de domicilios manda el cuadro y **no recibe nada**, ni

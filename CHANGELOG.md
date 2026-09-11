@@ -48,6 +48,26 @@ datos gigante» (dueño) + «asegúrate de que tenemos el límite real de cada m
 `src/components/dashboard/ImportedContactsUploader.tsx`, `vercel.json`, `docs/features/{golden-bullet,send-governance}.md`.
 **Ojo:** la 00060 va **antes** de desplegar, y la plantilla con botones la tiene que aprobar Meta (24-48h).
 
+## [2026-09-10c] - Un solo estilo, y el AIOS deja de mandar sushi
+
+**Qué:** se retiran `elegante` y `urbano`: el banco queda en 13 textos (cálido), y con ellos se van
+`StyleSelector`, `PUT /api/dashboard/templates/style`, `applyStyleToCatalog()` y la lectura de
+`admin_settings.template_style`. `TEMPLATE_STYLES` sigue siendo una lista de uno porque el CHECK de
+`template_versions.style` acepta los nombres viejos. **Y el hallazgo grande:** el botón «Crear
+plantillas» del alta es del **AIOS**, que tenía su propia copia del catálogo con 🍣 horneado en 10
+de las 11 de texto y la media de muestra escrita a mano (`via.placeholder.com`, muerto → el 502).
+La copia ahora se regenera desde la fuente de este repo, el emoji sale del `business_type` del
+cliente, las URLs de muestra salen de la env del AIOS, y el AIOS elige el primer nombre libre
+(`bienvenida` → `bienvenida_v2`) mirando la WABA, como hace este repo. AIOS v1.10.0.
+**Por qué:** «siempre cálido, nada de eso sirve» y «borrame todas las plantillas que veas por ahí,
+dicen te invitamos a una noche y eso me caga toda la comunicación» (dueño).
+**Archivos:** `template.types.ts`, `template-{texts,catalog}.ts`, `template.service.ts`,
+`twilio-catalog.service.ts`, `TemplateCatalogEditor.tsx`, `tests/unit/template-catalog.test.ts`,
+`SQL-PARA-CORRER/plantillas-evento-viejas/` (+ `03-RESET-AIOS-PASO-4.sql`), docs. **AIOS:**
+`templates-catalog.ts` (regenerado), `provisioning.ts`, `client.ts`, `.env.example`.
+**Verificado:** `tsc` y lint limpios en los dos repos · `tests/unit` en verde. **NO verificado:**
+nada contra Zernio. **Twilio:** los 4 tenants intactos (decisión del dueño). **Migración:** ninguna.
+
 ## [2026-09-10b] - La invitación a un evento, escrita contra el formulario del calendario
 
 **Qué:** la invitación pasó a ser **un marco, no un mensaje**: sacando variables, firma y opt-out,

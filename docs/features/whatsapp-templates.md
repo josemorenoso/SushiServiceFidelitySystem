@@ -1,4 +1,4 @@
-# Plantillas de WhatsApp — catálogo estándar, 3 estilos y edición sin huecos
+# Plantillas de WhatsApp — catálogo estándar, un solo estilo y edición sin huecos
 
 > **Estado:** implementado (v2.12.0, 2026-08-30) · **Alcance:** solo tenants `messaging_provider='zernio'`
 > **Requerimiento:** `docs/requerimientos/REQUERIMIENTOS_AGOSTO_2026.md` §12 (primera prioridad del proyecto)
@@ -22,10 +22,10 @@ Son **decisiones tomadas**, no supuestos. No volver a preguntarlas ni cambiarlas
 | # | Decisión | Dónde vive en el código |
 |---|----------|-------------------------|
 | 1 | **Un catálogo estándar de 13 plantillas**, igual para todo tenant nuevo | `src/constants/template-catalog.ts` |
-| 2 | **Un solo estilo por tenant.** No se mezcla — *"no puedes enviar un mensaje con tono urbano y uno cálido"* | `StyleSelector.tsx` ofrece una sola elección global |
+| 2 | **Un solo estilo.** Hubo tres hasta el 2026-09-10; el dueño los quitó (*"siempre cálido, nada de eso sirve"*) | `TEMPLATE_STYLES = ['calido']` |
 | 3 | **El dueño edita sus propias plantillas**, con advertencia de responsabilidad y registro de quién y cuándo | `template_versions.edited_by` / `disclaimer_accepted_at` |
-| 4 | **El estilo es SUGERENCIA, no candado.** Se puede cambiar; re-aplicarlo a las 13 es explícito y avisa que son 13 aprobaciones nuevas | `admin_settings.template_style` + `applyStyleToCatalog()` |
-| 5 | **Banco de textos fijo** (13 × 3 = 39). Sin LLM por ahora. El estilo NO varía por `business_type` | `src/constants/template-texts.ts` |
+| 4 | ~~El estilo es sugerencia, no candado~~ **Retirado el 2026-09-10** con los estilos. `admin_settings.template_style` ya no se lee; `applyStyleToCatalog()` y `StyleSelector` se borraron | — |
+| 5 | **Banco de textos fijo** (13). Sin LLM por ahora. Lo que varía por `business_type` es solo el emoji | `src/constants/template-texts.ts` |
 | 6 | **Solo tenants nuevos por Zernio.** Los 4 tenants Twilio no se tocan | `assertZernioTenant()` |
 
 Y la que ordena todo el diseño — **Pregunta 1, resuelta**:
@@ -68,10 +68,9 @@ Lo que pasa por debajo:
 ## El alta de un negocio nuevo: enviar tal cual o editar
 
 `aios_provision_tenant` **no siembra ningún `*_template_sid`**: un tenant recién creado llega a esta
-pantalla con las 13 vacías. Hasta 2026-09-06 el único camino que las creaba en bloque era
-`applyStyleToCatalog()`, y la pantalla solo lo ofrece **al elegir un estilo DISTINTO al actual**
-(`StyleSelector` no deja clicar el estilo activo). Como el default es `calido`, un negocio que
-quisiera cálido —o sea, casi todos— **no tenía ningún botón**: eran 13 ediciones a mano para mandar
+pantalla con las 13 vacías. Hasta 2026-09-06 el único camino que las creaba en bloque era el de
+cambiar de estilo (ya retirado), que solo aparecía al elegir un estilo DISTINTO al actual. Un negocio
+que quisiera el texto estándar **no tenía ningún botón**: eran 13 ediciones a mano para mandar
 textos que nadie quería cambiar. Reportado por el dueño.
 
 Ahora cada mensaje sin enviar muestra **dos salidas**:
@@ -153,23 +152,28 @@ vía `Level 2.0/aios-constelarys/src/lib/zernio/templates-catalog.ts`.
 
 ### El contrato de variables es sagrado
 
-El emisor (check-in, crons, campañas, calendario) manda un diccionario posicional fijo y **no sabe qué
-estilo tiene el tenant**. Un estilo puede reordenar la prosa; **nunca** agregar, quitar ni resignificar
-un `{{n}}`. Cambiar la aridad en `TEMPLATE_CATALOG` rompe el envío de los 3 estilos a la vez.
+El emisor (check-in, crons, campañas, calendario) manda un diccionario posicional fijo. Un texto
+puede reordenar la prosa; **nunca** agregar, quitar ni resignificar un `{{n}}`. Cambiar la aridad en
+`TEMPLATE_CATALOG` rompe el envío de todos los tenants a la vez.
 
 `validateTemplateBody()` lo hace cumplir en el editor, en la API y en el test.
 
-## Los 3 estilos
+## Un solo estilo (desde el 2026-09-10)
 
-| Estilo | Registro | Nota |
-|---|---|---|
-| `calido` | Cercano y enérgico | **El default. Port literal del catálogo en producción** — §12 respuesta 2: "sin cambios en el default" |
-| `elegante` | Sobrio, casi sin emojis, sin exclamaciones | Nuevo |
-| `urbano` | Directo, frases cortas, cero formalidad | Nuevo |
+Hubo tres —`calido`, `elegante`, `urbano`— y el dueño los redujo a uno, textual: *"siempre cálido,
+nada de eso sirve"*. `calido` es el port literal del catálogo que estuvo en producción con Twilio.
+`TEMPLATE_STYLES` sigue siendo una lista de un elemento porque `template_versions.style` y su CHECK
+(00039) aceptan los nombres viejos: una fila histórica con `elegante` no rompe nada, y
+`personalizado` sigue significando "el dueño lo editó a mano".
 
-**Son 39 textos, no 117:** el estilo NO varía por `business_type`. Lo específico del negocio viaja en
-variables. Cada texto es una aprobación de Meta aparte, así que la diferencia entre 39 y 117 es real
-en tiempo y en riesgo.
+**Son 13 textos.** Lo único que varía por `business_type` es el emoji horneado. Cada texto es una
+aprobación de Meta aparte.
+
+⚠️ **El AIOS lleva una COPIA de estos 13 textos** (`Level 2.0/aios-constelarys/src/lib/zernio/
+templates-catalog.ts`) porque es un repo aparte y es quien crea las plantillas al dar de alta un
+cliente. Se regenera desde la fuente con un script, no a mano. El 09 esa copia creó 12 plantillas con
+🍣 horneado porque nunca recibió el arreglo del emoji por rubro: si un texto cambia acá, hay que
+traerlo allá en el mismo día.
 
 ### El emoji de marca (v2.15.0)
 
@@ -217,7 +221,7 @@ afecta a las que se creen o se re-sometan después.
 camino de envío lo lee igual que ayer, y no se tocó ni una línea de ese camino. Lo nuevo:
 
 - **`template_versions`** — la vigente, la pendiente, el historial, y quién editó qué y cuándo.
-- **`admin_settings.template_style`** — el estilo default del tenant.
+- **`admin_settings.template_style`** — ya no se lee (los estilos se retiraron el 2026-09-10). Puede quedar en filas viejas.
 
 **Por qué una tabla y no más claves en `admin_settings`:** `admin_settings` es key-value y no tiene
 dónde registrar autor ni fecha, que es requisito duro de la decisión 3 (sin registro, *"es su culpa"*
@@ -255,13 +259,11 @@ importa: un tenant dado de alta por el AIOS (`aios_set_template_settings()`) tie
 | `src/app/api/dashboard/templates/catalog/route.ts` | `GET` estado del catálogo |
 | `src/app/api/dashboard/templates/catalog/[key]/route.ts` | `PUT` editar una plantilla |
 | `src/app/api/dashboard/templates/catalog/[key]/submit/route.ts` | `POST` enviar el texto del catálogo tal cual |
-| `src/app/api/dashboard/templates/style/route.ts` | `PUT` cambiar estilo (± re-aplicar) |
 | `src/app/api/webhook/zernio/route.ts` | Recibe `whatsapp.template.status_updated` |
 | `src/components/dashboard/templates/TemplateCatalogEditor.tsx` | La pantalla (Zernio) |
 | `src/components/dashboard/templates/TemplateEditorDialog.tsx` | El editor tipo documento |
-| `src/components/dashboard/templates/StyleSelector.tsx` | Estilo + confirmación de re-aplicar |
 | `src/components/dashboard/templates/TwilioTemplateManager.tsx` | La pantalla anterior, intacta |
-| `tests/unit/template-catalog.test.ts` | Las 39 combinaciones contra las reglas de Meta |
+| `tests/unit/template-catalog.test.ts` | Los 13 textos contra las reglas de Meta |
 
 ## La UX: por qué el vocabulario es el que es
 
@@ -363,7 +365,7 @@ software, no en las del AIOS, y el bucket tiene que ser el del proyecto `bredfyu
 - **Los 4 tenants Twilio** no reciben el catálogo estándar *completo*: sus plantillas existentes no
   se tocan (decisión 6, textual: "déjalos así, ni los toques"). Desde v2.15.0 sí pueden **rellenar
   los huecos** —crear las que nunca se les crearon— desde su propia pantalla. Lo que sigue sin
-  existir para ellos es el editor tipo documento y el cambio de estilo.
+  existir para ellos es el editor tipo documento.
 - **Las 2 plantillas de evento (media) no se pueden crear desde la pantalla de Twilio.** Llevan
   header de imagen/video y siguen dependiendo de `scripts/twilio-create-media-templates.mjs`. La
   tarjeta las muestra como informativas, sin botón.

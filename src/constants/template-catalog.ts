@@ -6,15 +6,15 @@
  * ligeramente distinto según quién lo haya armado a mano". Este archivo es esa
  * fuente única: todo tenant Zernio nuevo nace con exactamente estas 13.
  *
- * Los TEXTOS no están aquí — están en `template-texts.ts` (banco de 13 × 3
- * estilos). Aquí vive lo que NO cambia con el estilo: qué plantilla es, a qué
- * clave de `admin_settings` apunta, su categoría ante Meta y — lo más
- * importante — el CONTRATO DE VARIABLES.
+ * Los TEXTOS no están aquí — están en `template-texts.ts` (banco de 13).
+ * Aquí vive la estructura: qué plantilla es, a qué clave de `admin_settings`
+ * apunta, su categoría ante Meta y — lo más importante — el CONTRATO DE
+ * VARIABLES.
  *
  * ⚠️ EL CONTRATO DE VARIABLES ES SAGRADO. El emisor (check-in, crons de
  * cumpleaños/reactivación, campañas manuales, calendario) manda un diccionario
- * posicional fijo y NO sabe qué estilo tiene el tenant. Cambiar la aridad o el
- * significado de un `{{n}}` aquí rompe el envío de TODOS los estilos a la vez.
+ * posicional fijo. Cambiar la aridad o el significado de un `{{n}}` aquí rompe
+ * el envío de todos los tenants a la vez.
  * La tabla equivalente en prosa está en docs/PLANTILLAS.md.
  *
  * Portado con fidelidad de `scripts/twilio-create-text-templates.mjs` (11) +
@@ -42,39 +42,14 @@ import {
 export { TEMPLATE_STYLES }
 export type { TemplateStyle }
 
-/** El estilo con el que nace todo tenant. §12 respuesta 2: cálido, sin cambios. */
+/** El estilo con el que nace toda versión. Es el único desde el 2026-09-10. */
 export const DEFAULT_TEMPLATE_STYLE: TemplateStyle = 'calido'
 
 /** Idioma de las plantillas del catálogo. */
 export const TEMPLATE_LANGUAGE = 'es'
 
-/** Cuántas aprobaciones de Meta cuesta re-aplicar un estilo a todo el catálogo. */
+/** Cuántas plantillas tiene el catálogo — y cuántas aprobaciones de Meta cuesta. */
 export const CATALOG_SIZE = 13
-
-/** Cómo se le presentan los 3 estilos al dueño en la pantalla de Plantillas. */
-export const TEMPLATE_STYLE_INFO: Record<
-  TemplateStyle,
-  { label: string; tagline: string; description: string }
-> = {
-  calido: {
-    label: 'Cálido',
-    tagline: 'Cercano y enérgico',
-    description:
-      'El tono con el que nació la plataforma. Tutea, celebra cada logro y usa emojis con soltura. Funciona bien en negocios de ambiente familiar.',
-  },
-  elegante: {
-    label: 'Elegante',
-    tagline: 'Sobrio y cuidado',
-    description:
-      'Frases medidas, casi sin emojis y sin signos de exclamación. Transmite servicio atento sin efusividad. Pensado para propuestas de ticket alto.',
-  },
-  urbano: {
-    label: 'Urbano',
-    tagline: 'Directo y de la calle',
-    description:
-      'Habla como un cliente joven: frases cortas, cero formalidad y complicidad. Va bien con marcas informales y públicos de 18 a 35.',
-  },
-}
 
 /**
  * Token que puede aparecer en un `sample` para decir "aquí va el nombre del
@@ -350,21 +325,16 @@ export function isTemplateKey(value: string): value is TemplateKey {
   return value in TEMPLATE_CATALOG_BY_KEY
 }
 
-export function isTemplateStyle(value: string): value is TemplateStyle {
-  return (TEMPLATE_STYLES as readonly string[]).includes(value)
-}
-
 /**
- * Texto del banco para una plantilla + estilo, con el nombre del negocio y su
- * emoji ya puestos. Es el ÚNICO lugar que convierte el banco en un cuerpo real.
+ * Texto del banco para una plantilla, con el nombre del negocio y su emoji ya
+ * puestos. Es el ÚNICO lugar que convierte el banco en un cuerpo real.
  */
 export function buildTemplateBody(
   key: TemplateKey,
-  style: TemplateStyle,
   brandName: string,
   emoji: string = FALLBACK_TEMPLATE_EMOJI
 ): string {
-  return TEMPLATE_TEXTS[key][style](brandName, emoji)
+  return TEMPLATE_TEXTS[key](brandName, emoji)
 }
 
 /**
@@ -390,9 +360,9 @@ export function renderTemplatePreview(key: TemplateKey, body: string, brandName:
 }
 
 /**
- * ¿El texto editado sigue siendo idéntico a alguno del banco? Si sí, la versión
- * conserva ese estilo; si no, pasa a `personalizado` y la pantalla deja de
- * decirle al dueño que está usando un estilo que ya no está usando.
+ * ¿El texto editado sigue siendo idéntico al del banco? Si sí, la versión es
+ * `calido`; si no, pasa a `personalizado` y la pantalla deja de decirle al
+ * dueño que está usando el texto estándar cuando ya no lo está usando.
  */
 export function detectTemplateStyle(
   key: TemplateKey,
@@ -401,9 +371,7 @@ export function detectTemplateStyle(
   emoji: string = FALLBACK_TEMPLATE_EMOJI
 ): TemplateVersionStyle {
   const normalized = body.trim()
-  for (const style of TEMPLATE_STYLES) {
-    if (buildTemplateBody(key, style, brandName, emoji).trim() === normalized) return style
-  }
+  if (buildTemplateBody(key, brandName, emoji).trim() === normalized) return DEFAULT_TEMPLATE_STYLE
   return 'personalizado'
 }
 
@@ -476,10 +444,10 @@ export function validateTemplateBody(
 }
 
 /**
- * Auto-chequeo del banco: verifica las 13 × 3 combinaciones contra las mismas
- * reglas que aplicamos a una edición del dueño. Existe para que un texto nuevo
- * mal escrito falle en un test (tests/template-catalog.test.ts) y no en una
- * respuesta de Meta 48 horas después.
+ * Auto-chequeo del banco: verifica los 13 textos contra las mismas reglas que
+ * aplicamos a una edición del dueño. Existe para que un texto nuevo mal escrito
+ * falle en un test (tests/template-catalog.test.ts) y no en una respuesta de
+ * Meta 48 horas después.
  */
 export function assertCatalogTextsAreValid(
   brandName = 'Mi Negocio',
@@ -487,15 +455,13 @@ export function assertCatalogTextsAreValid(
 ): string[] {
   const problems: string[] = []
   for (const definition of TEMPLATE_CATALOG) {
-    for (const style of TEMPLATE_STYLES) {
-      const body = buildTemplateBody(definition.key, style, brandName, emoji)
-      const issues = validateTemplateBody(body, {
-        category: definition.category,
-        expectedVariables: definition.variables.length,
-      })
-      for (const issue of issues) {
-        problems.push(`${definition.key} / ${style}: ${issue}`)
-      }
+    const body = buildTemplateBody(definition.key, brandName, emoji)
+    const issues = validateTemplateBody(body, {
+      category: definition.category,
+      expectedVariables: definition.variables.length,
+    })
+    for (const issue of issues) {
+      problems.push(`${definition.key}: ${issue}`)
     }
   }
   return problems

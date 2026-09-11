@@ -39,7 +39,6 @@ import {
   buildTemplateExample,
   detectTemplateStyle,
   resolveTemplateEmoji,
-  isTemplateStyle,
   validateTemplateBody,
 } from '@/constants/template-catalog'
 import { createZernioTemplate, getZernioTemplateStatus } from '@/lib/zernio/templates'
@@ -51,7 +50,6 @@ import type {
   TemplateCatalogEntry,
   TemplateCatalogResponse,
   TemplateKey,
-  TemplateStyle,
   TemplateVersion,
   TemplateVersionStatus,
 } from '@/types/template.types'
@@ -107,43 +105,6 @@ export function assertZernioTenant(tenant: Tenant): asserts tenant is Tenant & {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Estilo del tenant (SUGERENCIA, no candado — §12 respuesta 4)
-// ─────────────────────────────────────────────────────────────
-
-export async function getTenantTemplateStyle(tenantId: string): Promise<TemplateStyle> {
-  const supabase = getServiceClient()
-  const { data } = await supabase
-    .from('admin_settings')
-    .select('value')
-    .eq('key', 'template_style')
-    .eq('tenant_id', tenantId)
-    .maybeSingle()
-
-  const value = data?.value
-  return value && isTemplateStyle(value) ? value : DEFAULT_TEMPLATE_STYLE
-}
-
-/**
- * Cambia el estilo por defecto del tenant. NO reescribe ninguna plantilla: es
- * solo el punto de partida de la próxima que se cree o edite. Re-aplicarlo a
- * las 13 es una acción aparte y explícita (`applyStyleToCatalog`), porque son
- * 13 aprobaciones nuevas de Meta.
- */
-export async function setTenantTemplateStyle(tenantId: string, style: TemplateStyle): Promise<void> {
-  const supabase = getServiceClient()
-  const { error } = await supabase
-    .from('admin_settings')
-    .upsert(
-      { key: 'template_style', value: style, tenant_id: tenantId, updated_at: new Date().toISOString() },
-      { onConflict: 'key,tenant_id' }
-    )
-  if (error) {
-    console.error('[Templates] No se pudo guardar template_style:', error.message)
-    throw new TemplateError('No se pudo guardar el estilo. Inténtalo de nuevo.', 500)
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
 // Lectura del estado del catálogo
 // ─────────────────────────────────────────────────────────────
 
@@ -195,11 +156,10 @@ function emojiOf(tenant: Tenant): string {
 
 /**
  * Todo lo que la pantalla de Plantillas necesita: la definición de las 13, qué
- * se está enviando hoy, qué hay en revisión y qué texto propone el estilo actual.
+ * se está enviando hoy, qué hay en revisión y qué texto propone el banco.
  */
 export async function getTemplateCatalogState(tenant: Tenant): Promise<TemplateCatalogResponse> {
-  const [style, versions, pointers] = await Promise.all([
-    getTenantTemplateStyle(tenant.id),
+  const [versions, pointers] = await Promise.all([
     fetchVersions(tenant.id),
     fetchPointers(tenant.id),
   ])
@@ -227,7 +187,7 @@ export async function getTemplateCatalogState(tenant: Tenant): Promise<TemplateC
       current,
       pending,
       lastRejected,
-      suggestedBody: buildTemplateBody(definition.key, style, brandName, emoji),
+      suggestedBody: buildTemplateBody(definition.key, brandName, emoji),
       // Puntero cargado fuera del panel (alta por el AIOS o SQL directo): la
       // plantilla está activa pero no tenemos su texto. La UI lo dice tal cual
       // en vez de inventarse un cuerpo que quizá no es el que se está enviando.
@@ -236,7 +196,7 @@ export async function getTemplateCatalogState(tenant: Tenant): Promise<TemplateC
     }
   })
 
-  return { provider: 'zernio', style, brandName, entries }
+  return { provider: 'zernio', brandName, entries }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -365,15 +325,11 @@ export async function saveTemplateEdit(input: SaveTemplateInput): Promise<SaveTe
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Somete a Meta el texto que el catálogo propone para el estilo del negocio,
- * sin pasar por el editor.
+ * Somete a Meta el texto que el catálogo propone, sin pasar por el editor.
  *
  * POR QUÉ EXISTE: un tenant recién dado de alta nace con las 13 sin configurar
- * (`aios_provision_tenant` no siembra ningún `*_template_sid`), y hasta ahora el
- * único camino masivo era `applyStyleToCatalog()` — que la pantalla solo ofrece
- * al ELEGIR UN ESTILO DISTINTO al actual. Con el estilo por defecto (`calido`)
- * no había ningún botón: eran 13 ediciones a mano para mandar textos que nadie
- * quería cambiar.
+ * (`aios_provision_tenant` no siembra ningún `*_template_sid`). Sin este botón
+ * eran 13 ediciones a mano para mandar textos que nadie quería cambiar.
  *
  * ⚠️ NO PIDE LA ADVERTENCIA DE RESPONSABILIDAD, y no es un descuido. La decisión
  * 3 del dueño ("si se las llegan a bloquear va a ser su culpa") es sobre el texto
@@ -393,15 +349,14 @@ export async function submitSuggestedTemplate(input: {
   const definition = TEMPLATE_CATALOG_BY_KEY[key]
   if (!definition) throw new TemplateError('Esa plantilla no existe en el catálogo.', 404)
 
-  const style = await getTenantTemplateStyle(tenant.id)
-  const body = buildTemplateBody(key, style, brandNameOf(tenant), emojiOf(tenant))
+  const body = buildTemplateBody(key, brandNameOf(tenant), emojiOf(tenant))
 
   return submitTemplateBody({
     tenant,
     definition,
     body,
     editor,
-    style,
+    style: DEFAULT_TEMPLATE_STYLE,
     disclaimerAcceptedAt: null,
     unchangedError:
       'Este mensaje ya se está enviando con este mismo texto. Si quieres cambiarlo, usa Editar.',
@@ -619,92 +574,6 @@ async function createAndSubmit(input: CreateAndSubmitInput): Promise<SaveTemplat
 // ─────────────────────────────────────────────────────────────
 // Re-aplicar un estilo a todo el catálogo (§12 respuesta 4)
 // ─────────────────────────────────────────────────────────────
-
-export interface ApplyStyleResult {
-  style: TemplateStyle
-  submitted: string[]
-  skipped: { key: TemplateKey; reason: string }[]
-  failed: { key: TemplateKey; reason: string }[]
-}
-
-/**
- * Reescribe las 13 plantillas con el banco de textos del estilo elegido.
- *
- * Son 13 aprobaciones nuevas de Meta. La pantalla tiene que decirlo ANTES de
- * confirmar, no después — decisión 4 del dueño. Este servicio asume que ya se
- * dijo: aquí no hay más confirmaciones.
- *
- * Tolerante a fallos parciales a propósito: si la plantilla 7 falla, las otras
- * 12 ya sometidas siguen su curso. Abortar a la mitad dejaría el catálogo en un
- * estado peor que el inicial y no habría forma de deshacer lo ya enviado a Meta.
- */
-export async function applyStyleToCatalog(args: {
-  tenant: Tenant
-  style: TemplateStyle
-  editor: TemplateEditor
-  acceptedDisclaimer: boolean
-}): Promise<ApplyStyleResult> {
-  const { tenant, style, editor } = args
-  assertZernioTenant(tenant)
-
-  if (!args.acceptedDisclaimer) {
-    throw new TemplateError(
-      'Antes de aplicar el estilo a todo el catálogo tienes que aceptar la advertencia de responsabilidad.',
-      400
-    )
-  }
-
-  const brandName = brandNameOf(tenant)
-  const emoji = emojiOf(tenant)
-  const versions = await fetchVersions(tenant.id)
-  const pointers = await fetchPointers(tenant.id)
-
-  const result: ApplyStyleResult = { style, submitted: [], skipped: [], failed: [] }
-
-  for (const definition of TEMPLATE_CATALOG) {
-    const mine = versions.filter((v) => v.template_key === definition.key)
-    const body = buildTemplateBody(definition.key, style, brandName, emoji)
-
-    if (mine.some((v) => v.status === 'pending')) {
-      result.skipped.push({ key: definition.key, reason: 'ya tenía un cambio en revisión' })
-      continue
-    }
-    const current = mine.find((v) => v.is_current) ?? null
-    if (current && current.body.trim() === body.trim()) {
-      result.skipped.push({ key: definition.key, reason: 'ya usa ese texto' })
-      continue
-    }
-
-    try {
-      await createAndSubmit({
-        tenant: tenant as Tenant & { zernio_account_id: string },
-        definition,
-        body,
-        brandName,
-        style,
-        editor,
-        existing: mine,
-        pointer: pointers[definition.settingsKey] ?? null,
-        hasCurrent: Boolean(current) || Boolean(pointers[definition.settingsKey]),
-        // Re-aplicar un estilo SÍ exige la casilla (se valida al entrar): el
-        // dueño declaró que se hace cargo de los 13 textos nuevos.
-        disclaimerAcceptedAt: new Date().toISOString(),
-      })
-      result.submitted.push(definition.key)
-    } catch (err) {
-      result.failed.push({
-        key: definition.key,
-        reason: err instanceof TemplateError ? err.message : 'Error inesperado',
-      })
-    }
-  }
-
-  // El estilo se guarda aunque alguna haya fallado: es la preferencia declarada
-  // del dueño y gobierna las plantillas que se creen de aquí en adelante.
-  await setTenantTemplateStyle(tenant.id, style)
-
-  return result
-}
 
 // ─────────────────────────────────────────────────────────────
 // Detector de aprobación — el punto donde cambia el puntero

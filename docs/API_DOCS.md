@@ -137,7 +137,6 @@ impide al rol `aios_constelarys` tocar `auth.users` — ver `docs/features/alta-
 | GET | /api/dashboard/templates/catalog | Estado del catálogo estándar (13 plantillas) — **solo Zernio** | Admin Cookie |
 | PUT | /api/dashboard/templates/catalog/:key | Editar una plantilla del catálogo | Admin Cookie |
 | POST | /api/dashboard/templates/catalog/:key/submit | Enviar a Meta el texto del catálogo **tal cual** | Admin Cookie |
-| PUT | /api/dashboard/templates/style | Cambiar estilo (± re-aplicar a las 13) | Admin Cookie |
 | GET | /api/dashboard/templates/standard | Qué le falta del set estándar — **solo Twilio** | Admin Cookie |
 | POST | /api/dashboard/templates/standard | Crear UNA plantilla estándar que falte (aditivo) | Admin Cookie |
 | GET | /api/dashboard/opt-outs | Clientes que pidieron salir — agnóstico de proveedor | Admin Cookie |
@@ -1466,33 +1465,9 @@ de cada envío** en las dos ramas de proveedor. Por eso cuenta igual con Twilio 
 diferencia de `/api/dashboard/twilio-metrics`, que deduce los opt-outs paginando la API de Mensajes
 de Twilio y devuelve vacío para un tenant Zernio. El teléfono va enmascarado.
 
-#### `PUT /api/dashboard/templates/style` — Admin JWT
+#### ~~`PUT /api/dashboard/templates/style`~~ — retirado el 2026-09-10
 
-**Body:**
-```json
-{ "style": "elegante", "reapplyAll": false, "acceptedDisclaimer": false }
-```
-
-| `reapplyAll` | Qué hace |
-|---|---|
-| `false` | **Solo cambia el default.** Ninguna plantilla se toca, nada va a Meta. Es el punto de partida de la próxima que se cree o edite |
-| `true` | Además reescribe las 13 con el banco del estilo nuevo. **Son 13 aprobaciones nuevas de Meta.** Exige `acceptedDisclaimer: true` |
-
-Tolerante a fallos parciales a propósito: si una plantilla falla, las ya sometidas siguen su curso.
-Abortar a la mitad dejaría el catálogo peor que al empezar y no hay forma de deshacer lo ya enviado.
-
-**Response 200 (`reapplyAll: true`):**
-```json
-{
-  "success": true,
-  "style": "elegante",
-  "reapplied": true,
-  "submitted": ["welcome", "birthday"],
-  "skipped": [{ "key": "reward_safe", "reason": "ya tenía un cambio en revisión" }],
-  "failed": [],
-  "message": "Se enviaron 2 mensajes a revisión de WhatsApp. Mientras los revisan, tus clientes siguen recibiendo los actuales."
-}
-```
+Se borró junto con los estilos `elegante` y `urbano` (decisión del dueño: "siempre cálido"). Devuelve 404.
 
 ---
 

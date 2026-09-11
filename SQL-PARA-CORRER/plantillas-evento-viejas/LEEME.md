@@ -1,64 +1,68 @@
-# Borrar las plantillas de evento viejas y rehacerlas contra el calendario
+# Rehacer las plantillas de WhatsApp de un propietario Zernio (las 13)
 
-**2026-09-10, decisión del dueño.** El texto de las dos plantillas de evento (`evento_imagen`
-y `evento_video`) no describía lo que el dueño teclea en el calendario. Se reescribió — una
-sola redacción, en `EVENT_INVITE_TEXTS` de `src/constants/template-texts.ts` — y las viejas
-salen de circulación.
+**2026-09-10, decisión del dueño.** El alta del 09 creó 12 de 13 plantillas para el primer
+cliente Zernio y las 12 están mal: **10 de las 11 de texto llevan 🍣 horneado** y las de evento
+invitan a «vivir una noche especial» con un cierre fijo que le pisa el llamado a la acción del
+dueño. Ninguna sirve para una barbería, un salón ni un restaurante que no sea de sushi.
 
-## Qué tenía de malo el texto viejo
+## Qué pasó de verdad (para no volver a buscar la variable)
 
-Tres cosas, todas horneadas en un texto que Meta aprueba **literal**:
+El botón «Crear plantillas» de la pantalla del cliente es del **AIOS**, no del producto. El AIOS
+tenía **su propia copia** del catálogo, hecha antes de que el producto arreglara el emoji por
+rubro, y la media de muestra de las de evento **escrita a mano** en el código: `via.placeholder.com`
+para la imagen (servicio muerto → `502 Media upload failed: fetch failed`) y un MP4 de w3schools para
+el video (vivo, por eso pasó). La variable `ZERNIO_TEMPLATE_SAMPLE_IMAGE_URL` del Vercel del
+producto no la leía nadie en ese flujo.
 
-1. **«vivir una noche especial».** El calendario no filtra por hora y su campo *Tipo* incluye
-   promo, activación y aniversario: una promo de mediodía salía invitando a una noche.
-2. **Un cierre fijo, «¡Te esperamos con tu familia!», DESPUÉS de `{{5}}`.** `{{5}}` es
-   justo el llamado a la acción que el dueño escribe en el formulario, así que el mensaje se
-   contradecía solo. Y como el enlace del evento se pega al final de `{{5}}`, el enlace
-   quedaba **en la mitad** — mientras el formulario promete que «va al final del mensaje».
-3. **La muestra de `{{5}}` era ese mismo cierre**, no una descripción de verdad: la vista
-   previa del dueño y el ejemplo que revisa Meta mostraban la frase repetida dos veces.
+Desde el AIOS **v1.10.0** el catálogo se regenera desde la fuente del producto, el emoji sale del
+tipo de negocio del cliente, y las URLs de muestra salen de `ZERNIO_TEMPLATE_SAMPLE_IMAGE_URL` /
+`ZERNIO_TEMPLATE_SAMPLE_VIDEO_URL` **en el Vercel del AIOS**.
 
-El texto nuevo deja `{{5}}` como lo último antes del aviso de SALIR, no hornea ningún momento
-del día y sirve igual para un restaurante, una barbería o un salón. **La aridad no cambia**
-(`{{1}}`..`{{5}}`), así que `calendar.service.ts` manda exactamente lo mismo que ayer.
+## El texto nuevo de evento (imagen y video, idéntico)
 
-## Lo que estos scripts NO hacen
+```
+¡Hola {{1}}! 🎉🍽️
+_{{2}}_
 
-**No borran nada en Meta.** Zernio no expone un DELETE de plantillas — el contrato verificado
-tiene crear, listar y consultar, y prohíbe inventar rutas (`src/lib/zernio/templates.ts`). El
-borrado físico es un clic tuyo en el panel de Zernio / Meta, y es opcional: una plantilla
-huérfana no cuesta, no se envía y no estorba. Lo que sí resuelven es que **nada del sistema
-vuelva a apuntarlas**, que es el problema real.
+*{{3}}*
+📅 {{4}}
 
-## Lo que NO se toca, y por qué
+{{5}}
 
-**Los 4 tenants Twilio** (Sushi Service, Don Alirio, Frangal, Demo). Envían eventos hoy con
-plantillas aprobadas que además llevan un `{{6}}` que Zernio no usa. Borrarles el puntero les
-rompe el calendario sin un solo error a la vista. Por eso los tres scripts filtran por
-`messaging_provider = 'zernio'`. **No le quites ese WHERE.**
+_Responde SALIR para no recibir más mensajes._
+```
+
+`{{1}}` nombre · `{{2}}` marca · `{{3}}` título · `{{4}}` fecha · `{{5}}` descripción + enlace. Es
+un marco: lo que ponemos nosotros es «¡Hola!». El emoji cambia por rubro (💈 barbería, 💅 salón,
+✨ el resto). Vive una sola vez en `EVENT_INVITE_TEXT` de `src/constants/template-texts.ts`.
+
+## Lo que NO se puede hacer
+
+**Borrar en Meta desde el código.** Zernio no expone DELETE. Y tampoco hace falta: el AIOS elige
+el primer nombre libre (`bienvenida` está tomado → crea `bienvenida_v2`), así que las viejas quedan
+huérfanas sin que nadie las apunte. Borrarlas a mano en el panel de Meta es opcional y **tiene
+trampa**: Meta bloquea un nombre borrado durante 30 días, así que si las borrás, no intentes reusar
+el nombre base.
+
+**Tocar a los 4 tenants Twilio** (Sushi Service, Don Alirio, Frangal, Demo). Decisión del dueño del
+10: se quedan con sus plantillas aprobadas tal cual. Por eso el 00, 01 y 02 filtran por
+`messaging_provider = 'zernio'`.
 
 ## Orden
 
 ```
-0. Desplegá primero el código de este commit.        ← no es opcional, ver abajo
-1. 00-VERIFICAR.sql        (solo lectura, guardá la salida)
-2. 01-RETIRAR.sql          (una transacción; mirá los conteos antes del COMMIT)
-3. 02-VERIFICAR-FINAL.sql  (las tres cosas que tienen que ser verdad)
-4. Plantillas → «Crear plantillas» en cada tenant Zernio.
+0. Desplegar el AIOS v1.10.0 y el producto con estos commits.       ← primero, siempre
+1. Subir un JPG y un MP4 de muestra a Supabase → Storage → bucket event-media.
+   Copiar las dos URLs públicas. Abrirlas en incógnito: tienen que verse.
+2. En Vercel DEL AIOS: ZERNIO_TEMPLATE_SAMPLE_IMAGE_URL y ..._VIDEO_URL. Redesplegar.
+   (En el Vercel del producto también, con los mismos valores: los usa su propia pantalla.)
+3. 03-RESET-AIOS-PASO-4.sql   → Supabase DEL AIOS (poner el business_name del cliente)
+4. AIOS → cliente → «Crear plantillas». Salen las 13 como _v2. «Actualizar estado» hasta 13/13.
+5. 00 → 01 → 02              → Supabase DEL PRODUCTO (solo si ese tenant llegó a tener
+                                punteros o versiones de evento; en un alta nueva no hay nada)
 ```
 
-**Por qué el paso 0 va primero.** `evento_video` quedó *pending* en Meta. Si Meta la aprueba
-después de que el 01 la marque `retired`, el webhook la promovía igual y volvía a escribir el
-puntero con el texto viejo: `applyProviderTemplateStatus()` solo miraba `is_current`. Este
-commit agrega la guarda que ignora la aprobación tardía de una versión retirada. Con el código
-viejo desplegado, el 01 se puede deshacer solo, en silencio, hasta 72 horas después.
-
-## Antes de apretar «Crear plantillas» otra vez
-
-El intento del 09 falló con `Zernio respondió 502: Media upload failed: fetch failed` en
-`evento_imagen`. Eso **no es la plantilla**: es que Meta no pudo descargar la imagen de muestra
-de `ZERNIO_TEMPLATE_SAMPLE_IMAGE_URL`. `evento_video` sí se creó, así que la del video se baja
-bien. Abrí la URL de la variable en una pestaña de incógnito: si no muestra la foto, el objeto
-no está en el bucket `event-media` o el nombre no coincide. Es el mismo motivo por el que Meta
-rechazó `evento_video_sushi_service_barra` en Twilio en su momento (*"Error downloading invalid
-media URL"*) — ver `docs/features/calendar.md`.
+**Por qué el paso 0 va primero.** Con el AIOS viejo, el botón reintenta los nombres base y Meta
+los rechaza por repetidos. Y en el producto, una versión que se retira con el 01 podía **revivir**
+si Meta la aprobaba tarde (`applyProviderTemplateStatus()` solo miraba `is_current`); este commit
+agrega la guarda.

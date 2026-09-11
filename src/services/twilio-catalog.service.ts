@@ -52,8 +52,7 @@ import {
   isTemplateKey,
   resolveTemplateEmoji,
 } from '@/constants/template-catalog'
-import { DEFAULT_TEMPLATE_STYLE } from '@/constants/template-catalog'
-import type { TemplateKey, TemplateStyle } from '@/types/template.types'
+import type { TemplateKey } from '@/types/template.types'
 import type { Tenant } from '@/types/tenant.types'
 
 const TWILIO_CONTENT_API = 'https://content.twilio.com/v1/Content'
@@ -127,7 +126,6 @@ export interface StandardCatalogReport {
   provider: 'twilio'
   brandName: string
   emoji: string
-  style: TemplateStyle
   templates: StandardTemplateStatus[]
   /** Cuántas se pueden crear ahora mismo con un click. */
   missingCount: number
@@ -191,22 +189,6 @@ async function fetchPointers(tenantId: string): Promise<Record<string, string>> 
   return pointers
 }
 
-/**
- * El estilo con el que se redactan las plantillas nuevas de este tenant.
- *
- * Los tenants Twilio no pasaron nunca por el selector de estilo (es de la
- * pantalla Zernio), así que en la práctica esto es siempre `calido` — que es
- * además el estilo de los textos que ya tienen aprobados. Se lee igual, por si
- * alguien lo fijó a mano, para no mezclar tonos dentro del mismo negocio.
- */
-async function resolveStyle(tenantId: string): Promise<TemplateStyle> {
-  const pointers = await fetchPointers(tenantId)
-  const stored = pointers.template_style
-  return stored === 'elegante' || stored === 'urbano' || stored === 'calido'
-    ? stored
-    : DEFAULT_TEMPLATE_STYLE
-}
-
 export async function getStandardCatalogReport(tenant: Tenant): Promise<StandardCatalogReport> {
   assertTwilioTenant(tenant)
 
@@ -218,9 +200,8 @@ export async function getStandardCatalogReport(tenant: Tenant): Promise<Standard
     )
   }
 
-  const [pointers, style, approvals] = await Promise.all([
+  const [pointers, approvals] = await Promise.all([
     fetchPointers(tenant.id),
-    resolveStyle(tenant.id),
     fetchTwilioApprovals(creds.basicAuth),
   ])
 
@@ -256,7 +237,7 @@ export async function getStandardCatalogReport(tenant: Tenant): Promise<Standard
       state,
       pointer,
       approvalStatus: approval?.status ?? null,
-      body: buildTemplateBody(definition.key, style, brandName, emoji),
+      body: buildTemplateBody(definition.key, brandName, emoji),
       needsMedia: Boolean(definition.header),
     }
   })
@@ -265,7 +246,6 @@ export async function getStandardCatalogReport(tenant: Tenant): Promise<Standard
     provider: 'twilio',
     brandName,
     emoji,
-    style,
     templates,
     missingCount: templates.filter((t) => t.state === 'missing' && !t.needsMedia).length,
     warning: approvals.warning,
@@ -382,8 +362,7 @@ export async function createStandardTemplate(
 
   const brandName = resolveBranding(tenant.config).name
   const emoji = resolveTemplateEmoji(tenant.business_type, tenant.config?.template_emoji)
-  const style = await resolveStyle(tenant.id)
-  const body = buildTemplateBody(definition.key, style, brandName, emoji)
+  const body = buildTemplateBody(definition.key, brandName, emoji)
   const examples = buildTemplateExample(definition.key, brandName)
 
   // Twilio quiere el diccionario posicional `{'1': ..., '2': ...}` — el mismo

@@ -30,7 +30,6 @@ import {
   Send,
   XCircle,
 } from 'lucide-react'
-import StyleSelector from './StyleSelector'
 import TemplateEditorDialog from './TemplateEditorDialog'
 import type { TemplateCatalogEntry, TemplateCatalogResponse } from '@/types/template.types'
 
@@ -161,7 +160,6 @@ export default function TemplateCatalogEditor() {
 
   if (!state) return null
 
-  const activeCount = state.entries.filter((e) => e.current || e.adoptedRef).length
   const pendingCount = state.entries.filter((e) => e.pending).length
   const unsentCount = state.entries.filter(isUnsent).length
 
@@ -227,8 +225,6 @@ export default function TemplateCatalogEditor() {
           </p>
         </div>
       )}
-
-      <StyleSelector style={state.style} activeCount={activeCount} onApplied={handleSaved} />
 
       {pendingCount > 0 && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 flex items-start gap-2">

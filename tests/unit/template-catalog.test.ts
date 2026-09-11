@@ -1,8 +1,8 @@
 /**
  * El banco de textos de plantillas, contra las reglas duras de Meta.
  *
- * POR QUÉ IMPORTA: cada uno de los 39 textos (13 plantillas × 3 estilos) es una
- * aprobación de Meta aparte, y el veredicto tarda 24-72h. Un texto que empieza
+ * POR QUÉ IMPORTA: cada uno de los 13 textos es una aprobación de Meta aparte,
+ * y el veredicto tarda 24-72h. Un texto que empieza
  * con una variable, que pierde un `{{n}}` que el backend sí manda, o que se
  * olvida la línea de opt-out en una plantilla MARKETING, no falla aquí: falla
  * dos días después, en producción, contra la reputación del número del cliente.
@@ -15,7 +15,6 @@ import { describe, it, expect } from 'vitest'
 import {
   TEMPLATE_CATALOG,
   TEMPLATE_CATALOG_BY_KEY,
-  TEMPLATE_STYLES,
   CATALOG_SIZE,
   DEFAULT_TEMPLATE_STYLE,
   FALLBACK_TEMPLATE_EMOJI,
@@ -60,59 +59,44 @@ describe('catálogo estándar', () => {
 })
 
 describe('banco de textos', () => {
-  it('las 39 combinaciones pasan las reglas de Meta', () => {
+  it('los 13 textos pasan las reglas de Meta', () => {
     expect(assertCatalogTextsAreValid(MARCA)).toEqual([])
   })
 
   it('toda plantilla MARKETING cierra con la línea de opt-out', () => {
     for (const t of TEMPLATE_CATALOG) {
       if (t.category !== 'MARKETING') continue
-      for (const style of TEMPLATE_STYLES) {
-        expect(buildTemplateBody(t.key, style, MARCA).trim().endsWith(OPT_OUT_LINE), `${t.key}/${style}`).toBe(true)
-      }
+      expect(buildTemplateBody(t.key, MARCA).trim().endsWith(OPT_OUT_LINE), t.key).toBe(true)
     }
   })
 
   it('la bienvenida es UTILITY y NO lleva opt-out', () => {
     const welcome = TEMPLATE_CATALOG_BY_KEY.welcome
     expect(welcome.category).toBe('UTILITY')
-    for (const style of TEMPLATE_STYLES) {
-      expect(buildTemplateBody('welcome', style, MARCA)).not.toContain('SALIR')
-    }
+    expect(buildTemplateBody('welcome', MARCA)).not.toContain('SALIR')
   })
 
-  it('los 3 estilos producen textos distintos entre sí', () => {
-    for (const t of TEMPLATE_CATALOG) {
-      const bodies = TEMPLATE_STYLES.map((s) => buildTemplateBody(t.key, s, MARCA))
-      expect(new Set(bodies).size, t.key).toBe(TEMPLATE_STYLES.length)
-    }
-  })
-
-  it('el estilo cálido sigue siendo el port literal, con el emoji del negocio', () => {
+  it('el texto sigue siendo el port literal, con el emoji del negocio', () => {
     // Muestra de control: si alguien "mejora" el default sin decisión del dueño,
     // esto se cae. §12 respuesta 2: "Sin cambios en el default".
     // Lo ÚNICO que cambió respecto al texto original de Sushi Service es que el
     // 🍣 dejó de estar horneado — ahora lo pone el tipo de negocio.
-    expect(buildTemplateBody('welcome', 'calido', MARCA, RESTAURANTE)).toBe(
+    expect(buildTemplateBody('welcome', MARCA, RESTAURANTE)).toBe(
       `¡Hola {{1}}! 🎉${RESTAURANTE}\n\nBienvenid@ a *${MARCA}*, nos alegra que seas parte de nuestro club\n\nEn cada visita sumas puntos y recibes premios reales — Hoy recibiste *{{2}} puntos* 🎉\n\nAsí funciona tu camino de recompensas 👇\n\n{{3}}\n\n¡Te esperamos pronto!\n\n_— ${MARCA}_`
     )
   })
 
   it('el nombre del negocio queda interpolado, sin marcadores sueltos', () => {
     for (const t of TEMPLATE_CATALOG) {
-      for (const style of TEMPLATE_STYLES) {
-        const body = buildTemplateBody(t.key, style, MARCA)
-        expect(body, `${t.key}/${style}`).not.toContain('${')
-        expect(body, `${t.key}/${style}`).not.toContain('{negocio}')
-      }
+      const body = buildTemplateBody(t.key, MARCA)
+      expect(body, t.key).not.toContain('${')
+      expect(body, t.key).not.toContain('{negocio}')
     }
   })
 
   it('las plantillas de evento NO hornean la marca: viaja en {{2}}', () => {
     for (const key of ['event_image', 'event_video'] as const) {
-      for (const style of TEMPLATE_STYLES) {
-        expect(buildTemplateBody(key, style, MARCA), `${key}/${style}`).not.toContain(MARCA)
-      }
+      expect(buildTemplateBody(key, MARCA), key).not.toContain(MARCA)
       expect(buildTemplateExample(key, MARCA)[1]).toBe(MARCA)
     }
   })
@@ -122,11 +106,9 @@ describe('banco de textos', () => {
     // que registrarse dos veces (imagen y video). El texto, no: dos literales
     // gemelos se despegan al primer retoque y el cliente recibe un mensaje
     // distinto según haya subido un JPG o un MP4.
-    for (const style of TEMPLATE_STYLES) {
-      expect(buildTemplateBody('event_video', style, MARCA, RESTAURANTE), style).toBe(
-        buildTemplateBody('event_image', style, MARCA, RESTAURANTE)
-      )
-    }
+    expect(buildTemplateBody('event_video', MARCA, RESTAURANTE)).toBe(
+      buildTemplateBody('event_image', MARCA, RESTAURANTE)
+    )
     expect(TEMPLATE_CATALOG_BY_KEY.event_video.variables).toEqual(
       TEMPLATE_CATALOG_BY_KEY.event_image.variables
     )
@@ -139,10 +121,8 @@ describe('banco de textos', () => {
     // acababa de escribir. Debajo de {{5}} solo puede quedar el aviso de SALIR,
     // que es lo único que Meta obliga a poner ahí.
     for (const key of ['event_image', 'event_video'] as const) {
-      for (const style of TEMPLATE_STYLES) {
-        const cuerpo = buildTemplateBody(key, style, MARCA, RESTAURANTE)
-        expect(cuerpo.trim().endsWith(`{{5}}\n\n${OPT_OUT_LINE}`), `${key}/${style}`).toBe(true)
-      }
+      const cuerpo = buildTemplateBody(key, MARCA, RESTAURANTE)
+      expect(cuerpo.trim().endsWith(`{{5}}\n\n${OPT_OUT_LINE}`), key).toBe(true)
     }
   })
 
@@ -151,13 +131,11 @@ describe('banco de textos', () => {
     // opt-out, no puede sobrar más que un saludo. Si alguien vuelve a meter una
     // frase de relleno, este número se dispara y la prueba se cae.
     for (const key of ['event_image', 'event_video'] as const) {
-      for (const style of TEMPLATE_STYLES) {
-        const nuestro = buildTemplateBody(key, style, MARCA, RESTAURANTE)
-          .replace(OPT_OUT_LINE, '')
-          .replace(/\{\{\d+\}\}/g, '')
-          .replace(/[\s*_📅🎉🙌✨💈💅🍽️]/gu, '')
-        expect(nuestro.length, `${key}/${style}: "${nuestro}"`).toBeLessThanOrEqual(20)
-      }
+      const nuestro = buildTemplateBody(key, MARCA, RESTAURANTE)
+        .replace(OPT_OUT_LINE, '')
+        .replace(/\{\{\d+\}\}/g, '')
+        .replace(/[\s*_📅🎉🙌✨💈💅🍽️]/gu, '')
+      expect(nuestro.length, `${key}: "${nuestro}"`).toBeLessThanOrEqual(20)
     }
   })
 
@@ -168,28 +146,24 @@ describe('banco de textos', () => {
     // dueño en la descripción, que viaja en {{5}}.
     const PROHIBIDOS = ['noche', 'familia', 'mediodía', 'tarde']
     for (const key of ['event_image', 'event_video'] as const) {
-      for (const style of TEMPLATE_STYLES) {
-        const cuerpo = buildTemplateBody(key, style, MARCA, RESTAURANTE).toLowerCase()
-        for (const palabra of PROHIBIDOS) {
-          expect(cuerpo, `${key}/${style} hornea "${palabra}"`).not.toContain(palabra)
-        }
+      const cuerpo = buildTemplateBody(key, MARCA, RESTAURANTE).toLowerCase()
+      for (const palabra of PROHIBIDOS) {
+        expect(cuerpo, `${key} hornea "${palabra}"`).not.toContain(palabra)
       }
     }
   })
 
   it('en TODO el banco las variables van en orden ascendente', () => {
-    // Las 39 combinaciones menos las 6 de evento ya cumplían esto sin que nadie
-    // lo hubiera escrito. Las de evento no: con la firma de la marca al final el
+    // Los 11 de texto ya cumplían esto sin que nadie lo hubiera escrito. Las 2
+    // de evento no: con la firma de la marca al final el
     // cuerpo quedaba `1,3,4,5,2`. Meta numera en orden de aparición y un rechazo
     // por esto no se ve al crear la plantilla — se ve 24-72h después, cuando ya
     // se sometió en las 25 cuentas.
     for (const t of TEMPLATE_CATALOG) {
-      for (const style of TEMPLATE_STYLES) {
-        const orden = [...buildTemplateBody(t.key, style, MARCA, RESTAURANTE).matchAll(/\{\{(\d+)\}\}/g)]
-          .map((m) => Number(m[1]))
-        const ascendente = [...orden].sort((a, b) => a - b)
-        expect(orden, `${t.key}/${style}: ${orden.join(',')}`).toEqual(ascendente)
-      }
+      const orden = [...buildTemplateBody(t.key, MARCA, RESTAURANTE).matchAll(/\{\{(\d+)\}\}/g)]
+        .map((m) => Number(m[1]))
+      const ascendente = [...orden].sort((a, b) => a - b)
+      expect(orden, `${t.key}: ${orden.join(',')}`).toEqual(ascendente)
     }
   })
 })
@@ -219,31 +193,27 @@ describe('emoji de marca', () => {
     // llegaba igual a una barbería.
     const PROHIBIDOS = ['🍣', '🍕', '🍔', '🌮', '☕', '🍜', '🥢', '💈', '💅', '🍽️']
     for (const t of TEMPLATE_CATALOG) {
-      for (const style of TEMPLATE_STYLES) {
-        const body = buildTemplateBody(t.key, style, MARCA, '§')
-        for (const emoji of PROHIBIDOS) {
-          expect(body, `${t.key}/${style} trae ${emoji} horneado`).not.toContain(emoji)
-        }
+      const body = buildTemplateBody(t.key, MARCA, '§')
+      for (const emoji of PROHIBIDOS) {
+        expect(body, `${t.key} trae ${emoji} horneado`).not.toContain(emoji)
       }
     }
   })
 
   it('el emoji viaja de verdad al cuerpo: dos negocios distintos, textos distintos', () => {
-    const barberia = buildTemplateBody('welcome', 'calido', MARCA, resolveTemplateEmoji('barbershop'))
-    const restaurante = buildTemplateBody('welcome', 'calido', MARCA, RESTAURANTE)
+    const barberia = buildTemplateBody('welcome', MARCA, resolveTemplateEmoji('barbershop'))
+    const restaurante = buildTemplateBody('welcome', MARCA, RESTAURANTE)
     expect(barberia).not.toBe(restaurante)
     expect(barberia).toContain('💈')
     expect(restaurante).toContain('🍽️')
   })
 
-  it('detectTemplateStyle sigue reconociendo el estilo con el emoji del negocio', () => {
+  it('detectTemplateStyle sigue reconociendo el texto del banco con el emoji del negocio', () => {
     // Si el detector usara otro emoji que el constructor, un texto SIN editar se
     // marcaría "personalizado" y la pantalla le mentiría al dueño.
     const emoji = resolveTemplateEmoji('barbershop')
-    for (const style of TEMPLATE_STYLES) {
-      const body = buildTemplateBody('points_earned_far', style, MARCA, emoji)
-      expect(detectTemplateStyle('points_earned_far', body, MARCA, emoji)).toBe(style)
-    }
+    const body = buildTemplateBody('points_earned_far', MARCA, emoji)
+    expect(detectTemplateStyle('points_earned_far', body, MARCA, emoji)).toBe(DEFAULT_TEMPLATE_STYLE)
   })
 })
 
@@ -285,20 +255,18 @@ describe('validateTemplateBody', () => {
 
 describe('detectTemplateStyle', () => {
   it('reconoce un texto que salió tal cual del banco', () => {
-    for (const style of TEMPLATE_STYLES) {
-      expect(detectTemplateStyle('birthday', buildTemplateBody('birthday', style, MARCA), MARCA)).toBe(style)
-    }
+    expect(detectTemplateStyle('birthday', buildTemplateBody('birthday', MARCA), MARCA)).toBe(DEFAULT_TEMPLATE_STYLE)
   })
 
   it('marca personalizado en cuanto el dueño toca una palabra', () => {
-    const editado = buildTemplateBody('birthday', DEFAULT_TEMPLATE_STYLE, MARCA).replace('Feliz', 'Felicísimo')
+    const editado = buildTemplateBody('birthday', MARCA).replace('Feliz', 'Felicísimo')
     expect(detectTemplateStyle('birthday', editado, MARCA)).toBe('personalizado')
   })
 })
 
 describe('renderTemplatePreview', () => {
   it('sustituye cada variable por su valor de muestra', () => {
-    const body = buildTemplateBody('birthday', 'calido', MARCA)
+    const body = buildTemplateBody('birthday', MARCA)
     const preview = renderTemplatePreview('birthday', body, MARCA)
     expect(preview).not.toMatch(/\{\{\d+\}\}/)
     expect(preview).toContain('Sofía')

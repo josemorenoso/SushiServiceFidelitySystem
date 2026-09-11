@@ -1,52 +1,46 @@
 /**
- * BANCO DE TEXTOS de las plantillas de WhatsApp — 13 plantillas × 3 estilos.
+ * BANCO DE TEXTOS de las plantillas de WhatsApp — las 13, en UN solo estilo.
  *
- * Decisión del dueño (REQUERIMIENTOS_AGOSTO_2026.md §12, respuesta 5): "banco
- * fijo, llm luego". Estos textos se escriben UNA vez y quedan fijos. La
- * generación con LLM (prompt P4 de PROMPTS_SESIONES_BARATAS.md) es una fase
- * posterior y NO está implementada.
+ * Hasta el 2026-09-10 había tres estilos (cálido, elegante, urbano). El dueño
+ * los quitó, textual: "siempre cálido, nada de eso sirve". Quedó el cálido,
+ * que es el tono con el que nació la plataforma y el único que estuvo alguna
+ * vez en producción. Cada texto es una aprobación de Meta aparte, así que
+ * menos textos es menos riesgo y menos espera.
  *
- * ALCANCE — por qué son 39 textos y no 117
- * ----------------------------------------
- * El estilo NO varía por `business_type`. Lo específico del negocio viaja en
- * variables (`{{1}}` = nombre del cliente, `brandName` interpolado, etc.), no en
- * el texto aprobado. Por eso el banco es 13 × 3 estilos, no 13 × 3 × 3 tipos de
- * negocio. Cada texto es una aprobación de Meta aparte: la diferencia es real en
- * tiempo y en riesgo.
+ * ⚠️ ESTE ARCHIVO ES LA FUENTE. El AIOS (`Level 2.0/aios-constelarys/src/lib/
+ * zernio/templates-catalog.ts`) lleva una COPIA de estos 13 textos porque es un
+ * repo aparte y es quien crea las plantillas al dar de alta un cliente. Si
+ * tocás un texto acá, hay que tocar la copia: el 09 el AIOS creó 12 plantillas
+ * con 🍣 horneado porque nadie le había pasado el arreglo del emoji por rubro.
  *
  * REGLAS QUE TODO TEXTO DE ESTE ARCHIVO CUMPLE (Meta las aplica siempre)
  * ---------------------------------------------------------------------
  *  1. No empieza ni termina con una variable.
- *  2. Variables secuenciales desde `{{1}}`, sin huecos.
+ *  2. Variables secuenciales desde `{{1}}`, sin huecos y en orden ascendente.
  *  3. Máx. 1024 caracteres.
  *  4. Toda plantilla MARKETING cierra con la línea de opt-out
  *     "_Responde SALIR para no recibir más mensajes._" (docs/PLANTILLAS.md).
  *  5. Sin urgencia falsa, sin promesas irreales, sin mayúsculas excesivas.
- * Hay un test que verifica 1-4 sobre las 39 combinaciones —
+ * `tests/unit/template-catalog.test.ts` verifica 1-4 sobre los 13 —
  * `assertCatalogTextsAreValid()` en `template-catalog.ts` aplica las mismas
  * reglas en runtime.
  *
  * ⚠️ CONTRATO CON EL BACKEND: la ARIDAD y el SIGNIFICADO de cada variable son
- * fijos por plantilla (ver `TEMPLATE_CATALOG`). Un estilo puede reordenar la
+ * fijos por plantilla (ver `TEMPLATE_CATALOG`). Un texto puede reordenar la
  * prosa, NUNCA agregar, quitar ni resignificar un `{{n}}` — el emisor
  * (check-in, crons, campañas, calendario) manda exactamente esos valores en ese
- * orden y no sabe qué estilo tiene el tenant.
+ * orden.
  *
- * ⚠️ `calido` es un PORT LITERAL del catálogo ya en producción
- * (`scripts/twilio-create-text-templates.mjs`, portado a Zernio en
- * `Level 2.0/aios-constelarys/src/lib/zernio/templates-catalog.ts`).
- * §12 respuesta 2: "Tono por defecto: cálido — el actual. Sin cambios en el
- * default". No tocar estos textos sin una decisión explícita del dueño.
- * ÚNICA excepción, por decisión del dueño del 2026-09-10: las dos de evento
- * (`EVENT_INVITE_TEXTS`) se reescribieron contra el formulario del calendario y
- * ya NO son el port de `twilio-create-media-templates.mjs`. Las plantillas
- * Twilio ya aprobadas de los 4 tenants viejos siguen intactas.
- * Nota para el dueño: los textos `calido` traen ${emoji} horneado (nacieron para
- * Sushi Service). En un tenant que no sea de comida japonesa ese emoji se ve
- * fuera de lugar. `elegante` y `urbano` nacen neutrales al tipo de negocio.
+ * ⚠️ Los 11 de texto son un PORT LITERAL del catálogo ya en producción
+ * (`scripts/twilio-create-text-templates.mjs`). §12 respuesta 2: "Tono por
+ * defecto: cálido — el actual. Sin cambios en el default". No tocar sin una
+ * decisión explícita del dueño. Las dos de evento (`EVENT_INVITE_TEXT`) SÍ se
+ * reescribieron, por decisión del dueño del 2026-09-10: ya no son el port de
+ * `twilio-create-media-templates.mjs`. Las plantillas Twilio ya aprobadas de
+ * los 4 tenants viejos siguen intactas.
  */
 
-import type { TemplateKey, TemplateStyle } from '@/types/template.types'
+import type { TemplateKey } from '@/types/template.types'
 
 /** Cierre de opt-out obligatorio en toda plantilla MARKETING. */
 export const OPT_OUT_LINE = '_Responde SALIR para no recibir más mensajes._'
@@ -104,171 +98,98 @@ export type TemplateBodyBuilder = (brandName: string, emoji: string) => string
  * ({{1}}..{{5}}), así que `calendar.service.ts` manda lo mismo a los dos
  * proveedores. Ver docs/PLANTILLAS.md § "Plantilla 12".
  */
-const EVENT_INVITE_TEXTS: Record<TemplateStyle, TemplateBodyBuilder> = {
-  calido: (_brand, emoji) =>
-    `¡Hola {{1}}! 🎉${emoji}\n_{{2}}_\n\n*{{3}}*\n📅 {{4}}\n\n{{5}}\n\n${OPT_OUT_LINE}`,
-  elegante: () =>
-    `Hola {{1}},\n_{{2}}_\n\n*{{3}}*\nFecha: {{4}}\n\n{{5}}\n\n${OPT_OUT_LINE}`,
-  urbano: () =>
-    `¡Qué más, {{1}}! 🙌\n_{{2}}_\n\n*{{3}}*\n📅 {{4}}\n\n{{5}}\n\n${OPT_OUT_LINE}`,
-}
+const EVENT_INVITE_TEXT: TemplateBodyBuilder = (_brand, emoji) =>
+  `¡Hola {{1}}! 🎉${emoji}\n_{{2}}_\n\n*{{3}}*\n📅 {{4}}\n\n{{5}}\n\n${OPT_OUT_LINE}`
 
 /**
- * El banco. El tipo `Record<TemplateKey, Record<TemplateStyle, ...>>` obliga a
- * TypeScript a fallar si alguien agrega una plantilla al catálogo o un estilo
- * nuevo y se olvida de escribir alguna de las combinaciones.
+ * El banco. El tipo `Record<TemplateKey, ...>` obliga a TypeScript a fallar si
+ * alguien agrega una plantilla al catálogo y se olvida de escribirle el texto.
  */
-export const TEMPLATE_TEXTS: Record<TemplateKey, Record<TemplateStyle, TemplateBodyBuilder>> = {
+export const TEMPLATE_TEXTS: Record<TemplateKey, TemplateBodyBuilder> = {
   // ─────────────────────────────────────────────────────────────
   // 1 · Bienvenida — UTILITY (única sin opt-out)
   //     {{1}} nombre · {{2}} puntos iniciales · {{3}} roadmap de tiers
   // ─────────────────────────────────────────────────────────────
-  welcome: {
-    calido: (brand, emoji) =>
-      `¡Hola {{1}}! 🎉${emoji}\n\nBienvenid@ a *${brand}*, nos alegra que seas parte de nuestro club\n\nEn cada visita sumas puntos y recibes premios reales — Hoy recibiste *{{2}} puntos* 🎉\n\nAsí funciona tu camino de recompensas 👇\n\n{{3}}\n\n¡Te esperamos pronto!\n\n_— ${brand}_`,
-    elegante: (brand) =>
-      `Hola {{1}}, es un gusto recibirte.\n\nTe damos la bienvenida a *${brand}*. Desde hoy formas parte de nuestro club de clientes.\n\nCada visita suma puntos, y cada punto se convierte en un beneficio real. Comienzas con *{{2}} puntos*.\n\nEste es el camino que te espera:\n\n{{3}}\n\nSerá un placer atenderte de nuevo.\n\n_— ${brand}_`,
-    urbano: (brand) =>
-      `¡Qué más, {{1}}! 🙌\n\nYa estás dentro de *${brand}*. Bienvenid@ al combo.\n\nAquí cada visita te suma puntos y los puntos se vuelven premios de verdad. Arrancas con *{{2}} puntos* 🎉\n\nMira todo lo que puedes desbloquear 👇\n\n{{3}}\n\n¡Nos vemos pronto!\n\n_— ${brand}_`,
-  },
+  welcome: (brand, emoji) =>
+    `¡Hola {{1}}! 🎉${emoji}\n\nBienvenid@ a *${brand}*, nos alegra que seas parte de nuestro club\n\nEn cada visita sumas puntos y recibes premios reales — Hoy recibiste *{{2}} puntos* 🎉\n\nAsí funciona tu camino de recompensas 👇\n\n{{3}}\n\n¡Te esperamos pronto!\n\n_— ${brand}_`,
 
   // ─────────────────────────────────────────────────────────────
   // 2 · Puntos sumados (lejos del siguiente tier) — MARKETING
   //     {{1}} nombre · {{2}} pts ganados · {{3}} saldo · {{4}} roadmap
   // ─────────────────────────────────────────────────────────────
-  points_earned_far: {
-    calido: (brand, emoji) =>
-      `¡{{1}}, gracias por tu visita! Esperamos que hayas disfrutado tu experiencia ${emoji}\n\nSumaste *+{{2}} puntos* hoy 🔥\n\nTu saldo: *{{3}} puntos*\n\nSigue visitándonos y descubre lo que te espera 👇\n\n{{4}}\n\nCuando llegues a tu próximo nivel podrás elegir entre tu *premio seguro* o la *Mystery Box* 🎲\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
-    elegante: (brand) =>
-      `Gracias por acompañarnos hoy, {{1}}.\n\nSumaste *{{2}} puntos* en esta visita.\n\nTu saldo actual es de *{{3}} puntos*.\n\nAsí avanza tu recorrido:\n\n{{4}}\n\nAl alcanzar el siguiente nivel podrás elegir entre tu premio asegurado o la Mystery Box.\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
-    urbano: (brand) =>
-      `¡{{1}}, gracias por venir! 🙌\n\nTe llevaste *+{{2}} puntos* en esta visita.\n\nVas en *{{3}} puntos* 💪\n\nEsto es lo que sigue 👇\n\n{{4}}\n\nCuando llegues al siguiente nivel eliges: premio seguro o Mystery Box 🎲\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
-  },
+  points_earned_far: (brand, emoji) =>
+    `¡{{1}}, gracias por tu visita! Esperamos que hayas disfrutado tu experiencia ${emoji}\n\nSumaste *+{{2}} puntos* hoy 🔥\n\nTu saldo: *{{3}} puntos*\n\nSigue visitándonos y descubre lo que te espera 👇\n\n{{4}}\n\nCuando llegues a tu próximo nivel podrás elegir entre tu *premio seguro* o la *Mystery Box* 🎲\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
 
   // ─────────────────────────────────────────────────────────────
   // 3 · Puntos sumados (cerca del siguiente tier) — MARKETING
   //     {{1}} nombre · {{2}} pts ganados · {{3}} saldo · {{4}} premio próximo
   // ─────────────────────────────────────────────────────────────
-  points_earned_near: {
-    calido: (brand, emoji) =>
-      `¡{{1}}, gracias por tu visita! Esperamos que hayas disfrutado tu experiencia ${emoji}\n\n¡Casi lo lograste! Sumaste *+{{2}} puntos* 🔥\n\nTu saldo: *{{3}} puntos*\n\nLa próxima visita reclama tu *{{4}}* o si quieres probar suerte, selecciona la *Mystery Box* con premios todavía mejores 🎲\n\n¡Vuelve pronto que ya casi es tuyo!\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
-    elegante: (brand) =>
-      `Gracias por tu visita, {{1}}.\n\nSumaste *{{2}} puntos* y estás muy cerca de tu próximo nivel.\n\nTu saldo actual es de *{{3}} puntos*.\n\nEn tu siguiente visita podrás reclamar *{{4}}*, o cambiarlo por la Mystery Box si prefieres la sorpresa.\n\nTe esperamos pronto.\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
-    urbano: (brand) =>
-      `¡{{1}}, gracias por venir! 🙌\n\nSumaste *+{{2}} puntos* y ya casi lo tienes.\n\nVas en *{{3}} puntos* 💪\n\nEn tu próxima visita reclamas *{{4}}*, o le juegas a la Mystery Box y te llevas algo mejor 🎲\n\n¡Vuelve pronto que ya casi!\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
-  },
+  points_earned_near: (brand, emoji) =>
+    `¡{{1}}, gracias por tu visita! Esperamos que hayas disfrutado tu experiencia ${emoji}\n\n¡Casi lo lograste! Sumaste *+{{2}} puntos* 🔥\n\nTu saldo: *{{3}} puntos*\n\nLa próxima visita reclama tu *{{4}}* o si quieres probar suerte, selecciona la *Mystery Box* con premios todavía mejores 🎲\n\n¡Vuelve pronto que ya casi es tuyo!\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
 
   // ─────────────────────────────────────────────────────────────
   // 4 · Tier desbloqueado, premio seguro — MARKETING
   //     {{1}} nombre · {{2}} tier · {{3}} premio · {{4}} roadmap
   // ─────────────────────────────────────────────────────────────
-  reward_safe: {
-    calido: (brand, emoji) =>
-      `¡{{1}}, gracias por volver! Alcanzaste el nivel *{{2}}* 🏆${emoji}\n\nElegiste ir a la segura y te ganaste: *{{3}}*\n\nMuestra *este mensaje* al mesero para reclamar tu premio 🎁\n\n{{4}}\n\nSigue sumando puntos para tu próximo nivel.\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
-    elegante: (brand) =>
-      `Enhorabuena, {{1}}: alcanzaste el nivel *{{2}}*.\n\nElegiste tu premio asegurado: *{{3}}*.\n\nPresenta este mensaje a nuestro equipo para reclamarlo.\n\n{{4}}\n\nGracias por tu preferencia.\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
-    urbano: (brand) =>
-      `¡{{1}}, lo lograste! Subiste a nivel *{{2}}* 🏆\n\nFuiste a la fija y te ganaste: *{{3}}* 🎁\n\nMuestra este mensaje cuando vengas y reclámalo.\n\n{{4}}\n\nA seguir sumando, que esto no para 💪\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
-  },
+  reward_safe: (brand, emoji) =>
+    `¡{{1}}, gracias por volver! Alcanzaste el nivel *{{2}}* 🏆${emoji}\n\nElegiste ir a la segura y te ganaste: *{{3}}*\n\nMuestra *este mensaje* al mesero para reclamar tu premio 🎁\n\n{{4}}\n\nSigue sumando puntos para tu próximo nivel.\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
 
   // ─────────────────────────────────────────────────────────────
   // 5 · Mystery Box, resultado — MARKETING
   //     {{1}} nombre · {{2}} tier · {{3}} premio · {{4}} roadmap
   // ─────────────────────────────────────────────────────────────
-  mystery_box_result: {
-    calido: (brand, emoji) =>
-      `¡{{1}}, gracias por volver! Abriste la *Mystery Box* de *{{2}}* 🎲${emoji}\n\nTu premio: *{{3}}*\n\nMuestra *este mensaje* al mesero para reclamar tu premio 🎁\n\n{{4}}\n\n¡Sigue sumando puntos, cada visita te acerca a una nueva recompensa!\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
-    elegante: (brand) =>
-      `Hola {{1}}, abriste la Mystery Box de tu nivel *{{2}}*.\n\nTu premio: *{{3}}*.\n\nPresenta este mensaje a nuestro equipo para reclamarlo.\n\n{{4}}\n\nCada visita te acerca a la siguiente recompensa.\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
-    urbano: (brand) =>
-      `¡{{1}}, le jugaste a la Mystery Box de *{{2}}*! 🎲\n\nTe salió: *{{3}}* 🎁\n\nMuestra este mensaje cuando vengas y reclámalo.\n\n{{4}}\n\nSigue sumando, que cada visita cuenta 💪\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
-  },
+  mystery_box_result: (brand, emoji) =>
+    `¡{{1}}, gracias por volver! Abriste la *Mystery Box* de *{{2}}* 🎲${emoji}\n\nTu premio: *{{3}}*\n\nMuestra *este mensaje* al mesero para reclamar tu premio 🎁\n\n{{4}}\n\n¡Sigue sumando puntos, cada visita te acerca a una nueva recompensa!\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
 
   // ─────────────────────────────────────────────────────────────
   // 6 · Golden Box, resultado (pity timer) — MARKETING
   //     {{1}} nombre · {{2}} premio · {{3}} roadmap
   // ─────────────────────────────────────────────────────────────
-  golden_box_result: {
-    calido: (brand, emoji) =>
-      `¡{{1}}, gracias por volver! Esperamos hayas disfrutado tu experiencia ${emoji}\n\nHoy tenías la *Golden Box* activada ✨🎲\n\nTu premio: *{{2}}*\n\nMuestra *este mensaje* al mesero para reclamar tu premio 🎁\n\n{{3}}\n\nLa suerte está de tu lado, sigue sumando puntos y desbloquea nuevas recompensas 🍀\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
-    elegante: (brand) =>
-      `Hoy tenías la Golden Box activa, {{1}}.\n\nTu premio: *{{2}}*.\n\nPresenta este mensaje a nuestro equipo para reclamarlo.\n\n{{3}}\n\nGracias por seguir con nosotros.\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
-    urbano: (brand) =>
-      `¡{{1}}, hoy tenías la Golden Box activada! ✨🎲\n\nTe salió: *{{2}}* 🎁\n\nMuestra este mensaje cuando vengas y reclámalo.\n\n{{3}}\n\nLa suerte anda de tu lado, aprovéchala 🍀\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
-  },
+  golden_box_result: (brand, emoji) =>
+    `¡{{1}}, gracias por volver! Esperamos hayas disfrutado tu experiencia ${emoji}\n\nHoy tenías la *Golden Box* activada ✨🎲\n\nTu premio: *{{2}}*\n\nMuestra *este mensaje* al mesero para reclamar tu premio 🎁\n\n{{3}}\n\nLa suerte está de tu lado, sigue sumando puntos y desbloquea nuevas recompensas 🍀\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
 
   // ─────────────────────────────────────────────────────────────
   // 7 · Cumpleaños — MARKETING
   //     {{1}} nombre · {{2}} puntos actuales
   // ─────────────────────────────────────────────────────────────
-  birthday: {
-    calido: (brand) =>
-      `¡Feliz cumpleaños {{1}}! 🎂🎉\n\nEn *${brand}* queremos celebrarlo contigo 🎁\n\nVen esta semana, menciona tu cumple y llévate una *sorpresa especial*\n\nTus puntos: *{{2}}* — cada visita te acerca más a una nueva recompensa 🔥\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
-    elegante: (brand) =>
-      `Feliz cumpleaños, {{1}}.\n\nEn *${brand}* queremos celebrarlo contigo. Visítanos esta semana, menciona tu cumpleaños y te tendremos preparada una atención especial.\n\nTu saldo actual: *{{2}} puntos*.\n\nSerá un gusto recibirte.\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
-    urbano: (brand) =>
-      `¡Feliz cumple, {{1}}! 🎂🎉\n\nEn *${brand}* queremos celebrarlo contigo.\n\nPásate por acá esta semana, di que estás de cumpleaños y te tenemos una sorpresa 🎁\n\nVas en *{{2}} puntos* — cada visita te acerca a un premio nuevo 💪\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
-  },
+  birthday: (brand) =>
+    `¡Feliz cumpleaños {{1}}! 🎂🎉\n\nEn *${brand}* queremos celebrarlo contigo 🎁\n\nVen esta semana, menciona tu cumple y llévate una *sorpresa especial*\n\nTus puntos: *{{2}}* — cada visita te acerca más a una nueva recompensa 🔥\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
 
   // ─────────────────────────────────────────────────────────────
   // 8 · Reactivación suave — MARKETING
   //     {{1}} nombre · {{2}} puntos · {{3}} premio próximo
   // ─────────────────────────────────────────────────────────────
-  reactivation_no_reward: {
-    calido: (brand, emoji) =>
-      `¡{{1}}, te extrañamos! Hace rato que no te vemos 👋${emoji}\n\nTienes *{{2}} puntos* acumulados y estás camino a desbloquear *{{3}}* 🔥\n\nCada visita te acerca más — vuelve y alcanza más rápido ese premio especial 💪\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
-    elegante: (brand) =>
-      `Hace un tiempo que no te vemos, {{1}}.\n\nTus *{{2}} puntos* siguen esperándote, y estás en camino a *{{3}}*.\n\nCuando quieras retomarlo, aquí estaremos.\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
-    urbano: (brand) =>
-      `¡{{1}}, hace rato no te vemos! 👀\n\nTienes *{{2}} puntos* guardados y vas camino a *{{3}}* 🔥\n\nNo se te vencen ni se te pierden — cuando quieras retomas donde ibas 💪\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
-  },
+  reactivation_no_reward: (brand, emoji) =>
+    `¡{{1}}, te extrañamos! Hace rato que no te vemos 👋${emoji}\n\nTienes *{{2}} puntos* acumulados y estás camino a desbloquear *{{3}}* 🔥\n\nCada visita te acerca más — vuelve y alcanza más rápido ese premio especial 💪\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
 
   // ─────────────────────────────────────────────────────────────
   // 9 · Reactivación agresiva — MARKETING
   //     {{1}} nombre · {{2}} puntos · {{3}} premio próximo
   // ─────────────────────────────────────────────────────────────
-  reactivation_aggressive: {
-    calido: (brand, emoji) =>
-      `Hola *{{1}}* 👀${emoji}\n\nTus *{{2}} puntos* llevan tiempo sin moverse\n\nEstás cerca de ganarte *{{3}}* — sería una lástima dejarlo ahí\n\nVuelve esta semana y sigue sumando, nosotros mantenemos tu progreso 💪\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
-    elegante: (brand) =>
-      `Tu progreso sigue intacto, {{1}}.\n\nAcumulaste *{{2}} puntos* y te falta poco para *{{3}}*.\n\nConservamos tu avance para cuando decidas volver. Una visita esta semana te acerca al objetivo.\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
-    urbano: (brand) =>
-      `Hola *{{1}}* 👀\n\nTus *{{2}} puntos* llevan tiempo quietos.\n\nEstás a nada de *{{3}}* — sería una lástima dejarlo ahí 🔥\n\nPásate esta semana y sigue sumando, que tu progreso te lo guardamos 💪\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
-  },
+  reactivation_aggressive: (brand, emoji) =>
+    `Hola *{{1}}* 👀${emoji}\n\nTus *{{2}} puntos* llevan tiempo sin moverse\n\nEstás cerca de ganarte *{{3}}* — sería una lástima dejarlo ahí\n\nVuelve esta semana y sigue sumando, nosotros mantenemos tu progreso 💪\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
 
   // ─────────────────────────────────────────────────────────────
   // 10 · Campaña Presencial → Domicilio — MARKETING
   //      {{1}} nombre · {{2}} puntos · {{3}} premio próximo
   // ─────────────────────────────────────────────────────────────
-  campaign_presencial_to_domicilio: {
-    calido: (brand, emoji) =>
-      `¡Hola {{1}}! 🛵${emoji}\n\n¿Sabías que también llevamos *${brand}* hasta tu puerta?\n\nPide tus favoritos sin salir de casa y los domicilios *también suman puntos* 🔥\n\nTienes *{{2}} puntos* y vas camino a *{{3}}*\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
-    elegante: (brand) =>
-      `Hola {{1}}, también llevamos *${brand}* hasta tu casa.\n\nNuestro servicio a domicilio suma los mismos puntos que una visita presencial.\n\nTienes *{{2}} puntos* y avanzas hacia *{{3}}*.\n\nCuando quieras, estamos a un mensaje de distancia.\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
-    urbano: (brand) =>
-      `¡{{1}}, también te llevamos *${brand}* hasta la puerta! 🛵\n\nPide desde donde estés — los domicilios también te suman puntos 🔥\n\nVas en *{{2}} puntos* y estás camino a *{{3}}*\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
-  },
+  campaign_presencial_to_domicilio: (brand, emoji) =>
+    `¡Hola {{1}}! 🛵${emoji}\n\n¿Sabías que también llevamos *${brand}* hasta tu puerta?\n\nPide tus favoritos sin salir de casa y los domicilios *también suman puntos* 🔥\n\nTienes *{{2}} puntos* y vas camino a *{{3}}*\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
 
   // ─────────────────────────────────────────────────────────────
   // 11 · Campaña Domicilio → Presencial — MARKETING
   //      {{1}} nombre · {{2}} puntos · {{3}} premio próximo
   // ─────────────────────────────────────────────────────────────
-  campaign_domicilio_to_presencial: {
-    calido: (brand, emoji) =>
-      `¡{{1}}, la experiencia en *${brand}* es otro nivel! ♥️${emoji}\n\nNos encanta llevarte el pedido a casa, pero en el restaurante es una experiencia completamente diferente ✨\n\nTienes *{{2}} puntos* — ven, suma puntos y desbloquea *{{3}}* 🔥\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
-    elegante: (brand) =>
-      `Nos encanta llevarte lo mejor a casa, {{1}}.\n\nAun así, vivir *${brand}* en el lugar es una experiencia distinta: el ambiente, el detalle y la atención de nuestro equipo.\n\nTienes *{{2}} puntos* y avanzas hacia *{{3}}*.\n\nTe esperamos cuando quieras acompañarnos.\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
-    urbano: (brand) =>
-      `¡{{1}}, en el local es otro cuento! ✨\n\nNos encanta llevarte el pedido a casa, pero venir es una experiencia completamente distinta.\n\nVas en *{{2}} puntos* — pásate, suma y desbloquea *{{3}}* 🔥\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
-  },
+  campaign_domicilio_to_presencial: (brand, emoji) =>
+    `¡{{1}}, la experiencia en *${brand}* es otro nivel! ♥️${emoji}\n\nNos encanta llevarte el pedido a casa, pero en el restaurante es una experiencia completamente diferente ✨\n\nTienes *{{2}} puntos* — ven, suma puntos y desbloquea *{{3}}* 🔥\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
 
   // ─────────────────────────────────────────────────────────────
   // 12 y 13 · Invitación a un evento del calendario — MARKETING
   //      {{1}} nombre · {{2}} marca · {{3}} título · {{4}} fecha · {{5}} CTA
   //      UN SOLO texto para las dos: lo único que las separa es el formato del
   //      header (imagen o video), que Meta congela al aprobar. Ver el porqué de
-  //      la duplicación de claves sobre `EVENT_INVITE_TEXTS`.
+  //      la duplicación de claves sobre `EVENT_INVITE_TEXT`.
   // ─────────────────────────────────────────────────────────────
-  event_image: EVENT_INVITE_TEXTS,
-  event_video: EVENT_INVITE_TEXTS,
+  event_image: EVENT_INVITE_TEXT,
+  event_video: EVENT_INVITE_TEXT,
 }

@@ -7,14 +7,18 @@
  * importa los textos: tenerlos aquí evita el ciclo de imports.
  */
 
-/** Los 3 estilos del banco de textos. `calido` es el default histórico. */
-export const TEMPLATE_STYLES = ['calido', 'elegante', 'urbano'] as const
+/**
+ * El único estilo del banco. Hubo tres (cálido, elegante, urbano) hasta el
+ * 2026-09-10; el dueño los quitó ("siempre cálido"). Sigue siendo una lista
+ * porque la columna `template_versions.style` y su CHECK (00039) todavía
+ * aceptan los nombres viejos: una fila histórica con `elegante` no rompe nada.
+ */
+export const TEMPLATE_STYLES = ['calido'] as const
 export type TemplateStyle = (typeof TEMPLATE_STYLES)[number]
 
 /**
- * Estilo efectivo de una versión guardada. `personalizado` no es elegible en la
- * UI: es lo que queda cuando el dueño editó el texto a mano y ya no coincide con
- * ningún estilo del banco.
+ * Estilo efectivo de una versión guardada. `personalizado` es lo que queda
+ * cuando el dueño editó el texto a mano y ya no coincide con el banco.
  */
 export type TemplateVersionStyle = TemplateStyle | 'personalizado'
 
@@ -104,7 +108,7 @@ export interface TemplateCatalogEntry {
   pending: TemplateVersion | null
   /** Último rechazo sin resolver — para avisarle al dueño (paso 4 del flujo). */
   lastRejected: TemplateVersion | null
-  /** Texto del banco para el estilo actual del tenant: el punto de partida del editor. */
+  /** Texto del banco: el punto de partida del editor. */
   suggestedBody: string
   /**
    * Nombre de una plantilla que `admin_settings` ya apunta pero que no creamos
@@ -128,8 +132,6 @@ export interface TemplateCatalogEntry {
 /** Respuesta de `GET /api/dashboard/templates/catalog`. */
 export interface TemplateCatalogResponse {
   provider: 'twilio' | 'zernio'
-  /** Estilo default del tenant (`admin_settings.template_style`). */
-  style: TemplateStyle
   brandName: string
   entries: TemplateCatalogEntry[]
 }

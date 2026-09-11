@@ -7,7 +7,7 @@
 > **Última actualización:** 2026-05-25 — Variables corregidas, opt-out agregado, reactivación agresiva con {{4}}
 
 > **📌 Desde v2.12.0 (2026-08-30) este documento describe el estilo `calido`, que es uno de tres.**
-> El catálogo estándar de 13 plantillas × 3 estilos (`calido`, `elegante`, `urbano`), la edición desde
+> El catálogo estándar de 13 plantillas (un solo estilo desde el 2026-09-10), la edición desde
 > el dashboard y el flujo "crear → esperar aprobación → cambiar puntero" viven en
 > **`docs/features/whatsapp-templates.md`**. Los textos ya no se copian a mano: están tipados en
 > `src/constants/template-texts.ts`, y la tabla de variables de abajo es la versión en prosa del
@@ -509,7 +509,7 @@ imagen/video"*. Así que el texto fijo se redujo a lo que Meta **obliga**, y ni 
 - toda MARKETING lleva la salida → la línea de SALIR;
 - `{{2}}` (la marca) va en su propia línea bajo el saludo, sin una frase que la presente.
 
-**Estilo `calido`** (`elegante` y `urbano` solo cambian el saludo; el emoji lo pone el
+**El texto** (el emoji lo pone el
 `business_type` del tenant — 🍽️ restaurante, 💈 barbería, 💅 salón, ✨ el resto):
 
 ```
@@ -541,7 +541,6 @@ después:
 | «vivir una **noche** especial» | El calendario no filtra por hora y su campo *Tipo* incluye promo, activación y aniversario: una promo de mediodía salía invitando a una noche |
 | Cierre fijo «¡Te esperamos con **tu familia**!» después de `{{5}}` | `{{5}}` **es** el llamado a la acción que el dueño escribió: el cierre se lo pisaba |
 | Muestra de `{{5}}` = ese mismo cierre | La muestra es lo que revisa Meta y lo que el dueño ve en la vista previa: mostraba la frase repetida dos veces en vez del dato real. Ahora es `¡Promo 2×1 todo el día! Te esperamos. 👉 https://…` |
-| Los 3 estilos con voces distintas | Ya casi no se distinguen, y está bien: **el estilo lo pone la descripción del dueño**, no el marco |
 
 **La aridad es la misma** (`{{1}}`..`{{5}}`), así que `calendar.service.ts` manda lo mismo a los dos
 proveedores y no se tocó ni una línea del camino de envío. Hay cinco pruebas que lo vigilan en

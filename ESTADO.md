@@ -32,6 +32,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Rendimiento del equipo: escaneos y premios por mesero, clientes nuevos vs frecuentes, mesas que más piden (dueño, 2026-09-11) | Opus 5 | `supabase/migrations/00065_*` · `src/services/staff-activity.service.ts` · `src/app/api/dashboard/staff-activity/route.ts` · `src/app/(dashboard)/dashboard/rendimiento/page.tsx` · `src/components/dashboard/StaffActivityPanel.tsx` · `src/components/layout/DashboardSidebar.tsx` · `src/components/layout/DashboardHeader.tsx` · `tests/db/staff-activity.test.ts` · `docs/features/staff-activity.md` · `docs/API_DOCS.md` · `docs/DB_SCHEMA.md` · `docs/features/dashboard.md` · `CHANGELOG.md` | **00065** | en curso |
 
 ## 3. Siguiente, en orden
 

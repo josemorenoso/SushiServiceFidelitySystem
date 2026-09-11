@@ -8,6 +8,21 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [2026-09-11k] - Golden Bullet: tandas, y la plata que necesita cada una antes de confirmar
+
+**Qué:** la billetera cobra la base entera al confirmar y el dueño quiere mandar 2.000 hoy y el resto
+después. Paso 5: «Cuántos en esta tanda» (los primeros N del archivo; `max_contacts` → `maxContacts`
+en `confirmImport()`); los que quedan fuera no se insertan ni encolan y entran subiendo el mismo CSV
+otra vez (la regla anti-reenvío excluye a los ya programados; la pantalla de resultado lo dice). Paso
+6, antes de la frase: «Preparate: esta tanda necesita» Twilio en USD (mensaje a mensaje) y billetera
+en COP (por adelantado), contra el saldo real de Twilio; si no alcanza, confirma con los números y
+cuántos mensajes cubre. El botón de programar lista qué le falta. Emojis en los botones: rechazados
+antes de ir a Twilio.
+**Verificado:** tsc limpio · lint limpio · suite entera 48 archivos / 756 tests. **NO verificado:** una
+confirmación real con tanda (la primera la hace el dueño ahora).
+**Archivos:** `src/services/imported-contacts.service.ts`, `src/app/api/dashboard/imported-contacts/confirm/route.ts`,
+`src/components/dashboard/ImportedContactsUploader.tsx`, `docs/features/golden-bullet.md`.
+
 ## [2026-09-11j] - Golden Bullet: foto arriba del mensaje 1
 
 **Qué:** el dueño quiere que el mensaje 1 lleve una imagen. En la pestaña Plantilla se sube (misma ruta

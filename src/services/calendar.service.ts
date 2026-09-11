@@ -36,6 +36,7 @@ import { getTenantById } from '@/lib/tenant'
 import { appEndOfDay } from '@/lib/timezone'
 import { EVENT_MEDIA_BUCKET, eventMediaPathFromPublicUrl, getEventMediaBaseUrl } from '@/lib/twilio/media'
 import { listZernioTemplates } from '@/lib/zernio/messaging'
+import { resolveTwilioAccount } from '@/lib/twilio/tenant-credentials'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -471,6 +472,7 @@ export async function claimScheduledEvent(
 async function assertEventTemplateUsable(
   templateSid: string,
   tenant: {
+    id: string
     is_demo?: boolean
     twilio_subaccount_sid: string | null
     twilio_subaccount_auth_token: string | null
@@ -509,12 +511,12 @@ async function assertEventTemplateUsable(
     return
   }
 
-  // Camino Twilio — SIN CAMBIOS.
-  const accountSid = tenant.twilio_subaccount_sid ?? process.env.TWILIO_ACCOUNT_SID
-  const authToken = tenant.twilio_subaccount_auth_token ?? process.env.TWILIO_AUTH_TOKEN
-  if (!accountSid || !authToken) return
+  // Camino Twilio. Sin cuenta resuelta (ni subcuenta ni tenant master) no hay
+  // nada que verificar: sendTemplateMessage() ya no envía en ese caso.
+  const account = resolveTwilioAccount(tenant)
+  if (!account) return
 
-  const auth = 'Basic ' + Buffer.from(`${accountSid}:${authToken}`).toString('base64')
+  const auth = 'Basic ' + Buffer.from(`${account.accountSid}:${account.authToken}`).toString('base64')
   let definition: { types?: Record<string, { media?: string[] }> } | null = null
   let approval: { whatsapp?: { status?: string; rejection_reason?: string } } | null = null
 

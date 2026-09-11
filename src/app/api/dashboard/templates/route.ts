@@ -14,8 +14,9 @@ export async function GET() {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
     }
 
-    // Multitenant: usar las credenciales de la subcuenta del tenant, no las de la
-    // master (env). Sin esto, el dashboard listaría las plantillas de Sushi Service.
+    // Multitenant: la subcuenta del tenant, o el env SOLO para el tenant master
+    // (`TWILIO_MASTER_TENANT_ID`). Un tenant sin subcuenta recibe la lista vacía:
+    // el 2026-09-10 uno recién creado listó las 27 plantillas de Sushi Service.
     const creds = await getTenantTwilioCredentials()
     if (!creds) {
       return NextResponse.json({ templates: [], error: 'Twilio no configurado' })

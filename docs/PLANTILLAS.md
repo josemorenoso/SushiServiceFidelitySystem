@@ -706,9 +706,11 @@ cliente (p.ej. Don Alirio) listaría las plantillas de Sushi Service.
 Helper único: `getTenantTwilioCredentials()` en
 [`src/lib/twilio/tenant-credentials.ts`](../src/lib/twilio/tenant-credentials.ts).
 Resuelve el tenant desde el JWT (`app_metadata.tenant_id`), devuelve el header
-`Authorization` (Basic) de la subcuenta y cae a la master solo si el tenant no tiene
-subcuenta propia. Exige SID **y** token de la subcuenta juntos (nunca mezcla SID de
-subcuenta con token master).
+`Authorization` (Basic) de la subcuenta. La cuenta del env (`TWILIO_*`) la usa **solo** el
+tenant cuyo id es `TWILIO_MASTER_TENANT_ID` (Sushi Service); cualquier otro sin subcuenta
+recibe `null` → «Twilio no configurado» (regla `resolveTwilioAccount()`, desde el 2026-09-10:
+antes caía a la master y un tenant nuevo del AIOS veía las plantillas de Sushi Service).
+Exige SID **y** token de la subcuenta juntos (nunca mezcla SID de subcuenta con token master).
 
 Endpoints que lo usan:
 - `GET/POST /api/dashboard/templates` — listar / crear plantillas
@@ -716,7 +718,7 @@ Endpoints que lo usan:
 - `GET /api/dashboard/twilio-metrics` — métricas de mensajería por tenant
 
 > ⚠️ Requiere que el admin del tenant haya re-logueado tras la migración para que el
-> JWT traiga `tenant_id`. Sin él, se cae a la master (comportamiento pre-migración).
+> JWT traiga `tenant_id`. Sin él no hay credenciales: la lista sale vacía.
 
 ---
 

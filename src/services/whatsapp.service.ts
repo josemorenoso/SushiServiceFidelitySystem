@@ -33,6 +33,7 @@ import { sendZernioTemplateMessage } from '@/lib/zernio/messaging'
 import { classifyMessageType } from '@/constants/messaging'
 import { reserveSendSlot, releaseSendSlot, describeDenial } from '@/services/line-budget.service'
 import { ZernioApiError } from '@/lib/zernio/client'
+import { resolveTwilioAccount } from '@/lib/twilio/tenant-credentials'
 
 export interface TwilioMessageResponse {
   sid: string
@@ -68,8 +69,10 @@ export interface MessageLogContext {
  * Credenciales + identidad del tenant para enviar mensajes. Aunque los nombres
  * de campo siguen siendo `twilio_*` (no se renombran — ver tenant.types.ts),
  * esta interfaz ahora también carga lo necesario para el camino Zernio.
- * Se pasa el tenant resuelto (por dominio/slug/JWT). Si el tenant no tiene
- * subaccount propio (camino Twilio), se usa la cuenta master via env (TWILIO_*).
+ * Se pasa el tenant resuelto (por dominio/slug/JWT). La cuenta Twilio la decide
+ * `resolveTwilioAccount()`: subcuenta propia, o el env SOLO si el tenant es el
+ * master (`TWILIO_MASTER_TENANT_ID`). Un tenant sin subcuenta que no sea el
+ * master NO envía — antes caía al número de Sushi Service y se le cobraba a él.
  */
 export interface TenantMessagingContext {
   id: string
@@ -87,15 +90,12 @@ export interface TenantMessagingContext {
 }
 
 function getTwilioClient(tenant: TenantMessagingContext) {
-  const accountSid = tenant.twilio_subaccount_sid ?? process.env.TWILIO_ACCOUNT_SID
-  const authToken = tenant.twilio_subaccount_auth_token ?? process.env.TWILIO_AUTH_TOKEN
-  const whatsappNumber = tenant.twilio_whatsapp_number ?? process.env.TWILIO_WHATSAPP_NUMBER
-
-  if (!accountSid || !authToken || !whatsappNumber) {
+  const account = resolveTwilioAccount(tenant)
+  if (!account || !account.whatsappNumber) {
     return null
   }
 
-  return { accountSid, authToken, whatsappNumber }
+  return { accountSid: account.accountSid, authToken: account.authToken, whatsappNumber: account.whatsappNumber }
 }
 
 export interface SendTemplateOptions {

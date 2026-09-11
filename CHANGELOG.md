@@ -8,6 +8,22 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [2026-09-10e] - La cuenta Twilio master es de UNA marca
+
+**Qué:** un tenant recién creado en el AIOS (sin subcuenta, sin paso 4) abría Plantillas y veía
+las 27 de Sushi Service: `getTenantTwilioCredentials()` "caía" a las `TWILIO_*` del env, y
+`whatsapp.service`, `calendar.service` y `line-health.service` tenían cada uno su propio
+`?? process.env.TWILIO_*`. Con eso podía crear plantillas en la cuenta de Sushi Service y una
+campaña manual habría salido desde su número, cobrada a él. Ahora la regla es una,
+`resolveTwilioAccount()`: subcuenta propia (SID y token, nunca a medias), o el env SOLO si
+`tenants.id = TWILIO_MASTER_TENANT_ID`; lo demás es «Twilio no configurado». Sin la variable,
+nadie usa el env (falla cerrado). **Sin migración.**
+**⚠️ Antes del push:** poner `TWILIO_MASTER_TENANT_ID` en Vercel (RUNBOOK §1.b'), o Sushi Service
+deja de listar y enviar.
+**Archivos:** `src/lib/twilio/tenant-credentials.ts`, `src/services/{whatsapp,calendar,line-health}.service.ts`,
+`src/app/api/dashboard/templates/route.ts`, `tests/unit/twilio-master-fallback.test.ts` (7 tests),
+`.env.example`, `docs/03-security.md`, `docs/RUNBOOK-DEPLOY.md`.
+
 ## [2026-09-10d] - Ver el goteo todos los días, y poder pararlo
 
 **Qué:** pestaña **«En curso»** (la que abre la pantalla) con lo que salió HOY, qué sale en el

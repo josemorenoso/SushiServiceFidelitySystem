@@ -41,6 +41,15 @@ cumpleaños, ni reactivación, ni recordatorios, ni calendario, ni goteo de la c
 Se lee en un solo sitio, server-side: [src/lib/openai/client.ts:41](src/lib/openai/client.ts#L41).
 Sin ella los domicilios no se parsean. **Créala ahora**, antes de apagar el VPS.
 
+### 1.b' — `TWILIO_MASTER_TENANT_ID` es NUEVA (2026-09-10) y sin ella Sushi Service deja de enviar
+
+Es el uuid de `tenants.id` de Sushi Service: `select id from tenants where slug = 'sushi-service';`
+Desde el commit que cierra la caída a la cuenta master, **solo ese tenant** usa las `TWILIO_*` del
+env; cualquier otro sin subcuenta recibe «Twilio no configurado» (antes veía y podía usar las
+plantillas y el número de Sushi Service). Si la variable falta, **nadie** las usa: el panel de
+Sushi Service lista cero plantillas y sus envíos por Twilio se registran como fallidos. Ponerla
+ANTES del push. Detalle: `docs/03-security.md` § "Cuenta Twilio master".
+
 ### 1.c — El resto (deben existir ya; confírmalas de paso)
 
 `NEXT_PUBLIC_SUPABASE_URL` · `NEXT_PUBLIC_SUPABASE_ANON_KEY` · `SUPABASE_SERVICE_ROLE_KEY` ·

@@ -137,6 +137,7 @@ con un `42501` que era del arnés, no del esquema. Se agregó el GRANT al bootst
 | `TWILIO_ACCOUNT_SID` | Solo servidor | En .env.local |
 | `TWILIO_AUTH_TOKEN` | Solo servidor | En .env.local |
 | `TWILIO_WHATSAPP_NUMBER` | Solo servidor | En .env.local |
+| `TWILIO_MASTER_TENANT_ID` | Solo servidor | uuid del ÚNICO tenant que puede usar las tres `TWILIO_*` de arriba. Sin ella nadie las usa (ver § "Cuenta Twilio master") |
 | `CRON_SECRET` | Solo servidor | Valida peticiones a /api/cron/* |
 | `WEBHOOK_DELIVERY_SECRET` | Solo servidor | Fail-closed: sin él `/api/webhook/delivery` responde 503 |
 | `OPENAI_API_KEY` | Solo servidor | Parseo con IA de los domicilios. **NUNCA con prefijo `NEXT_PUBLIC_`.** Solo la lee `src/lib/openai/client.ts`, desde API Routes |
@@ -284,6 +285,25 @@ de multi-sede F7).
 **Tests:** `tests/unit/db-failure.test.ts` — compara explícitamente "vacío" vs "fallo" sobre los
 mismos call sites (`settings.service.ts`, `staff-auth.ts`), para que una regresión futura que
 vuelva a fundir los dos casos ponga la suite en rojo.
+
+## Cuenta Twilio master — de una sola marca (2026-09-10)
+
+Las `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_WHATSAPP_NUMBER` del env son la cuenta
+de **una** marca (Sushi Service). Hasta el 2026-09-10 cualquier tenant sin subcuenta propia
+"caía" a ellas: un cliente recién creado en el AIOS, sin paso 4, vio las 27 plantillas de Sushi
+Service en su panel, habría podido crear plantillas en esa cuenta y una campaña manual habría
+salido **desde el número de Sushi Service y cobrada a Sushi Service**.
+
+La regla vive en `resolveTwilioAccount()` (`src/lib/twilio/tenant-credentials.ts`) y la
+comparten el envío (`whatsapp.service`), el calendario, el sondeo de línea y el panel:
+
+1. Subcuenta propia (SID **y** token): esa, con su propio número. Nunca se mezcla con el env.
+2. Sin subcuenta y `tenants.id = TWILIO_MASTER_TENANT_ID`: el env.
+3. Cualquier otro caso: `null` → «Twilio no configurado», sin listar, sin crear, sin enviar.
+
+Sin `TWILIO_MASTER_TENANT_ID` **nadie** usa el env, incluida Sushi Service: falla cerrado a
+propósito. `tests/unit/twilio-master-fallback.test.ts` fija las tres reglas. Un `?? process.env.TWILIO_*`
+nuevo fuera de ese archivo es la fuga otra vez.
 
 ## Reglas INVIOLABLES
 - NUNCA hardcodear credenciales en el código

@@ -46,6 +46,7 @@ import twilio from 'twilio'
 import { zernioFetch, ZernioApiError } from '@/lib/zernio/client'
 import type { QualityRating, LineStatus } from '@/services/line-budget.service'
 import type { Tenant } from '@/types/tenant.types'
+import { resolveTwilioAccount } from '@/lib/twilio/tenant-credentials'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -123,13 +124,12 @@ export function parseQualityRating(raw: unknown): QualityRating {
  * número es la única vía sin inventarse un dato que no tenemos.
  */
 async function readTwilio(tenant: Tenant): Promise<LineHealthReading | null> {
-  const accountSid = tenant.twilio_subaccount_sid ?? process.env.TWILIO_ACCOUNT_SID
-  const authToken = tenant.twilio_subaccount_auth_token ?? process.env.TWILIO_AUTH_TOKEN
-  const numero = tenant.twilio_whatsapp_number
+  const account = resolveTwilioAccount(tenant)
+  const numero = account?.whatsappNumber
 
-  if (!accountSid || !authToken || !numero) return null
+  if (!account || !numero) return null
 
-  const client = twilio(accountSid, authToken)
+  const client = twilio(account.accountSid, account.authToken)
   // `channel` es OBLIGATORIO en este listado (no es un filtro opcional): sin
   // él el SDK ni siquiera compila. 'whatsapp' es el único canal que este
   // producto usa.

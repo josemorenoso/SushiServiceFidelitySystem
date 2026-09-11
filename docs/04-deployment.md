@@ -177,7 +177,8 @@ sola vez** ahí y las comparten todos los tenants — NO se crea una copia por c
 | `OPENAI_API_KEY` | **Servidor** | 🆕 **Fase 2 de §25 (2026-09-03).** Key de OpenAI para el parseo con IA de los domicilios (`gpt-4o-mini`). **Hay que crearla en Vercel ANTES de desplegar: sin ella no entra ni un pedido de domicilio.** Antes vivía en las credenciales de n8n. Nada más del producto la usa |
 | `N8N_DOMICILIOS_WEBHOOK_URL` | ~~Servidor~~ | 🔻 **MUERTA desde la Fase 2.** Ya no se lee en ningún sitio: el flujo de domicilios corre dentro del producto. Se puede borrar del proyecto cuando se apague el VPS |
 | `N8N_GOOGLE_CONTACTS_WEBHOOK_URL` | **Servidor** | URL webhook n8n Google Contacts (W3, opcional) |
-| `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_WHATSAPP_NUMBER` / `TWILIO_MESSAGING_SERVICE_SID` | **Servidor** | Cuenta **master** (Sushi Service). Sirve de *fallback* cuando un tenant no tiene su propia subcuenta configurada — ver `getTwilioClient()` en `src/services/whatsapp.service.ts` |
+| `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_WHATSAPP_NUMBER` / `TWILIO_MESSAGING_SERVICE_SID` | **Servidor** | Cuenta **master** (Sushi Service). La usa **solo** el tenant `TWILIO_MASTER_TENANT_ID`; ya no es fallback de nadie — ver `resolveTwilioAccount()` en `src/lib/twilio/tenant-credentials.ts` |
+| `TWILIO_MASTER_TENANT_ID` | **Servidor** | uuid de `tenants.id` de Sushi Service. Sin ella nadie usa las `TWILIO_*` (falla cerrado) — `docs/03-security.md` § "Cuenta Twilio master" |
 | `NEXT_PUBLIC_BRAND_NAME` / `NEXT_PUBLIC_BRAND_SHORT` / `NEXT_PUBLIC_GOOGLE_MAPS_REVIEW_URL` / `RESTAURANT_WHATSAPP_LINK` | Pública / Servidor | Branding **default del sistema** — solo se usa si un tenant no tiene su propio `config` en la tabla `tenants`. Ver `src/lib/branding.ts` |
 | `NEXT_PUBLIC_DEMO_EMAIL` / `NEXT_PUBLIC_DEMO_PASSWORD` | Pública | (Opcional) Credenciales del login demo |
 
@@ -189,7 +190,7 @@ fila en `tenants` (ver §6) con:
 | Columna | Reemplaza a la env var... | Notas |
 |---------|---------------------------|-------|
 | `config.brand_name`, `brand_short`, `brand_tagline`, `staff_role_label`, `google_maps_url`, `whatsapp_link`, `instagram_url`, `delivery_phone`, `card_bg`, `page_bg` | `NEXT_PUBLIC_BRAND_*`, `RESTAURANT_WHATSAPP_LINK`, `NEXT_PUBLIC_GOOGLE_MAPS_REVIEW_URL` | Resuelto por dominio en cada request — ver `src/lib/branding.ts` (`resolveBranding()`) y `src/lib/branding-server.ts` |
-| `twilio_subaccount_sid`, `twilio_subaccount_auth_token`, `twilio_messaging_service_sid`, `twilio_whatsapp_number` | `TWILIO_*` | Si están vacías, el sistema cae al fallback master (columna de arriba) — útil solo en pruebas, en producción cada tenant real tiene su propia subcuenta |
+| `twilio_subaccount_sid`, `twilio_subaccount_auth_token`, `twilio_messaging_service_sid`, `twilio_whatsapp_number` | `TWILIO_*` | Si están vacías, el tenant NO envía ni lista plantillas (`Twilio no configurado`), salvo que sea el `TWILIO_MASTER_TENANT_ID`. Cada tenant real tiene su propia subcuenta o va por Zernio |
 | `domain` | — (nuevo) | Dominio custom del tenant, agregado también como Domain en Vercel — ver §6 paso 3 |
 | `slug` | — (nuevo) | Usado por n8n (`tenant_slug`) y por los crons (`?tenant=`) — ver §5 |
 
@@ -900,11 +901,13 @@ aprobado. Todo el paso 2/3/7 de §6 se pospone.
 SQL Editor. Crea el tenant + tiers default + `admin_settings` base + sede opcional. Es
 idempotente.
 
-> 🔴 **Trampa a evitar — el fallback al master.** `getTwilioClient()`
-> (`src/services/whatsapp.service.ts`) usa las env `TWILIO_*` (cuenta **master** = Sushi
-> Service) cuando el tenant no tiene credenciales propias. Un tenant sin Twilio que TENGA
-> algún `*_template_sid` en `admin_settings` enviaría WhatsApp **desde el número de Sushi
-> Service**, cobrado a la cuenta master y debitado de la billetera del cliente nuevo.
+> 🔴 **Trampa cerrada el 2026-09-10 — el fallback al master.** `getTwilioClient()`
+> (`src/services/whatsapp.service.ts`) usaba las env `TWILIO_*` (cuenta **master** = Sushi
+> Service) cuando el tenant no tenía credenciales propias: un tenant sin Twilio que TUVIERA
+> algún `*_template_sid` en `admin_settings` enviaba WhatsApp **desde el número de Sushi
+> Service**, cobrado a la cuenta master. Hoy `resolveTwilioAccount()` solo le da el env al
+> tenant `TWILIO_MASTER_TENANT_ID`; el resto sin subcuenta no envía. La regla de abajo sigue
+> valiendo como segunda cerradura.
 >
 > Por eso, mientras no haya Twilio propio: **cero claves `*_template_sid`** para ese
 > `tenant_id`. Sin plantilla configurada, el envío se corta antes de llamar a Twilio

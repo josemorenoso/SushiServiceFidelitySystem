@@ -32,6 +32,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Timeout de Supabase Auth te saca al login en medio del paso 4 del AIOS (Planeta Wings, 2026-09-11 23:45 UTC) · Opus 5 · 2026-09-11 | Opus 5 | AIOS: `src/lib/auth.ts`, `src/lib/supabase/proxy.ts`, `CHANGELOG.md` · producto: `ESTADO.md` | — | abierta |
 
 ## 3. Siguiente, en orden
 

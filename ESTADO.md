@@ -32,6 +32,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| API de Conversiones de Meta: celular hasheado + token por marca (dueño, 2026-09-11) | Opus 5 | `src/lib/meta-pixel*.ts`, `src/lib/meta-conversions*.ts`, `src/components/features/analytics/*`, `src/components/features/check-in/CheckInForm.tsx`, `src/app/(public)/check-in/page.tsx`, `src/app/(public)/privacidad/page.tsx`, `src/app/api/check-in/route.ts`, `src/app/api/customers/register/route.ts`, `src/app/api/dashboard/meta-conversions/*`, `src/app/(dashboard)/dashboard/settings/page.tsx`, `supabase/migrations/00061_*`, `tests/unit/meta-*.test.ts`, `docs/features/meta-pixel.md`, `docs/DB_SCHEMA.md`, `.env.example`, `CHANGELOG.md` | **00061** | en curso |
 
 ## 3. Siguiente, en orden
 

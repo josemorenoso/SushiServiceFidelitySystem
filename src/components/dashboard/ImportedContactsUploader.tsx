@@ -367,6 +367,22 @@ export function ImportedContactsUploader({ onSent, apagado = false }: { onSent?:
 
   const confirmacionOk = confirmacion.trim().toUpperCase() === FRASE_CONFIRMACION
 
+  // Por qué el botón de programar está gris, en palabras. Un botón deshabilitado
+  // sin motivo hizo que el dueño reescribiera la frase tres veces (2026-09-11)
+  // cuando lo que faltaba era la plantilla del paso 4, que Meta no había aprobado.
+  const faltantes: string[] = []
+  if (validation && validation.valid === 0) faltantes.push('un CSV con contactos válidos')
+  if (!templateSid) {
+    faltantes.push(
+      compatibles.length === 0
+        ? 'una plantilla aprobada por Meta en el paso 4 (la tuya sigue en revisión: tarda 24-48 h)'
+        : 'elegir la plantilla en el paso 4'
+    )
+  }
+  if (!promoLista) faltantes.push('el texto de la promo ({{2}}) en el paso 4')
+  if (!blockSize) faltantes.push('los mensajes por día en el paso 5')
+  if (!confirmacionOk) faltantes.push(`escribir ${FRASE_CONFIRMACION}`)
+
   return (
     <div className="space-y-5">
       {lineaTocada && (
@@ -718,12 +734,17 @@ export function ImportedContactsUploader({ onSent, apagado = false }: { onSent?:
               </div>
               <Button
                 onClick={handleSend}
-                disabled={sending || !templateSid || !promoLista || !confirmacionOk || !blockSize || validation.valid === 0}
+                disabled={sending || faltantes.length > 0}
                 className="gap-2"
               >
                 {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 {sending ? 'Programando...' : `Programar envío (${validation.valid.toLocaleString('es-CO')})`}
               </Button>
+              {faltantes.length > 0 && (
+                <p className="text-xs text-amber-700">
+                  Para programar falta: {faltantes.join(' · ')}.
+                </p>
+              )}
             </CardContent>
           </Card>
         </>

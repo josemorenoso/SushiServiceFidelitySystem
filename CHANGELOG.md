@@ -8,6 +8,21 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [2026-09-11f] - Plantillas: diagnóstico del sistema entero, guardado como pendiente (solo docs)
+
+**Tipo:** docs · **Origen:** el dueño ("me está causando mucha fricción el temita de las plantillas") · **Sin migración, sin código**
+
+- Se leyó todo el sistema (catálogo, textos, servicio, tres pantallas, envío, webhook, pasos 4 y 5 del AIOS,
+  scripts) y el diagnóstico quedó en **`docs/PENDIENTES-PLANTILLAS.md`**: nueve fallas verificadas y un plan de
+  ocho pasos, sin decidir ni construir.
+- Las tres de fondo: el AIOS y el producto tienen DOS catálogos y DOS rastreadores de aprobación que se ignoran
+  (todo tenant Zernio ve 13 «activo sin texto»); el catálogo de 13 no cubre `tier_unlocked_template_sid` ni
+  `reward_reminder_template_sid` (en Zernio, cruzar un nivel es silencio); tres pantallas para una cosa y
+  Ajustes › Plantillas le miente a un tenant Zernio.
+- `ESTADO.md`: fila 0.PLANTILLAS en §3 y un renglón en §6.
+- **Archivos:** `docs/PENDIENTES-PLANTILLAS.md` (nuevo), `ESTADO.md`, `CHANGELOG.md`.
+- **Verificado:** nada que verificar, no hay código.
+
 ## [2026-09-11e] - Rendimiento del equipo: escaneos y premios por mesero, nuevos vs frecuentes, mesas (00065)
 
 **Tipo:** feature · **Migración:** `00065` (aplicada el 2026-09-11, antes del push) · **Doc:** `docs/features/staff-activity.md`

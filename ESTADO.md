@@ -48,6 +48,15 @@
    ⚠️ `clubtepuy.constelarys.com` (raíz) con DOS sedes activas **no debe llevar a Envigado**: por D21
    responde 409 con la lista de sedes. Si lleva a Envigado, o Laureles está inactiva en el producto, o
    Envigado tiene el dominio raíz como propio. Se mira en `/dashboard/sedes` de Tepuy.
+0.PLANTILLAS **Rediseño del sistema de plantillas: diagnóstico cerrado el 11, decisión pendiente del dueño.**
+   Textual: *"me está causando mucha fricción… un sistema altamente mediocre aunque le hayamos metido
+   esfuerzo"*. Todo está en **`docs/PENDIENTES-PLANTILLAS.md`**: nueve fallas verificadas en el código y
+   un plan de ocho pasos. Las tres que quitan la fricción: (1) el AIOS deja de crear plantillas y llama al
+   producto —hoy son DOS catálogos, DOS rastreadores de aprobación y todo tenant Zernio ve 13 «activo sin
+   texto»—; (2) el catálogo no cubre `tier_unlocked_template_sid` ni `reward_reminder_template_sid`, así que
+   **en Zernio el cruce de nivel es silencio total**; (3) una sola pantalla Mensajes para los dos proveedores
+   (hoy tres, y Ajustes › Plantillas le miente a un tenant Zernio). Las dos que bajan el costo: reducir de 13
+   a 8 aprobaciones por tenant y probar UTILITY en los recibos. Nada construido.
 0.GB **Golden Bullet por bloques y sondeo de salud: construidos el 10, faltan CUATRO cosas del dueño.**
    El código está en la rama (`640ae1f`). En este orden:
    1. ✅ **La `00060` ya está aplicada** (dueño, 2026-09-10, antes del push).
@@ -445,6 +454,11 @@ sin UNIQUE por tenant · **D4** diagrama ER de DB_SCHEMA obsoleto · **D5** cont
   `00052` y `00055` los fabricó el script viejo al leer una cita como reserva. Ninguno se rellena.
 - **Choques de migración en ramas muertas**: `sushi-sync` (00015) y `port/sushi-fun-2.8` (00028).
 - **Catálogo de producto sin empezar** (referidos, push, fatiga, §7, §8, §18): `docs/ESTADO-REQUERIMIENTOS.md`.
+- **Plantillas (2026-09-11)**: cinco escritores de `admin_settings.*_template_sid` (el invariante de
+  `promoteVersion()` vale en un archivo, no en el sistema) · `tier_unlocked` y `reward_reminder` fuera del
+  catálogo · una plantilla PAUSED por Meta sigue apuntada y falla en silencio · `no_template_configured` no
+  llega a ninguna pantalla · `flujo-plantillas-recompensas-campanas.md` describe un contrato que ya no existe.
+  Diagnóstico y plan: `docs/PENDIENTES-PLANTILLAS.md` (§3 0.PLANTILLAS).
 
 ## 7. Reglas de esta casa
 

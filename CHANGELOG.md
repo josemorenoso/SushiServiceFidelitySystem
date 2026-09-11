@@ -133,6 +133,20 @@ datos gigante» (dueño) + «asegúrate de que tenemos el límite real de cada m
 `src/components/dashboard/ImportedContactsUploader.tsx`, `vercel.json`, `docs/features/{golden-bullet,send-governance}.md`.
 **Ojo:** la 00060 va **antes** de desplegar, y la plantilla con botones la tiene que aprobar Meta (24-48h).
 
+## [2026-09-11] - El marco de evento tenía tan poco texto que Meta lo rechazó
+
+**Qué:** Meta rechazó la invitación a evento con `INVALID_FORMAT`: exige ~3 palabras fijas por
+variable + 1 y el «marco mínimo» del 10 tenía 8 para 5 variables. Ahora tiene 22 («Te escribimos
+de _{{2}}_ porque tenemos una novedad para ti» / «Aquí van los detalles:»), sin "noche", sin
+"familia", y `{{5}}` sigue siendo lo último antes del SALIR. La prueba que exigía ≤20 caracteres
+fijos se reemplaza por la regla de Meta sobre los 13 textos. Copia del AIOS regenerada.
+**Por qué:** rechazo real en Twilio (Sushi Fun, `image_campaing`, 2026-09-11 01:29), leído con
+`scripts/verificar-plantillas-evento.mjs`. La anterior (`image_campanas_calendario`) cayó por otra
+cosa: el archivo de muestra `Zernio_template.jpg` no está en la raíz del bucket.
+**Archivos:** `template-texts.ts`, `tests/unit/template-catalog.test.ts`, `docs/PLANTILLAS.md`,
+`SQL-PARA-CORRER/plantillas-evento-viejas/LEEME.md` · AIOS `templates-catalog.ts`.
+**Verificado:** `tsc` en los dos repos · `template-catalog` 30 tests. **Migración:** ninguna.
+
 ## [2026-09-10c] - Un solo estilo, y el AIOS deja de mandar sushi
 
 **Qué:** se retiran `elegante` y `urbano`: el banco queda en 13 textos (cálido), y con ellos se van

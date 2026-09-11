@@ -126,16 +126,18 @@ describe('banco de textos', () => {
     }
   })
 
-  it('las de evento son un MARCO: casi todo el cuerpo son datos del dueño', () => {
-    // La medida de "cuánta redacción nuestra queda": sacando las variables y el
-    // opt-out, no puede sobrar más que un saludo. Si alguien vuelve a meter una
-    // frase de relleno, este número se dispara y la prueba se cae.
-    for (const key of ['event_image', 'event_video'] as const) {
-      const nuestro = buildTemplateBody(key, MARCA, RESTAURANTE)
-        .replace(OPT_OUT_LINE, '')
-        .replace(/\{\{\d+\}\}/g, '')
-        .replace(/[\s*_📅🎉🙌✨💈💅🍽️]/gu, '')
-      expect(nuestro.length, `${key}: "${nuestro}"`).toBeLessThanOrEqual(20)
+  it('TODO el banco tiene texto fijo suficiente para Meta: 3 palabras por variable + 1', () => {
+    // Meta rechaza con INVALID_FORMAT ("too many variable parameters relative
+    // to the message length"). La proporción documentada es 3×N+1 palabras
+    // fijas para N variables. El primer "marco mínimo" de evento tenía 8
+    // palabras para 5 variables y Meta lo rechazó en segundos (2026-09-11).
+    // Esto es lo contrario de "menos texto es mejor": hay un piso.
+    const palabras = (body: string) =>
+      body.replace(/\{\{\d+\}\}/g, ' ').split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length
+    for (const t of TEMPLATE_CATALOG) {
+      const body = buildTemplateBody(t.key, MARCA, RESTAURANTE)
+      const minimo = 3 * t.variables.length + 1
+      expect(palabras(body), `${t.key}: ${palabras(body)} palabras, mínimo ${minimo}`).toBeGreaterThanOrEqual(minimo)
     }
   })
 

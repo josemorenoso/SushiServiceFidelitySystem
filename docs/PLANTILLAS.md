@@ -514,11 +514,12 @@ imagen/video"*. Así que el texto fijo se redujo a lo que Meta **obliga**, y ni 
 
 ```
 ¡Hola {{1}}! 🎉🍽️
-_{{2}}_
+Te escribimos de _{{2}}_ porque tenemos una novedad para ti.
 
 *{{3}}*
-📅 {{4}}
+📅 Fecha: {{4}}
 
+Aquí van los detalles:
 {{5}}
 
 _Responde SALIR para no recibir más mensajes._
@@ -530,8 +531,12 @@ las 39 combinaciones del banco. Meta numera en orden de aparición y un rechazo 
 crear la plantilla: se ve 24-72h después, con las 25 cuentas ya sometidas. Hay una prueba que barre
 el banco entero.
 
-Sacando variables, firma y opt-out, lo que ponemos nosotros es **«¡Hola!»**: seis caracteres.
-Hay una prueba que lo mide y se cae si alguien vuelve a meter relleno.
+⚠️ **Hay un PISO de texto fijo, y es de Meta.** Rechaza con `INVALID_FORMAT` («too many variable
+parameters relative to the message length») cuando hay pocas palabras para tantas variables: la
+proporción documentada es **3 palabras por variable + 1** (5 variables → 16 palabras). El primer
+marco «¡Hola!» de seis caracteres tenía 8 y Meta lo rechazó en segundos (2026-09-11, Sushi Fun,
+`image_campaing`). «Te escribimos de … porque tenemos una novedad para ti» y «Aquí van los
+detalles» son relleno neutro a propósito: 22 palabras. Una prueba cuenta las palabras de los 13.
 
 **Qué se fue del texto viejo** — todo era literal aprobado por Meta, o sea imposible de arreglar
 después:
@@ -546,7 +551,7 @@ después:
 proveedores y no se tocó ni una línea del camino de envío. Hay cinco pruebas que lo vigilan en
 `tests/unit/template-catalog.test.ts`: que las dos claves compartan cuerpo y variables, que debajo de
 `{{5}}` no quede una sola palabra nuestra, que el texto no hornee un momento del día ni una compañía,
-que lo fijo no pase de 20 caracteres, y que en TODO el banco las variables vayan en orden ascendente.
+que los 13 tengan texto fijo suficiente para Meta (3×variables+1), y que las variables vayan en orden ascendente.
 
 Para sacar de circulación las viejas de un tenant Zernio:
 [`SQL-PARA-CORRER/plantillas-evento-viejas/`](../SQL-PARA-CORRER/plantillas-evento-viejas/LEEME.md).

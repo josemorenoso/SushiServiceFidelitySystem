@@ -22,11 +22,12 @@ tipo de negocio del cliente, y las URLs de muestra salen de `ZERNIO_TEMPLATE_SAM
 
 ```
 ¡Hola {{1}}! 🎉🍽️
-_{{2}}_
+Te escribimos de _{{2}}_ porque tenemos una novedad para ti.
 
 *{{3}}*
-📅 {{4}}
+📅 Fecha: {{4}}
 
+Aquí van los detalles:
 {{5}}
 
 _Responde SALIR para no recibir más mensajes._

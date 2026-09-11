@@ -73,33 +73,26 @@ export type TemplateBodyBuilder = (brandName: string, emoji: string) => string
  *
  * ES UN MARCO, NO UN MENSAJE. Decisión del dueño, textual: "el que decide qué
  * mensaje contiene es el cliente, por eso le pedimos que ingrese un título, una
- * descripción, un link y una imagen". El texto fijo se reduce a lo que Meta
- * OBLIGA y ni una palabra más:
+ * descripción, un link y una imagen". Lo que ponemos nosotros es lo mínimo que
+ * Meta acepta, y ni una palabra que el dueño pueda querer distinta:
  *
- *  1. Una plantilla no puede ser solo variables ni empezar o terminar con una
- *     → de ahí el saludo y la línea de SALIR, y nada en el medio.
- *  2. Toda plantilla MARKETING lleva la salida (`OPT_OUT_LINE`).
- *  3. `{{2}}` (la marca) va en su propia línea bajo el saludo, sin una frase que
- *     la presente. Ahí y no al final por una razón dura: **las variables van en
- *     orden ASCENDENTE**. Con la firma abajo el cuerpo quedaba `1,3,4,5,2`, el
- *     único caso desordenado de las 39 combinaciones del banco, y un rechazo de
- *     Meta por eso se descubre 72 horas después. Lo vigila una prueba.
+ *  1. **Meta exige texto fijo proporcional a las variables** — rechaza con
+ *     `INVALID_FORMAT` ("too many variable parameters relative to the message
+ *     length"). La proporción documentada es 3 palabras por variable + 1: con
+ *     5 variables, 16 palabras. La primera versión de este marco tenía 8 y
+ *     Meta la rechazó en segundos (2026-09-11, Sushi Fun, `image_campaing`).
+ *     Por eso "Te escribimos de … porque tenemos una novedad para ti" y "Aquí
+ *     van los detalles": son relleno neutro, a propósito, y una prueba cuenta
+ *     las palabras de los 13 textos.
+ *  2. Nada de "noche" ni de "familia": el calendario no filtra por hora y el
+ *     Tipo incluye promo, activación y aniversario. Meta aprueba el literal.
+ *  3. Nada DESPUÉS de `{{5}}` salvo el aviso de SALIR: `{{5}}` es el llamado a
+ *     la acción que el dueño escribió, con su enlace, y tiene que ser lo último.
+ *  4. Variables en orden ASCENDENTE (`1,2,3,4,5`): Meta numera por aparición.
  *
- * Todo lo demás lo pone el dueño en el formulario: `{{3}}` su título, `{{4}}` su
- * fecha y `{{5}}` su descripción con el enlace pegado (`buildEventCta()`). El
- * texto de antes invitaba a "vivir una noche especial" —el calendario no filtra
- * por hora, así que una promo de mediodía salía invitando a una noche— y
- * remataba con un "¡Te esperamos con tu familia!" que le pisaba el llamado a la
- * acción recién escrito. Los tres estilos ya casi no se distinguen entre sí, y
- * está bien: acá el estilo lo pone la descripción del dueño, no nosotros.
- *
- * ⚠️ Esto NO toca las plantillas Twilio ya aprobadas de los 4 tenants viejos,
- * que conservan su cuerpo con cierre fijo y su `{{6}}`. La aridad es la misma
- * ({{1}}..{{5}}), así que `calendar.service.ts` manda lo mismo a los dos
- * proveedores. Ver docs/PLANTILLAS.md § "Plantilla 12".
  */
 const EVENT_INVITE_TEXT: TemplateBodyBuilder = (_brand, emoji) =>
-  `¡Hola {{1}}! 🎉${emoji}\n_{{2}}_\n\n*{{3}}*\n📅 {{4}}\n\n{{5}}\n\n${OPT_OUT_LINE}`
+  `¡Hola {{1}}! 🎉${emoji}\nTe escribimos de _{{2}}_ porque tenemos una novedad para ti.\n\n*{{3}}*\n📅 Fecha: {{4}}\n\nAquí van los detalles:\n{{5}}\n\n${OPT_OUT_LINE}`
 
 /**
  * El banco. El tipo `Record<TemplateKey, ...>` obliga a TypeScript a fallar si

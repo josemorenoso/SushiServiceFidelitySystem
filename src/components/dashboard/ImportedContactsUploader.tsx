@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
-import { Upload, Download, Loader2, CheckCircle2, Send, FileText, CalendarClock, AlertTriangle } from 'lucide-react'
+import { Upload, Download, Loader2, CheckCircle2, Send, FileText, CalendarClock, AlertTriangle, FlaskConical } from 'lucide-react'
 import { toast } from 'sonner'
 import { ImportedContactsCostEstimator } from './ImportedContactsCostEstimator'
 
@@ -149,16 +149,30 @@ export function ImportedContactsUploader({ onSent, apagado = false }: { onSent?:
   const [twilioBalance, setTwilioBalance] = useState<{ balance: number | null; balanceCOP?: number } | null>(null)
   const [result, setResult] = useState<ConfirmResult | null>(null)
 
+  // ── La prueba a un número ──
+  // Todas las MARKETING compatibles, aprobadas O en revisión: una plantilla
+  // pendiente llega igual si el número le escribió a la línea en las últimas
+  // 24 h, y ver el mensaje en un celular ANTES de que Meta apruebe ahorra un
+  // ciclo de dos días si hay algo que corregir.
+  const [todasPlantillas, setTodasPlantillas] = useState<TemplateItem[]>([])
+  const [pruebaTel, setPruebaTel] = useState('')
+  const [pruebaNombre, setPruebaNombre] = useState('')
+  const [pruebaSid, setPruebaSid] = useState('')
+  const [pruebaPromo, setPruebaPromo] = useState('')
+  const [enviandoPrueba, setEnviandoPrueba] = useState(false)
+  const [pruebaEnviada, setPruebaEnviada] = useState<{ phone: string; sid: string } | null>(null)
+
   useEffect(() => {
     fetch('/api/dashboard/templates')
       .then((r) => r.json())
       .then((d) => {
-        const approved = (d.templates ?? []).filter(
-          (t: TemplateItem) => t.status === 'approved' && (t.category ?? '').toUpperCase() === 'MARKETING'
+        const marketing = (d.templates ?? []).filter(
+          (t: TemplateItem) => (t.category ?? '').toUpperCase() === 'MARKETING'
         )
-        setTemplates(approved)
+        setTemplates(marketing.filter((t: TemplateItem) => t.status === 'approved'))
+        setTodasPlantillas(marketing.filter((t: TemplateItem) => plantillaCompatible(t.body)))
       })
-      .catch(() => setTemplates([]))
+      .catch(() => { setTemplates([]); setTodasPlantillas([]) })
     fetch('/api/dashboard/twilio-balance')
       .then((r) => r.json())
       .then(setTwilioBalance)
@@ -226,6 +240,40 @@ export function ImportedContactsUploader({ onSent, apagado = false }: { onSent?:
     fin.setDate(fin.getDate() + Math.max(0, dias - 1))
     return { efectivo, dias, fin: fin.toISOString(), recortado: cupo !== null && blockSize > cupo }
   }, [validation, blockSize, cupo])
+
+  const plantillaPrueba = todasPlantillas.find((t) => t.sid === pruebaSid) ?? null
+  const pruebaPidePromo = plantillaPrueba ? plantillaUsaPromo(plantillaPrueba.body) : false
+  const pruebaTelOk = /^(\+?57)?3\d{9}$/.test(pruebaTel.replace(/[\s()-]/g, ''))
+
+  const enviarPrueba = async () => {
+    if (!pruebaTelOk || !pruebaSid || (pruebaPidePromo && !pruebaPromo.trim())) return
+    setEnviandoPrueba(true)
+    setPruebaEnviada(null)
+    try {
+      const res = await fetch('/api/dashboard/imported-contacts/test-send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: pruebaTel.trim(),
+          name: pruebaNombre.trim(),
+          template_sid: pruebaSid,
+          promo_text: pruebaPidePromo ? pruebaPromo.trim() : '',
+          fallback_name: fallbackName.trim(),
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.message || data.error || 'No se pudo enviar la prueba')
+        return
+      }
+      setPruebaEnviada({ phone: data.phone, sid: data.sid })
+      toast.success(`Prueba enviada a ${data.phone}`)
+    } catch {
+      toast.error('Error de conexión')
+    } finally {
+      setEnviandoPrueba(false)
+    }
+  }
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -331,6 +379,96 @@ export function ImportedContactsUploader({ onSent, apagado = false }: { onSent?:
           </p>
         </div>
       )}
+
+      {/* Prueba — el mensaje 1 a un número, antes de programar nada */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2"><FlaskConical className="h-4 w-4" /> Probar el mensaje en un celular</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Manda el mensaje 1 <strong>de verdad</strong> a un número que escribas acá, por el mismo camino que la
+            campaña (cuesta un mensaje). No lo agrega a ninguna base. Tocá <strong>Sí</strong> en el celular para ver
+            el mensaje 2 con la foto. No toques <strong>No</strong> desde el número de un cliente real: lo marca como
+            opt-out.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="prueba-tel" className="text-xs uppercase tracking-wide text-muted-foreground">Celular</Label>
+              <Input
+                id="prueba-tel"
+                value={pruebaTel}
+                onChange={(e) => setPruebaTel(e.target.value)}
+                placeholder="3001234567 o +573001234567"
+                inputMode="tel"
+              />
+              <p className={`text-xs ${pruebaTel && !pruebaTelOk ? 'text-amber-700' : 'text-muted-foreground'}`}>
+                Móvil colombiano: 10 dígitos empezando por 3, con o sin +57.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="prueba-nombre" className="text-xs uppercase tracking-wide text-muted-foreground">Nombre ({'{{1}}'})</Label>
+              <Input
+                id="prueba-nombre"
+                value={pruebaNombre}
+                onChange={(e) => setPruebaNombre(e.target.value)}
+                placeholder={`Vacío = «${fallbackName.trim() || 'cliente'}», como a los que no tienen nombre`}
+              />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs uppercase tracking-wide text-muted-foreground">Plantilla</Label>
+            {todasPlantillas.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                Todavía no hay ninguna plantilla compatible. Creala en la pestaña <strong>Plantilla</strong>; aparece acá apenas
+                exista, aunque Meta no la haya aprobado.
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {todasPlantillas.map((t) => (
+                  <button
+                    key={t.sid}
+                    onClick={() => setPruebaSid(t.sid)}
+                    className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                      pruebaSid === t.sid ? 'bg-foreground text-background border-foreground' : 'border-border bg-background hover:bg-muted'
+                    }`}
+                  >
+                    {t.name}{t.status !== 'approved' ? ` · ${['pending', 'received'].includes(t.status) ? 'en revisión' : t.status}` : ''}
+                  </button>
+                ))}
+              </div>
+            )}
+            {plantillaPrueba && plantillaPrueba.status !== 'approved' && (
+              <p className="text-xs text-amber-700">
+                Meta todavía no aprobó esta plantilla: solo llega si ese celular le escribió a la línea en las últimas 24
+                horas. Mandale «hola» a la línea desde el celular y después probá.
+              </p>
+            )}
+          </div>
+          {pruebaPidePromo && (
+            <div className="space-y-1.5">
+              <Label htmlFor="prueba-promo" className="text-xs uppercase tracking-wide text-muted-foreground">Texto de la promo ({'{{2}}'})</Label>
+              <Input id="prueba-promo" value={pruebaPromo} onChange={(e) => setPruebaPromo(e.target.value)} placeholder="Ej: un postre gratis en tu próxima visita" />
+            </div>
+          )}
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              variant="outline"
+              onClick={enviarPrueba}
+              disabled={apagado || enviandoPrueba || !pruebaTelOk || !pruebaSid || (pruebaPidePromo && !pruebaPromo.trim())}
+              className="gap-2"
+            >
+              {enviandoPrueba ? <Loader2 className="h-4 w-4 animate-spin" /> : <FlaskConical className="h-4 w-4" />}
+              {enviandoPrueba ? 'Enviando...' : 'Enviar prueba a este número'}
+            </Button>
+            {pruebaEnviada && (
+              <span className="text-xs text-green-700">
+                Enviada a {pruebaEnviada.phone} (SID {pruebaEnviada.sid.slice(0, 10)}…). Mirá el celular.
+              </span>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Paso 1 — Subir CSV */}
       <Card>

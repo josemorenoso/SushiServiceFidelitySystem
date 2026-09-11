@@ -305,6 +305,19 @@ Estados (`00060` agregó los dos últimos):
   excluye en `validate` y **otra vez** en `confirm` (carrera entre dos importaciones).
 - Los duplicados dentro del mismo CSV se descartan (solo el primero cuenta).
 
+## Probar el mensaje en un celular (2026-09-11)
+
+Arriba del paso 1 de «Nueva campaña» hay una tarjeta para mandar el mensaje 1 **de verdad** a un
+número tipeado (`3001234567` o `+573001234567`), con el nombre que se quiera o vacío para verlo como
+lo ven los sin nombre. Sale por `sendTemplateMessage()`, o sea por el mismo camino que la campaña
+(opt-out, presupuesto de línea, `message_logs` y el débito de 100 COP), y **no** inserta en
+`imported_contacts`: el número sigue pudiendo entrar en el CSV. Lista **todas** las MARKETING
+compatibles, aprobadas o en revisión: Meta solo entrega plantillas aprobadas fuera de la ventana de
+24 h, así que una pendiente llega igual si ese celular le escribió «hola» a la línea antes — y ver el
+mensaje dos días antes de la aprobación es lo que permite corregirlo sin perder el ciclo. Tocar «Sí»
+en el celular muestra el mensaje 2 con la foto; tocar «No» desde el número de un cliente real lo deja
+en opt-out, y la tarjeta lo advierte.
+
 ## Flujo (asistente de 5 pasos)
 
 1. **Subir CSV** — columnas `telefono` (req), `nombre`, `email`.
@@ -328,6 +341,7 @@ Estados (`00060` agregó los dos últimos):
 | POST | `/api/dashboard/imported-contacts/pause` | `{ campaign_id, action: 'pause' \| 'resume', block_size? }` |
 | GET/POST | `/api/dashboard/imported-contacts/template` | `GET` = defectos, topes y respuestas guardadas (no toca nada). `POST` = crea en Twilio y somete a Meta. Body: `{ body, boton_si?, boton_no?, promo_ejemplo? }` |
 | POST | `/api/dashboard/imported-contacts/reply-image` | Sube la foto de la respuesta al «sí» (multipart `file`, JPG/PNG/WebP) y devuelve su URL pública |
+| POST | `/api/dashboard/imported-contacts/test-send` | Manda el mensaje 1 a UN número tipeado (`{ phone, name?, template_sid, promo_text?, fallback_name? }`) por el mismo camino que la campaña. No toca `imported_contacts`. Si el proveedor lo rechaza, devuelve el motivo leído de `message_logs` |
 
 **Topes de `confirm`:** `409` si la puerta de calidad frena · `409` si no hay saldo ·
 **`413` si el lote pasa de 30.000 contactos**. Ese último no es una regla de negocio: es
@@ -384,6 +398,7 @@ como colombiano. El test que lo fija: `tests/unit/golden-bullet-telefonos.test.t
 - `src/components/dashboard/ImportedContactsUploader.tsx`, `ImportedContactsCostEstimator.tsx`, `ImportedContactsHistory.tsx`
 - `tests/unit/golden-bullet-bloques.test.ts`, `tests/unit/golden-bullet-telefonos.test.ts`, `tests/unit/golden-bullet-respuestas.test.ts`
 - `src/app/api/dashboard/imported-contacts/reply-image/route.ts` — la foto del mensaje 2
+- `src/app/api/dashboard/imported-contacts/test-send/route.ts` — la prueba a un número
 - `public/plantilla_golden_bullet.csv`
 - Wiring: `src/app/api/cron/queue-drain/route.ts` (envío y marcado),
   `src/app/api/webhook/twilio-incoming/route.ts` y `webhook/zernio/route.ts` (botones),

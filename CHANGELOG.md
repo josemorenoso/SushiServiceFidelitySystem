@@ -8,6 +8,20 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [2026-09-11i] - Golden Bullet: probar el mensaje en un celular antes de programar la base
+
+**Qué:** el dueño quiere ver el mensaje 1 en un celular antes de mandarlo a 7.438 personas. Arriba del
+paso 1 de «Nueva campaña» hay una tarjeta: número tipeado (`3001234567` o `+57…`), nombre opcional
+(vacío = como lo ven los sin nombre), plantilla (aprobada **o en revisión**: una pendiente llega si ese
+celular le escribió a la línea en las últimas 24 h) y promo si la plantilla usa `{{2}}`.
+`POST /test-send` sale por `sendTemplateMessage()`, el mismo camino que la campaña, sin tocar
+`imported_contacts`; si el proveedor lo rechaza, devuelve el motivo leído de `message_logs`. También:
+el nombre genérico de `{{1}}` se escribe al lado del mensaje 1 y queda en la marca.
+**Verificado:** tsc limpio · lint limpio · suite entera 48 archivos / 751 tests. **NO verificado:** el envío
+real de la prueba (no hay plantilla creada todavía).
+**Archivos:** `src/app/api/dashboard/imported-contacts/test-send/route.ts`,
+`src/components/dashboard/ImportedContacts{Uploader,Template}.tsx`, `docs/features/golden-bullet.md`.
+
 ## [2026-09-11h] - Golden Bullet: los tres textos del flujo se escriben en el panel, con foto en el «sí»
 
 **Qué:** el dueño quiere su propio mensaje 1 («Hola, {{1}} ❤️ Somos Sushi Service 🍣…», botón

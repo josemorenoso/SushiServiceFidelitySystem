@@ -20,15 +20,34 @@
 --   reintentaría los nombres base y Meta los rechazaría por repetidos.
 -- ═══════════════════════════════════════════════════════════════
 
+-- ── A. PRIMERO: mirá cómo se llama el cliente y qué tiene en el paso 4 ──────
+--    Corré SOLO esta consulta, copiá el business_name y pegalo abajo en B.
+SELECT
+    business_name,
+    whatsapp_provisioning->'steps'->'templates'->>'status'          AS paso4,
+    jsonb_array_length(COALESCE(whatsapp_provisioning->'steps'->'templates'->'created',  '[]')) AS creadas,
+    jsonb_array_length(COALESCE(whatsapp_provisioning->'steps'->'templates'->'approved', '[]')) AS aprobadas
+FROM clients
+ORDER BY business_name;
+
+-- ── B. DESPUÉS: el reset. Cambiá 'NOMBRE DEL NEGOCIO' por el de arriba ───────
 DO $$
 DECLARE
-  p_negocio text := 'NOMBRE DEL NEGOCIO';   -- ← `clients.business_name`, tal cual
+  p_negocio text := 'NOMBRE DEL NEGOCIO';   -- ← lo que te dio la consulta A
   v_cliente uuid;
+  v_n       int;
 BEGIN
-  SELECT id INTO v_cliente FROM clients WHERE business_name = p_negocio;
-  IF v_cliente IS NULL THEN
-    RAISE EXCEPTION 'No encontré un propietario con business_name = %. Copialo tal cual de la lista de clientes.', p_negocio;
+  IF p_negocio = 'NOMBRE DEL NEGOCIO' THEN
+    RAISE EXCEPTION 'Te falta poner el nombre del cliente en p_negocio (línea de arriba). Sale de la consulta A.';
   END IF;
+
+  SELECT count(*) INTO v_n FROM clients WHERE lower(trim(business_name)) = lower(trim(p_negocio));
+  IF v_n = 0 THEN
+    RAISE EXCEPTION 'No encontré un propietario con business_name = "%". Copialo de la consulta A.', p_negocio;
+  ELSIF v_n > 1 THEN
+    RAISE EXCEPTION 'Hay % clientes que se llaman "%". Afiná el nombre o usá el id.', v_n, p_negocio;
+  END IF;
+  SELECT id INTO v_cliente FROM clients WHERE lower(trim(business_name)) = lower(trim(p_negocio));
 
   UPDATE clients
      SET whatsapp_provisioning = jsonb_set(
@@ -42,6 +61,4 @@ BEGIN
   RAISE NOTICE 'Listo: el paso 4 de % vuelve a estar pendiente. Andá al AIOS y apretá «Crear plantillas».', p_negocio;
 END $$;
 
--- Para mirar cómo quedó:
--- SELECT business_name, whatsapp_provisioning->'steps'->'templates'
---   FROM clients WHERE business_name = 'NOMBRE DEL NEGOCIO';
+-- Para mirar cómo quedó, volvé a correr la consulta A: `creadas` tiene que dar 0.

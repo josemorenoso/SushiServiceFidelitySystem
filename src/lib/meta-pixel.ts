@@ -10,6 +10,10 @@
  *   1. **El de la plataforma** — `NEXT_PUBLIC_META_PIXEL_ID`, el mismo en las 25
  *      marcas. Es el de Cada1. Cada evento lleva `tenant` y `location`, así que
  *      dentro de esa cuenta se puede segmentar por marca y por sede.
+ *      ⚠️ APAGADO POR DECISIÓN DEL DUEÑO (2026-09-11): la variable se queda
+ *      vacía. Juntar a los comensales de las 25 marcas en una cuenta no sirve
+ *      para nada que la Ley 1581 permita (finalidad y responsable). El código
+ *      se queda; no se enciende sin una decisión nueva. `meta-pixel.md`.
  *   2. **El de la marca** — `tenants.config.integrations.meta_pixel_id`, que el
  *      restaurante carga desde el panel. Si lo carga, los MISMOS eventos le
  *      llegan también a su cuenta y tira sus propias campañas. Si no lo carga,

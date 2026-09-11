@@ -50,17 +50,18 @@ plantillas y el número de Sushi Service). Si la variable falta, **nadie** las u
 Sushi Service lista cero plantillas y sus envíos por Twilio se registran como fallidos. Ponerla
 ANTES del push. Detalle: `docs/03-security.md` § "Cuenta Twilio master".
 
-### 1.b'' — Las tres de Meta (2026-09-11): sin ellas el píxel está entero pero APAGADO
+### 1.b'' — Las de Meta (2026-09-11): se dejan VACÍAS a propósito
 
-- `NEXT_PUBLIC_META_PIXEL_ID` — el id del píxel de Cada1 (solo el número). Sin él no se carga un
-  byte de Meta en ninguna marca (salvo las que carguen el suyo desde el panel).
-- `META_CONVERSIONS_ACCESS_TOKEN` — el token de la API de Conversiones de ESE píxel (Administrador
-  de eventos → píxel → Configuración → API de Conversiones → Generar token). Server-only. Con él,
-  cada registro y cada check-in se manda también desde el servidor con el celular hasheado.
-- `META_CONVERSIONS_TEST_EVENT_CODE` — **solo para probar**: manda los eventos del servidor a la
-  pestaña «Probar eventos» en vez de contarlos. Quitarla al terminar.
+- `NEXT_PUBLIC_META_PIXEL_ID` y `META_CONVERSIONS_ACCESS_TOKEN` — el píxel de Cada1. **Apagado por
+  decisión del dueño (09-11)**: juntar a los comensales de las 25 marcas en una cuenta publicitaria
+  no sirve para nada que la Ley 1581 permita. Cada restaurante conecta el suyo desde el panel.
+  No las pongas.
+- `META_CONVERSIONS_TEST_EVENT_CODE` — **solo para probar** la API de Conversiones de un restaurante:
+  con el código de «Probar eventos» de SU Administrador de eventos, sus eventos del servidor aparecen
+  ahí en vez de contarse. Quitarla al terminar.
 
-No bloquean el deploy: sin ellas nada se rompe, nada se mide. Detalle: `docs/features/meta-pixel.md`.
+Nada de esto bloquea un deploy. Lo que sí hace falta para que un restaurante conecte el suyo es la
+`00061` (Paso 3). Detalle: `docs/features/meta-pixel.md`.
 
 ### 1.c — El resto (deben existir ya; confírmalas de paso)
 

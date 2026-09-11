@@ -33,7 +33,6 @@
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
 | Invitaciones con premio (link/QR → registro → premio en tarjeta → mesero valida) + Recompensas con pestañas (Redenciones adentro) (dueño, 2026-09-11) | Opus 5 | `supabase/migrations/00063_*`, `src/services/qr-campaign.service.ts`, `src/services/club-optin.service.ts`, `src/app/api/dashboard/qr-campaigns/**`, `src/app/api/invite/**`, `src/app/(public)/c/**`, `src/app/api/check-in/route.ts`, `src/components/features/check-in/CheckInForm.tsx` + `.types.ts`, `src/components/features/staff/{PendingRewardsList,RewardAlert}.tsx`, `src/types/database.types.ts`, `src/app/(dashboard)/dashboard/{rewards,redemptions}/page.tsx`, `src/components/dashboard/{RewardsLevelsPanel,RedemptionsPanel,InviteCampaignsPanel}.tsx`, `src/components/layout/DashboardSidebar.tsx`, `tests/unit/qr-campaigns.test.ts`, `docs/features/{invite-campaigns,reward-grants,referral-program,golden-bullet}.md` | **00063** | en curso |
-| Decisión sobre el píxel de Cada1: apagado por ley de datos, solo docs (dueño, 2026-09-11) | Opus 5 | `docs/features/meta-pixel.md`, `CLAUDE.md`, `.env.example`, `CHANGELOG.md`, `ESTADO.md` §3/§4/§5 | — | en curso |
 
 ## 3. Siguiente, en orden
 
@@ -214,18 +213,20 @@
 9. **Aplicar la 00030** en ventana tranquila (cierra el riesgo del DEFAULT puente).
 10. **Onboarding de los 25**: wildcard DNS ya resuelto y probado con Sushi Fun.
 
-**El norte** (dueño, 2026-09-05, corregido el 09-10): **Meta ya arrancó** — el píxel mide las páginas públicas y cada
-marca puede cargar el suyo (`docs/features/meta-pixel.md`). Falta la API de Conversiones, que es la mitad que el
-bloqueador de anuncios se come. **NO se desarrollan todavía**: automatizaciones dentro del restaurante y **Google**
-para reseñas. Ninguna decisión de hoy cierra esa puerta (`config.integrations`, credenciales de terceros aparte).
+**El norte** (dueño, 2026-09-05, corregido el 09-11): **Meta ya está entera** — píxel + API de Conversiones, y
+**cada marca conecta la suya** desde el panel (`docs/features/meta-pixel.md`). **El píxel de Cada1 queda APAGADO
+por decisión** (09-11): cruzar la base de una marca para la campaña de otra viola finalidad y responsable de la
+Ley 1581, así que un buzón con las 25 juntas no aporta nada que valga ese riesgo. **NO se desarrollan todavía**:
+automatizaciones dentro del restaurante y **Google** para reseñas.
 
 ## 4. Bloqueado: solo lo puede destrabar el dueño
 
-- **Las tres de Meta en Vercel** (RUNBOOK §1.b''): `NEXT_PUBLIC_META_PIXEL_ID` (el id del píxel de Cada1),
-  `META_CONVERSIONS_ACCESS_TOKEN` (su token de la API de Conversiones) y, solo para probar,
-  `META_CONVERSIONS_TEST_EVENT_CODE`. Sin las dos primeras el código está entero pero **apagado**. Y **mirar el
-  Administrador de eventos** con el código de prueba: es la única verificación real que esta feature no tuvo.
-  `docs/features/meta-pixel.md` § Cómo se verifica.
+- **Aplicar la `00061` en Supabase** (`tenant_integration_secrets`). Es lo ÚNICO que un restaurante necesita de
+  nuestro lado para conectar su píxel: sin ella el panel responde 503 al guardarle el token. Riesgo cero.
+- **Ver la API de Conversiones funcionar UNA vez** con el píxel de un restaurante real y el código de «Probar
+  eventos» de SU Administrador de eventos: es la única verificación que esta feature no tuvo
+  (`docs/features/meta-pixel.md` § Cómo se verifica). `NEXT_PUBLIC_META_PIXEL_ID` y
+  `META_CONVERSIONS_ACCESS_TOKEN` **se quedan vacías**: el píxel de Cada1 está apagado por decisión (§3, el norte).
 - **Decidir qué pasa con los clientes que ya existían.** La casilla nueva (celular cifrado a Meta) la aceptan
   los que se registran desde hoy; los anteriores aceptaron WhatsApp y nada más, y sus check-ins **sí** se mandan
   con el celular hasheado. Separarlos cuesta guardar la versión del consentimiento por cliente y filtrar en
@@ -269,6 +270,12 @@ para reseñas. Ninguna decisión de hoy cierra esa puerta (`config.integrations`
   5 marcas: el freno de la 00037 llevaba desde agosto **medido y apagado**. De paso:
   `isPhoneOptedOut()` miraba solo `customers`, así que el "no" de quien nunca fue cliente no
   lo leía nadie.
+- **El píxel de Cada1 queda apagado** (2026-09-11, solo docs): el dueño preguntó para qué le servía un píxel
+  propio y la respuesta honesta es que solo para tirar campañas a los comensales de sus clientes; hacerlo con la
+  base de una marca para otra es tratamiento sin autorización (Ley 1581: finalidad y responsable), y con la de
+  cada marca para esa marca lo hace igual de bien el píxel de la propia marca. El código queda (dos variables
+  vacías = cero bytes de Meta), la decisión vive en `meta-pixel.md`. Si un día ofrece «yo te manejo los
+  anuncios», el camino es acceso de socio a la cuenta publicitaria del restaurante, no un píxel de Cada1.
 - **La API de Conversiones de Meta** (2026-09-11, **migración `00061`, SIN aplicar**): cada registro y
   cada check-in se manda también desde el servidor (`after()` en `POST /api/check-in`) con el celular
   **hasheado SHA-256**, a los dos píxeles, cada uno con SU token (Cada1: env; la marca:

@@ -22,7 +22,7 @@ es literalmente «de quién es el píxel», y hay dos:
 
 | | De quién | Dónde se configura | Alcance |
 |---|---|---|---|
-| **Plataforma** | Cada1 | `NEXT_PUBLIC_META_PIXEL_ID` en Vercel | El MISMO en las 25 marcas |
+| **Plataforma** | Cada1 | `NEXT_PUBLIC_META_PIXEL_ID` en Vercel — **APAGADO por decisión, ver abajo** | El MISMO en las 25 marcas |
 | **Marca** | El restaurante | Panel → Configuración → **Píxel de Meta** (`tenants.config.integrations.meta_pixel_id`) | Solo esa marca |
 
 Los dos se inicializan en la misma página y Meta reparte cada evento a ambos: no hay que disparar
@@ -93,6 +93,36 @@ y el siguiente. `buildConversionEvent()` recibe `browser: null` en ese caso y ha
 El check-in **duplicado** no dispara nada: es el mismo cliente en la misma visita apretando de
 nuevo, y contarlo infla la audiencia de «los que vuelven» con gente que no volvió.
 
+## El píxel de Cada1 está apagado (dueño, 2026-09-11)
+
+Se construyó porque el primer pedido decía «quiero que **podamos** usar esta info». Al día siguiente el
+dueño preguntó para qué le servía a él un píxel propio, y la respuesta honesta fue: **solo para tirar
+anuncios, desde la cuenta de Cada1, a los comensales de sus clientes.** Y eso choca con la ley:
+
+- **Finalidad** (Ley 1581, art. 4): el comensal de Sushi Service autorizó comunicaciones y anuncios
+  *de Sushi Service*. Usar su celular —hasheado o no, directo o como semilla de una audiencia
+  similar— para la campaña de Don Alirio es un tratamiento que nadie autorizó.
+- **Responsable**: la política publicada dice, con nombre, que el restaurante es el responsable del
+  tratamiento y que no se comparte *«para fines ajenos a este programa»* (§6). Cada1 es el encargado.
+  Una campaña de otro restaurante es un fin ajeno por definición.
+- Y es la primera línea de `CLAUDE.md`: *un dato de la marca A jamás se ve ni se atribuye a la marca B.*
+
+Lo que sí es legítimo —campañas de una marca con los datos de esa marca, lookalikes armados solo con
+sus clientes— **lo hace igual de bien el píxel de la propia marca**. Un buzón con las 25 juntas no
+aporta nada que valga el riesgo de que un día alguien no filtre por `tenant`.
+
+**Decisión:** `NEXT_PUBLIC_META_PIXEL_ID` y `META_CONVERSIONS_ACCESS_TOKEN` se quedan **vacías**. El
+código del píxel de plataforma no se borra (con las dos vacías no carga un byte de Meta y no cuesta
+nada), pero **no se enciende sin una decisión nueva del dueño con un abogado al lado**, y no se
+construye nada que junte audiencias de dos marcas.
+
+**Si un día Cada1 ofrece «yo te manejo los anuncios»**: el camino es que el restaurante le dé acceso
+de **socio** a su cuenta publicitaria (Business Manager → Socios). Se trabaja con sus datos, dentro de
+su cuenta, bajo su responsabilidad. No hace falta ningún píxel de Cada1.
+
+Lo que sí sigue siendo de Cada1 y no tiene problema: **números agregados** sin identificar a nadie
+(«esta semana se registraron 400 personas en la red»), que ya salen mejor de la propia base.
+
 ## Decisiones y qué NO hacer
 
 - **A Meta le va el celular hasheado, y nada más de la persona** (dueño, 2026-09-11). Desde el
@@ -130,9 +160,9 @@ nuevo, y contarlo infla la audiencia de «los que vuelven» con gente que no vol
 
 ## Cómo se verifica
 
-0. **Aplicar la `00061` en Supabase y poner `META_CONVERSIONS_ACCESS_TOKEN` en Vercel.** Sin la
-   tabla, el panel responde 503 al guardar el token de una marca y el servidor solo manda al píxel
-   de Cada1 (si tiene token). Sin la variable, el servidor no manda nada al de Cada1.
+0. **Aplicar la `00061` en Supabase.** Es lo único que un restaurante necesita de nuestro lado:
+   sin la tabla, el panel responde 503 al guardarle el token. (`META_CONVERSIONS_ACCESS_TOKEN` y
+   `NEXT_PUBLIC_META_PIXEL_ID` se quedan vacías: ver «El píxel de Cada1 está apagado».)
 1. `npx vitest run tests/unit/meta-pixel.test.ts tests/unit/meta-conversions.test.ts tests/unit/tenant-config-paths.test.ts` — 65 pruebas.
    La suite de base (`tests/db/*`) aplica la 00061 en un Postgres real: si el SQL no corre, se cae ahí.
 2. **En el navegador, con la extensión [Meta Pixel Helper](https://www.facebook.com/business/help/198406697184603):**
@@ -143,8 +173,9 @@ nuevo, y contarlo infla la audiencia de «los que vuelven» con gente que no vol
 4. En el panel → Configuración → Píxel de Meta: pegar un id, guardar, recargar `/check-in` y ver
    **dos** píxeles en el Helper. Borrarlo y ver que vuelve a haber uno.
 5. Sin `NEXT_PUBLIC_META_PIXEL_ID` y sin píxel de marca: el HTML no menciona `facebook.net`.
-6. **La API de Conversiones, sin ensuciar los números:** poner `META_CONVERSIONS_TEST_EVENT_CODE`
-   con el código de la pestaña **Probar eventos** del Administrador de eventos, registrarse con un
+6. **La API de Conversiones, sin ensuciar los números:** con el píxel y el token de un restaurante
+   real cargados en su panel, poner `META_CONVERSIONS_TEST_EVENT_CODE` con el código de la pestaña
+   **Probar eventos** de SU Administrador de eventos, registrarse con un
    celular nuevo y ver ahí el `CompleteRegistration` con «Servidor» como origen y `ph` en
    «Parámetros de coincidencia»; hacer check-in con uno ya registrado y ver el `CheckIn`. Con el
    píxel del navegador activo, los dos eventos deben aparecer **deduplicados** (mismo `event_id`).
@@ -155,8 +186,8 @@ nuevo, y contarlo infla la audiencia de «los que vuelven» con gente que no vol
 ## Pendiente
 
 - **NO verificado en el navegador ni contra Meta** (2026-09-11): nada de la lista de arriba se
-  corrió contra una página real ni contra el Administrador de eventos. Faltan en Vercel
-  `NEXT_PUBLIC_META_PIXEL_ID` y `META_CONVERSIONS_ACCESS_TOKEN`, y en Supabase la `00061`.
+  corrió contra una página real ni contra el Administrador de eventos. Falta la `00061` en Supabase
+  y un restaurante con su píxel y su token cargados para verlo funcionar una vez.
 - **Los clientes que ya existían no aceptaron esto.** La casilla nueva la marcan los que se registran
   desde hoy; los anteriores aceptaron WhatsApp y nada más. Sus check-ins **sí** se mandan con el
   celular hasheado (el servidor no distingue). Si el dueño quiere separarlos, hace falta guardar la

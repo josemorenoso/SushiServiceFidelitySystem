@@ -26,6 +26,19 @@ rotativos» (dueño, 2026-09-11; eligió esta salida entre tres). **Archivos:**
 00062). **NO verificado:** en el navegador. **Migración:** 00062, escrita sin aplicar — **va ANTES
 del deploy** (sin la columna el picker responde 503 en todas las sedes).
 
+## [2026-09-11b] - El píxel de Cada1 queda apagado (decisión, solo docs)
+
+**Qué:** `NEXT_PUBLIC_META_PIXEL_ID` y `META_CONVERSIONS_ACCESS_TOKEN` se quedan vacías. El código del
+píxel de plataforma no se toca: con las dos vacías no carga un byte de Meta. Cada restaurante conecta SU
+píxel y SU token desde Configuración → Píxel de Meta, y sus datos viven en SU cuenta de Meta.
+**Por qué:** el dueño preguntó para qué le servía un píxel propio. Solo para tirar campañas a los
+comensales de sus clientes — y usar la base de una marca para la campaña de otra es tratamiento sin
+autorización (Ley 1581: finalidad y responsable; contradice además §6 de la política publicada). Con la
+base de cada marca para esa marca, el píxel de la marca lo hace igual. Si un día ofrece «yo te manejo
+los anuncios», el camino es acceso de socio a la cuenta publicitaria del cliente, no un buzón de Cada1.
+**Archivos:** `docs/features/meta-pixel.md`, `CLAUDE.md`, `.env.example`, `docs/RUNBOOK-DEPLOY.md`, `ESTADO.md`.
+**Verificado:** n/a (docs). **Migración:** ninguna.
+
 ## [2026-09-11] - La API de Conversiones de Meta: el celular hasheado, desde el servidor
 
 **Qué:** cada registro y cada check-in se manda TAMBIÉN desde `POST /api/check-in` (en `after()`)

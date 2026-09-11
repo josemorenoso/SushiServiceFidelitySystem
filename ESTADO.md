@@ -1,6 +1,6 @@
 # ESTADO — RestaurantQR / Cada1
 
-> **Última actualización:** 2026-09-10 (push de producto `069a12d` y AIOS `b6fd308`, Opus 5)
+> **Última actualización:** 2026-09-11 (cierre de la caída a la cuenta Twilio master, Opus 5; pendiente de push)
 > Toda sesión lo lee PRIMERO. Toda sesión que cierra un bloque lo ACTUALIZA al final. Límite: 150 líneas.
 > Lo obsoleto se **saca**, no se tacha: un ítem tachado sigue costando tokens cada vez que alguien lee esto.
 >
@@ -14,8 +14,8 @@
 
 | Qué | Estado |
 |-----|--------|
-| Código | **`main` = `origin/main` = `069a12d`, pusheado el 2026-09-10 por orden del dueño** — despliega en Vercel: un solo estilo de plantillas, la invitación a evento como marco, y el retiro de versiones que no revive. **Sin migración.** La carpeta sigue en `feat/multisede-aios` (= `main`). Sin mergear a propósito: `master`, `port/sushi-fun-2.8`, `sushi-sync` |
-| Verificación | ✅ 2026-09-08 (noche): `tsc` limpio · **vitest 35 archivos / 559 tests, TODOS en verde** · eslint **7 errores preexistentes** (hooks y gráficas del panel, ninguno en lo tocado). El rojo de `aios-health` era del RELOJ (el helper mete dos pedidos con `now() - 1h`/`- 2h`, así que entre medianoche y las 2 a.m. el segundo cae en el día anterior): a esta hora pasa. Sigue sin corregirse. `build` no se corrió |
+| Código | **`origin/main` = `069a12d`** (pusheado el 2026-09-10). **Local va UN commit adelante, sin pushear:** la caída a la cuenta Twilio master cerrada (un tenant nuevo del AIOS veía y podía usar las plantillas y el número de Sushi Service). **Sin migración, pero con variable NUEVA en Vercel: `TWILIO_MASTER_TENANT_ID`** (uuid de Sushi Service; sin ella Sushi Service deja de listar y enviar por Twilio — RUNBOOK §1.b'). Ponerla ANTES del push. La carpeta sigue en `feat/multisede-aios` (= `main`). Sin mergear a propósito: `master`, `port/sushi-fun-2.8`, `sushi-sync` |
+| Verificación | ✅ 2026-09-11 (madrugada): `tsc` limpio · **vitest 42 archivos / 662 tests, TODOS en verde** · eslint **7 errores preexistentes** (hooks y gráficas del panel, ninguno en lo tocado). El rojo de `aios-health` era del RELOJ (el helper mete dos pedidos con `now() - 1h`/`- 2h`, así que entre medianoche y las 2 a.m. el segundo cae en el día anterior): a esta hora pasa. Sigue sin corregirse. `build` no se corrió |
 | Marcas vivas | **5**: sushi-service (542 clientes), demo-ventas (412), sushi-fun (251), don-alirio (244), cafe-frangal (8) |
 | Base de datos de producción | ✅ **Aplicadas hasta la `00056`** (dueño, 2026-09-08: `00047`, `00050`, `00051`, `00053`, `00054` y `00056`, todas). El esquema ya alcanza al código de `main`. La 00030 NUNCA aplicada (a propósito). La 00015 NO se aplica (reabre fuga). Huecos: `00048`, `00049`, `00052`, `00055` |
 | Migraciones: dónde están | El directorio muestra **solo la rama puesta**; el inventario real y el número de la próxima los da `node scripts/proxima-migracion.mjs`. **Desde el 07 la única reserva es la fila del tablero (§2)**: un número citado en cualquier otro doc no reserva nada. `00048`, `00049`, `00052` y `00055` son huecos: no se rellenan |
@@ -32,7 +32,6 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
-| Cerrar la caída a la cuenta Twilio master (un tenant sin subcuenta veía y podía usar las plantillas/número de Sushi Service), Opus 5, 2026-09-10 | Opus 5 | `src/lib/twilio/tenant-credentials.ts`, `src/services/whatsapp.service.ts`, `src/services/calendar.service.ts`, `src/services/line-health.service.ts`, `src/app/api/dashboard/templates/route.ts`, `tests/unit/twilio-master-fallback.test.ts`, `.env.example`, `docs/03-security.md`, `docs/RUNBOOK-DEPLOY.md`, `CHANGELOG.md` | — | En curso |
 
 ## 3. Siguiente, en orden
 

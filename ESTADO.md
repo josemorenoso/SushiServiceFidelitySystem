@@ -32,6 +32,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Golden Bullet: control diario, pausa y creación de la plantilla con botones (dueño, 2026-09-10, noche) | Opus 5 | `src/services/imported-contacts.service.ts`, `src/services/golden-bullet-template.service.ts`, `src/app/api/dashboard/imported-contacts/**`, `src/components/dashboard/ImportedContacts*.tsx`, `src/app/(dashboard)/dashboard/imported-contacts/page.tsx`, `tests/unit/golden-bullet-bloques.test.ts`, `docs/features/golden-bullet.md` | — (sin migración: la pausa NO usa estado nuevo) | en curso |
 
 ## 3. Siguiente, en orden
 

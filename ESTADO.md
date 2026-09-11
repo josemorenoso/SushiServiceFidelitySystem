@@ -32,6 +32,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Cerrar la caída a la cuenta Twilio master (un tenant sin subcuenta veía y podía usar las plantillas/número de Sushi Service), Opus 5, 2026-09-10 | Opus 5 | `src/lib/twilio/tenant-credentials.ts`, `src/services/whatsapp.service.ts`, `src/services/calendar.service.ts`, `src/services/line-health.service.ts`, `src/app/api/dashboard/templates/route.ts`, `tests/unit/twilio-master-fallback.test.ts`, `.env.example`, `docs/03-security.md`, `docs/RUNBOOK-DEPLOY.md`, `CHANGELOG.md` | — | En curso |
 
 ## 3. Siguiente, en orden
 

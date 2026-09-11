@@ -32,18 +32,18 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
-| Golden Bullet: control diario, pausa y creación de la plantilla con botones (dueño, 2026-09-10, noche) | Opus 5 | `src/services/imported-contacts.service.ts`, `src/services/golden-bullet-template.service.ts`, `src/app/api/dashboard/imported-contacts/**`, `src/components/dashboard/ImportedContacts*.tsx`, `src/app/(dashboard)/dashboard/imported-contacts/page.tsx`, `tests/unit/golden-bullet-bloques.test.ts`, `docs/features/golden-bullet.md` | — (sin migración: la pausa NO usa estado nuevo) | en curso |
 
 ## 3. Siguiente, en orden
 
 0.GB **Golden Bullet por bloques y sondeo de salud: construidos el 10, faltan CUATRO cosas del dueño.**
    El código está en la rama (`640ae1f`). En este orden:
    1. **Aplicar la `00060`** (va en el 0.quinquies, con las otras dos).
-   2. **Crear la plantilla con botones y mandarla a aprobar. Meta tarda 24-48 h**, así que
-      es lo primero del día: el texto exacto, los dos botones y su payload
-      (`CLUB_SI` / `CLUB_NO`) están listos para copiar en `docs/features/golden-bullet.md`.
-      El contrato de variables es fijo: `{{1}}`=nombre, `{{2}}`=promo. Una plantilla con
-      tres variables NO sirve.
+   2. **Crear la plantilla con botones. Meta tarda 24-48 h**, así que es lo primero del día.
+      **Ya NO se crea a mano:** `/dashboard/imported-contacts` → pestaña «Plantilla» la
+      escribe en Twilio y la somete a Meta con las credenciales del tenant. Solo pide una
+      cosa: la línea de **de dónde salió el número de esa gente, y tiene que ser verdad**
+      (no tiene valor por defecto a propósito). El texto para copiar a mano, por si se
+      prefiere, sigue en `docs/features/golden-bullet.md`.
    3. **Correr el sondeo en modo ensayo ANTES de dejarlo suelto**:
       `GET /api/cron/line-health?dry=1` con el `CRON_SECRET`. Devuelve el escalón y la
       calidad que ESCRIBIRÍA en cada marca, sin escribir. Es la primera vez que algo va a
@@ -229,6 +229,13 @@ para reseñas. Ninguna decisión de hoy cierra esa puerta (`config.integrations`
 
 ## 5. Hecho reciente
 
+- **El goteo dejó de ser a ciegas** (2026-09-10, sin migración): pestaña «En curso» con lo que
+  salió HOY y **botón de parar**. Pausar NO es un estado nuevo —sería un error caro: el
+  anti-duplicado de la 00038 solo cubre `status='queued'`, así que sacar un item de ahí libera
+  su hueco y la campaña se podría re-encolar entera— sino `not_before` en el año 9999.
+  Reanudar reprograma desde hoy y acepta otro ritmo. La plantilla se crea desde el panel, sin
+  copiar tokens. El bloque que se propone por defecto pasó a ser **la mitad** del cupo: los
+  cumpleaños no pasan por esta cola y un goteo que vacía el presupuesto de madrugada los mata.
 - **Golden Bullet por bloques + el freno de línea encendido** (2026-09-10, migración `00060`):
   encolaba nada y enviaba todo dentro del request — con 25.000 contactos moría a los 300 s.
   Ahora reparte en bloques diarios con un `not_before` escalonado (el drenador no cambió) y

@@ -8,6 +8,26 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [2026-09-10d] - Ver el goteo todos los días, y poder pararlo
+
+**Qué:** pestaña **«En curso»** (la que abre la pantalla) con lo que salió HOY, qué sale en el
+próximo bloque y cuándo termina — más un **botón de parar**. Pausar NO usa un estado nuevo, y la
+razón importa: el anti-duplicado de la 00038 es un índice único PARCIAL `WHERE status='queued'`,
+así que sacar un item de `queued` **libera su hueco** y la campaña se podría re-encolar entera,
+mandándole a esa gente el mensaje dos veces. Pausar es `not_before` en el año 9999 — el item sigue
+`queued` y el drenador no lo ve. Reanudar reprograma **desde hoy** y acepta un ritmo distinto sin
+volver a subir el CSV. La plantilla con botones ahora **se crea desde el panel** (pestaña
+«Plantilla»), con las credenciales del tenant: nadie copia un token. Y el bloque que se **propone**
+pasó a ser la mitad del cupo, no el cupo entero: cumpleaños y recordatorios **no** pasan por esta
+cola —salen de su propio cron— así que un goteo que vacía el presupuesto de madrugada los mata.
+**Por qué:** «ir viendo a diario qué mensajes enviamos y poder detenerlo […] imagínate que nos
+gastamos el cupo hoy» + «conéctate a Twilio y créala, dime qué credenciales necesitas» (dueño).
+**Archivos:** `src/services/{imported-contacts,golden-bullet-template}.service.ts`,
+`src/app/api/dashboard/imported-contacts/{progress,pause,template}/`,
+`src/components/dashboard/ImportedContacts{Progress,Template,Uploader}.tsx`,
+`src/app/(dashboard)/dashboard/imported-contacts/page.tsx`, `docs/features/golden-bullet.md`.
+**Sin migración.** El techo sigue siendo el presupuesto completo (D-7): cambia el default, no el tope.
+
 ## [2026-09-10c] - Una base de 25.000 se despierta por bloques, no de un tiro
 
 **Qué:** Golden Bullet deja de enviar dentro del request —con 25.000 contactos moría a los 300s

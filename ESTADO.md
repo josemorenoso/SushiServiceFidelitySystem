@@ -14,7 +14,7 @@
 
 | Qué | Estado |
 |-----|--------|
-| Código | **`main` = `origin/main` = `79fea79`, pusheado el 2026-09-08 (noche) por orden del dueño** — despliega en Vercel el alta del usuario del cliente (`/api/aios/tenant-admin`), **sin migración**. La carpeta sigue en `feat/multisede-aios` (= `main`). Sin mergear a propósito: `master`, `port/sushi-fun-2.8`, `sushi-sync` |
+| Código | **`main` = `origin/main` = `f99b7fb`, pusheado el 2026-09-10 (noche) por orden del dueño** — 14 commits de CUATRO sesiones: el píxel de Meta, tres de plantillas de evento, y las dos de Golden Bullet (bloques + salud de línea + tablero diario). **Migración `00060`, ya aplicada por el dueño antes del push.** ⚠️ Este despliegue **enciende el cron de salud de línea** (`0 * * * *`): desde la primera hora en punto escribe `messaging_daily_limit` y `quality_rating` en las 5 marcas, solo. Decisión del dueño, con el riesgo sobre la mesa. La carpeta sigue en `feat/multisede-aios` (= `main`). Sin mergear a propósito: `master`, `port/sushi-fun-2.8`, `sushi-sync` |
 | Verificación | ✅ 2026-09-08 (noche): `tsc` limpio · **vitest 35 archivos / 559 tests, TODOS en verde** · eslint **7 errores preexistentes** (hooks y gráficas del panel, ninguno en lo tocado). El rojo de `aios-health` era del RELOJ (el helper mete dos pedidos con `now() - 1h`/`- 2h`, así que entre medianoche y las 2 a.m. el segundo cae en el día anterior): a esta hora pasa. Sigue sin corregirse. `build` no se corrió |
 | Marcas vivas | **5**: sushi-service (542 clientes), demo-ventas (412), sushi-fun (251), don-alirio (244), cafe-frangal (8) |
 | Base de datos de producción | ✅ **Aplicadas hasta la `00056`** (dueño, 2026-09-08: `00047`, `00050`, `00051`, `00053`, `00054` y `00056`, todas). El esquema ya alcanza al código de `main`. La 00030 NUNCA aplicada (a propósito). La 00015 NO se aplica (reabre fuga). Huecos: `00048`, `00049`, `00052`, `00055` |
@@ -37,7 +37,7 @@
 
 0.GB **Golden Bullet por bloques y sondeo de salud: construidos el 10, faltan CUATRO cosas del dueño.**
    El código está en la rama (`640ae1f`). En este orden:
-   1. **Aplicar la `00060`** (va en el 0.quinquies, con las otras dos).
+   1. ✅ **La `00060` ya está aplicada** (dueño, 2026-09-10, antes del push).
    2. **Crear la plantilla con botones. Meta tarda 24-48 h**, así que es lo primero del día.
       **Ya NO se crea a mano:** `/dashboard/imported-contacts` → pestaña «Plantilla» la
       escribe en Twilio y la somete a Meta con las credenciales del tenant. Solo pide una
@@ -149,13 +149,12 @@
    (`34b30a6`), así que el coexistente por Twilio recibe su TwiML completo. Lo que SÍ falta para
    el de Zernio: **18.c** — su operador de domicilios manda el cuadro y **no recibe nada**, ni
    éxito ni fallo, y un reenvío humano **duplica cliente, visita y puntos** (nada deduplica eso).
-0.quinquies **Aplicar la `00058`, la `00059` y la `00060` en Supabase** (producto) y la **`00009` en el Supabase del AIOS**,
+0.quinquies **Aplicar la `00058` y la `00059` en Supabase** (producto) y la **`00009` en el Supabase del AIOS**,
    en ese orden y ANTES de desplegar. Sin la 00058, `/dashboard/sedes` responde **503** al guardar
    (`merge_location_config_deep()` no existe) y las columnas `location_id` de recompensas tampoco.
    Sin la 00009 del AIOS, guardar un cliente revienta con el CHECK viejo en cuanto alguien elija
-   «grupo» o «franquicia». Sin la `00060`, Golden Bullet responde error al confirmar (`imported_contacts.status` no
-   admite `'queued'`) y el sondeo de salud no puede guardar un snapshot de Twilio (CHECK de
-   `source`). Las tres son de RIESGO BAJO: no tocan una sola fila de historia.
+   «grupo» o «franquicia». La `00060` ya la corrió el dueño el 10, antes del push. Las dos que quedan son de RIESGO
+   BAJO: no tocan una sola fila de historia.
 0.quater **Falta el autoservicio de contraseña** («olvidé mi contraseña» en `/login`). Ya se puede
    cambiar una clave desde «Accesos» y desde el AIOS, así que nadie queda encerrado — pero mientras
    no exista el autoservicio, cada olvido sigue pasando por una persona. Depende de que el SMTP del

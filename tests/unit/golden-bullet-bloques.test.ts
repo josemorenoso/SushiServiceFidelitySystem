@@ -14,6 +14,7 @@ import { describe, it, expect } from 'vitest'
 import { planBlocks } from '@/services/imported-contacts.service'
 import { detectClubButton, CLUB_PAYLOAD_SI, CLUB_PAYLOAD_NO } from '@/services/club-optin.service'
 import { buildClubInviteBody, BOTON_SI, BOTON_NO } from '@/services/golden-bullet-template.service'
+import { plantillaCompatible } from '@/components/dashboard/ImportedContactsUploader'
 
 const AHORA = new Date('2026-09-10T12:00:00.000Z')
 
@@ -174,5 +175,32 @@ describe('buildClubInviteBody — el cuerpo de la plantilla', () => {
 
   it('pregunta en vez de solo promocionar', () => {
     expect(cuerpo).toMatch(/¿Querés hacer parte\?/)
+  })
+})
+
+describe('plantillaCompatible — la guarda que evita perder 15.000 mensajes de un tiro', () => {
+  it('acepta la que usa exactamente {{1}} y {{2}}', () => {
+    expect(plantillaCompatible('Hola {{1}}, te damos {{2}}')).toBe(true)
+    expect(plantillaCompatible(buildClubInviteBody('Sushi Service', 'Nos visitaste.'))).toBe(true)
+  })
+
+  it('RECHAZA las MARKETING del catálogo estándar, que llevan 3 y 4 variables', () => {
+    // Este es el caso real: reactivación, puntos y cumpleaños están aprobadas y
+    // son MARKETING, así que la lista las ofrecía. confirmImport() solo rellena
+    // dos, y un envío con variables faltantes lo rechaza el proveedor ENTERO —
+    // fallaría en el 100% de los destinatarios, y recién después de confirmar.
+    expect(plantillaCompatible('Hola {{1}}, tenés {{2}} puntos. {{3}}')).toBe(false)
+    expect(plantillaCompatible('Hola {{1}}, {{2}} puntos, ganaste {{3}}. {{4}}')).toBe(false)
+  })
+
+  it('rechaza la que le falta alguna de las dos', () => {
+    expect(plantillaCompatible('Hola {{1}}, vuelve pronto')).toBe(false)
+    expect(plantillaCompatible('Te damos {{2}}')).toBe(false)
+    expect(plantillaCompatible('Sin variables')).toBe(false)
+    expect(plantillaCompatible('')).toBe(false)
+  })
+
+  it('tolera los espacios que Twilio deja dentro de las llaves', () => {
+    expect(plantillaCompatible('Hola {{ 1 }}, te damos {{ 2 }}')).toBe(true)
   })
 })

@@ -89,6 +89,33 @@ const TEXTO_ADVERTENCIA =
   'también la atención a los clientes actuales. Cada contacto recibe UN solo mensaje y ' +
   'quien pida salir no vuelve a ser contactado nunca.'
 
+/**
+ * Qué variables `{{n}}` usa el cuerpo de una plantilla.
+ *
+ * Existe por una trampa que costaría los 15.000 mensajes de una sola vez:
+ * `confirmImport()` rellena EXACTAMENTE dos variables —`{{1}}`=nombre y
+ * `{{2}}`=promo— pero la lista del paso 4 ofrece **todas** las MARKETING
+ * aprobadas del negocio. Y las MARKETING del catálogo estándar llevan tres o
+ * cuatro (saldo de puntos, camino de niveles): elegir una de esas manda un
+ * envío con variables faltantes que el proveedor rechaza entero.
+ *
+ * Fallaría en el 100% de los destinatarios, y recién se vería después de
+ * confirmar. Más barato es no dejar elegirla.
+ */
+function variablesDe(body: string): Set<number> {
+  const encontradas = new Set<number>()
+  for (const m of (body ?? '').matchAll(/\{\{\s*(\d+)\s*\}\}/g)) {
+    encontradas.add(Number(m[1]))
+  }
+  return encontradas
+}
+
+/** Una plantilla sirve para Golden Bullet si usa {{1}} y {{2}}, y ninguna más. */
+export function plantillaCompatible(body: string): boolean {
+  const vars = variablesDe(body)
+  return vars.has(1) && vars.has(2) && [...vars].every((n) => n === 1 || n === 2)
+}
+
 function formatearFecha(iso: string): string {
   return new Date(iso).toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })
 }
@@ -143,6 +170,10 @@ export function ImportedContactsUploader({ onSent }: { onSent?: () => void }) {
       })
       .catch(() => setBudget(null))
   }, [])
+
+  // Solo se ofrecen las que Golden Bullet puede rellenar de verdad. Ver `plantillaCompatible`.
+  const compatibles = templates.filter((t) => plantillaCompatible(t.body))
+  const incompatibles = templates.filter((t) => !plantillaCompatible(t.body))
 
   const cupo = budget?.enforced ? (budget.campaignBudget ?? null) : null
   const lineaTocada =
@@ -375,9 +406,21 @@ export function ImportedContactsUploader({ onSent }: { onSent?: () => void }) {
                 <Label className="text-xs uppercase tracking-wide text-muted-foreground">Plantilla MARKETING aprobada</Label>
                 {templates.length === 0 ? (
                   <p className="text-xs text-muted-foreground">No hay plantillas MARKETING aprobadas. Créalas en Plantillas.</p>
+                ) : compatibles.length === 0 ? (
+                  <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                    <p>
+                      <strong>Ninguna de tus plantillas aprobadas sirve para esto.</strong> Golden Bullet rellena
+                      exactamente dos variables ({'{{1}}'} nombre y {'{{2}}'} promo), y las que tenés usan otra
+                      cantidad — un envío con variables faltantes lo rechaza el proveedor entero.
+                    </p>
+                    <p className="mt-2">
+                      Creá la de los dos botones en la pestaña <strong>Plantilla</strong>. Meta tarda 24-48 h y
+                      cuando la apruebe aparece sola acá.
+                    </p>
+                  </div>
                 ) : (
                   <div className="flex flex-wrap gap-1.5">
-                    {templates.map((t) => (
+                    {compatibles.map((t) => (
                       <button
                         key={t.sid}
                         onClick={() => setTemplateSid(t.sid)}
@@ -389,6 +432,13 @@ export function ImportedContactsUploader({ onSent }: { onSent?: () => void }) {
                       </button>
                     ))}
                   </div>
+                )}
+                {incompatibles.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    No se ofrecen {incompatibles.length}{' '}
+                    {incompatibles.length === 1 ? 'plantilla aprobada' : 'plantillas aprobadas'} porque no usan
+                    exactamente {'{{1}}'} y {'{{2}}'}: {incompatibles.map((t) => t.name).join(', ')}.
+                  </p>
                 )}
               </div>
               <div className="space-y-1.5">

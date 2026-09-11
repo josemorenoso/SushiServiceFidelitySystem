@@ -131,7 +131,15 @@ Tipo **`twilio/quick-reply`**, categoría **MARKETING**, idioma **es**:
 - `{{1}}` = nombre del contacto, o el genérico si el CSV no traía nombre.
 - `{{2}}` = el texto de la promo que se escribe en el asistente.
 
-Una plantilla con tres variables **no sirve**: la segunda no se rellenaría nunca.
+Una plantilla con tres variables **no sirve**, y el asistente ya no la ofrece.
+
+> ⚠️ **Ninguna plantilla del catálogo estándar sirve para Golden Bullet.** Las MARKETING
+> aprobadas de una marca (reactivación, puntos, cumpleaños) llevan **tres o cuatro**
+> variables — saldo de puntos, camino de niveles. Elegir una de esas manda un envío con
+> variables faltantes que el proveedor rechaza **entero**: fallaría en el 100% de los
+> destinatarios, y recién se vería después de confirmar. Desde el 2026-09-10 el paso 4
+> **solo ofrece las que usan exactamente `{{1}}` y `{{2}}`** y lista aparte las que
+> descartó, con el motivo (`plantillaCompatible()` en el asistente).
 
 ### Qué pasa cuando tocan cada botón
 

@@ -32,7 +32,6 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
-| Golden Bullet: bloquear plantillas incompatibles en el asistente (dueño, 2026-09-10) | Opus 5 | `src/components/dashboard/ImportedContactsUploader.tsx`, `tests/unit/golden-bullet-bloques.test.ts`, `docs/features/golden-bullet.md` | — | en curso |
 
 ## 3. Siguiente, en orden
 
@@ -229,6 +228,11 @@ para reseñas. Ninguna decisión de hoy cierra esa puerta (`config.integrations`
 
 ## 5. Hecho reciente
 
+- **El asistente dejó de ofrecer plantillas que romperían el envío entero** (2026-09-10, sin
+  migración): las MARKETING del catálogo llevan 3 o 4 variables y Golden Bullet solo rellena dos,
+  así que elegir una mandaba un envío con variables faltantes que el proveedor rechaza al 100% de
+  los destinatarios — y solo se veía después de confirmar. Ahora se ofrecen únicamente las que
+  usan `{{1}}` y `{{2}}`.
 - **El goteo dejó de ser a ciegas** (2026-09-10, sin migración): pestaña «En curso» con lo que
   salió HOY y **botón de parar**. Pausar NO es un estado nuevo —sería un error caro: el
   anti-duplicado de la 00038 solo cubre `status='queued'`, así que sacar un item de ahí libera

@@ -17,7 +17,9 @@ hornea en un `whatsapp/card` (cabecera de imagen + cuerpo + los mismos dos boton
 `id`: el webhook no cambia). Sin foto sigue siendo `twilio/quick-reply`. `construirTiposPlantilla()` es
 pura y tiene test. Las fotos del mensaje 1 **no se barren** al subir otra: la URL vive en una plantilla
 aprobada y WhatsApp la descarga en cada envío. Con foto el nombre en Meta lleva `_foto`.
-**Verificado:** tsc limpio · lint limpio · suite entera 48 archivos / 755 tests. **NO verificado:** la
+Primer intento real del dueño: Twilio devolvió 400 «Button Title text cannot contain emojis» por un 🔴 y
+un 🔵 en los botones; ahora `validarBoton()` y la pantalla lo frenan antes de mandarlo.
+**Verificado:** tsc limpio · lint limpio · suite entera 48 archivos / 756 tests. **NO verificado:** la
 creación real del `whatsapp/card` en Twilio ni su aprobación en Meta (todavía no se creó ninguna).
 **Archivos:** `src/services/{golden-bullet-template,club-optin}.service.ts`,
 `src/app/api/dashboard/imported-contacts/{template,reply-image}/route.ts`,

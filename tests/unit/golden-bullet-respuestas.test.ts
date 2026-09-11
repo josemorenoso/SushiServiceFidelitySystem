@@ -112,6 +112,14 @@ describe('validarBoton — los títulos de los botones', () => {
     expect(validarBoton('🟢 Sí, quiero mi regalo', 'sí')).toMatch(/20/)
   })
 
+  it('un emoji en el botón lo rechaza Twilio al crear, así que se frena acá', () => {
+    // «Button Title text cannot contain emojis» (HTTP 400, 2026-09-11).
+    expect(validarBoton('🔴 No, gracias', 'no')).toMatch(/emoji/)
+    expect(validarBoton('Sí, quiero ❤️', 'sí')).toMatch(/emoji/)
+    // Acentos y signos no son emojis.
+    expect(validarBoton('Sí, ¡quiero!', 'sí')).toBeNull()
+  })
+
   it('un botón vacío no es un botón', () => {
     expect(validarBoton('   ', 'no')).not.toBeNull()
   })

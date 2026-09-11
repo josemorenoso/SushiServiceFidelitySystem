@@ -58,6 +58,9 @@ const TEXTAREA =
 /** Largo en caracteres como los cuenta WhatsApp (un emoji es uno). */
 const largo = (s: string) => [...s].length
 
+/** Twilio rechaza emojis en los botones («Button Title text cannot contain emojis»). Espejo de `validarBoton()`. */
+const tieneEmoji = (s: string) => /\p{Extended_Pictographic}/u.test(s)
+
 /** Qué variables `{{n}}` usa un cuerpo. Espejo de `variablesDelCuerpo()` del servidor. */
 function variablesDe(body: string): Set<number> {
   const vars = new Set<number>()
@@ -167,7 +170,9 @@ export function ImportedContactsTemplate() {
       ? 'Los dos botones necesitan texto.'
       : largo(botonSi) > botonMax || largo(botonNo) > botonMax
         ? `Un botón no puede pasar de ${botonMax} caracteres.`
-        : null
+        : tieneEmoji(botonSi) || tieneEmoji(botonNo)
+          ? 'Los botones no aceptan emojis (WhatsApp los rechaza). En el mensaje sí van.'
+          : null
 
   const marca = config?.brand_name ?? 'la marca'
   const generico = nombreGenerico.trim() || config?.nombre_generico_default || 'cliente'
@@ -393,11 +398,11 @@ export function ImportedContactsTemplate() {
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="boton-si" className="text-xs uppercase tracking-wide text-muted-foreground">
-                  Botón del sí
+                  Botón del sí (solo texto, sin emojis)
                 </Label>
                 <Input id="boton-si" value={botonSi} onChange={(e) => setBotonSi(e.target.value)} />
-                <p className={`text-xs ${largo(botonSi) > botonMax ? 'text-amber-700' : 'text-muted-foreground'}`}>
-                  {largo(botonSi)} / {botonMax}
+                <p className={`text-xs ${largo(botonSi) > botonMax || tieneEmoji(botonSi) ? 'text-amber-700' : 'text-muted-foreground'}`}>
+                  {tieneEmoji(botonSi) ? 'Sin emojis en los botones · ' : ''}{largo(botonSi)} / {botonMax}
                 </p>
               </div>
               <div className="space-y-1.5">
@@ -405,8 +410,8 @@ export function ImportedContactsTemplate() {
                   Botón del no
                 </Label>
                 <Input id="boton-no" value={botonNo} onChange={(e) => setBotonNo(e.target.value)} />
-                <p className={`text-xs ${largo(botonNo) > botonMax ? 'text-amber-700' : 'text-muted-foreground'}`}>
-                  {largo(botonNo)} / {botonMax}
+                <p className={`text-xs ${largo(botonNo) > botonMax || tieneEmoji(botonNo) ? 'text-amber-700' : 'text-muted-foreground'}`}>
+                  {tieneEmoji(botonNo) ? 'Sin emojis en los botones · ' : ''}{largo(botonNo)} / {botonMax}
                 </p>
               </div>
             </div>

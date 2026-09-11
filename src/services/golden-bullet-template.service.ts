@@ -94,11 +94,21 @@ export function validarCuerpoClub(body: string): string | null {
   return null
 }
 
-/** Lo mismo para el texto visible de un botón. */
+/** Emojis y pictogramas. Espejo de `tieneEmoji()` en el asistente. */
+const RE_EMOJI = /\p{Extended_Pictographic}/u
+
+/**
+ * Lo mismo para el texto visible de un botón.
+ *
+ * Sin emojis: Twilio los rechaza al crear («Button Title text cannot contain
+ * emojis», HTTP 400, 2026-09-11). Los botones de respuesta rápida de WhatsApp
+ * son solo texto; en el cuerpo sí van.
+ */
 export function validarBoton(titulo: string, cual: 'sí' | 'no'): string | null {
   const t = titulo.trim()
   if (!t) return `El botón del ${cual} está vacío.`
   if ([...t].length > BOTON_MAX) return `El botón del ${cual} tiene ${[...t].length} caracteres y WhatsApp acepta hasta ${BOTON_MAX}.`
+  if (RE_EMOJI.test(t)) return `El botón del ${cual} lleva un emoji y WhatsApp no los acepta en los botones (en el mensaje sí).`
   return null
 }
 

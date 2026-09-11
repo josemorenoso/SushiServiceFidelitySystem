@@ -231,8 +231,9 @@ La pestaña **«Plantilla»** tiene los tres mensajes del flujo, y **ninguno est
    sigue siendo `twilio/quick-reply`. Los `id` de los botones son los mismos en los dos tipos, así
    que el webhook no sabe ni necesita saber cuál se usó. Meta revisa la foto con el texto y es la
    misma en cada envío: otra foto es otra plantilla (el nombre lleva `_foto`). Los títulos van al
-   tope de 20,
-   contados como los cuenta WhatsApp: «Sí, quiero mi regalo» cabe justo; con un emoji
+   tope de 20 y **sin emojis** (Twilio: «Button Title text cannot contain emojis», HTTP 400,
+   2026-09-11; en el cuerpo sí van), contados como los cuenta WhatsApp: «Sí, quiero mi regalo» cabe
+   justo; con un emoji
    delante, no). Se crea en la cuenta Twilio del negocio y se somete a Meta sin que nadie
    copie un token. Lo que antes era un campo aparte —**de dónde salió su número, y tiene que
    ser verdad**— ahora es parte del texto: el panel lo recuerda, el servidor no puede

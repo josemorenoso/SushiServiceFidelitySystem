@@ -14,7 +14,7 @@
 
 | Qué | Estado |
 |-----|--------|
-| Código | **`origin/main` = `e0050bf`** (pusheado el 2026-09-11, 04:10, por orden del dueño: Golden Bullet con los tres textos editables; antes, `a55f574` a las 03:45: el flag, el Toaster y el normalizador de celulares). Antes, `d47ade8` + su commit de docs (02:30: rendimiento del equipo, 00065 **aplicada antes**). Antes, en el mismo día: `76d99b7` (AIOS + 00064, plantillas) y `3278f66` (invitaciones, 00063). **Local = remoto.** La carpeta sigue en `feat/multisede-aios` (= `main`). Sin mergear a propósito: `master`, `port/sushi-fun-2.8`, `sushi-sync`. **Variables que el código desplegado espera en Vercel:** `TWILIO_MASTER_TENANT_ID` (RUNBOOK §1.b'; sin ella Sushi Service deja de enviar por Twilio) y las tres de Meta (§1.b'', no bloquean) |
+| Código | **`origin/main` = `cc13745`** (pusheado el 2026-09-11, 04:25, por orden del dueño: Golden Bullet con los tres textos editables y `{nombre|alternativo}`; antes, `a55f574` a las 03:45: el flag, el Toaster y el normalizador de celulares). Antes, `d47ade8` + su commit de docs (02:30: rendimiento del equipo, 00065 **aplicada antes**). Antes, en el mismo día: `76d99b7` (AIOS + 00064, plantillas) y `3278f66` (invitaciones, 00063). **Local = remoto.** La carpeta sigue en `feat/multisede-aios` (= `main`). Sin mergear a propósito: `master`, `port/sushi-fun-2.8`, `sushi-sync`. **Variables que el código desplegado espera en Vercel:** `TWILIO_MASTER_TENANT_ID` (RUNBOOK §1.b'; sin ella Sushi Service deja de enviar por Twilio) y las tres de Meta (§1.b'', no bloquean) |
 | Verificación | ✅ 2026-09-11 (04:05): `tsc` limpio · lint limpio en lo tocado · **suite entera: 48 archivos / 748 tests en verde** · eslint **7 errores preexistentes** (hooks y gráficas del panel, ninguno en lo tocado). El rojo de `aios-health` era del RELOJ (el helper mete dos pedidos con `now() - 1h`/`- 2h`, así que entre medianoche y las 2 a.m. el segundo cae en el día anterior): a esta hora pasa. Sigue sin corregirse. `build` no se corrió |
 | Marcas vivas | **5**: sushi-service (542 clientes), demo-ventas (412), sushi-fun (251), don-alirio (244), cafe-frangal (8) |
 | Base de datos de producción | ✅ **Aplicadas hasta la `00056`** (dueño, 2026-09-08: `00047`, `00050`, `00051`, `00053`, `00054` y `00056`, todas). El esquema ya alcanza al código de `main`. La 00030 NUNCA aplicada (a propósito). La 00015 NO se aplica (reabre fuga). Huecos: `00048`, `00049`, `00052`, `00055`. **`00062` aplicada** (dueño, 2026-09-11, antes del push). **`00065` aplicada** (dueño, 2026-09-11, antes del push). **Escritas sin aplicar: `00058`, `00059`, `00061`, `00064`** |
@@ -22,7 +22,7 @@
 | Crons | Los 5 en `vercel.json`, corriendo. `birthday` 18:00 y `reactivation` 20:00 UTC (= 13:00/15:00 Bogotá), verificado. ⚠️ **`reward-reminder` sigue en 16:00 UTC (11:00 Bogotá)**; la auditoría estimó ≈21:00 UTC. **Decisión del dueño** |
 | n8n | Apagado. `domicilios_whatsapp_v4.json` sigue en el VPS pero ya no dispara |
 | AIOS (`Level 2.0/aios-constelarys`) | **Local `c8a1917` (v1.11.0, 2026-09-11, SIN pushear)**: borrar propietario entero, lista Twilio \| Zernio con recarga, reinicio de WhatsApp, Embedded Signup que se anota solo (00010 del AIOS, sin aplicar), `ZERNIO_SIMULATE` solo con `true`. Necesita la **00064 del producto** aplicada y `ZERNIO_API_KEY` vigente en su Vercel. Antes: **`origin/main` = `b6fd308` (v1.10.0), pusheado el 2026-09-10**: las 13 plantillas copiadas del producto (sin 🍣, emoji por rubro), media de muestra desde `ZERNIO_TEMPLATE_SAMPLE_{IMAGE,VIDEO}_URL` **del Vercel del AIOS** (las dos son obligatorias o el paso 4 no arranca), y nombres `_v2` cuando el base ya existe en la WABA |
-| Grafo | Hook post-commit instalado el 07 (`graphify hook status`): se actualiza solo en cada commit. ⚠️ 169 comunidades renombradas por su hub: `graphify label` las refresca (cuesta LLM, no se corrió) |
+| Grafo | Reconstruido a mano el 2026-09-11 04:30 (5.535 nodos, 539 comunidades). Hook post-commit instalado el 07 (`graphify hook status`): se actualiza solo en cada commit. ⚠️ 169 comunidades renombradas por su hub: `graphify label` las refresca (cuesta LLM, no se corrió) |
 | Deadline | ~2026-09-10 — onboarding de los 25 clientes de Zernio |
 
 ## 2. En vuelo ahora mismo
@@ -271,6 +271,13 @@ automatizaciones dentro del restaurante y **Google** para reseñas.
 
 ## 5. Hecho reciente
 
+- **Golden Bullet, listo para la campaña de amor y amistad** (2026-09-11, sin migración, **desplegado** en `cc13745`):
+  el CSV «no cargaba» porque el flag nacía apagado y el 403 era mudo (ahora hay botón para encenderlo y la
+  página monta el Toaster); los tres textos del flujo se escriben en el panel (mensaje 1 con botones,
+  respuestas al sí —con foto y `{nombre|¿cómo estás?}`— y al no); `{{2}}` es opcional; el normalizador de
+  celulares ya no deja pasar extranjeros. Los dos CSV de Sushi Service (7.438 + 6.688) están en
+  `Contactos/salida/GOLDEN-BULLET-*.csv`, fuera del repo. Faltan del dueño: invitación con premio,
+  plantilla a Meta (24-48 h), billetera COP y saldo Twilio (ver 0.GB).
 - **Rendimiento del equipo** (2026-09-11, migración `00065`, **aplicada y desplegada**): el dueño preguntó dónde se
   veía cuántos clientes escaneó cada mesero y qué mesas piden más, y la respuesta era «en ningún lado»: los
   datos se guardaban desde la 00009/00018 y nadie los leía. Apartado nuevo **«Rendimiento»**

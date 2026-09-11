@@ -14,7 +14,7 @@
 
 | Qué | Estado |
 |-----|--------|
-| Código | **`origin/main` = `88ccb8f`** (pusheado el 2026-09-11). Local = remoto. La carpeta sigue en `feat/multisede-aios` (= `main`). Sin mergear a propósito: `master`, `port/sushi-fun-2.8`, `sushi-sync`. **Variables que el código desplegado espera en Vercel:** `TWILIO_MASTER_TENANT_ID` (RUNBOOK §1.b'; sin ella Sushi Service deja de enviar por Twilio) y las tres de Meta (§1.b'', no bloquean) |
+| Código | **`origin/main` = `3278f66`** (pusheado el 2026-09-11, noche: invitaciones con premio, 00063 **aplicada antes**). ⚠️ **Local ≠ remoto:** quedan sin pushear `74a85d6` (plantillas) y `678499a` (AIOS + **00064**); ese push es del dueño, **después de aplicar la 00064**. La carpeta sigue en `feat/multisede-aios` (= `main`). Sin mergear a propósito: `master`, `port/sushi-fun-2.8`, `sushi-sync`. **Variables que el código desplegado espera en Vercel:** `TWILIO_MASTER_TENANT_ID` (RUNBOOK §1.b'; sin ella Sushi Service deja de enviar por Twilio) y las tres de Meta (§1.b'', no bloquean) |
 | Verificación | ✅ 2026-09-11 (00:41): `tsc` limpio · **vitest 44 archivos / 695 tests, TODOS en verde** · eslint **7 errores preexistentes** (hooks y gráficas del panel, ninguno en lo tocado). El rojo de `aios-health` era del RELOJ (el helper mete dos pedidos con `now() - 1h`/`- 2h`, así que entre medianoche y las 2 a.m. el segundo cae en el día anterior): a esta hora pasa. Sigue sin corregirse. `build` no se corrió |
 | Marcas vivas | **5**: sushi-service (542 clientes), demo-ventas (412), sushi-fun (251), don-alirio (244), cafe-frangal (8) |
 | Base de datos de producción | ✅ **Aplicadas hasta la `00056`** (dueño, 2026-09-08: `00047`, `00050`, `00051`, `00053`, `00054` y `00056`, todas). El esquema ya alcanza al código de `main`. La 00030 NUNCA aplicada (a propósito). La 00015 NO se aplica (reabre fuga). Huecos: `00048`, `00049`, `00052`, `00055`. **`00062` aplicada** (dueño, 2026-09-11, antes del push). **Escritas sin aplicar: `00058`, `00059`, `00061`, `00064`** |
@@ -167,14 +167,12 @@
       tenant. Zernio (AIOS v1.10.x, Pedacito/Tepuy): «Crear plantillas» cuando tengan el paso 3 y
       las dos `ZERNIO_TEMPLATE_SAMPLE_*_URL` en el Vercel **del AIOS**. Producto y AIOS con el
       cuerpo corregido: **sin pushear** (`675fdbe` en el AIOS).
-0.quinquies **Aplicar la `00058`, la `00059` y la `00063` en Supabase** (producto) y la **`00009` en el Supabase del AIOS**,
+0.quinquies **Aplicar la `00058` y la `00059` en Supabase** (producto) y la **`00009` en el Supabase del AIOS**,
    en ese orden y ANTES de desplegar. Sin la 00058, `/dashboard/sedes` responde **503** al guardar
    (`merge_location_config_deep()` no existe) y las columnas `location_id` de recompensas tampoco.
    Sin la 00009 del AIOS, guardar un cliente revienta con el CHECK viejo en cuanto alguien elija
-   «grupo» o «franquicia». La `00060` ya la corrió el dueño el 10, antes del push. **Sin la `00063`**, la pestaña
-   Invitaciones de Recompensas responde 500 al listar (`qr_campaigns` no existe) y el registro por
-   `/c/{slug}` se completa pero SIN premio (el INSERT del grant falla por el CHECK de `source`).
-   Las tres son de RIESGO BAJO: no tocan una sola fila de historia. **Y la `00061`** (`tenant_integration_secrets`, el token de la API
+   «grupo» o «franquicia». La `00060` (10) y la `00063` (11) ya las corrió el dueño antes de cada push. Las dos que
+   quedan son de RIESGO BAJO: no tocan una sola fila de historia. **Y la `00061`** (`tenant_integration_secrets`, el token de la API
    de Conversiones por marca): tabla nueva, riesgo cero, puede ir después del código; hasta que corra, el panel
    responde 503 al guardar el token de una marca. La `00062` (meseros rotativos) ya está aplicada (11).
 0.quater **Falta el autoservicio de contraseña** («olvidé mi contraseña» en `/login`). Ya se puede

@@ -299,6 +299,10 @@ automatizaciones dentro del restaurante y **Google** para reseñas.
 
 ## 5. Hecho reciente
 
+- **Autorizados Domicilio dentro de Domicilios** (2026-09-12, `1de033e`, pusheado, sin migración): dos pestañas
+  en `/dashboard/domicilios` —«Domicilios» y «Autorizados» (`AutorizadosPanel.tsx`, la pantalla vieja tal cual)—;
+  `/dashboard/authorized-numbers` redirige a `?tab=autorizados` y salió del menú. Patrón de Recompensas ›
+  Redenciones (`useSyncExternalStore`, nunca `useSearchParams()`). Endpoints intactos. → `delivery-dashboard.md`.
 - **Golden Bullet por tandas desde el panel** (2026-09-12, sin migración): al terminar el goteo desaparecían
   «se registraron» y «dijeron que no», y para otra parte de la misma base había que resubir el CSV. Ahora
   `confirm` guarda la base ENTERA (la tanda `queued`, el resto **`valid`** = sin programar; el estado ya

@@ -1,8 +1,11 @@
 # Feature: Apartado de Domicilios (el panel)
 
-> **Estado:** Completo — escrito el 2026-09-07 en `feat/domicilios`, **sin desplegar**.
-> **Ruta:** `/dashboard/domicilios`
+> **Estado:** Completo y desplegado. Escrito el 2026-09-07 en `feat/domicilios`; desde el
+> 2026-09-12 (`1de033e`) lleva la pestaña **«Autorizados»**.
+> **Ruta:** `/dashboard/domicilios` (`?tab=autorizados` abre la segunda pestaña;
+> `/dashboard/authorized-numbers` redirige ahí)
 > **Archivos clave:** `src/app/(dashboard)/dashboard/domicilios/page.tsx`,
+> `src/components/dashboard/domicilios/AutorizadosPanel.tsx`,
 > `src/app/api/dashboard/domicilios/{route,resumen/route,fallos/route}.ts`,
 > `src/services/delivery-dashboard.service.ts`, `src/lib/delivery-reasons.ts`,
 > `src/lib/delivery-silence.ts`, `src/components/dashboard/domicilios/*`
@@ -38,14 +41,38 @@ su arreglo (la otra mitad es la tabla `delivery_intake_failures` de la 00053).
   el panel) sigue siendo una buena mejora para después y **no** se construyó a medias.
 - **No manda nada.** La alarma de silencio se pinta y punto. Los mensajes y correos son
   §24-A y viven en el AIOS, no acá.
-- **No escribe una fila.** Es solo lectura de `visits`, `customers`, `tenants` y
-  `delivery_intake_failures`. No toca `delivery.service.ts` ni ninguno de los tres
-  webhooks: el contrato de `/api/webhook/delivery` lo usa n8n y no se cambia.
+- **La pestaña «Domicilios» no escribe una fila.** Es solo lectura de `visits`, `customers`,
+  `tenants` y `delivery_intake_failures`. No toca `delivery.service.ts` ni ninguno de los
+  tres webhooks: el contrato de `/api/webhook/delivery` lo usa n8n y no se cambia. Lo único
+  que escribe en esta página es la pestaña «Autorizados», y solo `authorized_numbers`.
 - **No trae migración.** Todo sale de tablas que ya existen más la 00053, que es de otra
   rama.
 - **No incluye el interruptor de la auto-respuesta (18.e) ni la plantilla de fallo de
   Zernio (18.c).** Los dos están fuera de alcance por decisión previa; 18.e además toca
   `webhook/twilio-incoming`, que es territorio de otra sesión.
+
+---
+
+## Las dos pestañas (desde el 2026-09-12)
+
+El dueño pidió textual: *«Mete autorizados domicilio dentro del apartado de domicilios»*.
+Eran dos entradas del menú para la misma cosa: los pedidos y quién puede mandarlos.
+
+| Pestaña | Qué es | De dónde viene |
+|---|---|---|
+| **Domicilios** (inicial) | Los tres bloques de abajo | Lo que esta página siempre fue |
+| **Autorizados** | `AutorizadosPanel.tsx`: los celulares que pueden mandar un pedido, su sede, alta/baja/borrado | La pantalla `/dashboard/authorized-numbers` entera, tal cual, sin su `Toaster` (lo pone la página) y con título de sección en vez de `h1` |
+
+- La ruta vieja **se conserva y redirige** a `/dashboard/domicilios?tab=autorizados` para que
+  no se rompa ningún enlace guardado. Ya no tiene entrada en el menú (ni en el lateral ni en
+  el móvil; el móvil ganó «Domicilios», que no tenía).
+- La pestaña inicial se lee de `?tab=` con `window.location` vía `useSyncExternalStore`,
+  **nunca con `useSearchParams()`** (CSR bailout, ver la trampa en `CLAUDE.md`). Es el mismo
+  patrón de Recompensas › Redenciones. Dentro de la página se cambia de pestaña por estado:
+  el botón «Gestionar números autorizados» del bloque 1 recibe `onGestionarAutorizados` y
+  no navega.
+- Los endpoints `/api/dashboard/authorized-numbers` **no cambiaron**; la lógica de la sede de
+  cada número sigue documentada en `delivery-webhook.md` § «La sede del operador».
 
 ---
 

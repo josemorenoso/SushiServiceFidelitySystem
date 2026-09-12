@@ -32,6 +32,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Migración de Sushi Service de Twilio a Zernio (coexistencia): runbook paso a paso, dueño, 2026-09-12 | Opus 5 | `ESTADO.md`, `docs/RUNBOOK-SUSHI-SERVICE-A-ZERNIO.md` (nuevo) | — | En vuelo |
 
 ## 3. Siguiente, en orden
 

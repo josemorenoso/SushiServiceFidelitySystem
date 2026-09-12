@@ -108,6 +108,16 @@ Las tres funciones tienen `SET search_path = public, pg_temp`, `REVOKE ALL FROM 
 `GRANT EXECUTE` solo a `aios_constelarys` — ningún otro rol (ni `authenticated`, ni `anon`) puede
 llamarlas.
 
+**Coexistencia (AIOS v1.11.2, 2026-09-12).** El Embedded Signup con `onboarding=business_app` deja la
+cuenta conectada en Zernio, pero el número puede quedar **«sin registrar» en Cloud API** en el WhatsApp
+Manager de Meta, y una WABA con su único número a medio activar es una cuenta a medio activar: a Planeta
+Wings le dejó 13 plantillas «En revisión» durante horas. El paso 3 del AIOS tiene desde entonces
+«Registrar número en Cloud API» (`POST /v1/accounts/{id}/whatsapp/register`, contrato §3). Y el paso 4
+guarda el estado que Meta devolvió de **cada** plantilla (rechazo con motivo incluido): antes solo contaba
+las aprobadas, y una rechazada quedaba pendiente para siempre. Hasta que `aios_activate_whatsapp()` corra
+(paso 4 de la SEDE en el AIOS), el producto sigue viendo al tenant como `twilio`: Conexiones dice
+«sin número · por Twilio» y Plantillas muestra el gestor de Twilio. Es lo esperado a mitad del alta.
+
 ## Webhook (`src/app/api/webhook/zernio/route.ts`)
 
 Contraparte de `twilio-incoming/route.ts` para tenants Zernio.

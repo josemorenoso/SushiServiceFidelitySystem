@@ -28,6 +28,14 @@ panel y no tenemos su texto» (`adoptedRef`) — verificado en PENDIENTES §1.1.
   catálogo que exista allí con nombre base o `_vN`: crear la fila en `template_versions` con
   `provider_ref`, `status` real (`PENDING`/`APPROVED`/`REJECTED` + motivo) y el texto del catálogo
   estándar (`src/constants/template-texts.ts`, sin emojis horneados: hay un test que lo vigila).
+- **Evidencia real (Planeta Wings, 2026-09-12 05:13 UTC, log del producto):** el dueño apretó «Enviar a
+  Meta» en Bienvenida y Zernio respondió `400 — La categoría UTILITY no coincide con la que ya está
+  asociada a esta plantilla: MARKETING`. `bienvenida` ya existía en la WABA (la creó el AIOS a las 00:17,
+  como UTILITY) y **Meta la recategorizó a MARKETING en la revisión**. Dos consecuencias: (a) la adopción
+  tiene que leer la categoría REAL de la WABA, no la del catálogo; (b) la pantalla mostró «WhatsApp no
+  aceptó el cambio en este momento… vuelve a intentarlo más tarde», que es falso: no es transitorio. Un
+  400 de nombre/categoría repetidos tiene que decir «ya existe en tu cuenta de WhatsApp con ese nombre» y
+  adoptarla, no invitar a reintentar.
 - `nextProviderRef()` pasa a mirar la unión de `template_versions` + nombres de la WABA (misma regla que
   `nextFreeName()` del AIOS: base, `_v2`, `_v3`…).
 - El botón «Enviar a Meta» se muestra **por plantilla**, con su estado al lado, y un «Actualizar estado»

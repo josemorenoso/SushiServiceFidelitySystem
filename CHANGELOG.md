@@ -8,6 +8,20 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [2.x] — 2026-09-12 — El AIOS enciende los domicilios por WhatsApp de una marca (00066)
+
+**Pedido del dueño:** el panel de Planeta Wings decía «hace falta que Cada1 lo prenda en la ficha de tu marca»
+y en el AIOS no había ningún botón: la bandera `config.has_delivery_webhook` nace en `false` para toda marca
+del AIOS (00056) y solo se prendía por SQL.
+
+- **`00066_aios_delivery_webhook.sql`**: `aios_delivery_webhook_enabled(slug)` (lee; ausente = `true`, la
+  misma regla de `buildDeliveryChannel()`) y `aios_set_delivery_webhook(slug, enabled)` (escribe por
+  `merge_tenant_config_deep()`). SECURITY DEFINER, `search_path` fijo, REVOKE de PUBLIC y GRANT solo a
+  `aios_constelarys`. Riesgo nulo: una clave booleana dentro de `config`. **Se aplica antes de desplegar el
+  AIOS v1.12.0**; sin ella el AIOS muestra «falta aplicar la 00066» en vez del interruptor.
+- Nada cambia en el producto: la bandera sigue siendo informativa (solo la lee el aviso ámbar de Domicilios).
+- Docs: `docs/features/delivery-dashboard.md` (cómo se activa ahora).
+
 ## [2.x] — 2026-09-12 — Golden Bullet por tandas desde el panel: la base entera se guarda y se ve
 
 **Pedido del dueño:** al terminar el goteo desaparecían «se registraron» y «dijeron que no», y para mandar

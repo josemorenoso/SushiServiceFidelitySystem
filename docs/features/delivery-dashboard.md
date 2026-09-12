@@ -81,6 +81,19 @@ sección habría sido una decisión del dueño, no nuestra. Y la clave **ausente
 `true`**: los tenants que ya reciben domicilios no la tienen puesta, y decirles «no está
 activo» sería mentirles sobre algo que funciona.
 
+> **Actualizado 2026-09-12 — la «ficha de tu marca» del aviso ya existe.** Toda marca creada
+> desde el AIOS nace con la clave en `false` (`aios_provision_tenant`, 00056) y hasta hoy se
+> prendía por SQL. Ahora la enciende y la apaga el operador desde el AIOS: ficha de la sede →
+> tarjeta **Sistema** → «Domicilios por WhatsApp» (AIOS v1.12.0). Por debajo son dos funciones
+> `SECURITY DEFINER` del producto, **migración `00066`**: `aios_delivery_webhook_enabled(slug)`
+> replica la regla «ausente = `true`» de `buildDeliveryChannel()` y `aios_set_delivery_webhook(slug,
+> enabled)` escribe por `merge_tenant_config_deep()`. Hacen falta porque el rol `aios_constelarys`
+> no lee ni escribe `tenants.config` (00035). **La bandera sigue siendo informativa**: ningún
+> webhook la consulta; un pedido de un número autorizado entra igual. Por eso el AIOS dice qué
+> tiene que estar listo (línea recibiendo, celular del operador en «Autorizados») en vez de
+> prometer que el botón hace que los pedidos entren. Es de la marca, no de la sede: en un grupo,
+> encenderla en una sede la enciende en todas.
+
 > **Actualizado 2026-09-08 — cuadro modelo para copiar, e instrucciones plegables.** El
 > dueño lo pidió textual: *«un cuadro de ejemplo que al tocar copiar les traiga un mensaje
 > plantilla que puedan usar para guardar predeterminado en WhatsApp»*. `ComoFuncionaCard.tsx`

@@ -74,6 +74,7 @@ const REASON_LABEL: Record<string, string> = {
   no_es_movil_colombiano: 'No es móvil colombiano',
   duplicado: 'Duplicado en el archivo',
   ya_contactado: 'Ya contactado antes',
+  en_otra_base: 'Ya está en una base cargada, sin programar (pestaña Bases)',
   sin_columna_telefono: 'Falta columna teléfono',
 }
 
@@ -409,8 +410,9 @@ export function ImportedContactsUploader({ onSent, apagado = false }: { onSent?:
           </div>
           {(result.left_out ?? 0) > 0 && (
             <p className="mt-4 max-w-md rounded-lg border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
-              Quedaron <strong>{(result.left_out ?? 0).toLocaleString('es-CO')}</strong> sin programar. Cuando quieras
-              seguir, subí <strong>el mismo CSV</strong>: los de esta tanda se excluyen solos y entran los que faltan.
+              Quedaron <strong>{(result.left_out ?? 0).toLocaleString('es-CO')}</strong> guardados sin programar. La
+              siguiente tanda se programa desde la pestaña <strong>Bases</strong>, sin volver a subir nada: los que ya
+              recibieron el mensaje no pueden volver a entrar.
             </p>
           )}
           <Button className="mt-6" variant="outline" onClick={() => setResult(null)}>Nueva importación</Button>
@@ -722,8 +724,8 @@ export function ImportedContactsUploader({ onSent, apagado = false }: { onSent?:
                   <strong>{enTanda.toLocaleString('es-CO')}</strong> del archivo.
                   {quedanFuera > 0 && (
                     <>
-                      {' '}Los otros <strong>{quedanFuera.toLocaleString('es-CO')}</strong> quedan para después: subís el
-                      mismo CSV y entran solos (los ya programados se excluyen).
+                      {' '}Los otros <strong>{quedanFuera.toLocaleString('es-CO')}</strong> quedan guardados en la base y los
+                      programás después desde la pestaña Bases, sin resubir el CSV.
                     </>
                   )}
                 </p>

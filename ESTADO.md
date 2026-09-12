@@ -1,6 +1,6 @@
 # ESTADO — RestaurantQR / Cada1
 
-> **Última actualización:** 2026-09-12 (Autorizados Domicilio dentro de Domicilios, pusheado `1de033e`; Planeta Wings: timeout de Auth, estado por plantilla y registro en Cloud API en el AIOS; prompt de plantillas una por una; Opus 5)
+> **Última actualización:** 2026-09-12 (Golden Bullet por tandas desde el panel: la base entera se guarda, pestaña «Bases», `POST /continue`, sin migración; antes: Autorizados Domicilio dentro de Domicilios, pusheado `1de033e`; Planeta Wings: timeout de Auth, estado por plantilla y registro en Cloud API en el AIOS; prompt de plantillas una por una; Opus 5)
 > Toda sesión lo lee PRIMERO. Toda sesión que cierra un bloque lo ACTUALIZA al final. Límite: 150 líneas.
 > Lo obsoleto se **saca**, no se tacha: un ítem tachado sigue costando tokens cada vez que alguien lee esto.
 >
@@ -15,7 +15,7 @@
 | Qué | Estado |
 |-----|--------|
 | Código | **`origin/main` = `1de033e`** (push 2026-09-12 por orden del dueño: Autorizados Domicilio como pestaña de Domicilios, sin migración; antes `27e4ae2`, docs del Golden Bullet, y `8cf5ed4`: nombre editable de plantillas en Meta, `ac686b8`; antes `05b7eb8`) (pusheado el 2026-09-12 por orden del dueño: **`712ff58` Golden Bullet por Zernio con la marca en Twilio** —código, sin migraciones; Vercel lo despliega solo; el puente necesita `ZERNIO_API_KEY` y `ZERNIO_WEBHOOK_SECRET` en el Vercel del producto— más docs. Antes, el mismo día: solo docs —prompt de plantillas, `zernio-messaging.md`, este archivo— sobre `d38319c`, el drenador a 240 s/20 en paralelo; antes `9c34760` a las 06:00, por orden del dueño: Golden Bullet por tandas con la plata a la vista, foto en el mensaje 1, prueba a un celular, nombre genérico al lado del mensaje, los tres textos editables y `{nombre|alternativo}`; antes, `a55f574` a las 03:45: el flag, el Toaster y el normalizador de celulares). Antes, `d47ade8` + su commit de docs (02:30: rendimiento del equipo, 00065 **aplicada antes**). Antes, en el mismo día: `76d99b7` (AIOS + 00064, plantillas) y `3278f66` (invitaciones, 00063). **Local = remoto.** La carpeta sigue en `feat/multisede-aios` (= `main`). Sin mergear a propósito: `master`, `port/sushi-fun-2.8`, `sushi-sync`. **Variables que el código desplegado espera en Vercel:** `TWILIO_MASTER_TENANT_ID` (RUNBOOK §1.b'; sin ella Sushi Service deja de enviar por Twilio) y las tres de Meta (§1.b'', no bloquean) |
-| Verificación | ✅ 2026-09-12 (nombre editable de plantillas): `tsc` limpio · eslint limpio en lo tocado · `template-catalog.test.ts` 34/34. Suite entera NO se corrió esta vez. Antes, ✅ 2026-09-11 (06:00): `tsc` limpio · lint limpio en lo tocado · **suite entera: 48 archivos / 756 tests en verde** · eslint **7 errores preexistentes** (hooks y gráficas del panel, ninguno en lo tocado). El rojo de `aios-health` era del RELOJ (el helper mete dos pedidos con `now() - 1h`/`- 2h`, así que entre medianoche y las 2 a.m. el segundo cae en el día anterior): a esta hora pasa. Sigue sin corregirse. `build` no se corrió |
+| Verificación | ✅ 2026-09-12 (Golden Bullet por tandas): `tsc` limpio · eslint limpio en lo tocado (los 7 errores del proyecto son los preexistentes) · **suite entera: 50 archivos / 787 tests en verde**. Antes, ✅ 2026-09-11 (06:00): `tsc` limpio · lint limpio en lo tocado · **suite entera: 48 archivos / 756 tests en verde** · eslint **7 errores preexistentes** (hooks y gráficas del panel, ninguno en lo tocado). El rojo de `aios-health` era del RELOJ (el helper mete dos pedidos con `now() - 1h`/`- 2h`, así que entre medianoche y las 2 a.m. el segundo cae en el día anterior): a esta hora pasa. Sigue sin corregirse. `build` no se corrió |
 | Marcas vivas | **5**: sushi-service (542 clientes), demo-ventas (412), sushi-fun (251), don-alirio (244), cafe-frangal (8) |
 | Base de datos de producción | ✅ **Aplicadas hasta la `00056`** (dueño, 2026-09-08: `00047`, `00050`, `00051`, `00053`, `00054` y `00056`, todas). El esquema ya alcanza al código de `main`. La 00030 NUNCA aplicada (a propósito). La 00015 NO se aplica (reabre fuga). Huecos: `00048`, `00049`, `00052`, `00055`. **`00062` aplicada** (dueño, 2026-09-11, antes del push). **`00065` aplicada** (dueño, 2026-09-11, antes del push). **Escritas sin aplicar: `00058`, `00059`, `00061`, `00064`** |
 | Migraciones: dónde están | El directorio muestra **solo la rama puesta**; el inventario real y el número de la próxima los da `node scripts/proxima-migracion.mjs`. **Desde el 07 la única reserva es la fila del tablero (§2)**: un número citado en cualquier otro doc no reserva nada. `00048`, `00049`, `00052` y `00055` son huecos: no se rellenan |
@@ -32,7 +32,6 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
-| Golden Bullet por tandas desde el panel: la base entera se guarda, «En curso» muestra cada base (terminadas incluidas) con registrados/rechazos y deja programar la siguiente tanda sin resubir el CSV (dueño, 2026-09-12) | Opus 5 | `src/services/imported-contacts.service.ts` · `src/app/api/dashboard/imported-contacts/{confirm,progress,continue}/route.ts` · `src/components/dashboard/ImportedContactsProgress.tsx` · `ImportedContactsUploader.tsx` · `dashboard/imported-contacts/page.tsx` · `tests/unit/golden-bullet-*.test.ts` · `docs/features/golden-bullet.md` · `docs/API_DOCS.md` · `CHANGELOG.md` | — | en curso |
 
 ## 3. Siguiente, en orden
 
@@ -291,6 +290,16 @@ automatizaciones dentro del restaurante y **Google** para reseñas.
 
 ## 5. Hecho reciente
 
+- **Golden Bullet por tandas desde el panel** (2026-09-12, sin migración): al terminar el goteo desaparecían
+  «se registraron» y «dijeron que no», y para otra parte de la misma base había que resubir el CSV. Ahora
+  `confirm` guarda la base ENTERA (la tanda `queued`, el resto **`valid`** = sin programar; el estado ya
+  estaba en el CHECK de la 00023), la pestaña **«Bases»** (ex «En curso») muestra cada base mientras exista
+  con en la base / programados / sin programar / enviados / entregados / registrados / rechazos, y
+  «Programar otra tanda» → `POST /continue` hereda plantilla, promo y advertencia de la tanda anterior
+  (`campaigns.filters`). Una campaña por tanda: pausa y drenador intactos. De paso: **toda lectura de la
+  base pagina de a 1.000** (PostgREST cortaba ahí en silencio). ⚠️ Los 6.438 de la base del 11 no están
+  guardados: subir ese CSV UNA vez más (los 1.000 se excluyen solos) y de ahí en adelante todo desde el
+  panel. → `docs/features/golden-bullet.md` § «Bases y tandas».
 - **Golden Bullet, listo para la campaña de amor y amistad** (2026-09-11, sin migración, **desplegado** en `cc13745`):
   el CSV «no cargaba» porque el flag nacía apagado y el 403 era mudo (ahora hay botón para encenderlo y la
   página monta el Toaster); los tres textos del flujo se escriben en el panel (mensaje 1 con botones,

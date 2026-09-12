@@ -87,9 +87,11 @@ export default function ImportedContactsPage() {
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
-          {/* «En curso» va primero a propósito: con un goteo de semanas, lo que
-              uno abre el panel a mirar es qué salió hoy, no a cargar otro CSV. */}
-          <TabsTrigger value="curso">En curso</TabsTrigger>
+          {/* «Bases» va primero a propósito: con un goteo de semanas, lo que
+              uno abre el panel a mirar es qué salió hoy, quién se registró y
+              cuántos quedan por programar — no a cargar otro CSV. Hasta el
+              2026-09-12 se llamaba «En curso» y solo mostraba lo que goteaba. */}
+          <TabsTrigger value="curso">Bases</TabsTrigger>
           <TabsTrigger value="nueva">Nueva campaña</TabsTrigger>
           <TabsTrigger value="plantilla">Plantilla</TabsTrigger>
           <TabsTrigger value="historial">Historial &amp; ROI</TabsTrigger>

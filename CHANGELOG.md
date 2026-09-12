@@ -8,6 +8,24 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [2.x] — 2026-09-12 — Golden Bullet por tandas desde el panel: la base entera se guarda y se ve
+
+**Pedido del dueño:** al terminar el goteo desaparecían «se registraron» y «dijeron que no», y para mandar
+otra parte de la misma base había que resubir el CSV y confiar en la regla anti-reenvío.
+
+- `confirm` guarda la base ENTERA: la tanda como `queued`, el resto como **`valid`** («en la base, sin
+  programar»; el estado existía en el CHECK desde la 00023). Nada se descarta. Sin migración.
+- Nuevo `POST /api/dashboard/imported-contacts/continue` (`programarSiguienteTanda()`): la siguiente tanda con
+  dos números; plantilla, promo y nombre genérico se heredan de la anterior por `campaigns.filters`
+  (`template_sid`, `promo_text`, `fallback_name`, `tanda`); la advertencia aceptada se hereda (`inherited_from`).
+  Pasa por las mismas dos puertas (calidad y saldo). Una campaña por tanda: pausa y drenador sin cambios.
+- La pestaña **«En curso» pasa a ser «Bases»** y muestra cada base mientras exista —terminadas incluidas— con
+  en la base / programados / sin programar, enviados, entregados (solo Zernio), registrados, rechazos, rebotes,
+  y el formulario «Programar otra tanda». `progress` sin `batch_id` devuelve todas (`getBases()`).
+- **Toda lectura de la base pagina de a 1.000** (`leerTodo()`): PostgREST corta ahí en silencio y con 7.438
+  contactos el tablero contaba mal. `validate` distingue `en_otra_base` de `ya_contactado`.
+- Tests: `golden-bullet-tandas.test.ts` (11). Docs: `golden-bullet.md` § «Bases y tandas», `API_DOCS.md`.
+
 ## [2.x] — 2026-09-12 — Autorizados Domicilio pasa a ser una pestaña de Domicilios
 
 **Pedido del dueño:** «Mete autorizados domicilio dentro del apartado de domicilios». Dos entradas del menú

@@ -121,7 +121,10 @@ impide al rol `aios_constelarys` tocar `auth.users` — ver `docs/features/alta-
 | POST | /api/dashboard/imported-contacts/template | Crea la plantilla con botones en el proveedor de la difusión (Twilio o Zernio) y la somete a Meta. `contentSid` = `HX…` en Twilio, el **nombre** en Zernio | Admin Cookie + flag |
 | POST | /api/dashboard/imported-contacts/test-send | Manda el mensaje 1 a UN celular por la misma línea que la difusión; devuelve `provider` | Admin Cookie + flag |
 | POST | /api/dashboard/imported-contacts/validate | Validar CSV de contactos (sin insertar) | Admin Cookie + flag |
-| POST | /api/dashboard/imported-contacts/confirm | Confirmar e importar/enviar Golden Bullet | Admin Cookie + flag |
+| POST | /api/dashboard/imported-contacts/confirm | Guarda la base ENTERA y encola la primera tanda (`max_contacts`); el resto queda `valid`, sin programar | Admin Cookie + flag |
+| POST | /api/dashboard/imported-contacts/continue | La siguiente tanda de una base guardada: `{ batch_id, max_contacts, block_size, template_sid?, promo_text?, fallback_name? }`. Hereda de la tanda anterior lo que no venga. 409 `nothing_pending` / `template_required` / `line_quality` / `insufficient_balance` | Admin Cookie + flag |
+| GET | /api/dashboard/imported-contacts/progress | Sin `batch_id`: TODAS las bases (terminadas incluidas) con total / programados / sin programar / enviados / entregados / registrados / rechazos y la cola. Con `batch_id`, una | Admin Cookie |
+| POST | /api/dashboard/imported-contacts/pause | `{ campaign_id, action: 'pause' \| 'resume', block_size? }` — por campaña (= por tanda) | Admin Cookie |
 | GET | /api/dashboard/imported-contacts | Listar lotes o contactos de un lote | Admin Cookie |
 | GET | /api/dashboard/imported-contacts/stats | Estadísticas por lote | Admin Cookie |
 | GET | /api/dashboard/imported-contacts/roi | ROI por lote | Admin Cookie |

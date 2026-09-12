@@ -9,14 +9,18 @@
  * Reglas anti-reenvío: un teléfono que ya existe en imported_contacts NUNCA
  * se vuelve a contactar (evita bloqueos de Twilio/Meta).
  *
+ * Una BASE es un CSV confirmado: se guarda ENTERA (desde el 2026-09-12) y sale
+ * por TANDAS, cada una con su campaña. Los que todavía no entraron en ninguna
+ * tanda están en `status = 'valid'`: en la base, sin programar.
+ *
  * Ref: docs/features/golden-bullet.md
  */
 
 import { randomUUID } from 'crypto'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type PostgrestError } from '@supabase/supabase-js'
 import { logDbFailure } from '@/lib/db-failure'
-import { enqueueSendBatch } from '@/services/send-queue.service'
-import { getLineBudget } from '@/services/line-budget.service'
+import { enqueueSendBatch, type EnqueueItem } from '@/services/send-queue.service'
+import { getLineBudget, type LineBudget } from '@/services/line-budget.service'
 import { getSettingValue } from '@/services/settings.service'
 import { canSendBulk } from '@/services/wallet.service'
 import type { Tenant } from '@/types/tenant.types'
@@ -26,6 +30,29 @@ function getServiceClient() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!url || !key) throw new Error('Missing Supabase environment variables')
   return createClient(url, key)
+}
+
+/**
+ * PostgREST corta TODA respuesta en 1.000 filas (`max-rows` de Supabase) y lo
+ * hace en silencio: una base de 7.438 contactos leída de un tirón devuelve
+ * 1.000 y el tablero cuenta mal sin que ningún error lo diga. Todo lo que lea
+ * "todas las filas de la base" pasa por acá. La consulta tiene que venir
+ * ORDENADA por algo estable, o las páginas se pisan.
+ */
+const PAGINA = 1000
+
+async function leerTodo<T>(
+  pagina: (desde: number, hasta: number) => PromiseLike<{ data: T[] | null; error: PostgrestError | null }>
+): Promise<{ data: T[]; error: PostgrestError | null }> {
+  const todo: T[] = []
+  for (let desde = 0; ; desde += PAGINA) {
+    const { data, error } = await pagina(desde, desde + PAGINA - 1)
+    if (error) return { data: todo, error }
+    const filas = data ?? []
+    todo.push(...filas)
+    if (filas.length < PAGINA) break
+  }
+  return { data: todo, error: null }
 }
 
 // Tarifa por defecto (Meta + Twilio). Configurable en admin_settings.
@@ -76,7 +103,12 @@ export interface ParsedContact {
   email: string | null
 }
 
-export type InvalidReason = 'formato_invalido' | 'no_es_movil_colombiano' | 'duplicado' | 'ya_contactado'
+/**
+ * `en_otra_base`: el teléfono ya está guardado en una base de esta marca SIN
+ * programar (`valid`). No se le escribió, pero tampoco entra por acá: se
+ * programa desde «Bases», donde ya está. `ya_contactado`: cualquier otro estado.
+ */
+export type InvalidReason = 'formato_invalido' | 'no_es_movil_colombiano' | 'duplicado' | 'ya_contactado' | 'en_otra_base'
 
 export interface CSVValidationResult {
   batch_id: string
@@ -171,13 +203,17 @@ export async function validateCSV(fileText: string, fileName: string, tenantId: 
     candidates.push({ phone: normalized, name, email })
   }
 
-  // Excluir números ya contactados previamente (regla anti-reenvío).
-  const existing = await getExistingPhones([...seen], tenantId)
+  // Excluir números que ya están en la tabla (regla anti-reenvío). Los que
+  // esperan en otra base sin programar se distinguen para que el panel diga
+  // dónde están, pero se excluyen igual: un teléfono existe UNA vez por marca.
+  const existing = await getExistingPhoneStatuses([...seen], tenantId)
   for (const c of candidates) {
-    if (existing.has(c.phone)) {
+    const estado = existing.get(c.phone)
+    if (estado !== undefined) {
       result.already_contacted++
-      addInvalid('ya_contactado')
-      if (result.preview.length < 10) result.preview.push({ phone: c.phone, name: c.name ?? '', status: 'invalid', reason: 'ya_contactado' })
+      const motivo: InvalidReason = estado === 'valid' ? 'en_otra_base' : 'ya_contactado'
+      addInvalid(motivo)
+      if (result.preview.length < 10) result.preview.push({ phone: c.phone, name: c.name ?? '', status: 'invalid', reason: motivo })
       continue
     }
     result.valid++
@@ -203,13 +239,18 @@ export async function validateCSV(fileText: string, fileName: string, tenantId: 
  * vez de devolver un Set incompleto en silencio.
  */
 export async function getExistingPhones(phones: string[], tenantId: string): Promise<Set<string>> {
-  if (phones.length === 0) return new Set()
+  return new Set((await getExistingPhoneStatuses(phones, tenantId)).keys())
+}
+
+/** Igual que `getExistingPhones()`, pero con el `status` de cada uno: `validateCSV()` distingue con él a los que esperan sin programar. */
+export async function getExistingPhoneStatuses(phones: string[], tenantId: string): Promise<Map<string, string>> {
+  if (phones.length === 0) return new Map()
   const supabase = getServiceClient()
-  const found = new Set<string>()
+  const found = new Map<string, string>()
   // Consultar en chunks para no exceder límites de la query .in()
   for (let i = 0; i < phones.length; i += 500) {
     const chunk = phones.slice(i, i + 500)
-    const { data, error } = await supabase.from('imported_contacts').select('phone').eq('tenant_id', tenantId).in('phone', chunk)
+    const { data, error } = await supabase.from('imported_contacts').select('phone, status').eq('tenant_id', tenantId).in('phone', chunk)
     if (error) {
       logDbFailure({
         scope: 'GoldenBullet',
@@ -219,7 +260,7 @@ export async function getExistingPhones(phones: string[], tenantId: string): Pro
       })
       throw new Error(`No se pudo verificar teléfonos ya contactados: ${error.message}`)
     }
-    for (const row of data ?? []) found.add(row.phone)
+    for (const row of data ?? []) found.set(row.phone as string, row.status as string)
   }
   return found
 }
@@ -302,7 +343,7 @@ export function planBlocks(
  */
 const IMPORT_TTL_DIAS = 30
 
-// ─── Confirmar e importar (envío) ───────────────────────────────
+// ─── Confirmar e importar (encolar) ─────────────────────────────
 
 export interface ConfirmImportParams {
   batchId: string
@@ -329,19 +370,22 @@ export interface ConfirmImportParams {
   acceptedByEmail?: string
   /**
    * Cuántos contactos entran en ESTA tanda (los primeros N del archivo, en su
-   * orden). El resto no se inserta ni se encola: vuelve a subirse el mismo CSV
-   * cuando se quiera seguir, y la regla anti-reenvío deja pasar solo a los que
-   * todavía no se programaron. Existe porque la billetera cobra la base entera
-   * por adelantado (W-D6) y el dueño quiere pagar de a tandas (2026-09-11).
+   * orden). Los demás NO se descartan: se guardan en `imported_contacts` como
+   * `valid` —en la base, sin programar— y la siguiente tanda se programa desde
+   * el panel con `programarSiguienteTanda()`, sin volver a subir el CSV. Hasta
+   * el 2026-09-12 los que quedaban fuera se perdían y había que resubir el
+   * archivo y confiar en la regla anti-reenvío para no repetir a nadie.
+   * Existe porque la billetera cobra la tanda por adelantado (W-D6) y el dueño
+   * quiere pagar de a tandas (2026-09-11).
    */
   maxContacts?: number
 }
 
 export interface ConfirmImportResult {
-  /** Contactos válidos que quedaron fuera de esta tanda por el tope. Se mandan subiendo el mismo CSV otra vez. */
+  /** Contactos válidos que quedaron GUARDADOS en la base sin programar (`valid`). Se programan desde «Bases». */
   left_out?: number
   campaign_id: string
-  /** Contactos escritos en `imported_contacts`. */
+  /** Contactos escritos en `imported_contacts` en esta llamada (los de la tanda + los que esperan). */
   inserted: number
   /**
    * Items que entraron de verdad en `send_queue`.
@@ -355,7 +399,7 @@ export interface ConfirmImportResult {
    */
   queued: number
   blocked_auto: number
-  /** Costo del plan COMPLETO, no de lo que sale hoy. */
+  /** Costo de ESTA tanda, no de lo que sale hoy ni de la base entera. */
   total_cost_usd: number
   /** El reparto en bloques. `null` si no se llegó a planificar nada. */
   plan: BlockPlan | null
@@ -378,6 +422,227 @@ export interface ConfirmImportResult {
   }
 }
 
+type Puertas =
+  | { ok: true; presupuesto: LineBudget }
+  | { ok: false; blocked_by_quality: NonNullable<ConfirmImportResult['blocked_by_quality']> }
+  | { ok: false; insufficient_balance: NonNullable<ConfirmImportResult['insufficient_balance']> }
+
+/**
+ * Las dos puertas por las que pasa TODA tanda antes de encolarse — la primera
+ * y cada una de las siguientes, porque entre tanda y tanda pasan días y la
+ * línea puede haberse marcado o la billetera vaciado.
+ *
+ * 1. Calidad (spec §3.4.1, conservada por D-7). Golden Bullet es la ÚNICA
+ *    clase que le escribe a gente que no dio consentimiento, y por eso es la
+ *    primera sospechosa de una caída de calidad. Si la línea ya está tocada,
+ *    no se le suma una base fría encima. D-7 eliminó la puerta del escalón
+ *    (`messaging_daily_limit > 250`): a 250 también se puede, más lento.
+ * 2. Saldo (spec W-D6). Se cobra la TANDA por adelantado, aunque salga
+ *    goteando durante semanas. Cambiarlo es una decisión comercial.
+ */
+async function puertasDeEntrada(tenantId: string, destinatarios: number): Promise<Puertas> {
+  const presupuesto = await getLineBudget(tenantId)
+  if (
+    presupuesto.lineStatus !== 'active' ||
+    presupuesto.qualityRating === 'yellow' ||
+    presupuesto.qualityRating === 'red'
+  ) {
+    return {
+      ok: false,
+      blocked_by_quality: { lineStatus: presupuesto.lineStatus, qualityRating: presupuesto.qualityRating },
+    }
+  }
+
+  if (destinatarios > 0) {
+    const budget = await canSendBulk(tenantId, destinatarios)
+    if (!budget.ok) {
+      return {
+        ok: false,
+        insufficient_balance: {
+          balanceCop: budget.balanceCop,
+          pricePerMessage: budget.pricePerMessage,
+          messagesAvailable: budget.messagesAvailable,
+          recipients: destinatarios,
+          shortfallCop: budget.shortfallCop,
+        },
+      }
+    }
+  }
+
+  return { ok: true, presupuesto }
+}
+
+/** Una fila de `imported_contacts` lista para entrar en la cola. */
+export interface ContactoAProgramar {
+  id: string
+  phone: string
+  name: string | null
+}
+
+/**
+ * Lo que una tanda deja escrito en `campaigns.filters`.
+ *
+ * Es el contrato entre tandas: la siguiente hereda de acá la plantilla, la
+ * promo y el nombre genérico, así que el dueño programa «otra tanda» con dos
+ * números y nada más. Las campañas anteriores al 2026-09-12 no tienen
+ * `template_sid` ni `tanda`: `heredarDeCampana()` las lee igual.
+ */
+export interface FiltrosGoldenBullet {
+  golden_bullet: true
+  source_file: string
+  batch_id: string
+  /** 1 para la primera tanda de la base, 2 para la siguiente, … */
+  tanda: number
+  plan: BlockPlan
+  template_sid: string
+  promo_text: string
+  fallback_name: string
+  /**
+   * La advertencia aceptada vive ACÁ y no en `consent_events`.
+   *
+   * El spec §3.4.1 pedía guardarla en `consent_events` con channel 'import'.
+   * No se hace, y la razón importa: `consent_events` es el libro de evidencia
+   * de que UNA PERSONA consintió, y estas personas NO consintieron — de eso
+   * trata todo el régimen especial de Golden Bullet. Escribir 25.000 filas
+   * 'opt_in' porque el OPERADOR marcó una casilla fabricaría exactamente la
+   * evidencia que el libro existe para poder demostrar. Lo que sí es cierto, y
+   * queda escrito, es que una persona identificada aceptó el riesgo tal día.
+   *
+   * Una tanda posterior de la MISMA base hereda la aceptación de la primera
+   * (`inherited_from`): la advertencia se aceptó por esos contactos, no por
+   * el día en que salen. `consent_events` sí recibe un opt_in REAL cuando
+   * alguien toca el botón «quiero ser parte» de la plantilla.
+   */
+  consent_warning: {
+    text: string | null
+    accepted_by: string | null
+    accepted_at: string
+    inherited_from?: string
+  }
+}
+
+/**
+ * Los items de `send_queue` de una tanda, repartidos en bloques.
+ *
+ * EL TRUCO, Y POR QUÉ ES ASÍ: los bloques NO se implementan con un contador
+ * ni con estado nuevo, sino escalonando `not_before` — el bloque k no se
+ * puede intentar antes del día k. El drenador YA ordena por `not_before` y ya
+ * respeta el presupuesto de la línea en cada vuelta, así que el divisor de
+ * bloques no le cambia una sola línea de código al drenador, y de paso queda
+ * visible y auditable: se puede mirar la cola y ver qué día le toca a cada uno.
+ *
+ * Golden Bullet es P4, la prioridad más baja, así que siempre cede el turno a
+ * las campañas de clientes que SÍ consintieron.
+ *
+ * Es PURA a propósito: es lo que fija que dos tandas de la misma base salgan
+ * con las mismas variables y el mismo escalonado.
+ */
+export function armarItemsDeCola(
+  contactos: ContactoAProgramar[],
+  plan: BlockPlan,
+  opciones: { tenantId: string; campaignId: string; templateSid: string; promoText: string; fallbackName: string }
+): EnqueueItem[] {
+  return contactos.map((c, indice) => {
+    const bloque = Math.floor(indice / plan.blockSize)
+    const notBefore = new Date(plan.startsAt)
+    notBefore.setDate(notBefore.getDate() + bloque)
+
+    const expiresAt = new Date(notBefore)
+    expiresAt.setDate(expiresAt.getDate() + IMPORT_TTL_DIAS)
+
+    return {
+      tenantId: opciones.tenantId,
+      phone: c.phone,
+      customerId: null,
+      importedContactId: c.id,
+      campaignId: opciones.campaignId,
+      // 'import' y no 'manual': es lo que lo hace P4 y lo que permite frenarlo
+      // aparte del resto de las campañas (spec §3.3).
+      messageType: 'import',
+      templateSid: opciones.templateSid,
+      // `{{2}}` solo viaja si hay promo: mandar una variable que la
+      // plantilla no declara es tan rechazable como que falte una.
+      variables: (opciones.promoText
+        ? { '1': c.name || opciones.fallbackName, '2': opciones.promoText }
+        : { '1': c.name || opciones.fallbackName }) as Record<string, string>,
+      notBefore,
+      expiresAt,
+    }
+  })
+}
+
+/**
+ * La campaña de una tanda. Nace 'running' y se queda así mientras la cola
+ * gotee: la cierra `cerrarCampanasTerminadas()` del drenador cuando no le
+ * quedan items — marcarla 'completed' hoy, con miles pendientes, le mentiría
+ * al operador. `source: 'manual'` porque 'imported' no está en el CHECK.
+ */
+async function crearCampanaDeTanda(
+  supabase: ReturnType<typeof getServiceClient>,
+  tenantId: string,
+  filtros: FiltrosGoldenBullet
+): Promise<string> {
+  const { data: campaign, error } = await supabase
+    .from('campaigns')
+    .insert({
+      name:
+        filtros.tanda > 1
+          ? `Golden Bullet — ${filtros.source_file} (tanda ${filtros.tanda})`
+          : `Golden Bullet — ${filtros.source_file}`,
+      type: 'manual',
+      source: 'manual',
+      status: 'running',
+      // NOT NULL en la tabla. Si la plantilla no usa {{2}}, queda el SID.
+      message_template: filtros.promo_text || `plantilla ${filtros.template_sid}`,
+      filters: filtros,
+      executed_at: new Date().toISOString(),
+      tenant_id: tenantId,
+    })
+    .select('id')
+    .single()
+
+  if (error || !campaign) {
+    throw new Error(`Error creando campaña: ${error?.message}`)
+  }
+  return campaign.id as string
+}
+
+/** Pasa a `queued` (con su campaña) las filas de la tanda. Devuelve las que de verdad cambiaron. */
+async function marcarComoEncolados(
+  supabase: ReturnType<typeof getServiceClient>,
+  tenantId: string,
+  contactos: ContactoAProgramar[],
+  campaignId: string
+): Promise<ContactoAProgramar[]> {
+  const listos: ContactoAProgramar[] = []
+  for (let i = 0; i < contactos.length; i += 500) {
+    const trozo = contactos.slice(i, i + 500)
+    // `.eq('status', 'valid')` es la guarda contra dos tandas programadas a la
+    // vez sobre la misma base: la segunda no se lleva filas que la primera ya
+    // encoló, y por lo tanto nadie recibe el mensaje dos veces.
+    const { data, error } = await supabase
+      .from('imported_contacts')
+      .update({ status: 'queued', campaign_id: campaignId })
+      .eq('tenant_id', tenantId)
+      .eq('status', 'valid')
+      .in('id', trozo.map((c) => c.id))
+      .select('id, phone, name')
+    if (error) {
+      logDbFailure({
+        scope: 'GoldenBullet',
+        reason: 'mark_queued_error',
+        error,
+        context: { tenant_id: tenantId, campaign_id: campaignId, chunk_start: i },
+      })
+      continue
+    }
+    for (const fila of data ?? []) {
+      listos.push({ id: fila.id as string, phone: fila.phone as string, name: (fila.name as string | null) ?? null })
+    }
+  }
+  return listos
+}
+
 export async function confirmImport(params: ConfirmImportParams): Promise<ConfirmImportResult> {
   const supabase = getServiceClient()
   const tenantId = params.tenant.id
@@ -391,24 +656,15 @@ export async function confirmImport(params: ConfirmImportParams): Promise<Confir
   const blockedAuto = params.contacts.length - sinRepetidos.length
 
   // La tanda: los primeros N que quedaron, en el orden del archivo. Los que
-  // quedan fuera NO son bloqueados: son los de la próxima subida.
+  // quedan fuera NO son bloqueados: se guardan como `valid` y son los de la
+  // próxima tanda, que se programa desde el panel.
   const tope = Number.isInteger(params.maxContacts) && (params.maxContacts as number) > 0 ? (params.maxContacts as number) : null
   const leftOut = tope !== null && sinRepetidos.length > tope ? sinRepetidos.length - tope : 0
   const toImport = leftOut > 0 ? sinRepetidos.slice(0, tope as number) : sinRepetidos
+  const enEspera = leftOut > 0 ? sinRepetidos.slice(tope as number) : []
 
-  // ─── Puerta de calidad (spec §3.4.1, conservada por D-7) ───
-  // Golden Bullet es la ÚNICA clase que le escribe a gente que no dio
-  // consentimiento, y por eso es la primera sospechosa de una caída de
-  // calidad. Si la línea ya está tocada, no se le suma una base fría encima.
-  //
-  // D-7 eliminó la puerta del escalón (`messaging_daily_limit > 250`): a 250
-  // también se puede, más lento. La de CALIDAD se conserva sin cambios.
-  const presupuesto = await getLineBudget(tenantId)
-  if (
-    presupuesto.lineStatus !== 'active' ||
-    presupuesto.qualityRating === 'yellow' ||
-    presupuesto.qualityRating === 'red'
-  ) {
+  const puertas = await puertasDeEntrada(tenantId, toImport.length)
+  if (!puertas.ok) {
     return {
       campaign_id: '',
       inserted: 0,
@@ -416,181 +672,299 @@ export async function confirmImport(params: ConfirmImportParams): Promise<Confir
       blocked_auto: blockedAuto,
       total_cost_usd: 0,
       plan: null,
-      blocked_by_quality: {
-        lineStatus: presupuesto.lineStatus,
-        qualityRating: presupuesto.qualityRating,
-      },
+      ...('blocked_by_quality' in puertas
+        ? { blocked_by_quality: puertas.blocked_by_quality }
+        : { insufficient_balance: puertas.insufficient_balance }),
     }
   }
 
-  // ─── Bloqueo por saldo (spec W-D6) ───
-  // Se cobra por la base ENTERA por adelantado, aunque salga goteando durante
-  // meses. Es el comportamiento que ya existía y no se cambia acá: cambiarlo es
-  // una decisión comercial, no un detalle de implementación.
-  if (toImport.length > 0) {
-    const budget = await canSendBulk(tenantId, toImport.length)
-    if (!budget.ok) {
-      return {
-        campaign_id: '',
-        inserted: 0,
-        queued: 0,
-        blocked_auto: blockedAuto,
-        total_cost_usd: 0,
-        plan: null,
-        insufficient_balance: {
-          balanceCop: budget.balanceCop,
-          pricePerMessage: budget.pricePerMessage,
-          messagesAvailable: budget.messagesAvailable,
-          recipients: toImport.length,
-          shortfallCop: budget.shortfallCop,
-        },
-      }
-    }
-  }
+  // ─── El plan de bloques y la campaña de la tanda 1 ───
+  const plan = planBlocks(toImport.length, params.blockSize, puertas.presupuesto.campaignBudget)
+  const campaignId = await crearCampanaDeTanda(supabase, tenantId, {
+    golden_bullet: true,
+    source_file: params.sourceFile,
+    batch_id: params.batchId,
+    tanda: 1,
+    plan,
+    template_sid: params.templateSid,
+    promo_text: params.promoText,
+    fallback_name: fallbackName,
+    consent_warning: {
+      text: params.consentText ?? null,
+      accepted_by: params.acceptedByEmail ?? null,
+      accepted_at: new Date().toISOString(),
+    },
+  })
 
-  // ─── El plan de bloques ───
-  const plan = planBlocks(toImport.length, params.blockSize, presupuesto.campaignBudget)
-
-  // 1. Crear campaña (source 'manual' — 'imported' no está en el CHECK de campaigns.source)
-  //
-  // La campaña nace 'running' y se queda así mientras la cola gotee. La cierra
-  // `cerrarCampanasTerminadas()` del drenador cuando no le quedan items:
-  // marcarla 'completed' hoy, con 25.000 pendientes, le mentiría al operador.
-  const { data: campaign, error: campaignError } = await supabase
-    .from('campaigns')
-    .insert({
-      name: `Golden Bullet — ${params.sourceFile}`,
-      type: 'manual',
-      source: 'manual',
-      status: 'running',
-      // NOT NULL en la tabla. Si la plantilla no usa {{2}}, queda el SID.
-      message_template: params.promoText || `plantilla ${params.templateSid}`,
-      filters: {
-        golden_bullet: true,
-        source_file: params.sourceFile,
-        batch_id: params.batchId,
-        plan,
-        // La advertencia aceptada vive ACÁ y no en `consent_events`.
-        //
-        // El spec §3.4.1 pedía guardarla en `consent_events` con channel
-        // 'import'. No se hace, y la razón importa: `consent_events` es el
-        // libro de evidencia de que UNA PERSONA consintió, y estas personas NO
-        // consintieron — de eso trata todo el régimen especial de Golden
-        // Bullet. Escribir 25.000 filas 'opt_in' porque el OPERADOR marcó una
-        // casilla fabricaría exactamente la evidencia que el libro existe para
-        // poder demostrar. Lo que sí es cierto, y queda escrito, es que una
-        // persona identificada aceptó el riesgo tal día.
-        //
-        // `consent_events` sí recibe un opt_in REAL cuando alguien toca el
-        // botón «quiero ser parte» de la plantilla.
-        consent_warning: {
-          text: params.consentText ?? null,
-          accepted_by: params.acceptedByEmail ?? null,
-          accepted_at: new Date().toISOString(),
-        },
-      },
-      executed_at: new Date().toISOString(),
-      tenant_id: tenantId,
-    })
-    .select()
-    .single()
-
-  if (campaignError || !campaign) {
-    throw new Error(`Error creando campaña: ${campaignError?.message}`)
-  }
-
-  // 2. Insertar los contactos como 'queued': están en la cola, todavía sin salir.
-  //    Se piden de vuelta `id` y `phone` porque el item de la cola guarda
-  //    `imported_contact_id`, que es lo que después deja marcar el contacto
-  //    cuando el drenador lo envía de verdad.
+  // ─── Escribir la base ENTERA ───
+  // Los de la tanda entran como 'queued' con su campaña; los que esperan, como
+  // 'valid' sin campaña. Se piden de vuelta `id` y `phone` porque el item de la
+  // cola guarda `imported_contact_id`, que es lo que después deja marcar el
+  // contacto cuando el drenador lo envía de verdad.
   let inserted = 0
   const idPorTelefono = new Map<string, string>()
+  const filas = [
+    ...toImport.map((c) => ({ ...c, status: 'queued' as const, campaign_id: campaignId as string | null })),
+    ...enEspera.map((c) => ({ ...c, status: 'valid' as const, campaign_id: null as string | null })),
+  ].map((c) => ({
+    phone: c.phone,
+    name: c.name,
+    email: c.email,
+    source_file: params.sourceFile,
+    source_batch: params.batchId,
+    status: c.status,
+    campaign_id: c.campaign_id,
+    tenant_id: tenantId,
+  }))
 
-  if (toImport.length > 0) {
-    const rows = toImport.map((c) => ({
-      phone: c.phone,
-      name: c.name,
-      email: c.email,
-      source_file: params.sourceFile,
-      source_batch: params.batchId,
-      status: 'queued' as const,
-      campaign_id: campaign.id,
-      tenant_id: tenantId,
-    }))
-    for (let i = 0; i < rows.length; i += 500) {
-      const chunk = rows.slice(i, i + 500)
-      const { data, error } = await supabase.from('imported_contacts').insert(chunk).select('id, phone')
-      if (error) {
-        logDbFailure({
-          scope: 'GoldenBullet',
-          reason: 'insert_contacts_error',
-          error,
-          context: { tenant_id: tenantId, batch_id: params.batchId, chunk_start: i },
-        })
-        continue
-      }
-      for (const row of data ?? []) idPorTelefono.set(row.phone as string, row.id as string)
-      inserted += data?.length ?? 0
+  for (let i = 0; i < filas.length; i += 500) {
+    const chunk = filas.slice(i, i + 500)
+    const { data, error } = await supabase.from('imported_contacts').insert(chunk).select('id, phone')
+    if (error) {
+      logDbFailure({
+        scope: 'GoldenBullet',
+        reason: 'insert_contacts_error',
+        error,
+        context: { tenant_id: tenantId, batch_id: params.batchId, chunk_start: i },
+      })
+      continue
     }
+    for (const row of data ?? []) idPorTelefono.set(row.phone as string, row.id as string)
+    inserted += data?.length ?? 0
   }
 
-  // 3. Encolar, repartido en bloques.
-  //
-  // EL TRUCO, Y POR QUÉ ES ASÍ: los bloques NO se implementan con un contador
-  // ni con estado nuevo, sino escalonando `not_before` — el bloque k no se
-  // puede intentar antes del día k. El drenador YA ordena por `not_before` y ya
-  // respeta el presupuesto de la línea en cada vuelta, así que el divisor de
-  // bloques no le cambia una sola línea de código al drenador, y de paso queda
-  // visible y auditable: se puede mirar la cola y ver qué día le toca a cada uno.
-  //
-  // Golden Bullet es P4, la prioridad más baja, así que siempre cede el turno a
-  // las campañas de clientes que SÍ consintieron.
-  const items = toImport
-    .map((c, indice) => {
-      const idContacto = idPorTelefono.get(c.phone)
-      if (!idContacto) return null // no se pudo insertar: no se encola
-
-      const bloque = Math.floor(indice / plan.blockSize)
-      const notBefore = new Date(plan.startsAt)
-      notBefore.setDate(notBefore.getDate() + bloque)
-
-      const expiresAt = new Date(notBefore)
-      expiresAt.setDate(expiresAt.getDate() + IMPORT_TTL_DIAS)
-
-      return {
-        tenantId,
-        phone: c.phone,
-        customerId: null,
-        importedContactId: idContacto,
-        campaignId: campaign.id as string,
-        // 'import' y no 'manual': es lo que lo hace P4 y lo que permite frenarlo
-        // aparte del resto de las campañas (spec §3.3).
-        messageType: 'import',
-        templateSid: params.templateSid,
-        // `{{2}}` solo viaja si hay promo: mandar una variable que la
-        // plantilla no declara es tan rechazable como que falte una.
-        variables: (params.promoText
-          ? { '1': c.name || fallbackName, '2': params.promoText }
-          : { '1': c.name || fallbackName }) as Record<string, string>,
-        notBefore,
-        expiresAt,
-      }
+  // ─── Encolar la tanda, repartida en bloques ───
+  const contactos = toImport
+    .map((c) => {
+      const id = idPorTelefono.get(c.phone)
+      return id ? { id, phone: c.phone, name: c.name } : null // no se pudo insertar: no se encola
     })
-    .filter((x): x is NonNullable<typeof x> => x !== null)
+    .filter((x): x is ContactoAProgramar => x !== null)
 
-  const { enqueued } = await enqueueSendBatch(items)
+  const { enqueued } = await enqueueSendBatch(
+    armarItemsDeCola(contactos, plan, {
+      tenantId,
+      campaignId,
+      templateSid: params.templateSid,
+      promoText: params.promoText,
+      fallbackName,
+    })
+  )
 
   return {
-    campaign_id: campaign.id,
+    campaign_id: campaignId,
     inserted,
     queued: enqueued,
     blocked_auto: blockedAuto,
     left_out: leftOut,
-    // El costo es del plan COMPLETO, no de lo que sale hoy: es la plata que esta
-    // importación va a gastar de acá a que termine.
+    // El costo es de la TANDA completa, no de lo que sale hoy: es la plata que
+    // esta programación va a gastar de acá a que termine.
     total_cost_usd: Math.round(enqueued * costPerMsg * 100) / 100,
     plan,
   }
+}
+
+// ─── La siguiente tanda de una base ya cargada ──────────────────
+
+/** Lo que la tanda siguiente hereda de la anterior. */
+export interface HerenciaDeTanda {
+  campaignId: string
+  templateSid: string | null
+  promoText: string
+  fallbackName: string | null
+  blockSize: number | null
+  tanda: number
+  consentWarning: FiltrosGoldenBullet['consent_warning'] | null
+}
+
+/**
+ * Lee de una campaña de Golden Bullet lo que la tanda siguiente necesita.
+ *
+ * Las campañas creadas antes del 2026-09-12 no guardaban `template_sid`: solo
+ * `message_template`, que era la promo o, si la plantilla no usaba {{2}},
+ * el literal `plantilla HX…`. De ahí se recupera el SID cuando se puede; si la
+ * campaña vieja tenía promo, el SID se perdió y el panel lo pide de nuevo.
+ * PURA: es la única traducción entre lo viejo y lo nuevo, y conviene poder probarla.
+ */
+export function heredarDeCampana(campana: {
+  id: string
+  filters: unknown
+  message_template: string | null
+}): HerenciaDeTanda {
+  const f = (campana.filters ?? {}) as Partial<FiltrosGoldenBullet> & { plan?: { blockSize?: number } }
+  const literal = (campana.message_template ?? '').trim()
+  const sidLegado = literal.startsWith('plantilla ') ? literal.slice('plantilla '.length).trim() : null
+
+  return {
+    campaignId: campana.id,
+    templateSid: f.template_sid ?? sidLegado ?? null,
+    promoText: f.promo_text ?? (sidLegado ? '' : literal),
+    fallbackName: f.fallback_name ?? null,
+    blockSize: typeof f.plan?.blockSize === 'number' ? f.plan.blockSize : null,
+    tanda: typeof f.tanda === 'number' && f.tanda > 0 ? f.tanda : 1,
+    consentWarning: f.consent_warning ?? null,
+  }
+}
+
+export interface SiguienteTandaParams {
+  tenant: Tenant
+  batchId: string
+  /** Cuántos de los que esperan entran ahora. */
+  maxContacts: number
+  blockSize: number
+  /** Si no viene, se hereda de la tanda anterior. */
+  templateSid?: string
+  promoText?: string
+  fallbackName?: string
+  acceptedByEmail?: string
+}
+
+export type SiguienteTandaResult =
+  | ConfirmImportResult
+  | { reason: 'nothing_pending' }
+  | { reason: 'template_required' }
+
+/**
+ * Programa la siguiente tanda de una base que ya está en `imported_contacts`.
+ *
+ * Es lo que evita resubir el CSV: los que esperan están guardados como
+ * `valid`, así que «otra tanda» son dos números (cuántos y por día). Pasa por
+ * las MISMAS dos puertas que la primera tanda —calidad y saldo— porque entre
+ * una y otra pueden pasar semanas.
+ *
+ * Toma los que esperan en el orden en que se guardaron (`created_at`, y por
+ * teléfono dentro de cada trozo de 500 del INSERT, que comparte `now()`): es
+ * aproximadamente el orden del archivo, no exactamente.
+ */
+export async function programarSiguienteTanda(params: SiguienteTandaParams): Promise<SiguienteTandaResult> {
+  const supabase = getServiceClient()
+  const tenantId = params.tenant.id
+  const tope = Math.max(0, Math.floor(params.maxContacts))
+  if (tope === 0) return { reason: 'nothing_pending' }
+
+  // 1. Los que esperan, en orden. Se lee solo lo que entra en la tanda.
+  const { data: esperando, error } = await supabase
+    .from('imported_contacts')
+    .select('id, phone, name')
+    .eq('tenant_id', tenantId)
+    .eq('source_batch', params.batchId)
+    .eq('status', 'valid')
+    .order('created_at', { ascending: true })
+    .order('phone', { ascending: true })
+    .range(0, Math.min(tope, PAGINA) - 1)
+  if (error) {
+    logDbFailure({
+      scope: 'GoldenBullet',
+      reason: 'pending_lookup_error',
+      error,
+      context: { tenant_id: tenantId, batch_id: params.batchId },
+    })
+    throw new Error(`No se pudo leer la base: ${error.message}`)
+  }
+  let pendientes: ContactoAProgramar[] = (esperando ?? []).map((f) => ({
+    id: f.id as string,
+    phone: f.phone as string,
+    name: (f.name as string | null) ?? null,
+  }))
+  // Más de una página: se sigue leyendo hasta cubrir la tanda.
+  while (pendientes.length < tope && pendientes.length % PAGINA === 0 && pendientes.length > 0) {
+    const { data: mas } = await supabase
+      .from('imported_contacts')
+      .select('id, phone, name')
+      .eq('tenant_id', tenantId)
+      .eq('source_batch', params.batchId)
+      .eq('status', 'valid')
+      .order('created_at', { ascending: true })
+      .order('phone', { ascending: true })
+      .range(pendientes.length, Math.min(tope, pendientes.length + PAGINA) - 1)
+    const filas = (mas ?? []).map((f) => ({
+      id: f.id as string,
+      phone: f.phone as string,
+      name: (f.name as string | null) ?? null,
+    }))
+    if (filas.length === 0) break
+    pendientes = pendientes.concat(filas)
+  }
+  if (pendientes.length === 0) return { reason: 'nothing_pending' }
+
+  // 2. La tanda anterior: de ahí sale lo que no venga en los parámetros.
+  const { data: previas } = await supabase
+    .from('campaigns')
+    .select('id, filters, message_template, created_at')
+    .eq('tenant_id', tenantId)
+    .contains('filters', { golden_bullet: true, batch_id: params.batchId })
+    .order('created_at', { ascending: false })
+    .limit(1)
+  const anterior = previas && previas.length > 0 ? heredarDeCampana(previas[0]) : null
+
+  const templateSid = params.templateSid?.trim() || anterior?.templateSid || null
+  if (!templateSid) return { reason: 'template_required' }
+  const promoText = (params.promoText ?? anterior?.promoText ?? '').trim()
+  const fallbackName = params.fallbackName?.trim() || anterior?.fallbackName || 'cliente'
+  const costPerMsg = await getCostPerMessageUsd(tenantId)
+
+  // 3. Las dos puertas, otra vez: la línea y la billetera de HOY.
+  const puertas = await puertasDeEntrada(tenantId, pendientes.length)
+  if (!puertas.ok) {
+    return {
+      campaign_id: '',
+      inserted: 0,
+      queued: 0,
+      blocked_auto: 0,
+      total_cost_usd: 0,
+      plan: null,
+      ...('blocked_by_quality' in puertas
+        ? { blocked_by_quality: puertas.blocked_by_quality }
+        : { insufficient_balance: puertas.insufficient_balance }),
+    }
+  }
+
+  // 4. Plan, campaña, marcar y encolar.
+  const plan = planBlocks(pendientes.length, params.blockSize, puertas.presupuesto.campaignBudget)
+  const sourceFile = await nombreDeArchivo(supabase, tenantId, params.batchId)
+  const campaignId = await crearCampanaDeTanda(supabase, tenantId, {
+    golden_bullet: true,
+    source_file: sourceFile,
+    batch_id: params.batchId,
+    tanda: (anterior?.tanda ?? 0) + 1,
+    plan,
+    template_sid: templateSid,
+    promo_text: promoText,
+    fallback_name: fallbackName,
+    consent_warning: anterior?.consentWarning
+      ? { ...anterior.consentWarning, inherited_from: anterior.campaignId }
+      : { text: null, accepted_by: params.acceptedByEmail ?? null, accepted_at: new Date().toISOString() },
+  })
+
+  const encolables = await marcarComoEncolados(supabase, tenantId, pendientes, campaignId)
+  const { enqueued } = await enqueueSendBatch(
+    armarItemsDeCola(encolables, plan, { tenantId, campaignId, templateSid, promoText, fallbackName })
+  )
+
+  return {
+    campaign_id: campaignId,
+    inserted: 0,
+    queued: enqueued,
+    blocked_auto: 0,
+    left_out: 0,
+    total_cost_usd: Math.round(enqueued * costPerMsg * 100) / 100,
+    plan,
+  }
+}
+
+async function nombreDeArchivo(
+  supabase: ReturnType<typeof getServiceClient>,
+  tenantId: string,
+  batchId: string
+): Promise<string> {
+  const { data } = await supabase
+    .from('imported_contacts')
+    .select('source_file')
+    .eq('tenant_id', tenantId)
+    .eq('source_batch', batchId)
+    .limit(1)
+    .maybeSingle()
+  return (data?.source_file as string | undefined) ?? 'import.csv'
 }
 
 // ─── Control diario: mirar y parar ──────────────────────────────
@@ -614,14 +988,36 @@ export async function confirmImport(params: ConfirmImportParams): Promise<Confir
  */
 const PAUSA_SENTINELA = '9999-12-31T00:00:00.000Z'
 
-export interface BatchProgress {
+/**
+ * La foto de una BASE: todo lo que se subió en un CSV, tandas incluidas.
+ *
+ * Hasta el 2026-09-12 esto era la foto de un lote goteando y desaparecía en
+ * cuanto la cola se vaciaba — con ella se iban «se registraron» y «dijeron
+ * que no», que son justo lo que el dueño mira después. Ahora la base se ve
+ * mientras exista, y además contesta cuántos quedan por programar.
+ */
+export interface BaseProgress {
   batchId: string
+  /** La campaña de la ÚLTIMA tanda. `null` si la base nunca se programó. */
   campaignId: string | null
+  /** Las campañas con cola viva: son las que se pausan y reanudan. */
+  activeCampaignIds: string[]
   sourceFile: string
-  /** Contactos de este lote que ya recibieron el mensaje. */
+  createdAt: string
+  /** Toda la base guardada: programados + los que esperan. */
+  total: number
+  /** Guardados sin programar (`valid`). Son los de la próxima tanda. */
+  pending: number
+  /** Los que ya entraron en alguna tanda: `total − pending`. */
+  programmed: number
+  /** Cuántas tandas se programaron. */
+  batches: number
+  /** Contactos que ya recibieron el mensaje (sent + delivered + converted). */
   sent: number
   /** Los que salieron HOY. Es el número que contesta "¿cuánto cupo me comí?". */
   sentToday: number
+  /** El proveedor confirmó la entrega. Solo Zernio lo reporta; por Twilio queda en 0. */
+  delivered: number
   /** Todavía en la cola. */
   queued: number
   /** El proveedor los rechazó tres veces. */
@@ -630,7 +1026,6 @@ export interface BatchProgress {
   optedOut: number
   /** Volvieron y se registraron. */
   converted: number
-  total: number
   paused: boolean
   /** Cuándo sale el próximo bloque. `null` si no queda nada o está pausado. */
   nextBlockAt: string | null
@@ -638,165 +1033,232 @@ export interface BatchProgress {
   nextBlockSize: number
   /** Fecha estimada del último bloque, al ritmo actual. */
   estimatedEndAt: string | null
+  /** El ritmo de la última tanda. */
   blockSize: number | null
+  /** Lo que la próxima tanda heredaría. `null` si la última campaña no se pudo leer. */
+  lastBatch: { templateSid: string | null; promoText: string; fallbackName: string | null; size: number } | null
+  /** Ni cola ni pendientes: la base terminó. */
+  finished: boolean
+}
+
+export interface FilaDeBase {
+  source_batch: string
+  source_file: string
+  status: string
+  message_sent_at: string | null
+  campaign_id: string | null
+  twilio_sid: string | null
+  created_at: string
+}
+
+export interface FilaEnCola {
+  campaign_id: string
+  not_before: string
 }
 
 /**
- * La foto de un lote HOY.
- *
- * Existe porque un goteo de semanas sin tablero es un goteo a ciegas: el dueño
- * pidió "ir viendo a diario qué mensajes enviamos y poder detenerlo". Sin esto,
- * la única forma de saber qué pasó ayer es contar filas a mano.
+ * Reduce las filas de una base a su foto. PURA: es la aritmética que el
+ * tablero muestra y la que hay que poder probar sin base de datos.
  */
-export async function getBatchProgress(
+export function resumirBase(
   batchId: string,
-  tenantId: string
-): Promise<BatchProgress | null> {
+  filas: FilaDeBase[],
+  enCola: FilaEnCola[],
+  entregados: Set<string>,
+  ultima: HerenciaDeTanda | null,
+  ahora: Date = new Date()
+): BaseProgress {
+  const inicioDeHoy = new Date(ahora)
+  inicioDeHoy.setHours(0, 0, 0, 0)
+
+  let pending = 0
+  let sent = 0
+  let sentToday = 0
+  let delivered = 0
+  let bounced = 0
+  let optedOut = 0
+  let converted = 0
+  const campanas = new Map<string, number>()
+  let createdAt = filas[0]?.created_at ?? ahora.toISOString()
+
+  for (const c of filas) {
+    if (c.created_at < createdAt) createdAt = c.created_at
+    if (c.campaign_id) campanas.set(c.campaign_id, (campanas.get(c.campaign_id) ?? 0) + 1)
+    switch (c.status) {
+      case 'valid':
+        pending++
+        break
+      case 'sent':
+      case 'delivered':
+      case 'converted':
+        sent++
+        if (c.message_sent_at && new Date(c.message_sent_at) >= inicioDeHoy) sentToday++
+        if (c.status === 'delivered' || (c.twilio_sid && entregados.has(c.twilio_sid))) delivered++
+        if (c.status === 'converted') converted++
+        break
+      case 'bounced':
+        bounced++
+        break
+      case 'opted_out':
+        optedOut++
+        break
+    }
+  }
+
+  const propias = new Set(campanas.keys())
+  const filasEnCola = enCola
+    .filter((f) => propias.has(f.campaign_id))
+    .sort((a, b) => a.not_before.localeCompare(b.not_before))
+  const queued = filasEnCola.length
+  const paused = queued > 0 && filasEnCola.every((f) => new Date(f.not_before).getFullYear() >= 9999)
+
+  let nextBlockAt: string | null = null
+  let nextBlockSize = 0
+  let estimatedEndAt: string | null = null
+  if (queued > 0 && !paused) {
+    nextBlockAt = filasEnCola[0].not_before
+    // El "próximo bloque" son los que comparten el mismo not_before que el
+    // primero: así el número que se muestra es el que de verdad va a salir,
+    // no el tamaño teórico del plan.
+    nextBlockSize = filasEnCola.filter((f) => f.not_before === nextBlockAt).length
+    estimatedEndAt = filasEnCola[filasEnCola.length - 1].not_before
+  }
+
+  const total = filas.length
+  return {
+    batchId,
+    campaignId: ultima?.campaignId ?? null,
+    activeCampaignIds: [...new Set(filasEnCola.map((f) => f.campaign_id))],
+    sourceFile: filas[0]?.source_file ?? '',
+    createdAt,
+    total,
+    pending,
+    programmed: total - pending,
+    batches: campanas.size,
+    sent,
+    sentToday,
+    delivered,
+    queued,
+    bounced,
+    optedOut,
+    converted,
+    paused,
+    nextBlockAt,
+    nextBlockSize,
+    estimatedEndAt,
+    blockSize: ultima?.blockSize ?? null,
+    lastBatch: ultima
+      ? {
+          templateSid: ultima.templateSid,
+          promoText: ultima.promoText,
+          fallbackName: ultima.fallbackName,
+          size: campanas.get(ultima.campaignId) ?? 0,
+        }
+      : null,
+    finished: queued === 0 && pending === 0,
+  }
+}
+
+/**
+ * Todas las bases de la marca, cada una con su foto. Las que todavía tienen
+ * algo por hacer (cola viva o contactos por programar) van primero; después,
+ * las terminadas, de la más nueva a la más vieja.
+ *
+ * Con `batchId` devuelve solo esa. Lee `imported_contacts` entera por marca —
+ * paginada, porque PostgREST corta en 1.000— y agrupa en memoria: son cuatro
+ * consultas por marca en vez de cuatro por base.
+ */
+export async function getBases(tenantId: string, batchId?: string): Promise<BaseProgress[]> {
   const supabase = getServiceClient()
 
-  const { data: contactos, error } = await supabase
-    .from('imported_contacts')
-    .select('status, message_sent_at, source_file, campaign_id')
-    .eq('source_batch', batchId)
-    .eq('tenant_id', tenantId)
-
+  const { data: filas, error } = await leerTodo<FilaDeBase>((desde, hasta) => {
+    let q = supabase
+      .from('imported_contacts')
+      .select('source_batch, source_file, status, message_sent_at, campaign_id, twilio_sid, created_at')
+      .eq('tenant_id', tenantId)
+    if (batchId) q = q.eq('source_batch', batchId)
+    return q.order('created_at', { ascending: true }).order('id', { ascending: true }).range(desde, hasta)
+  })
   if (error) {
     logDbFailure({
       scope: 'GoldenBullet',
       reason: 'progress_lookup_error',
       error,
-      context: { batch_id: batchId, tenant_id: tenantId },
+      context: { batch_id: batchId ?? null, tenant_id: tenantId },
     })
-    throw new Error(`No se pudo leer el avance del lote: ${error.message}`)
+    throw new Error(`No se pudo leer el avance de las bases: ${error.message}`)
   }
-  if (!contactos || contactos.length === 0) return null
+  if (filas.length === 0) return []
 
-  const inicioDeHoy = new Date()
-  inicioDeHoy.setHours(0, 0, 0, 0)
-
-  let sent = 0
-  let sentToday = 0
-  let bounced = 0
-  let optedOut = 0
-  let converted = 0
-
-  for (const c of contactos) {
-    const st = c.status as string
-    if (st === 'sent' || st === 'delivered' || st === 'converted') {
-      sent++
-      if (c.message_sent_at && new Date(c.message_sent_at as string) >= inicioDeHoy) sentToday++
-    }
-    if (st === 'bounced') bounced++
-    if (st === 'opted_out') optedOut++
-    if (st === 'converted') converted++
+  const porBase = new Map<string, FilaDeBase[]>()
+  for (const f of filas) {
+    const lista = porBase.get(f.source_batch)
+    if (lista) lista.push(f)
+    else porBase.set(f.source_batch, [f])
   }
+  const campanas = [...new Set(filas.map((f) => f.campaign_id).filter((c): c is string => !!c))]
 
-  const campaignId = (contactos[0].campaign_id as string | null) ?? null
+  // La cola viva de esas campañas.
+  const { data: enCola } = campanas.length
+    ? await leerTodo<FilaEnCola>((desde, hasta) =>
+        supabase
+          .from('send_queue')
+          .select('campaign_id, not_before')
+          .eq('tenant_id', tenantId)
+          .eq('status', 'queued')
+          .in('campaign_id', campanas)
+          .order('not_before', { ascending: true })
+          .order('id', { ascending: true })
+          .range(desde, hasta)
+      )
+    : { data: [] as FilaEnCola[] }
 
-  // El plan y la pausa viven en la campaña; la cola viva, en send_queue.
-  let blockSize: number | null = null
-  if (campaignId) {
-    const { data: campana } = await supabase
-      .from('campaigns')
-      .select('filters')
-      .eq('id', campaignId)
+  // Las entregas confirmadas (solo Zernio las reporta; Twilio no tiene status callback).
+  const { data: entregas } = await leerTodo<{ twilio_sid: string | null }>((desde, hasta) =>
+    supabase
+      .from('message_logs')
+      .select('twilio_sid')
       .eq('tenant_id', tenantId)
-      .maybeSingle()
-    const filtros = (campana?.filters ?? {}) as { plan?: { blockSize?: number } }
-    blockSize = filtros.plan?.blockSize ?? null
+      .eq('message_type', 'import')
+      .in('status', ['delivered', 'read'])
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true })
+      .range(desde, hasta)
+  )
+  const entregados = new Set((entregas ?? []).map((e) => e.twilio_sid).filter((s): s is string => !!s))
+
+  // La última campaña de cada base: de ahí sale lo que la próxima tanda hereda.
+  const ultimaPorBase = new Map<string, HerenciaDeTanda>()
+  if (campanas.length > 0) {
+    const { data: camps } = await supabase
+      .from('campaigns')
+      .select('id, filters, message_template, created_at')
+      .eq('tenant_id', tenantId)
+      .in('id', campanas)
+      .order('created_at', { ascending: true })
+    const baseDeCampana = new Map<string, string>()
+    for (const f of filas) if (f.campaign_id) baseDeCampana.set(f.campaign_id, f.source_batch)
+    // Ascendente: la última escritura por base gana.
+    for (const c of camps ?? []) {
+      const base = baseDeCampana.get(c.id as string)
+      if (base) ultimaPorBase.set(base, heredarDeCampana({ id: c.id as string, filters: c.filters, message_template: c.message_template as string | null }))
+    }
   }
 
-  const { data: enCola } = await supabase
-    .from('send_queue')
-    .select('not_before')
-    .eq('tenant_id', tenantId)
-    .eq('campaign_id', campaignId ?? '')
-    .eq('status', 'queued')
-    .order('not_before', { ascending: true })
-
-  const filas = enCola ?? []
-  const queued = filas.length
-  const paused = queued > 0 && filas.every((f) => new Date(f.not_before as string).getFullYear() >= 9999)
-
-  let nextBlockAt: string | null = null
-  let nextBlockSize = 0
-  let estimatedEndAt: string | null = null
-
-  if (queued > 0 && !paused) {
-    nextBlockAt = filas[0].not_before as string
-    // El "próximo bloque" son los que comparten el mismo not_before que el
-    // primero: así el número que se muestra es el que de verdad va a salir,
-    // no el tamaño teórico del plan.
-    nextBlockSize = filas.filter((f) => f.not_before === filas[0].not_before).length
-    estimatedEndAt = filas[filas.length - 1].not_before as string
-  }
-
-  return {
-    batchId,
-    campaignId,
-    sourceFile: (contactos[0].source_file as string) ?? '',
-    sent,
-    sentToday,
-    queued,
-    bounced,
-    optedOut,
-    converted,
-    total: contactos.length,
-    paused,
-    nextBlockAt,
-    nextBlockSize,
-    estimatedEndAt,
-    blockSize,
-  }
+  const ahora = new Date()
+  const bases = [...porBase.entries()].map(([id, f]) =>
+    resumirBase(id, f, enCola ?? [], entregados, ultimaPorBase.get(id) ?? null, ahora)
+  )
+  return bases.sort((a, b) => {
+    if (a.finished !== b.finished) return a.finished ? 1 : -1
+    return b.createdAt.localeCompare(a.createdAt)
+  })
 }
 
-/**
- * Los lotes que TODAVÍA están goteando.
- *
- * Es la lista que abre el tablero diario: normalmente son cero o uno, así que
- * llamar a `getBatchProgress()` por cada uno no es caro. Si algún día son
- * muchos, esto es lo que hay que convertir en una sola consulta agregada.
- */
-export async function getActiveBatches(tenantId: string): Promise<BatchProgress[]> {
-  const supabase = getServiceClient()
-
-  // Los batches con cola viva salen de `send_queue`, no de `imported_contacts`:
-  // la cola es la que sabe qué falta por salir.
-  const { data: enCola, error } = await supabase
-    .from('send_queue')
-    .select('campaign_id')
-    .eq('tenant_id', tenantId)
-    .eq('status', 'queued')
-    .eq('message_type', 'import')
-    .not('campaign_id', 'is', null)
-
-  if (error) {
-    logDbFailure({
-      scope: 'GoldenBullet',
-      reason: 'active_batches_error',
-      error,
-      context: { tenant_id: tenantId },
-    })
-    return []
-  }
-
-  const campanas = [...new Set((enCola ?? []).map((r) => r.campaign_id as string))]
-  if (campanas.length === 0) return []
-
-  const { data: contactos } = await supabase
-    .from('imported_contacts')
-    .select('source_batch, campaign_id')
-    .eq('tenant_id', tenantId)
-    .in('campaign_id', campanas)
-
-  const batches = [...new Set((contactos ?? []).map((c) => c.source_batch as string))]
-
-  const progresos: BatchProgress[] = []
-  for (const batchId of batches) {
-    const p = await getBatchProgress(batchId, tenantId)
-    if (p) progresos.push(p)
-  }
-  return progresos
+/** La foto de UNA base. `null` si no existe en esta marca. */
+export async function getBatchProgress(batchId: string, tenantId: string): Promise<BaseProgress | null> {
+  const [base] = await getBases(tenantId, batchId)
+  return base ?? null
 }
 
 export interface PauseResult {
@@ -993,13 +1455,18 @@ export interface ImportedBatchSummary {
 /** Lista los lotes importados agrupados (resumen por batch). */
 export async function listBatches(tenantId: string): Promise<ImportedBatchSummary[]> {
   const supabase = getServiceClient()
-  const { data, error } = await supabase
-    .from('imported_contacts')
-    .select('source_batch, source_file, status, created_at')
-    .eq('tenant_id', tenantId)
-    .order('created_at', { ascending: false })
+  const { data, error } = await leerTodo<{ source_batch: string; source_file: string; status: string; created_at: string }>(
+    (desde, hasta) =>
+      supabase
+        .from('imported_contacts')
+        .select('source_batch, source_file, status, created_at')
+        .eq('tenant_id', tenantId)
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: true })
+        .range(desde, hasta)
+  )
 
-  if (error || !data) return []
+  if (error) return []
 
   const map = new Map<string, ImportedBatchSummary>()
   for (const row of data) {
@@ -1035,13 +1502,16 @@ export interface BatchStats {
 
 export async function getBatchStats(batchId: string, tenantId: string): Promise<BatchStats> {
   const supabase = getServiceClient()
-  const { data } = await supabase
-    .from('imported_contacts')
-    .select('status')
-    .eq('source_batch', batchId)
-    .eq('tenant_id', tenantId)
+  const { data: rows } = await leerTodo<{ status: string }>((desde, hasta) =>
+    supabase
+      .from('imported_contacts')
+      .select('status')
+      .eq('source_batch', batchId)
+      .eq('tenant_id', tenantId)
+      .order('id', { ascending: true })
+      .range(desde, hasta)
+  )
 
-  const rows = data ?? []
   const sent = rows.filter((r) => ['sent', 'delivered', 'converted'].includes(r.status)).length
   const converted = rows.filter((r) => r.status === 'converted').length
   const blocked = rows.filter((r) => r.status === 'blocked').length
@@ -1075,13 +1545,19 @@ export async function getBatchRoi(batchId: string, tenantId: string): Promise<Ba
   const supabase = getServiceClient()
 
   // Contactos del lote + visitas de los convertidos (join customers)
-  const { data: contacts } = await supabase
-    .from('imported_contacts')
-    .select('status, converted_to_customer_id, customers:converted_to_customer_id(total_visits)')
-    .eq('source_batch', batchId)
-    .eq('tenant_id', tenantId)
-
-  const rows = contacts ?? []
+  const { data: rows } = await leerTodo<{
+    status: string
+    converted_to_customer_id: string | null
+    customers: { total_visits: number } | { total_visits: number }[] | null
+  }>((desde, hasta) =>
+    supabase
+      .from('imported_contacts')
+      .select('status, converted_to_customer_id, customers:converted_to_customer_id(total_visits)')
+      .eq('source_batch', batchId)
+      .eq('tenant_id', tenantId)
+      .order('id', { ascending: true })
+      .range(desde, hasta)
+  )
   const enviados = rows.filter((r) => ['sent', 'delivered', 'converted'].includes(r.status)).length
   const convertidos = rows.filter((r) => r.status === 'converted').length
 

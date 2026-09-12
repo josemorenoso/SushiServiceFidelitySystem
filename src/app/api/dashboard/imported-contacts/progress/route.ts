@@ -1,17 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireTenantId } from '@/lib/tenant'
-import { getBatchProgress, getActiveBatches } from '@/services/imported-contacts.service'
+import { getBatchProgress, getBases } from '@/services/imported-contacts.service'
 
 export const dynamic = 'force-dynamic'
 
 /**
  * GET /api/dashboard/imported-contacts/progress?batch_id=…
  *
- * La foto de HOY de un lote que está goteando: cuántos salieron hoy, cuántos
- * faltan, cuándo sale el próximo bloque y si está pausado.
+ * La foto de una base: cuántos hay en total, cuántos esperan sin programar,
+ * cuántos salieron (hoy y en total), quién se registró y quién dijo que no,
+ * cuándo sale el próximo bloque y si está pausada.
  *
- * Existe porque un goteo de semanas sin tablero es un goteo a ciegas.
+ * Sin `batch_id` devuelve TODAS las bases de la marca —las terminadas también:
+ * hasta el 2026-09-12 una base desaparecía de acá en cuanto se vaciaba la
+ * cola, y con ella los registrados y los rechazos, que son lo que el dueño
+ * mira después de la campaña.
  */
 export async function GET(request: NextRequest) {
   const supabase = await createClient()
@@ -24,14 +28,12 @@ export async function GET(request: NextRequest) {
     const batchId = new URL(request.url).searchParams.get('batch_id')
     const tenantId = await requireTenantId()
 
-    // Sin `batch_id` devuelve TODO lo que sigue goteando. Es la vista que abre
-    // el tablero diario, para no tener que saberse un UUID de memoria.
     if (!batchId) {
-      return NextResponse.json({ batches: await getActiveBatches(tenantId) })
+      return NextResponse.json({ batches: await getBases(tenantId) })
     }
     const progress = await getBatchProgress(batchId, tenantId)
     if (!progress) {
-      return NextResponse.json({ error: 'Lote no encontrado' }, { status: 404 })
+      return NextResponse.json({ error: 'Base no encontrada' }, { status: 404 })
     }
     return NextResponse.json(progress)
   } catch (error) {

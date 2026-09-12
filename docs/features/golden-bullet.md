@@ -1,6 +1,6 @@
 # Feature: Golden Bullet (Importación Masiva de Contactos)
 
-> **Versión:** v3.1.0 — 2026-09-10
+> **Versión:** v3.2.0 — 2026-09-12
 > **Estado:** ✅ Implementado (detrás de feature flag)
 > **Migraciones:** `00023_imported_contacts.sql` · `00060_golden_bullet_bloques.sql`
 > **Ver también:** [`send-governance.md`](send-governance.md) · [`campaigns.md`](campaigns.md)
@@ -213,10 +213,66 @@ formalismo. Esa es exactamente la razón por la que la plantilla pregunta en vez
 promocionar: el botón convierte una base sin consentimiento en una lista de gente que sí
 lo dio, y deja constancia de quién dijo que no.
 
-## El tablero diario y el botón de parar (v3.1.0)
+## Bases y tandas: la base entera se guarda y se ve (v3.2.0, 2026-09-12)
 
-Un goteo de semanas sin tablero es un goteo a ciegas. La pestaña **«En curso»** —que es la
-que abre la pantalla, antes que «Nueva campaña»— contesta tres preguntas:
+Lo que el dueño encontró después de su primera campaña real (1.000 de un CSV de 7.438):
+al vaciarse la cola, la tarjeta de «En curso» desaparecía y con ella **«se registraron» y
+«dijeron que no»**, que es justo lo que se mira después; y para mandar otra parte de la
+misma base había que **resubir el CSV** y confiar en que la regla anti-reenvío excluyera a
+los ya programados. Los que quedaban fuera de la tanda no se guardaban en ningún lado.
+
+**Ahora `confirm` guarda la base ENTERA.** Los de la tanda entran como `queued` con su
+campaña; los demás, como **`valid`** — «en la base, sin programar» — sin campaña. El
+estado existía en el CHECK desde la 00023 y nunca se había usado: no hay migración.
+
+| Concepto | Qué es | Dónde vive |
+|---|---|---|
+| **Base** | Un CSV confirmado, entero | `imported_contacts.source_batch` |
+| **Tanda** | Una parte de la base que se programó | Una campaña (`campaigns.filters.golden_bullet`, `batch_id`, `tanda`) |
+| **Sin programar** | Los que esperan la próxima tanda | `imported_contacts.status = 'valid'` |
+
+**Una campaña por tanda, a propósito.** La pausa (`not_before` 9999), el drenador y
+`cerrarCampanasTerminadas()` trabajan por campaña y no cambian. Parar una base es parar
+todas sus campañas con cola viva (`activeCampaignIds`), y el panel lo hace en un clic.
+
+**La tanda siguiente son dos números.** `POST /continue` (`programarSiguienteTanda()`)
+toma los primeros N `valid` de la base en el orden en que se guardaron (`created_at` y, dentro
+de cada trozo de 500 del INSERT, teléfono: aproximadamente el orden del archivo) y hereda de la
+tanda anterior lo que no venga en el cuerpo: `template_sid`, `promo_text`, `fallback_name`, que
+desde hoy se escriben en `campaigns.filters` (`FiltrosGoldenBullet`). Pasa por las **mismas dos
+puertas** que la primera —calidad de línea y saldo— porque entre tanda y tanda pasan semanas.
+`marcarComoEncolados()` actualiza con `.eq('status','valid')`: dos tandas programadas a la vez
+sobre la misma base no se llevan la misma fila, y nadie recibe el mensaje dos veces.
+
+**La advertencia aceptada se hereda** (`consent_warning.inherited_from`): se aceptó por esos
+contactos al confirmar la base, no por el día en que salen. No se vuelve a tipear.
+
+**Las campañas de antes del 12** no guardaron `template_sid`: `heredarDeCampana()` lo recupera
+del literal `plantilla HX…` de `message_template` cuando la plantilla no usaba `{{2}}`; si usaba
+promo, el SID se perdió y el formulario pide elegir la plantilla (`409 template_required`).
+Para la base de Sushi Service del 11, los 6.438 que quedaron fuera **no están guardados**: hay
+que subir el mismo CSV UNA vez más (los 1.000 se excluyen solos) y desde ahí todo sale del panel.
+
+**Un teléfono existe UNA vez por marca** en `imported_contacts`, cualquiera sea su estado.
+`validate` distingue **`en_otra_base`** (está `valid` en otra base: se programa desde «Bases»,
+donde ya está) de `ya_contactado`, y excluye los dos.
+
+**PostgREST corta en 1.000 filas y lo hace en silencio.** Ninguna lectura del módulo paginaba:
+una base de 7.438 se leía como 1.000 y el tablero contaba mal. Todo lo que lee «todas las filas
+de la base» pasa por `leerTodo()` (`.range()` de a 1.000 sobre una consulta ordenada).
+
+**«Entregados»** sale del cruce `imported_contacts.twilio_sid` ↔ `message_logs` con
+`status in (delivered, read)`. Solo Zernio reporta entregas (Twilio no tiene status callback):
+por Twilio queda en 0 aunque los mensajes hayan llegado, y la tarjeta lo dice.
+
+## La pestaña «Bases» y el botón de parar (v3.1.0, renombrada en v3.2.0)
+
+Un goteo de semanas sin tablero es un goteo a ciegas. La pestaña **«Bases»** —hasta el 12 se
+llamaba «En curso» y solo mostraba lo que goteaba; es la que abre la pantalla, antes que
+«Nueva campaña»— muestra **cada base mientras exista**, terminadas incluidas: en la base ·
+programados · sin programar; enviados · por salir · entregados · se registraron · dijeron que
+no · rebotados; y, si quedan por programar, el formulario **«Programar otra tanda»**. Mientras
+gotea, contesta además tres preguntas:
 
 - **¿Cuánto cupo me comí hoy?** El número grande: mensajes de esta base que salieron hoy.
 - **¿Qué sigue?** Cuántos salen en el próximo bloque, qué día, y la fecha estimada de fin.
@@ -344,7 +400,8 @@ Estados (`00060` agregó los dos últimos):
 
 | Estado | Significa |
 |---|---|
-| `pending` / `valid` / `invalid` | del parseo del CSV |
+| `pending` / `invalid` | del parseo del CSV |
+| **`valid`** | **en la base, sin programar** (desde el 2026-09-12): guardado al confirmar, espera la próxima tanda |
 | **`queued`** | en `send_queue`, esperando su bloque. Pueden ser semanas |
 | `sent` / `delivered` / `bounced` | resultado del envío |
 | `converted` | volvió y se registró: ya es customer |
@@ -354,6 +411,8 @@ Estados (`00060` agregó los dos últimos):
 ### Reglas anti-reenvío (CRÍTICO)
 - Un teléfono que **ya existe** en `imported_contacts` NUNCA se vuelve a contactar. Se
   excluye en `validate` y **otra vez** en `confirm` (carrera entre dos importaciones).
+  Los `valid` (en una base, sin programar) también existen: `validate` los reporta como
+  `en_otra_base` y no entran por un CSV nuevo — se programan desde «Bases».
 - Los duplicados dentro del mismo CSV se descartan (solo el primero cuenta).
 
 ## Probar el mensaje en un celular (2026-09-11)
@@ -376,19 +435,21 @@ en opt-out, y la tarjeta lo advierte.
 3. **Costo** — `válidos × tarifa` + saldo.
 4. **Plantilla y bloque** — plantilla MARKETING aprobada + **cuántos por día**, con la
    fecha de fin calculada.
-5. **Confirmar** — se acepta la advertencia → `POST /confirm`: inserta como `queued`,
-   crea la campaña y **encola** en bloques.
+5. **Confirmar** — se acepta la advertencia → `POST /confirm`: guarda la base entera (la
+   tanda como `queued`, el resto como `valid`), crea la campaña de la tanda 1 y **encola** en
+   bloques. Las tandas siguientes salen de «Bases» → «Programar otra tanda» (`POST /continue`).
 
 ## Endpoints
 
 | Método | Ruta | Descripción |
 |--------|------|-------------|
 | POST | `/api/dashboard/imported-contacts/validate` | Validar CSV (multipart `file`), sin insertar |
-| POST | `/api/dashboard/imported-contacts/confirm` | Insertar + **encolar**. Body: `{ batch_id, source_file, template_sid, promo_text?, block_size, consent_text?, fallback_name?, contacts[] }` (`promo_text` solo si la plantilla usa `{{2}}`) |
+| POST | `/api/dashboard/imported-contacts/confirm` | Guardar la base entera + **encolar** la tanda 1. Body: `{ batch_id, source_file, template_sid, promo_text?, block_size, consent_text?, fallback_name?, max_contacts?, contacts[] }` (`promo_text` solo si la plantilla usa `{{2}}`). Devuelve `left_out` = los que quedaron `valid` |
+| POST | `/api/dashboard/imported-contacts/continue` | La siguiente tanda de una base guardada. Body: `{ batch_id, max_contacts, block_size, template_sid?, promo_text?, fallback_name? }`; lo que falte se hereda. 409: `nothing_pending`, `template_required`, `line_quality`, `insufficient_balance` |
 | GET | `/api/dashboard/imported-contacts` | Lotes o contactos de un `batch_id` |
 | GET | `/api/dashboard/imported-contacts/stats` | Estadísticas por `batch_id` |
 | GET | `/api/dashboard/imported-contacts/roi` | ROI por `batch_id` |
-| GET | `/api/dashboard/imported-contacts/progress` | Con `batch_id`, la foto de ese lote. **Sin** `batch_id`, todo lo que sigue goteando |
+| GET | `/api/dashboard/imported-contacts/progress` | Con `batch_id`, la foto de esa base. **Sin** `batch_id`, TODAS las bases de la marca, terminadas incluidas (`getBases()`), las que tienen algo por hacer primero |
 | POST | `/api/dashboard/imported-contacts/pause` | `{ campaign_id, action: 'pause' \| 'resume', block_size? }` |
 | GET/POST | `/api/dashboard/imported-contacts/template` | `GET` = defectos, topes y respuestas guardadas (no toca nada). `POST` = crea en Twilio y somete a Meta. Body: `{ body, boton_si?, boton_no?, promo_ejemplo? }` |
 | POST | `/api/dashboard/imported-contacts/reply-image` | Sube la foto de la respuesta al «sí» (multipart `file`, JPG/PNG/WebP) y devuelve su URL pública |
@@ -439,15 +500,16 @@ como colombiano. El test que lo fija: `tests/unit/golden-bullet-telefonos.test.t
 ## Archivos
 
 - `supabase/migrations/00023_imported_contacts.sql`, `00060_golden_bullet_bloques.sql`
-- `src/services/imported-contacts.service.ts` (`planBlocks()`, `confirmImport()`, `markImportedContactsResult()`)
+- `src/services/imported-contacts.service.ts` (`planBlocks()`, `confirmImport()`, `programarSiguienteTanda()`, `getBases()`/`resumirBase()`, `heredarDeCampana()`, `leerTodo()`, `markImportedContactsResult()`)
 - `src/services/club-optin.service.ts` — los dos botones
 - `src/services/golden-bullet-template.service.ts` — crea la plantilla y la somete a Meta
-- `src/components/dashboard/ImportedContactsProgress.tsx` — el tablero diario y el botón de parar
+- `src/components/dashboard/ImportedContactsProgress.tsx` — las bases: tablero, parar, y «Programar otra tanda»
+- `src/app/api/dashboard/imported-contacts/continue/route.ts` — la siguiente tanda
 - `src/components/dashboard/ImportedContactsTemplate.tsx` — crear la plantilla sin salir del panel
 - `src/app/api/dashboard/imported-contacts/{route,validate,confirm,stats,roi}.ts`
 - `src/app/(dashboard)/dashboard/imported-contacts/page.tsx`
 - `src/components/dashboard/ImportedContactsUploader.tsx`, `ImportedContactsCostEstimator.tsx`, `ImportedContactsHistory.tsx`
-- `tests/unit/golden-bullet-bloques.test.ts`, `tests/unit/golden-bullet-telefonos.test.ts`, `tests/unit/golden-bullet-respuestas.test.ts`
+- `tests/unit/golden-bullet-bloques.test.ts`, `tests/unit/golden-bullet-telefonos.test.ts`, `tests/unit/golden-bullet-respuestas.test.ts`, `tests/unit/golden-bullet-tandas.test.ts`
 - `src/app/api/dashboard/imported-contacts/reply-image/route.ts` — la foto del mensaje 2
 - `src/app/api/dashboard/imported-contacts/test-send/route.ts` — la prueba a un número
 - `public/plantilla_golden_bullet.csv`

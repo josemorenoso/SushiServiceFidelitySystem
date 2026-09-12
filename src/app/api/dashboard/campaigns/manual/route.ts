@@ -66,7 +66,16 @@ export async function POST(request: NextRequest) {
     const tenantId = await requireTenantId()
     const tenant = await getTenantById(tenantId)
     if (!tenant) {
-      return NextResponse.json({ error: 'Tenant no encontrado' }, { status: 404 })
+      // Con sesión válida el tenant existe: si no se pudo leer, fue la base
+      // (la causa exacta queda en el log de `getTenantById`). Decirlo así, y
+      // con 503, para que el operador reintente en vez de buscar una marca perdida.
+      return NextResponse.json(
+        {
+          error: 'Problema técnico',
+          message: 'No pudimos leer tu marca ahora mismo (fallo momentáneo de la base). Reintentá en unos segundos; no se envió nada.',
+        },
+        { status: 503 }
+      )
     }
 
     const db = getServiceClient()

@@ -311,7 +311,7 @@ export function ManualCampaigns() {
             `Saldo insuficiente: la campaña necesita ${data.recipients} mensajes y el saldo alcanza para ${data.messagesAvailable}. Recarga tu billetera para continuar.`
           )
         } else {
-          setSendError(data.error || 'Error enviando la campaña')
+          setSendError(data.message || data.error || 'Error enviando la campaña')
         }
         return
       }

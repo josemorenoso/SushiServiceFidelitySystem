@@ -8,6 +8,19 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [fix] — 2026-09-12 — «Tenant no encontrado» en la campaña manual era un fallo de base escondido
+
+**Qué pasó:** al confirmar una campaña manual (152 clientes) el modal dijo «Tenant no encontrado» (404, 18:35 UTC, una sola
+vez en 6 h). `getTenantById()` devolvía `null` tanto para «no existe» como para un error de Supabase, y la ruta lo llamaba
+marca inexistente. Nada se envió.
+
+- `src/lib/tenant.ts`: los cinco lookups (`getTenantById/BySlug/ByMessagingService/ByWhatsappNumber/ByZernioAccountId`)
+  pasan el error real por `logDbFailure()` (`[Tenant][FALLO] reason=…_error code=…`). Siguen devolviendo `null`: ningún
+  llamador cambia.
+- `campaigns/manual`: con sesión válida la marca existe, así que un `null` es la base → 503 «Problema técnico… reintentá»,
+  y `ManualCampaigns.tsx` muestra ese `message`.
+- Sin relación con el Golden Bullet por Zernio: esa ruta y `TENANT_COLUMNS` no cambiaron desde la 00061.
+
 ## [migración 00067] — 2026-09-12 — Zernio en paralelo a Twilio, desde el AIOS
 
 **Pedido del dueño:** poder conectar su Zernio (coexistencia) al mismo tiempo que su Twilio, desde el AIOS, sin SQL;

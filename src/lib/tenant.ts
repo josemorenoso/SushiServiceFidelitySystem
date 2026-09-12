@@ -234,6 +234,11 @@ export async function getTenantById(id: string): Promise<Tenant | null> {
     .select(TENANT_COLUMNS)
     .eq('id', id)
     .single()
+  // Un fallo de base (timeout del pooler, 42703, RLS) devolvía `null` igual que
+  // «no existe», y el llamador decía «Tenant no encontrado» de una marca que sí
+  // existe (campaña manual, 2026-09-12). Se sigue devolviendo `null` —los ~40
+  // llamadores no cambian— pero la causa real queda en el log.
+  if (isDbFailure(error)) logDbFailure({ scope: 'Tenant', reason: 'getTenantById_error', error, context: { id } })
   if (error || !data) return null
   return data as Tenant
 }
@@ -248,6 +253,11 @@ export async function getTenantBySlug(slug: string): Promise<Tenant | null> {
     .eq('slug', slug)
     .eq('is_active', true)
     .single()
+  // Un fallo de base (timeout del pooler, 42703, RLS) devolvía `null` igual que
+  // «no existe», y el llamador decía «Tenant no encontrado» de una marca que sí
+  // existe (campaña manual, 2026-09-12). Se sigue devolviendo `null` —los ~40
+  // llamadores no cambian— pero la causa real queda en el log.
+  if (isDbFailure(error)) logDbFailure({ scope: 'Tenant', reason: 'getTenantBySlug_error', error, context: { slug } })
   if (error || !data) return null
   return data as Tenant
 }
@@ -262,6 +272,11 @@ export async function getTenantByMessagingService(msid: string): Promise<Tenant 
     .eq('twilio_messaging_service_sid', msid)
     .eq('is_active', true)
     .single()
+  // Un fallo de base (timeout del pooler, 42703, RLS) devolvía `null` igual que
+  // «no existe», y el llamador decía «Tenant no encontrado» de una marca que sí
+  // existe (campaña manual, 2026-09-12). Se sigue devolviendo `null` —los ~40
+  // llamadores no cambian— pero la causa real queda en el log.
+  if (isDbFailure(error)) logDbFailure({ scope: 'Tenant', reason: 'getTenantByMessagingService_error', error, context: { msid } })
   if (error || !data) return null
   return data as Tenant
 }
@@ -276,6 +291,11 @@ export async function getTenantByWhatsappNumber(number: string): Promise<Tenant 
     .eq('twilio_whatsapp_number', number)
     .eq('is_active', true)
     .single()
+  // Un fallo de base (timeout del pooler, 42703, RLS) devolvía `null` igual que
+  // «no existe», y el llamador decía «Tenant no encontrado» de una marca que sí
+  // existe (campaña manual, 2026-09-12). Se sigue devolviendo `null` —los ~40
+  // llamadores no cambian— pero la causa real queda en el log.
+  if (isDbFailure(error)) logDbFailure({ scope: 'Tenant', reason: 'getTenantByWhatsappNumber_error', error, context: { number } })
   if (error || !data) return null
   return data as Tenant
 }
@@ -290,6 +310,11 @@ export async function getTenantByZernioAccountId(accountId: string): Promise<Ten
     .eq('zernio_account_id', accountId)
     .eq('is_active', true)
     .single()
+  // Un fallo de base (timeout del pooler, 42703, RLS) devolvía `null` igual que
+  // «no existe», y el llamador decía «Tenant no encontrado» de una marca que sí
+  // existe (campaña manual, 2026-09-12). Se sigue devolviendo `null` —los ~40
+  // llamadores no cambian— pero la causa real queda en el log.
+  if (isDbFailure(error)) logDbFailure({ scope: 'Tenant', reason: 'getTenantByZernioAccountId_error', error, context: { accountId } })
   if (error || !data) return null
   return data as Tenant
 }

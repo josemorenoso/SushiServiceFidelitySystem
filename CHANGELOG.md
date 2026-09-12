@@ -8,6 +8,22 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [docs] — 2026-09-12 — Runbook: Sushi Service de Twilio a Zernio por coexistencia
+
+**Contexto:** la línea prepago de Sushi Service en Twilio venció y el operador la retiró. El dueño decidió
+número nuevo, coexistencia y envío por Zernio, con meta de ~1.000 mensajes/día.
+
+- `docs/RUNBOOK-SUSHI-SERVICE-A-ZERNIO.md` (nuevo): el paso a paso verificado contra `provisioning.ts` e
+  `import.ts` del AIOS, `00036`/`00064`, `whatsapp.service.ts` y `queue-drain`. Importar el tenant en el AIOS,
+  condición «Falta instalar WhatsApp», wizard 0-3 con «Registrar número en Cloud API», 13 plantillas, pasos 4 y 5
+  de la sede, el SQL de las dos claves que el catálogo no cubre (`tier_unlocked`, `reward_reminder`), cómo leer el
+  cupo en el WhatsApp Manager y fijarlo en `messaging_daily_limit`, la prueba mínima y la vuelta atrás.
+- Hallazgos que pesan: el Golden Bullet es Twilio de punta a punta (lista, crea, prueba y contesta por Twilio) y
+  no sale por Zernio sin construir esa rama; `aios_deactivate_whatsapp()` borra los `*_template_sid` al volver a
+  Twilio, así que los `HX…` se guardan antes; un número nuevo arranca en 250 únicos/día hasta la verificación
+  del negocio en Meta.
+- `ESTADO.md`: ítem 0.SUSHI en la cola.
+
 ## [2026-09-11l] - Drenador: 240 s por corrida y 20 en paralelo (un bloque de 1.400 tardaba 3 h)
 
 **Qué:** la primera campaña real de Golden Bullet (Sushi Service, 2026-09-11) tardó ~3 horas en sacar el

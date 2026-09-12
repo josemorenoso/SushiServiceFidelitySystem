@@ -32,10 +32,22 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
-| Migración de Sushi Service de Twilio a Zernio (coexistencia): runbook paso a paso, dueño, 2026-09-12 | Opus 5 | `ESTADO.md`, `docs/RUNBOOK-SUSHI-SERVICE-A-ZERNIO.md` (nuevo) | — | En vuelo |
 
 ## 3. Siguiente, en orden
 
+0.SUSHI **Sushi Service se queda sin línea: la prepago de Twilio venció y el operador la retiró (dueño,
+   2026-09-12).** Decisión del dueño: número nuevo, coexistencia, envío por Zernio, meta ~1.000/día.
+   El paso a paso verificado contra el código está en **`docs/RUNBOOK-SUSHI-SERVICE-A-ZERNIO.md`**
+   (importar en el AIOS → condición «Falta instalar WhatsApp» → wizard 0-3 → Registrar en Cloud API →
+   13 plantillas → paso 4 y 5 de la sede → SQL de las dos claves huérfanas → cupo). Tres cosas que
+   no resuelve ningún panel: (1) **la verificación del negocio en Meta**, sin la cual el número
+   nuevo no pasa de 250 únicos/día — arrancarla hoy; (2) **el Golden Bullet es Twilio de punta a
+   punta** (`ImportedContactsUploader.tsx:173`, `golden-bullet-template.service.ts`, TwiML del «sí»):
+   los 14.126 contactos de `Contactos/salida/` NO salen por Zernio sin construir esa rama — decisión
+   pendiente del dueño; (3) `tier_unlocked_template_sid` y `reward_reminder_template_sid` no están
+   en el catálogo del AIOS y quedan con su `HX…` (deuda 1.2 de `PENDIENTES-PLANTILLAS.md`): se crean
+   a mano en el WhatsApp Manager y se apuntan por SQL (§5 del runbook). Los envíos de Sushi Service
+   fallan desde que murió el sender y siguen fallando hasta que Meta apruebe las 13.
 0.AIOS **Antes de que el dueño registre el número real de Tepuy (mañana, 2026-09-12).** En orden:
    1. **Aplicar la `00064`** en el Supabase del producto (borrado, `aios_deactivate_whatsapp`,
       `aios_wallet_topup`; riesgo nulo salvo la primera, que lleva tres candados) y la **`00010`** en

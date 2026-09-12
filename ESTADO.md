@@ -32,6 +32,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Conectar Zernio EN PARALELO a Twilio desde el AIOS (función `aios_attach_zernio_account`, botón en el wizard de sede), dueño, 2026-09-12 | Opus 5 | `supabase/migrations/00067_aios_attach_zernio_account.sql` (nuevo), `docs/DB_SCHEMA.md`, `docs/features/zernio-messaging.md`, `docs/RUNBOOK-SUSHI-SERVICE-A-ZERNIO.md`, `ESTADO.md`, `CHANGELOG.md`; en el AIOS: `src/lib/product-db.ts`, `src/lib/actions/provisioning.ts`, `src/components/sites/SiteProvisioningWizard.tsx`, `src/lib/zernio/provisioning-state.ts`, `README.md`, `CHANGELOG.md` | **00067** | En vuelo |
 
 ## 3. Siguiente, en orden
 

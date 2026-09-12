@@ -123,6 +123,18 @@ export interface SendTemplateOptions {
   headerMediaType?: 'image' | 'video'
   /** Solo camino Zernio. Idioma de la plantilla. Default: env ZERNIO_TEMPLATE_LANGUAGE o 'es'. */
   templateLanguage?: string
+  /**
+   * Fuerza el proveedor de ESTE envío, por encima de `tenant.messaging_provider`.
+   *
+   * Existe por una sola razón (2026-09-12): una marca que manda lo normal por
+   * Twilio quiere lanzar la DIFUSIÓN por su línea de coexistencia en Zernio,
+   * porque a la de Twilio la gente la toma por número falso. Lo fija el Golden
+   * Bullet a través de `resolveGoldenBulletProvider()` y nadie más. No relaja
+   * ninguna guarda: `zernio` sin `zernio_account_id`/`zernio_phone_number`
+   * sigue fallando CERRADO en `sendViaZernio()`, y `twilio` sin credenciales
+   * sigue devolviendo `null`.
+   */
+  provider?: 'twilio' | 'zernio'
 }
 
 /**
@@ -373,7 +385,7 @@ export async function sendTemplateMessage(
     return { sid: simulatedSid, status: 'delivered' }
   }
 
-  const provider = tenant.messaging_provider === 'zernio' ? 'zernio' : 'twilio'
+  const provider = options?.provider ?? (tenant.messaging_provider === 'zernio' ? 'zernio' : 'twilio')
 
   if (provider === 'zernio') {
     return sendViaZernio(phone, contentSid, variables, tenant, logContext, options)

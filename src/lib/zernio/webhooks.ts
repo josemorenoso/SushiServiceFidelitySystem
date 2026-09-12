@@ -91,8 +91,39 @@ export interface ZernioWebhookPayloadMessage {
   /** Forma exacta no confirmada del todo en la doc pública — tratar como opaco. */
   conversation: Record<string, unknown>
   account: Record<string, unknown>
-  metadata?: Record<string, unknown>
+  /**
+   * Va en el SOBRE, no dentro de `message` (spec público, `WebhookPayloadMessage`,
+   * 2026-09-12). Lo que importa de WhatsApp: `buttonPayload` cuando la persona
+   * tocó un botón de PLANTILLA (Meta manda un `button` plano, `interactiveType`
+   * queda vacío), e `interactiveType`/`interactiveId` para botones de sesión.
+   */
+  metadata?: {
+    buttonPayload?: string
+    interactiveType?: 'button_reply' | 'list_reply' | 'nfm_reply'
+    interactiveId?: string
+    [extra: string]: unknown
+  }
   timestamp: string
+}
+
+/**
+ * El payload del botón tocado, esté donde esté. Zernio lo documenta en
+ * `metadata.buttonPayload` del sobre; se tolera también dentro de `message`
+ * (donde este código lo buscó hasta el 2026-09-12 sin que nadie lo confirmara)
+ * y el `interactiveId` de un botón de sesión. Sin nada, `null`: el detector
+ * cae al texto visible del botón.
+ */
+export function readButtonPayload(payload: ZernioWebhookPayloadMessage): string | null {
+  const meta = payload.metadata
+  const candidates = [
+    meta?.buttonPayload,
+    meta?.interactiveId,
+    (payload.message as { buttonPayload?: unknown }).buttonPayload,
+  ]
+  for (const c of candidates) {
+    if (typeof c === 'string' && c.trim()) return c.trim()
+  }
+  return null
 }
 
 /** Evento `message.delivered` / `message.read` / `message.failed`. */

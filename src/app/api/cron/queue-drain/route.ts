@@ -41,6 +41,7 @@ import { validateCronSecret } from '@/lib/validators/cron'
 import { markImportedContactsResult } from '@/services/imported-contacts.service'
 import { getTenantById } from '@/lib/tenant'
 import { sendTemplateMessage } from '@/services/whatsapp.service'
+import { resolveGoldenBulletProvider } from '@/services/club-optin.service'
 import { getLineBudget } from '@/services/line-budget.service'
 import { isPhoneOptedOut } from '@/services/customer.service'
 import { getRecoveryZoneConfig } from '@/services/settings.service'
@@ -280,17 +281,30 @@ async function drenarTenant(tenantId: string, res: Resultado): Promise<Resultado
     error_message: string | null
   }> = []
 
+  // El Golden Bullet puede salir por OTRA línea que el resto de la marca
+  // (la de coexistencia en Zernio, mientras lo normal sigue en Twilio). Se
+  // resuelve una vez por tanda y solo si hay items de importación en ella.
+  const proveedorGoldenBullet = permitidos.some((item) => item.message_type === 'import')
+    ? await resolveGoldenBulletProvider(tenant)
+    : null
+
   // Lotes concurrentes, igual que las campañas.
   const resultados = await Promise.all(
     permitidos.map(async (item) => {
       try {
+        const proveedor =
+          item.message_type === 'import' && proveedorGoldenBullet
+            ? proveedorGoldenBullet
+            : tenant.messaging_provider === 'zernio'
+              ? 'zernio'
+              : 'twilio'
         const enviado = await sendTemplateMessage(
           item.phone,
           item.template_sid,
           item.variables ?? {},
           tenant,
           { customerId: item.customer_id, messageType: item.message_type },
-          construirOpciones(item, tenant.messaging_provider)
+          { ...construirOpciones(item, proveedor), provider: proveedor }
         )
         return { item, enviado, error: null as string | null }
       } catch (err) {
@@ -494,9 +508,10 @@ async function filtrarPorGuardas(
 }
 
 /**
- * Reconstruye las opciones de envío según el PROVEEDOR ACTUAL del tenant, no
+ * Reconstruye las opciones de envío según el PROVEEDOR ACTUAL del envío, no
  * según el que tenía al encolar. Un tenant puede migrar de Twilio a Zernio
- * mientras su cola gotea.
+ * mientras su cola gotea — y un item de Golden Bullet puede salir por Zernio
+ * con la marca todavía en Twilio (ver `resolveGoldenBulletProvider`).
  *
  * Twilio y Zernio pasan la media de forma incompatible: en Twilio viaja como
  * una VARIABLE de la plantilla (y hay que impedir que el reintento por 21665 la

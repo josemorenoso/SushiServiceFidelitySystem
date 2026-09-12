@@ -1,12 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getTenantTwilioCredentials } from '@/lib/twilio/tenant-credentials'
+import { requireTenantId, getTenantById } from '@/lib/tenant'
+import { listZernioTemplates } from '@/lib/zernio/messaging'
+import { mapZernioTemplateToItem } from '@/lib/zernio/template-listing'
+import { resolveGoldenBulletProvider } from '@/services/club-optin.service'
 
 export const dynamic = 'force-dynamic'
 
 const TWILIO_CONTENT_API = 'https://content.twilio.com/v1/Content'
 
-export async function GET() {
+/**
+ * GET — las plantillas del proveedor, en la forma que las pantallas ya conocen.
+ *
+ * Desde el 2026-09-12 es consciente del proveedor: un tenant Zernio recibe SU
+ * WABA (antes recibía `[]` con «Twilio no configurado», y el asistente de
+ * Golden Bullet, las campañas manuales y las burbujas de riesgo se quedaban
+ * sin nada que elegir). `?provider=zernio|twilio` fuerza uno, y
+ * `?provider=golden_bullet` pide el de la difusión, que puede ser distinto al
+ * de la marca (la línea de coexistencia en Zernio con lo demás en Twilio; ver
+ * `resolveGoldenBulletProvider`). Solo se acepta `zernio` si el tenant tiene la
+ * cuenta conectada; si no, cae al de la marca.
+ */
+export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -14,12 +30,38 @@ export async function GET() {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
     }
 
+    const tenant = await getTenantById(await requireTenantId())
+    const pedido = request.nextUrl.searchParams.get('provider')
+    const brandProvider = tenant?.messaging_provider === 'zernio' ? 'zernio' : 'twilio'
+    const provider =
+      pedido === 'golden_bullet' && tenant
+        ? await resolveGoldenBulletProvider(tenant)
+        : pedido === 'zernio' && tenant?.zernio_account_id
+          ? 'zernio'
+          : pedido === 'twilio'
+            ? 'twilio'
+            : brandProvider
+
+    if (provider === 'zernio') {
+      if (!tenant?.zernio_account_id) {
+        return NextResponse.json({ templates: [], provider, error: 'Zernio no configurado' })
+      }
+      try {
+        const listado = await listZernioTemplates(tenant.zernio_account_id)
+        const templates = (listado.templates ?? []).map(mapZernioTemplateToItem)
+        return NextResponse.json({ templates, provider })
+      } catch (error) {
+        console.error('[Templates] Zernio API error:', error instanceof Error ? error.message : error)
+        return NextResponse.json({ templates: [], provider, error: 'Error consultando Zernio' })
+      }
+    }
+
     // Multitenant: la subcuenta del tenant, o el env SOLO para el tenant master
     // (`TWILIO_MASTER_TENANT_ID`). Un tenant sin subcuenta recibe la lista vacía:
     // el 2026-09-10 uno recién creado listó las 27 plantillas de Sushi Service.
     const creds = await getTenantTwilioCredentials()
     if (!creds) {
-      return NextResponse.json({ templates: [], error: 'Twilio no configurado' })
+      return NextResponse.json({ templates: [], provider, error: 'Twilio no configurado' })
     }
     const headers = {
       Authorization: creds.basicAuth,
@@ -97,7 +139,7 @@ export async function GET() {
       }
     })
 
-    return NextResponse.json({ templates })
+    return NextResponse.json({ templates, provider })
   } catch (error) {
     console.error('[Templates]', error)
     return NextResponse.json({ error: 'Error del servidor' }, { status: 500 })

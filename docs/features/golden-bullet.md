@@ -156,11 +156,53 @@ Una plantilla con tres variables **no sirve**, y el asistente ya no la ofrece.
 > Bullet rompe esa suposición — le escribe a gente que no está en `customers` — y sin la
 > segunda consulta el "no" de esas personas **no lo miraba nadie**. Ahora mira los dos sitios.
 
-> ⚠️ **En Zernio el botón «sí» no recibe respuesta.** El webhook de Zernio solo puede
-> devolver un 2xx sin cuerpo, y la única salida de envío manda **plantillas aprobadas**: el
-> texto libre no es que sea difícil, es que no existe. El efecto de negocio sí ocurre
-> entero (queda el consentimiento, queda el opt-out), pero quien consiente **no recibe su
-> enlace**. Es hermano del 18.c y necesita una plantilla nueva aprobada por Meta.
+> ✅ **En Zernio el botón «sí» SÍ recibe respuesta (desde el 2026-09-12).** Tocar el botón
+> abre la ventana de 24 h de WhatsApp, y dentro de ella Zernio manda texto libre con foto en la
+> misma conversación (`POST /v1/inbox/conversations/{id}/messages`, contrato §8;
+> `sendZernioConversationMessage()`). El webhook lee el botón en `metadata.buttonPayload` del
+> sobre —que en Zernio es el TEXTO del botón, no un payload propio— y lo reconoce por la
+> etiqueta guardada en `admin_settings` (`golden_bullet_button_*`). Lo que sigue sin acuse en
+> Zernio es el opt-out por palabra clave (SALIR), que no es de este flujo.
+
+### Por qué línea sale la difusión — `golden_bullet_provider` (2026-09-12)
+
+El proveedor de la marca (`tenants.messaging_provider`) es uno, pero la difusión puede salir por
+**otra línea**. El caso que lo motivó (dueño, 2026-09-12): Sushi Service manda recibos y campañas
+por Twilio y eso funciona, pero a una base fría la línea de Twilio le parece un número falso; la
+difusión tiene que salir por la línea que la gente conoce —la de coexistencia, en Zernio— sin
+mover lo demás todavía (la línea de Twilio vence en ~un mes y ahí se migra todo).
+
+| `messaging_provider` | `admin_settings.golden_bullet_provider` | Cuenta Zernio conectada | La difusión sale por |
+|---|---|---|---|
+| `zernio` | (da igual) | — | Zernio |
+| `twilio` | `zernio` | sí (`zernio_account_id` + `zernio_phone_number`) | **Zernio** |
+| `twilio` | `zernio` | no | Twilio, con aviso en el log |
+| `twilio` | vacío | — | Twilio |
+
+`goldenBulletProviderFor()` (pura) y `resolveGoldenBulletProvider()` en `club-optin.service.ts`.
+Lo respetan **los cuatro** puntos por los que pasa el Golden Bullet: el listado de plantillas del
+asistente (`GET /api/dashboard/templates?provider=golden_bullet`), la creación (`createClubInviteTemplate`,
+rama `crearEnZernio`), la prueba (`test-send`) y cada item `message_type='import'` del drenador
+(`queue-drain`, que pasa `options.provider` a `sendTemplateMessage()`). Nadie más usa
+`options.provider`: no relaja ninguna guarda de `sendViaZernio()` ni del camino Twilio.
+
+El interruptor vive en la pestaña **Plantilla** («Mandar la difusión por la línea de coexistencia»)
+y solo aparece con la marca en Twilio y la cuenta de Zernio conectada. Para que una marca Twilio
+tenga esa cuenta hay que pasar el alta de Zernio en el AIOS y volver el proveedor a `twilio`: el
+paso a paso está en `docs/RUNBOOK-SUSHI-SERVICE-A-ZERNIO.md` § "Modo puente doble".
+
+**Lo que cambia en Zernio respecto a Twilio, en esta pantalla:**
+- La plantilla se identifica por **nombre** (`club_invite_<marca>[_foto][_vN]`), no por `HX…`, y
+  Zernio la crea y la somete a Meta en una sola llamada. El nombre se elige libre en la WABA
+  antes de crear (`nombreLibreEnWaba`).
+- Los botones **no llevan payload**: Meta devuelve el texto. El detector los reconoce por el
+  título guardado (`guardarEtiquetas()`), con los textos de defecto como respaldo.
+- La foto del mensaje 1 va como header de imagen con la URL pública de muestra; Zernio la
+  rellena sola en cada envío.
+- El saldo no es el de Twilio: se ve en el panel de Zernio (se factura por Team). El asistente
+  etiqueta el costo como «Zernio» y no consulta `/api/dashboard/twilio-balance`.
+- El cupo de línea (`messaging_daily_limit`, 00037) es de la **marca**, no de la línea: con dos
+  líneas activas cuenta las dos juntas. Es aceptable para el mes del puente; se anota.
 
 ### Antes de mandarle esto a Meta
 
@@ -262,9 +304,10 @@ los dos, «cliente». La vista previa del mensaje 1 muestra las dos versiones.
 
 **Enlaces en el texto del mensaje 1**: se puede escribir una URL completa (Meta rechaza los
 acortadores y revisa el destino). Pero el botón «sí» tiene que tocarse **en este chat**: el
-consentimiento y el mensaje 2 salen por la línea de Twilio, no por otra; un `wa.me` a otra línea
-va como «también podés escribirnos a…», nunca como el llamado principal. La foto viaja como `<Media>`
-en el TwiML de `twilio-incoming` (Zernio sigue sin poder contestar: ver arriba).
+consentimiento y el mensaje 2 salen por la línea por la que salió el mensaje 1, no por otra; un
+`wa.me` a otra línea va como «también podés escribirnos a…», nunca como el llamado principal. La
+foto viaja como `<Media>` en el TwiML de `twilio-incoming`, o como `attachmentUrl` en la
+conversación de Zernio (ver arriba).
 
 > `POST /api/dashboard/imported-contacts/template` crea **y somete**. `GET` de la misma
 > ruta devuelve los defectos, los topes y las respuestas guardadas, y **no toca Twilio ni Meta**.

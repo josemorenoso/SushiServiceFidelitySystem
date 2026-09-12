@@ -34,11 +34,21 @@ import { getTenantByZernioAccountId } from '@/lib/tenant'
 import { setWhatsappOptOut, clearWhatsappOptOut } from '@/services/customer.service'
 import { applyProviderTemplateStatus } from '@/services/template.service'
 import { logDeliveryIntakeFailure, processDeliveryMessage } from '@/services/delivery.service'
+import type { Tenant } from '@/types/tenant.types'
 
 // Mismos keywords que twilio-incoming/route.ts (duplicados a propósito: son
 // ~2 líneas estables y extraerlos a un módulo compartido es más cambio del
 // que amerita esta migración — ver docs/features/zernio-messaging.md).
-import { detectClubButton, handleClubOptIn, handleClubOptOut } from '@/services/club-optin.service'
+import {
+  detectClubButton,
+  handleClubOptIn,
+  handleClubOptOut,
+  CLUB_SETTING_KEYS,
+  type ClubReply,
+} from '@/services/club-optin.service'
+import { getMultipleSettings } from '@/services/settings.service'
+import { sendZernioConversationMessage } from '@/lib/zernio/messaging'
+import { readButtonPayload } from '@/lib/zernio/webhooks'
 
 const OPT_OUT_KEYWORDS = ['STOP', 'STOPALL', 'UNSUBSCRIBE', 'CANCEL', 'CANCELAR', 'END', 'QUIT', 'BAJA', 'SALIR', 'SAL', 'SALI', 'FUERA', 'OPTOUT', 'NO']
 const OPT_IN_KEYWORDS = ['START', 'UNSTOP', 'YES', 'SI', 'ALTA', 'ACEPTO']
@@ -106,6 +116,36 @@ async function isDuplicateZernioEvent(eventId: string): Promise<boolean> {
   return false
 }
 
+/**
+ * El acuse a un botón del Golden Bullet: texto libre (con foto si el operador
+ * la subió) en la conversación que la persona acaba de abrir. Solo vale dentro
+ * de la ventana de 24 h, y acá siempre estamos dentro: se contesta en el mismo
+ * webhook del toque. Nunca lanza: el efecto de negocio ya ocurrió y este
+ * webhook tiene que devolver 2xx pase lo que pase.
+ */
+async function contestarEnConversacion(
+  tenant: Tenant,
+  conversationId: string | null | undefined,
+  respuesta: ClubReply,
+  eventId: string
+): Promise<{ ok: true; messageId: string | null } | { ok: false; error: string }> {
+  if (!tenant.zernio_account_id) return { ok: false, error: 'la marca no tiene zernio_account_id' }
+  if (!conversationId) return { ok: false, error: 'el evento no trae conversationId' }
+  try {
+    const result = await sendZernioConversationMessage({
+      accountId: tenant.zernio_account_id,
+      conversationId,
+      message: respuesta.body,
+      attachmentUrl: respuesta.mediaUrl,
+      attachmentType: 'image',
+      idempotencyKey: `club-reply-${eventId}`,
+    })
+    return { ok: true, messageId: result.data?.messageId ?? null }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) }
+  }
+}
+
 async function handleMessageReceived(payload: ZernioWebhookPayloadMessage): Promise<NextResponse> {
   const accountId = extractAccountId(payload.account)
   const tenant = accountId ? await getTenantByZernioAccountId(accountId) : null
@@ -144,46 +184,43 @@ async function handleMessageReceived(payload: ZernioWebhookPayloadMessage): Prom
   // ── Los botones de Golden Bullet ──
   //
   // Mismo criterio que en twilio-incoming: va ANTES del bloque de palabras
-  // clave. `message.text` trae el texto visible del botón; el payload viaja en
-  // `buttonPayload` SI Zernio lo manda — nunca se ha visto un entrante real por
-  // este canal (ver 0.IOTA en ESTADO.md), así que se lee con tolerancia y el
-  // texto visible queda de respaldo.
+  // clave. En Zernio el botón de una plantilla NO lleva payload propio (Meta
+  // devuelve su TEXTO, y Zernio lo pone en `metadata.buttonPayload` del sobre —
+  // spec público, 2026-09-12), así que el reconocimiento real es por el título
+  // que el operador guardó al crearla (`golden_bullet_button_*`), con los
+  // textos de defecto como último respaldo.
   //
-  // ⚠️ LIMITACIÓN REAL, NO UN OLVIDO: acá NO se le contesta a la persona, por lo
-  // mismo que el opt-out de más abajo tampoco. Este webhook solo devuelve un
-  // 2xx sin cuerpo y la única salida de Zernio manda PLANTILLAS APROBADAS: el
-  // texto libre no es que sea difícil, es que no existe. El efecto de negocio sí
-  // ocurre entero (queda el consentimiento y queda el opt-out); lo que falta es
-  // el acuse. Para quien toca «quiero ser parte» eso duele de verdad: consiente
-  // y no recibe su enlace. Mandarle el enlace exige una plantilla nueva aprobada
-  // por Meta — es hermano del 18.c y está anotado en golden-bullet.md.
-  const boton = detectClubButton(
-    text,
-    (message as { buttonPayload?: string | null }).buttonPayload ?? null
-  )
+  // Y SÍ se le contesta (desde el 2026-09-12). Tocar el botón abre la ventana
+  // de 24 h de WhatsApp, y dentro de ella Zernio manda texto libre con foto en
+  // la misma conversación (`sendZernioConversationMessage`). Es el mismo acuse
+  // que Twilio devuelve por TwiML: la persona que dijo «sí» recibe su enlace en
+  // el acto. Best-effort: si el acuse falla, el consentimiento ya quedó escrito
+  // y se responde 200 igual — Zernio reintentaría el evento y el dedup de
+  // arriba lo frenaría, así que un fallo acá no se repite solo.
+  const etiquetas = await getMultipleSettings([CLUB_SETTING_KEYS.botonSi, CLUB_SETTING_KEYS.botonNo], tenant.id)
+    .then((a) => ({ si: a[CLUB_SETTING_KEYS.botonSi], no: a[CLUB_SETTING_KEYS.botonNo] }))
+    .catch(() => undefined)
+  const boton = detectClubButton(text, readButtonPayload(payload), etiquetas)
   if (boton && phone.length === 10) {
-    if (boton === 'opt_in') {
-      await handleClubOptIn(phone, tenant, text)
-      console.warn(
-        `[webhook/zernio] opt-in por botón de ${phone} en ${tenant.slug} — consentimiento registrado, SIN acuse (falta plantilla)`
-      )
-    } else {
-      await handleClubOptOut(phone, tenant, text)
-    }
-    return NextResponse.json({ received: true, club_button: boton }, { status: 200 })
+    const respuesta: ClubReply =
+      boton === 'opt_in' ? await handleClubOptIn(phone, tenant, text) : await handleClubOptOut(phone, tenant, text)
+    const acuse = await contestarEnConversacion(tenant, message.conversationId, respuesta, eventId)
+    console.warn(
+      `[webhook/zernio] ${boton === 'opt_in' ? 'opt-in' : 'opt-out'} por botón de ${phone} en ${tenant.slug} — ` +
+        (acuse.ok ? `acuse enviado (${acuse.messageId ?? 'sin id'})` : `acuse NO enviado: ${acuse.error}`)
+    )
+    return NextResponse.json({ received: true, club_button: boton, reply_sent: acuse.ok }, { status: 200 })
   }
 
   // Opt-out / opt-in: réplica exacta del criterio de twilio-incoming — persistimos
   // el estado en NUESTRA base para dejar de intentar enviarle (auditoría 12-Julio, tarea 8).
   //
-  // ⚠️ AQUÍ NO SE LE CONTESTA AL CLIENTE, Y ES DELIBERADO. `twilio-incoming` sí le manda
-  // una confirmación («no vas a recibir más mensajes…») porque puede: devuelve TwiML en
-  // la misma petición, texto libre dentro de la ventana de 24 h. Zernio no tiene nada
-  // equivalente —el webhook solo devuelve un 2xx sin cuerpo (ver la cabecera de este
-  // archivo)— y la única salida disponible, `sendZernioTemplateMessage()`, manda
-  // PLANTILLAS APROBADAS. Mandar texto libre por aquí no es que sea difícil: no existe.
-  // Confirmarle la salida a un cliente Zernio exige una plantilla nueva aprobada por
-  // Meta; el costo y el diseño están en `docs/features/twilio-opt-out.md`.
+  // ⚠️ AQUÍ NO SE LE CONTESTA AL CLIENTE — TODAVÍA. `twilio-incoming` sí le manda una
+  // confirmación («no vas a recibir más mensajes…») por TwiML. Desde el 2026-09-12 Zernio
+  // SÍ puede contestar texto libre en la ventana de 24 h (`sendZernioConversationMessage`,
+  // es lo que hace el bloque de botones de arriba), así que esto ya no es una limitación
+  // del proveedor: es que nadie decidió el texto ni lo pidió. El diseño está en
+  // `docs/features/twilio-opt-out.md`; cuando se haga, es el mismo `contestarEnConversacion()`.
   //
   // Lo que sí es idéntico a Twilio es el LOG: `matched` distingue "lo marqué" de "no
   // había a quién marcarle nada", que antes se logueaban las dos como éxito.

@@ -154,6 +154,8 @@ export function ImportedContactsUploader({ onSent, apagado = false }: { onSent?:
   const [tanda, setTanda] = useState<number | null>(null)
   const [budget, setBudget] = useState<LineBudgetInfo | null>(null)
   const [twilioBalance, setTwilioBalance] = useState<{ balance: number | null; balanceCOP?: number } | null>(null)
+  /** Por qué línea sale la difusión (lo dice `/api/dashboard/templates?provider=golden_bullet`). */
+  const [proveedor, setProveedor] = useState<'twilio' | 'zernio'>('twilio')
   const [result, setResult] = useState<ConfirmResult | null>(null)
 
   // ── La prueba a un número ──
@@ -170,7 +172,10 @@ export function ImportedContactsUploader({ onSent, apagado = false }: { onSent?:
   const [pruebaEnviada, setPruebaEnviada] = useState<{ phone: string; sid: string } | null>(null)
 
   useEffect(() => {
-    fetch('/api/dashboard/templates')
+    // Las plantillas del proveedor por el que SALE LA DIFUSIÓN, que puede no
+    // ser el de la marca (Golden Bullet por la línea de coexistencia en Zernio
+    // con lo demás en Twilio). El servidor lo resuelve; acá solo se pregunta.
+    fetch('/api/dashboard/templates?provider=golden_bullet')
       .then((r) => r.json())
       .then((d) => {
         const marketing = (d.templates ?? []).filter(
@@ -178,12 +183,17 @@ export function ImportedContactsUploader({ onSent, apagado = false }: { onSent?:
         )
         setTemplates(marketing.filter((t: TemplateItem) => t.status === 'approved'))
         setTodasPlantillas(marketing.filter((t: TemplateItem) => plantillaCompatible(t.body)))
+        const p = d.provider === 'zernio' ? 'zernio' : 'twilio'
+        setProveedor(p)
+        // El saldo de Twilio solo dice algo si la difusión sale por Twilio.
+        if (p === 'twilio') {
+          fetch('/api/dashboard/twilio-balance')
+            .then((r) => r.json())
+            .then(setTwilioBalance)
+            .catch(() => setTwilioBalance(null))
+        }
       })
       .catch(() => { setTemplates([]); setTodasPlantillas([]) })
-    fetch('/api/dashboard/twilio-balance')
-      .then((r) => r.json())
-      .then(setTwilioBalance)
-      .catch(() => setTwilioBalance(null))
     // El nombre genérico de {{1}} se escribe al lado del mensaje 1 (pestaña
     // Plantilla) y queda en la marca; acá solo se arranca con ese valor.
     fetch('/api/dashboard/settings')
@@ -794,8 +804,9 @@ export function ImportedContactsUploader({ onSent, apagado = false }: { onSent?:
                 <p className="font-medium">Preparate: esta tanda necesita</p>
                 <ul className="mt-1 list-disc pl-5 text-xs sm:text-sm">
                   <li>
-                    <strong>Twilio: US${costoTwilioUsd.toFixed(2)}</strong> ({enTanda.toLocaleString('es-CO')} × US$
+                    <strong>{proveedor === 'zernio' ? 'Zernio' : 'Twilio'}: US${costoTwilioUsd.toFixed(2)}</strong> ({enTanda.toLocaleString('es-CO')} × US$
                     {validation.twilio_cost_per_message}), que se cobran mensaje a mensaje, el día que sale cada bloque.
+                    {proveedor === 'zernio' && ' Sale por la línea de coexistencia; el saldo se ve en el panel de Zernio.'}
                     {saldoTwilio !== null && (
                       <>
                         {' '}Hoy hay <strong>US${saldoTwilio.toFixed(2)}</strong>

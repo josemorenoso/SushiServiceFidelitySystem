@@ -1,13 +1,97 @@
 # Runbook — Sushi Service: de Twilio a Zernio por coexistencia
 
-> **Cuándo:** 2026-09-12. La línea prepago que estaba en Twilio venció y el operador la retiró.
-> **Decisión del dueño:** número nuevo, en **coexistencia** (la app de WhatsApp Business sigue en el
-> celular) y enviando por **Zernio**. Meta: sostener **~1.000 mensajes diarios** de campaña.
+> **Cuándo:** 2026-09-12. El operador desactivó la SIM prepago de la línea de Twilio; el WhatsApp
+> sigue vivo en Cloud API y **los mensajes normales salen bien**, pero en ~un mes el número se
+> recicla. Y a la **difusión** (Golden Bullet) la gente la toma por número falso viniendo de ahí.
+> **Decisión del dueño:** la difusión sale YA por su **línea de coexistencia** (la que la gente
+> conoce, en Zernio); lo normal sigue por Twilio hasta que muera; después, todo a Zernio.
+> Meta: sostener **~1.000 mensajes diarios** de difusión.
+>
+> **Este runbook tiene dos partes.** El **§A «modo puente doble»** es lo de hoy: Zernio conectado
+> con la marca todavía en Twilio, y el Golden Bullet saliendo por Zernio. Los §1-§9 de abajo son la
+> **migración completa**, para cuando Twilio muera: se ejecutan sobre lo que el §A ya dejó hecho.
 > **Quién lo ejecuta:** el dueño, desde el AIOS (`Level 2.0/aios-constelarys`, `origin/main` =
 > `62e8c13`, v1.11.2 + «Registrar número en Cloud API») y el editor SQL de Supabase.
 > **Verificado contra:** `provisioning.ts` e `import.ts` del AIOS, `00036`/`00064`,
 > `whatsapp.service.ts`, `queue-drain/route.ts`, `ImportedContactsUploader.tsx`,
 > `docs/features/zernio-messaging.md`, `conexiones.md`, `PENDIENTES-PLANTILLAS.md`.
+
+## A. Modo puente doble — la difusión por Zernio, lo normal por Twilio (HOY)
+
+Lo construido el 2026-09-12 (`docs/features/golden-bullet.md` § "Por qué línea sale la difusión"):
+el Golden Bullet lee `admin_settings.golden_bullet_provider`; con `zernio` y la cuenta conectada,
+**lista, crea, prueba y manda por Zernio aunque `tenants.messaging_provider` siga en `twilio`**.
+El resto de la marca (recibos, campañas, cumpleaños, domicilios por Twilio) no se entera.
+
+**A.1 — Lo previo (ya hecho por el dueño, §1):** migraciones, Vercel del AIOS, AIOS desplegado. Más
+lo que exige Meta para coexistencia (§1) y **la verificación del negocio en Meta, arrancada hoy**:
+la línea de coexistencia es un número NUEVO para Cloud API y nace en **250 únicos/día**; los 1.000
+solo llegan con el negocio verificado. Es la única cosa de este runbook que no se hace en un rato.
+
+**A.2 — En el AIOS, nivel propietario (§3 entero):** importar Sushi Service → condición «Falta
+instalar WhatsApp» → paso 0 «el número que ya usa» → profile → número → link (escanear el QR
+desde la app) → `accountId` → **«Registrar número en Cloud API»** → paso 6 (webhook, con la URL
+revisada). El paso 4 (las 13 plantillas) se puede hacer ya: no se usan hasta la migración completa,
+pero así Meta las aprueba con tiempo. **El paso 5 de la sede NO se corre** en el puente: pisaría
+los `HX…` de Twilio (y con la marca en `twilio` la función lo rechaza igual).
+
+**A.3 — Dejar los `zernio_*` en el tenant SIN cambiar de proveedor.** Dos formas; la primera no
+deja ventana:
+
+```sql
+-- (a) Directo. Los tres valores están en el wizard del propietario del AIOS (profile, número, cuenta).
+UPDATE tenants
+   SET zernio_profile_id   = '<profileId>',
+       zernio_account_id   = '<accountId>',
+       zernio_phone_number = '+57XXXXXXXXXX'
+ WHERE slug = 'sushi-service'
+   AND messaging_provider = 'twilio';
+-- esperado: UPDATE 1. Si dice 0, la marca ya no está en twilio: mirar antes de seguir.
+```
+
+```sql
+-- (b) O por el AIOS: paso 4 de la sede («Activar») y ACTO SEGUIDO volver el proveedor:
+UPDATE tenants SET messaging_provider = 'twilio' WHERE slug = 'sushi-service';
+-- entre el paso 4 y este UPDATE la marca manda por Zernio con punteros HX → fallan. Segundos, pero a
+-- una hora tranquila. (a) no tiene ese hueco; (b) deja además la fila de tenant_connections.
+```
+
+Comprobar:
+```sql
+SELECT slug, messaging_provider, zernio_account_id, zernio_phone_number FROM tenants WHERE slug = 'sushi-service';
+-- esperado: twilio + los dos zernio_* con valor
+```
+
+**A.4 — Vercel del PRODUCTO:** `ZERNIO_API_KEY` (la misma del AIOS: crea la plantilla y manda el
+acuse) y `ZERNIO_WEBHOOK_SECRET`. Desplegar el producto con el commit del Golden Bullet por Zernio
+(push de `main` = deploy; lo ordena el dueño).
+
+**A.5 — En el panel:** Golden Bullet → **Plantilla** → botón **«Mandar la difusión por la línea de
+coexistencia (Zernio)»** (solo aparece con A.3 hecho). Escribir el mensaje 1, los botones y la
+foto → **Crear** (va a la WABA de coexistencia; nombre `club_invite_sushi_service[_foto]`) →
+Meta 24-48 h → **probar a tu celular** desde el paso 5 del asistente (sale por Zernio) → subir el
+CSV y programar la tanda. El costo se etiqueta «Zernio» y el saldo se mira en el panel de Zernio.
+
+**A.6 — El «sí» y el «no».** Al tocar un botón, el webhook de Zernio (`/api/webhook/zernio`)
+reconoce el título del botón y **contesta en el acto** con el texto de la pestaña Plantilla y la
+foto del regalo (texto libre dentro de la ventana de 24 h, contrato §8). Para que eso funcione:
+webhook registrado (A.2, paso 6) y `ZERNIO_WEBHOOK_SECRET` puesto. Se confirma con UN toque desde
+tu celular: en los logs de Vercel sale `[webhook/zernio] opt-in por botón … acuse enviado`. Un
+`401` ahí es el header de la firma (§7.5).
+
+**A.7 — Cupo.** `messaging_daily_limit` de Sushi Service está en NULL (mide, no frena) y ahora
+cuenta las DOS líneas juntas: es de la marca, no de la línea. Con 250/día de Meta en la línea de
+coexistencia, el drenador va a ver rechazos de Meta (`131xxx`) pasado el cupo: **hasta que el
+negocio esté verificado, programar bloques de ≤250/día**. El escalón real se lee en el WhatsApp
+Manager (§6).
+
+**A.8 — Vuelta atrás del puente:** el mismo botón («Volver a mandar la difusión por Twilio») o
+`DELETE FROM admin_settings WHERE key = 'golden_bullet_provider' AND tenant_id = (SELECT id FROM tenants WHERE slug = 'sushi-service')`.
+Los `zernio_*` pueden quedarse: con el proveedor en `twilio` no hacen nada.
+
+**Cuando Twilio muera (≈ un mes):** seguir con los §4-§6 de abajo — paso 5 de la sede (o el
+`UPDATE` de `messaging_provider` a `zernio` si se usó A.3.a, y entonces sí el paso 5), el SQL de
+las claves huérfanas (§5) y el cupo (§6). El §2 (guardar los `HX…`) se hace ANTES de eso.
 
 ## 0. Qué cambia y qué no
 
@@ -17,7 +101,7 @@
 | Plantillas | 15 punteros `admin_settings.*_template_sid` con SIDs `HX…` de Twilio | Las **13 del catálogo** las crea el AIOS (paso 4) y las carga el paso 5. **Dos quedan huérfanas** (§5) |
 | Entrantes (opt-out, domicilios) | `/api/webhook/twilio-incoming` | `/api/webhook/zernio` — exige `ZERNIO_WEBHOOK_SECRET` y firma |
 | Campañas a clientes (`/dashboard/campaigns`) | ✅ | ✅ — la cola reconstruye la media según el proveedor ACTUAL (`construirOpciones()`), así que lo encolado hoy sale mañana por Zernio |
-| Golden Bullet (`/dashboard/imported-contacts`) | ✅ | ❌ **No existe en Zernio** — ver §7 antes de contar con él |
+| Golden Bullet (`/dashboard/imported-contacts`) | ✅ | ✅ desde el 2026-09-12 (lista/crea/prueba/manda por Zernio y contesta el «sí»); ver §A |
 | Cupo | Medido, sin freno (`messaging_daily_limit = NULL`) | Igual hasta que lo fijes (§6). Meta manda: un número nuevo arranca en **250 únicos/día** |
 | Check-in, puntos, premios, QR | No dependen de WhatsApp | Igual |
 
@@ -215,19 +299,14 @@ un cron cada 15 min es muy superior a 1.000/día; el techo lo pone Meta, no el s
 
 ## 7. Lo que NO funciona en Zernio hoy, y pesa para los 1.000 diarios
 
-1. **Golden Bullet es Twilio de punta a punta.** `ImportedContactsUploader.tsx:173` lista las
-   plantillas desde `/api/dashboard/templates` (Content API de Twilio), «Plantilla» las crea en
-   Twilio (`golden-bullet-template.service.ts`), la prueba y el envío mandan un `HX…` que Zernio
-   no conoce, y la respuesta al botón «sí» sale por TwiML de `twilio-incoming`. Con Sushi Service
-   en Zernio, esa pantalla queda **vacía y muda**. Los 7.438 + 6.688 contactos de
-   `Contactos/salida/GOLDEN-BULLET-*.csv` **no salen por Zernio sin construir la rama Zernio**:
-   listar/crear la plantilla vía Zernio (§4 del contrato), mandar por `name`, y una plantilla
-   aprobada para contestar el «sí» (Zernio no manda texto libre — hermano del 18.c).
-   **Si «los 1.000 diarios» son ESTO, hay que decidirlo antes del paso 4 de la sede.**
+1. ~~Golden Bullet es Twilio de punta a punta.~~ **Resuelto el 2026-09-12** (§A): lista, crea,
+   prueba y manda por Zernio, y contesta el «sí» con texto libre en la ventana de 24 h. Lo que no
+   cambió: el cupo es de la marca (A.7) y el saldo de Zernio se mira en su panel.
 2. **Campañas a clientes existentes** (`/dashboard/campaigns`, cumpleaños, reactivación, eventos):
-   sí funcionan en Zernio. Ese es el envío masivo que hoy soporta.
-3. **Silencios conocidos de Zernio**: confirmación al operador de domicilios (18.c) y respuesta al
-   «sí» del Golden Bullet — los dos necesitan una plantilla aprobada, no un texto.
+   sí funcionan en Zernio.
+3. **Silencio conocido de Zernio**: la confirmación al operador de domicilios (18.c) y el acuse al
+   SALIR por palabra clave. Ya no necesitan plantilla —`sendZernioConversationMessage()` manda texto
+   libre en la ventana de 24 h—; falta decidir el texto y llamarlo.
 4. **No hay saldo por tenant en Zernio**: se factura por Team. `/dashboard/twilio-balance` deja de
    aplicar; la billetera COP (`trg_debit_wallet`) sigue cobrando por `message_logs.twilio_sid`
    (que en Zernio guarda el `messageId`).

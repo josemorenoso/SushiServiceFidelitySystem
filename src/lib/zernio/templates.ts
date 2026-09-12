@@ -34,8 +34,10 @@ export type ZernioTemplateCategory = 'AUTHENTICATION' | 'MARKETING' | 'UTILITY'
 
 /**
  * Componentes de la plantilla, tal cual los espera Meta a través de Zernio.
- * Solo modelamos los que usa el catálogo estándar: header de media, body con
- * variables posicionales. Sin footer y sin botones — ninguna de las 13 los usa.
+ * Modelamos los que usa el catálogo estándar —header de media, body con
+ * variables posicionales— y, desde el 2026-09-12, los botones de respuesta
+ * rápida que usa la plantilla del Golden Bullet (`golden-bullet-template.service.ts`).
+ * Sin footer: nadie lo usa.
  */
 export interface ZernioTemplateHeaderComponent {
   type: 'header'
@@ -51,7 +53,22 @@ export interface ZernioTemplateBodyComponent {
   example: { body_text: string[][] }
 }
 
-export type ZernioTemplateComponent = ZernioTemplateHeaderComponent | ZernioTemplateBodyComponent
+/**
+ * Botones de respuesta rápida. Meta solo acepta el TEXTO al crearlos: el
+ * payload que vuelve al tocarlos es ese mismo texto (Zernio no deja fijar un
+ * payload propio para `quick_reply` al enviar — su `templateButtonParams` cubre
+ * `url`, `copy_code` y `flow`, verificado en el spec el 2026-09-12). Por eso el
+ * detector de `club-optin.service.ts` reconoce el botón por su título.
+ */
+export interface ZernioTemplateButtonsComponent {
+  type: 'buttons'
+  buttons: { type: 'quick_reply'; text: string }[]
+}
+
+export type ZernioTemplateComponent =
+  | ZernioTemplateHeaderComponent
+  | ZernioTemplateBodyComponent
+  | ZernioTemplateButtonsComponent
 
 export interface CreateZernioTemplateInput {
   accountId: string
@@ -62,8 +79,48 @@ export interface CreateZernioTemplateInput {
   bodyText: string
   /** Valores de ejemplo en orden posicional ({{1}}, {{2}}, ...). */
   bodyExample: string[]
-  /** Solo las 2 plantillas de evento del calendario. */
+  /** Las 2 plantillas de evento del calendario y el Golden Bullet con foto. */
   header?: { format: 'image' | 'video'; sampleUrl: string }
+  /** Textos de los botones de respuesta rápida (hasta 3, ≤20 caracteres, sin emojis). Solo el Golden Bullet. */
+  quickReplies?: string[]
+}
+
+/**
+ * Arma el array `components` que Zernio reenvía a Meta. Separado de la llamada
+ * HTTP para poder probarlo sin red: el orden (header → body → buttons) y la
+ * forma de cada pieza son lo que Meta revisa, y equivocarlos cuesta un ciclo
+ * de aprobación de 24-48 h.
+ */
+export function buildZernioTemplateComponents(
+  input: Pick<CreateZernioTemplateInput, 'bodyText' | 'bodyExample' | 'header' | 'quickReplies'>
+): ZernioTemplateComponent[] {
+  const components: ZernioTemplateComponent[] = []
+
+  if (input.header) {
+    components.push({
+      type: 'header',
+      format: input.header.format,
+      example: { header_handle: [input.header.sampleUrl] },
+    })
+  }
+
+  components.push({
+    type: 'body',
+    text: input.bodyText,
+    // `body_text` es un array DE arrays: Meta acepta varios juegos de ejemplo y
+    // nosotros mandamos uno solo. Mandar el array plano hace fallar la revisión.
+    example: { body_text: [input.bodyExample] },
+  })
+
+  const quickReplies = (input.quickReplies ?? []).map((t) => t.trim()).filter(Boolean)
+  if (quickReplies.length > 0) {
+    components.push({
+      type: 'buttons',
+      buttons: quickReplies.map((text) => ({ type: 'quick_reply' as const, text })),
+    })
+  }
+
+  return components
 }
 
 export interface ZernioTemplateMutationResult {
@@ -88,23 +145,7 @@ export interface ZernioTemplateMutationResult {
 export async function createZernioTemplate(
   input: CreateZernioTemplateInput
 ): Promise<ZernioTemplateMutationResult> {
-  const components: ZernioTemplateComponent[] = []
-
-  if (input.header) {
-    components.push({
-      type: 'header',
-      format: input.header.format,
-      example: { header_handle: [input.header.sampleUrl] },
-    })
-  }
-
-  components.push({
-    type: 'body',
-    text: input.bodyText,
-    // `body_text` es un array DE arrays: Meta acepta varios juegos de ejemplo y
-    // nosotros mandamos uno solo. Mandar el array plano hace fallar la revisión.
-    example: { body_text: [input.bodyExample] },
-  })
+  const components = buildZernioTemplateComponents(input)
 
   return zernioFetch<ZernioTemplateMutationResult>('/whatsapp/templates', {
     method: 'POST',

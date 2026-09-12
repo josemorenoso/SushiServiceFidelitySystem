@@ -12,14 +12,39 @@
  * MARKETING aprobadas, y **no tiene puntero**. Meterla al catálogo la obligaría
  * a tener uno y le pondría a `promoteVersion()` una plantilla que no gobierna.
  *
- * LO QUE SÍ COMPARTE con el catálogo es la mecánica de Twilio: crear en la
- * Content API y después someter a Meta en `/ApprovalRequests/whatsapp`. Si esa
- * mecánica cambia, cambia en los dos sitios.
+ * LO QUE SÍ COMPARTE con el catálogo es la mecánica de cada proveedor. Twilio:
+ * crear en la Content API y después someter a Meta en `/ApprovalRequests/whatsapp`.
+ * Zernio (desde el 2026-09-12): `POST /v1/whatsapp/templates` crea Y somete en
+ * una sola llamada, con los botones como componente `buttons`. Si esa mecánica
+ * cambia, cambia en los dos sitios.
+ *
+ * EL PROVEEDOR DE ESTA PLANTILLA NO ES (necesariamente) EL DE LA MARCA
+ * ────────────────────────────────────────────────────────────────────
+ * Ver `resolveGoldenBulletProvider()` en club-optin.service.ts: una marca que
+ * manda lo normal por Twilio puede lanzar la difusión por su línea de
+ * coexistencia en Zernio. Acá se crea en el proveedor que ESA función diga.
+ *
+ * DOS DIFERENCIAS DE ZERNIO QUE NO SON DETALLE
+ * ───────────────────────────────────────────
+ * 1. La plantilla se identifica por NOMBRE, no por SID: `contentSid` devuelve
+ *    el `name` y es lo que el asistente manda como `template_sid` — igual que
+ *    el resto del sistema en el camino Zernio (ver whatsapp.service.ts).
+ * 2. Los botones NO llevan payload propio: Meta devuelve el TEXTO del botón al
+ *    tocarlo. El detector de `club-optin.service.ts` los reconoce por el título
+ *    guardado en `admin_settings` (`guardarEtiquetas()` en la ruta).
  */
 
 import { resolveBranding } from '@/lib/branding'
 import { getTenantTwilioCredentials } from '@/lib/twilio/tenant-credentials'
-import { CLUB_PAYLOAD_SI, CLUB_PAYLOAD_NO } from '@/services/club-optin.service'
+import { createZernioTemplate } from '@/lib/zernio/templates'
+import { listZernioTemplates } from '@/lib/zernio/messaging'
+import { ZernioApiError } from '@/lib/zernio/client'
+import {
+  CLUB_PAYLOAD_SI,
+  CLUB_PAYLOAD_NO,
+  resolveGoldenBulletProvider,
+  type MessagingProvider,
+} from '@/services/club-optin.service'
 import type { Tenant } from '@/types/tenant.types'
 
 const TWILIO_CONTENT_API = 'https://content.twilio.com/v1/Content'
@@ -125,6 +150,7 @@ function metaName(brandName: string): string {
 }
 
 export interface CreateClubTemplateResult {
+  /** Twilio: el `HX…`. Zernio: el NOMBRE de la plantilla (es lo que se manda). */
   contentSid: string
   friendlyName: string
   body: string
@@ -133,6 +159,7 @@ export interface CreateClubTemplateResult {
   imageUrl: string | null
   approvalSubmitted: boolean
   approvalError: string | null
+  provider: MessagingProvider
 }
 
 export interface ClubTemplateInput {
@@ -193,23 +220,41 @@ export function validarFotoPlantilla(url: string | null | undefined): string | n
 }
 
 /**
- * Crea la plantilla en la cuenta Twilio del tenant y la somete a Meta.
+ * El nombre que se le da a la plantilla en la WABA. Meta no deja crear dos con
+ * el mismo nombre e idioma, y no hay borrado por el contrato verificado: si
+ * `base` ya existe (aprobada, rechazada o pendiente, da igual), la nueva sale
+ * como `base_v2`, `base_v3`… — el mismo esquema que usa el catálogo estándar.
  *
- * Las credenciales NO se piden ni se pasan por parámetro: salen de la fila del
- * tenant (o del entorno como respaldo), igual que en todo el resto del panel.
- * Nadie tiene que copiar un token a ninguna parte.
+ * PURA: recibe los nombres que ya hay.
+ */
+export function nombreLibreEnWaba(base: string, existentes: Iterable<string>): string {
+  const usados = new Set([...existentes].map((n) => n.trim().toLowerCase()))
+  if (!usados.has(base)) return base
+  for (let v = 2; v < 100; v++) {
+    const candidato = `${base}_v${v}`
+    if (!usados.has(candidato)) return candidato
+  }
+  return `${base}_${Date.now()}`
+}
+
+/** Los textos de ejemplo que Meta revisa junto al cuerpo. Espejo del `variables` de Twilio. */
+export function ejemploDelCuerpo(body: string, promoEjemplo?: string | null): string[] {
+  const usaPromo = variablesDelCuerpo(body).has(2)
+  return usaPromo ? ['Juan', (promoEjemplo ?? '').trim() || 'un postre gratis en tu próxima visita'] : ['Juan']
+}
+
+/**
+ * Crea la plantilla en el proveedor del Golden Bullet y la somete a Meta.
+ *
+ * Las credenciales NO se piden ni se pasan por parámetro: en Twilio salen de la
+ * fila del tenant (o del entorno como respaldo); en Zernio, de `ZERNIO_API_KEY`
+ * y del `zernio_account_id` del tenant. Nadie tiene que copiar un token a
+ * ninguna parte.
  */
 export async function createClubInviteTemplate(
   tenant: Tenant,
   input: ClubTemplateInput
 ): Promise<CreateClubTemplateResult> {
-  if (tenant.messaging_provider === 'zernio') {
-    throw new GoldenBulletTemplateError(
-      'Este negocio está en Zernio: su plantilla se crea desde la pantalla de Plantillas, no desde acá.',
-      409
-    )
-  }
-
   // El cuerpo lo escribe el operador. Lo que ANTES era un campo aparte —la
   // línea de «de dónde salió su número», que tiene que ser verdad— ahora es
   // parte del texto que escribe; el panel se lo recuerda, pero no se puede
@@ -227,12 +272,17 @@ export async function createClubInviteTemplate(
   const errorFoto = validarFotoPlantilla(imageUrl)
   if (errorFoto) throw new GoldenBulletTemplateError(errorFoto, 400)
 
+  const brandName = resolveBranding(tenant.config).name
+
+  if ((await resolveGoldenBulletProvider(tenant)) === 'zernio') {
+    return crearEnZernio(tenant, brandName, { body, botonSi, botonNo, imageUrl, promoEjemplo: input.promoEjemplo })
+  }
+
   const creds = await getTenantTwilioCredentials(tenant.id)
   if (!creds) {
     throw new GoldenBulletTemplateError('Este negocio no tiene credenciales de Twilio configuradas.', 400)
   }
 
-  const brandName = resolveBranding(tenant.config).name
   // Con foto el nombre cambia: Meta no deja reenviar el mismo nombre con otro tipo.
   const friendlyName = imageUrl ? `${metaName(brandName)}_foto` : metaName(brandName)
   const usaPromo = variablesDelCuerpo(body).has(2)
@@ -290,5 +340,84 @@ export async function createClubInviteTemplate(
     approvalError = error instanceof Error ? error.message : 'Error desconocido'
   }
 
-  return { contentSid: created.sid, friendlyName, body, botonSi, botonNo, imageUrl, approvalSubmitted, approvalError }
+  return {
+    contentSid: created.sid,
+    friendlyName,
+    body,
+    botonSi,
+    botonNo,
+    imageUrl,
+    approvalSubmitted,
+    approvalError,
+    provider: 'twilio',
+  }
+}
+
+/**
+ * La rama Zernio. Una sola llamada crea la plantilla en la WABA del tenant y
+ * la deja `PENDING` ante Meta; el veredicto llega por el webhook
+ * `whatsapp.template.status_updated` o se lee en el listado.
+ *
+ * El nombre es el identificador de envío, así que se elige libre en la WABA
+ * (`nombreLibreEnWaba`) ANTES de crear: un 400 de Meta por nombre repetido no
+ * dice cuál es el libre.
+ */
+async function crearEnZernio(
+  tenant: Tenant,
+  brandName: string,
+  args: { body: string; botonSi: string; botonNo: string; imageUrl: string | null; promoEjemplo?: string }
+): Promise<CreateClubTemplateResult> {
+  if (!tenant.zernio_account_id) {
+    throw new GoldenBulletTemplateError(
+      'Este negocio todavía no tiene la cuenta de WhatsApp de Zernio conectada (Conexiones).',
+      400
+    )
+  }
+
+  const base = args.imageUrl ? `${metaName(brandName)}_foto` : metaName(brandName)
+  let existentes: string[] = []
+  try {
+    const listado = await listZernioTemplates(tenant.zernio_account_id)
+    existentes = (listado.templates ?? []).map((t) => t.name)
+  } catch (error) {
+    // Sin listado no se puede elegir nombre a ciegas: un `_v2` sobre un `_v2`
+    // que ya existe termina en un 400 igual de opaco. Mejor decirlo.
+    const detail = error instanceof Error ? error.message : String(error)
+    throw new GoldenBulletTemplateError(`No se pudo leer la WABA en Zernio para elegir el nombre: ${detail}`, 502)
+  }
+  const friendlyName = nombreLibreEnWaba(base, existentes)
+
+  try {
+    const created = await createZernioTemplate({
+      accountId: tenant.zernio_account_id,
+      name: friendlyName,
+      category: 'MARKETING',
+      language: LANGUAGE,
+      bodyText: args.body,
+      bodyExample: ejemploDelCuerpo(args.body, args.promoEjemplo),
+      header: args.imageUrl ? { format: 'image', sampleUrl: args.imageUrl } : undefined,
+      quickReplies: [args.botonSi, args.botonNo],
+    })
+
+    return {
+      contentSid: created.template?.name ?? friendlyName,
+      friendlyName,
+      body: args.body,
+      botonSi: args.botonSi,
+      botonNo: args.botonNo,
+      imageUrl: args.imageUrl,
+      // Zernio crea y somete en el mismo POST: si respondió, ya está en revisión.
+      approvalSubmitted: true,
+      approvalError: null,
+      provider: 'zernio',
+    }
+  } catch (error) {
+    const zernioErr = error instanceof ZernioApiError ? error : null
+    const detail = error instanceof Error ? error.message : String(error)
+    console.error('[GoldenBulletTemplate] zernio create', zernioErr?.status ?? 'n/a', detail)
+    throw new GoldenBulletTemplateError(
+      `Zernio rechazó la creación de la plantilla${zernioErr?.status ? ` (HTTP ${zernioErr.status})` : ''}. ${detail.slice(0, 300)}`,
+      502
+    )
+  }
 }

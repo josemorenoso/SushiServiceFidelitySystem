@@ -91,12 +91,27 @@ export async function sendZernioTemplateMessage(input: SendZernioTemplateInput):
   })
 }
 
+/**
+ * Un componente tal como Meta lo devuelve en el listado. Es la definición
+ * aprobada (texto con `{{n}}`, formato del header, botones), no un envío.
+ * Tipado laxo a propósito: Meta agrega campos y el listado solo se lee.
+ */
+export interface ZernioListedTemplateComponent {
+  type: 'HEADER' | 'BODY' | 'FOOTER' | 'BUTTONS' | (string & {})
+  format?: 'TEXT' | 'IMAGE' | 'VIDEO' | 'DOCUMENT' | (string & {})
+  text?: string
+  buttons?: { type: string; text?: string }[]
+  [extra: string]: unknown
+}
+
 export interface ZernioTemplateSummary {
   id: string
   name: string
   status: 'APPROVED' | 'PENDING' | 'REJECTED' | 'PAUSED' | 'DISABLED' | 'IN_APPEAL' | 'PENDING_DELETION'
   category: 'AUTHENTICATION' | 'MARKETING' | 'UTILITY'
   language: string
+  /** Presente en el spec público (2026-09-12); se lee con tolerancia a que falte. */
+  components?: ZernioListedTemplateComponent[]
 }
 
 export interface ZernioListTemplatesResult {
@@ -107,4 +122,66 @@ export interface ZernioListTemplatesResult {
 /** Lista las plantillas de WhatsApp de una cuenta (solo lectura). */
 export async function listZernioTemplates(accountId: string): Promise<ZernioListTemplatesResult> {
   return zernioFetch<ZernioListTemplatesResult>(`/whatsapp/templates?accountId=${encodeURIComponent(accountId)}`)
+}
+
+// ─── Texto libre dentro de una conversación abierta ───────────────────────
+
+export interface SendZernioConversationMessageInput {
+  accountId: string
+  /** `message.conversationId` del webhook `message.received`, tal cual. */
+  conversationId: string
+  message: string
+  /** URL pública. Con `attachmentType: 'image'` WhatsApp la muestra arriba del texto. */
+  attachmentUrl?: string | null
+  attachmentType?: 'image' | 'video' | 'file'
+  /**
+   * `Idempotency-Key`: mismo valor + mismo cuerpo = Zernio devuelve la primera
+   * respuesta en vez de mandar dos veces. Se le pasa el id del evento que se
+   * está contestando, porque Zernio reintenta webhooks y este acuse no puede
+   * llegarle dos veces a la persona.
+   */
+  idempotencyKey?: string
+}
+
+export interface ZernioConversationMessageResult {
+  success: boolean
+  data?: {
+    messageId?: string
+    conversationId?: string
+  }
+}
+
+/**
+ * Manda un mensaje de TEXTO LIBRE (con foto opcional) en una conversación que
+ * la persona abrió al escribir o al tocar un botón.
+ *
+ * `POST /v1/inbox/conversations/{conversationId}/messages` — verificado contra
+ * el spec OpenAPI público el 2026-09-12 y anotado en
+ * `Level 2.0/aios-constelarys/docs/zernio-api-contract.md` §8.
+ *
+ * WhatsApp solo lo entrega DENTRO de la ventana de 24 h que abre el último
+ * mensaje entrante de esa persona; fuera de ella Meta lo rechaza y la única
+ * salida es una plantilla aprobada (`sendZernioTemplateMessage`). Por eso este
+ * envío vive en los webhooks —se contesta en el acto— y en ningún cron.
+ */
+export async function sendZernioConversationMessage(
+  input: SendZernioConversationMessageInput
+): Promise<ZernioConversationMessageResult> {
+  const body: Record<string, unknown> = {
+    accountId: input.accountId,
+    message: input.message,
+  }
+  const attachmentUrl = input.attachmentUrl?.trim()
+  if (attachmentUrl) {
+    body.attachmentUrl = attachmentUrl
+    body.attachmentType = input.attachmentType ?? 'image'
+  }
+
+  const headers: Record<string, string> = {}
+  if (input.idempotencyKey) headers['Idempotency-Key'] = input.idempotencyKey
+
+  return zernioFetch<ZernioConversationMessageResult>(
+    `/inbox/conversations/${encodeURIComponent(input.conversationId)}/messages`,
+    { method: 'POST', headers, body: JSON.stringify(body) }
+  )
 }

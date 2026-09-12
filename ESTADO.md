@@ -32,23 +32,26 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
-| Golden Bullet por Zernio (listar/crear la plantilla con botones por Zernio, acuse al «sí»/«no» por texto libre en la ventana de 24 h, asistente sin Twilio), dueño, 2026-09-12 | Opus 5 | `src/lib/zernio/{templates,messaging,webhooks}.ts`, `src/services/golden-bullet-template.service.ts`, `src/services/club-optin.service.ts`, `src/app/api/dashboard/templates/route.ts`, `src/app/api/dashboard/imported-contacts/template/route.ts`, `src/app/api/webhook/zernio/route.ts`, `src/components/dashboard/ImportedContacts{Uploader,Template}.tsx`, `tests/unit/golden-bullet-zernio.test.ts` (nuevo), `docs/features/golden-bullet.md`, `docs/RUNBOOK-SUSHI-SERVICE-A-ZERNIO.md`, `ESTADO.md`, `CHANGELOG.md` | — | En vuelo |
 
 ## 3. Siguiente, en orden
 
-0.SUSHI **Sushi Service se queda sin línea: la prepago de Twilio venció y el operador la retiró (dueño,
-   2026-09-12).** Decisión del dueño: número nuevo, coexistencia, envío por Zernio, meta ~1.000/día.
-   El paso a paso verificado contra el código está en **`docs/RUNBOOK-SUSHI-SERVICE-A-ZERNIO.md`**
-   (importar en el AIOS → condición «Falta instalar WhatsApp» → wizard 0-3 → Registrar en Cloud API →
-   13 plantillas → paso 4 y 5 de la sede → SQL de las dos claves huérfanas → cupo). Tres cosas que
-   no resuelve ningún panel: (1) **la verificación del negocio en Meta**, sin la cual el número
-   nuevo no pasa de 250 únicos/día — arrancarla hoy; (2) **el Golden Bullet es Twilio de punta a
-   punta** (`ImportedContactsUploader.tsx:173`, `golden-bullet-template.service.ts`, TwiML del «sí»):
-   los 14.126 contactos de `Contactos/salida/` NO salen por Zernio sin construir esa rama — decisión
-   pendiente del dueño; (3) `tier_unlocked_template_sid` y `reward_reminder_template_sid` no están
-   en el catálogo del AIOS y quedan con su `HX…` (deuda 1.2 de `PENDIENTES-PLANTILLAS.md`): se crean
-   a mano en el WhatsApp Manager y se apuntan por SQL (§5 del runbook). Los envíos de Sushi Service
-   fallan desde que murió el sender y siguen fallando hasta que Meta apruebe las 13.
+0.SUSHI **Sushi Service: la difusión por la línea de coexistencia (Zernio), lo normal por Twilio
+   hasta que muera (dueño, 2026-09-12).** El operador desactivó la SIM de Twilio; el WhatsApp sigue
+   vivo (~1 mes) y manda bien, pero a la difusión la toman por número falso. **Construido el 12, sin
+   pushear:** el Golden Bullet lee `admin_settings.golden_bullet_provider` y con `zernio` + cuenta
+   conectada lista/crea/prueba/manda por Zernio **aunque la marca siga en `twilio`**
+   (`goldenBulletProviderFor()`, `options.provider` en `sendTemplateMessage`, `?provider=golden_bullet`
+   en `/api/dashboard/templates`), y el webhook de Zernio **contesta el «sí»/«no»** con texto libre
+   en la ventana de 24 h (`sendZernioConversationMessage()`, contrato §8, verificado contra el
+   OpenAPI público). Botón en Golden Bullet → Plantilla. Paso a paso: **`docs/RUNBOOK-SUSHI-SERVICE-A-ZERNIO.md`
+   §A** (modo puente doble) y §1-§9 (migración completa, para cuando Twilio muera). Lo que el
+   dueño tiene que hacer, en orden: (1) **verificación del negocio en Meta**, HOY — la línea de
+   coexistencia nace en 250 únicos/día y los 1.000 solo llegan verificada; (2) el alta en el AIOS
+   (§3 del runbook) + `UPDATE tenants SET zernio_*` sin tocar el proveedor (§A.3); (3) `ZERNIO_API_KEY`
+   y `ZERNIO_WEBHOOK_SECRET` en el Vercel del PRODUCTO y desplegar; (4) el botón, la plantilla,
+   24-48 h de Meta, prueba a su celular, tanda de ≤250/día hasta que Meta suba el cupo. Pendiente
+   de código: `tier_unlocked_template_sid` y `reward_reminder_template_sid` fuera del catálogo
+   del AIOS (§5 del runbook) — solo pesa en la migración completa.
 0.AIOS **Antes de que el dueño registre el número real de Tepuy (mañana, 2026-09-12).** En orden:
    1. **Aplicar la `00064`** en el Supabase del producto (borrado, `aios_deactivate_whatsapp`,
       `aios_wallet_topup`; riesgo nulo salvo la primera, que lleva tres candados) y la **`00010`** en

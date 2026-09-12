@@ -141,8 +141,10 @@ Contraparte de `twilio-incoming/route.ts` para tenants Zernio.
     webhook tras 10 fallos, y eso costaría los pedidos de todos los tenants Zernio).
   - ⏱️ Este camino ahora hace una llamada a OpenAI, así que puede exceder los 5 s que pide Zernio y
     provocar un reintento. **No duplica**: el dedup por `event_id` corre ANTES, ver abajo.
-  - ✉️ Sigue sin haber confirmación para el operador en este canal (Zernio solo envía plantillas
-    aprobadas, nunca texto libre). Pendiente: una plantilla propia para eso.
+  - ✉️ Sigue sin haber confirmación para el operador en este canal. Desde el 2026-09-12 Zernio SÍ
+    manda texto libre dentro de la ventana de 24 h (`sendZernioConversationMessage()`, contrato §8; lo
+    usa el acuse a los botones del Golden Bullet), así que ya no hace falta una plantilla: falta
+    decidir el texto y llamarlo desde acá (18.c).
 - `message.delivered` / `message.read` / `message.failed` → `UPDATE message_logs WHERE twilio_sid =
   message.id` (status + `delivered_at` si delivered, `error_code`/`error_message` si failed). Esto es
   en realidad la **primera vez** que algo alimenta el status de entrega en `message_logs` — Twilio

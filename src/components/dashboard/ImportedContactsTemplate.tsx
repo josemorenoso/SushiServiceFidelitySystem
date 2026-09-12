@@ -4,8 +4,9 @@
  * La pestaña «Plantilla» de Golden Bullet: los TRES textos del flujo.
  *
  *   1. El mensaje 1 —la plantilla con los dos botones— se escribe acá entero,
- *      con los títulos de los botones, y se crea en la cuenta Twilio del
- *      negocio y se manda a aprobar a Meta sin que nadie copie un token.
+ *      con los títulos de los botones, y se crea en el proveedor por el que
+ *      sale la difusión (Twilio, o la línea de coexistencia en Zernio) y se
+ *      manda a aprobar a Meta sin que nadie copie un token.
  *   2. La respuesta al «sí» (texto + enlace de registro + foto del regalo).
  *   3. La respuesta al «no».
  *
@@ -27,10 +28,19 @@ interface Creada {
   friendlyName: string
   approvalSubmitted: boolean
   approvalError: string | null
+  provider?: 'twilio' | 'zernio'
 }
 
 interface Config {
   brand_name: string
+  /** Por qué línea sale la difusión hoy. */
+  provider: 'twilio' | 'zernio'
+  /** Por qué línea manda la MARCA lo normal (recibos, campañas). */
+  brand_provider: 'twilio' | 'zernio'
+  /** Solo si la marca está en Twilio Y tiene cuenta de Zernio: se puede elegir. */
+  provider_switchable: boolean
+  zernio_phone: string | null
+  provider_setting: string
   body_default: string
   boton_si_default: string
   boton_no_default: string
@@ -120,6 +130,7 @@ export function ImportedContactsTemplate() {
   const [subiendoM1, setSubiendoM1] = useState(false)
   const [creando, setCreando] = useState(false)
   const [creada, setCreada] = useState<Creada | null>(null)
+  const [cambiandoLinea, setCambiandoLinea] = useState(false)
 
   // ── Respuestas a los botones ──
   const [respSi, setRespSi] = useState('')
@@ -176,6 +187,34 @@ export function ImportedContactsTemplate() {
 
   const marca = config?.brand_name ?? 'la marca'
   const generico = nombreGenerico.trim() || config?.nombre_generico_default || 'cliente'
+  const proveedor = config?.provider ?? 'twilio'
+  const nombreProveedor = proveedor === 'zernio' ? 'Zernio' : 'Twilio'
+
+  /**
+   * «La difusión sale por…». Solo aparece cuando hay algo que elegir: marca en
+   * Twilio con la cuenta de Zernio conectada. Se guarda como cualquier otro
+   * ajuste del Golden Bullet; el servidor decide con `goldenBulletProviderFor()`.
+   */
+  const cambiarLinea = async (valor: 'zernio' | '') => {
+    setCambiandoLinea(true)
+    try {
+      const res = await fetch('/api/dashboard/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'golden_bullet_provider', value: valor }),
+      })
+      if (!res.ok) {
+        toast.error('No se pudo cambiar la línea de la difusión')
+        return
+      }
+      toast.success(valor === 'zernio' ? 'La difusión sale por la línea de coexistencia (Zernio).' : 'La difusión sale por Twilio.')
+      await cargar()
+    } catch {
+      toast.error('Error de conexión')
+    } finally {
+      setCambiandoLinea(false)
+    }
+  }
   const previaMensaje1 = (nombre: string) =>
     body.replaceAll(/\{\{\s*1\s*\}\}/g, nombre).replaceAll(/\{\{\s*2\s*\}\}/g, promo.trim() || '[regalo]')
 
@@ -344,7 +383,7 @@ export function ImportedContactsTemplate() {
             <p className="text-sm text-muted-foreground">
               Se llama <code className="text-xs">{creada.friendlyName}</code>.{' '}
               {creada.approvalSubmitted
-                ? 'Ya está en revisión de Meta: tarda entre 24 y 48 horas. Cuando la aprueben aparece sola en la lista de plantillas del paso 4.'
+                ? `Ya está en revisión de Meta (por ${creada.provider === 'zernio' ? 'Zernio' : 'Twilio'}): tarda entre 24 y 48 horas. Cuando la aprueben aparece sola en la lista de plantillas del paso 4.`
                 : 'Quedó creada en Twilio pero NO se pudo mandar a revisión. Enviala desde la pantalla de Plantillas.'}
             </p>
             {creada.approvalError && (
@@ -363,6 +402,32 @@ export function ImportedContactsTemplate() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            {config && (config.provider_switchable || config.brand_provider !== config.provider) && (
+              <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm space-y-2">
+                <p>
+                  La difusión sale por <strong>{nombreProveedor}</strong>
+                  {proveedor === 'zernio' && config.zernio_phone ? ` (${config.zernio_phone})` : ''}
+                  {config.brand_provider !== proveedor
+                    ? `, aunque lo demás de la marca sigue saliendo por ${config.brand_provider === 'zernio' ? 'Zernio' : 'Twilio'}.`
+                    : '.'}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  La plantilla de abajo se crea en esa línea, y la prueba y la base salen por ella. Una base
+                  fría confía más en el número que ya conoce (el de coexistencia) que en uno nuevo.
+                </p>
+                {config.provider_switchable && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={cambiandoLinea}
+                    onClick={() => cambiarLinea(proveedor === 'zernio' ? '' : 'zernio')}
+                  >
+                    {cambiandoLinea ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    {proveedor === 'zernio' ? 'Volver a mandar la difusión por Twilio' : 'Mandar la difusión por la línea de coexistencia (Zernio)'}
+                  </Button>
+                )}
+              </div>
+            )}
             <p className="text-sm text-muted-foreground">
               Es el único mensaje que revisa Meta. Pregunta en vez de promocionar y trae dos botones: el
               «no» de un toque cuesta mucho menos que un «Bloquear», y el «sí» deja el consentimiento

@@ -18,6 +18,7 @@ import {
   RESPUESTA_SI_DEFECTO,
   RESPUESTA_NO_DEFECTO,
   NOMBRE_GENERICO_DEFECTO,
+  goldenBulletProviderFor,
 } from '@/services/club-optin.service'
 import { resolveBranding } from '@/lib/branding'
 
@@ -68,9 +69,18 @@ export async function GET() {
   const brandName = resolveBranding(tenant.config).name
   const ajustes = await getMultipleSettings(Object.values(CLUB_SETTING_KEYS), tenantId)
   const slug = ajustes[CLUB_SETTING_KEYS.invitacion]?.trim() || null
+  const provider = goldenBulletProviderFor(tenant, ajustes[CLUB_SETTING_KEYS.proveedor])
 
   return NextResponse.json({
     brand_name: brandName,
+    // Por qué línea sale la difusión, y si el operador puede cambiarlo: solo
+    // tiene sentido con la marca en Twilio Y una cuenta de Zernio conectada.
+    provider,
+    brand_provider: tenant.messaging_provider === 'zernio' ? 'zernio' : 'twilio',
+    provider_switchable:
+      tenant.messaging_provider !== 'zernio' && !!tenant.zernio_account_id && !!tenant.zernio_phone_number,
+    zernio_phone: tenant.zernio_phone_number ?? null,
+    provider_setting: ajustes[CLUB_SETTING_KEYS.proveedor] ?? '',
     body_default: buildClubInviteBody(brandName, '[de dónde salió su número — y tiene que ser verdad]'),
     boton_si_default: BOTON_SI,
     boton_no_default: BOTON_NO,

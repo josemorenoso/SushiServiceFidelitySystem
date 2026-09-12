@@ -29,7 +29,7 @@ import { requireTenantId, getTenantById } from '@/lib/tenant'
 import { getSettingValue } from '@/services/settings.service'
 import { sendTemplateMessage } from '@/services/whatsapp.service'
 import { normalizePhone } from '@/services/imported-contacts.service'
-import { CLUB_SETTING_KEYS, NOMBRE_GENERICO_DEFECTO } from '@/services/club-optin.service'
+import { CLUB_SETTING_KEYS, NOMBRE_GENERICO_DEFECTO, resolveGoldenBulletProvider } from '@/services/club-optin.service'
 
 export const dynamic = 'force-dynamic'
 
@@ -105,10 +105,17 @@ export async function POST(request: NextRequest) {
     const promo = (body.promo_text ?? '').trim()
     const variables: Record<string, string> = promo ? { '1': nombre, '2': promo } : { '1': nombre }
 
-    const enviado = await sendTemplateMessage(phone, body.template_sid.trim(), variables, tenant, {
-      customerId: null,
-      messageType: 'import',
-    })
+    // Por la MISMA línea por la que va a salir la base (Twilio o la de
+    // coexistencia en Zernio): probar por una y mandar por otra no prueba nada.
+    const provider = await resolveGoldenBulletProvider(tenant)
+    const enviado = await sendTemplateMessage(
+      phone,
+      body.template_sid.trim(),
+      variables,
+      tenant,
+      { customerId: null, messageType: 'import' },
+      { provider }
+    )
 
     if (!enviado) {
       const motivo = await ultimoMotivoDeFallo(tenantId, phone, body.template_sid.trim())
@@ -123,7 +130,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    return NextResponse.json({ sid: enviado.sid, status: enviado.status, phone, variables })
+    return NextResponse.json({ sid: enviado.sid, status: enviado.status, phone, variables, provider })
   } catch (error) {
     console.error('[GoldenBullet] Error en el envío de prueba:', error)
     return NextResponse.json({ error: 'No se pudo enviar la prueba' }, { status: 500 })

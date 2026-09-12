@@ -8,6 +8,29 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [2.x] — 2026-09-12 — Golden Bullet por Zernio: la difusión por la línea de coexistencia con la marca en Twilio
+
+**Pedido del dueño:** Twilio manda bien lo normal pero a la difusión la toman por número falso; la difusión
+tiene que salir por la línea de coexistencia (Zernio) YA, y lo demás quedarse en Twilio hasta que ese número
+muera (~1 mes). Antes el Golden Bullet era Twilio de punta a punta.
+
+- `club-optin.service.ts`: `golden_bullet_provider` + `goldenBulletProviderFor()`/`resolveGoldenBulletProvider()`
+  (marca Zernio → Zernio; Twilio + ajuste `zernio` + cuenta conectada → Zernio; si no, Twilio con aviso).
+- `whatsapp.service.ts`: `options.provider` fuerza el proveedor de UN envío; ninguna guarda se relaja.
+  Lo usan `test-send` y el drenador (`message_type='import'`). Nadie más.
+- `golden-bullet-template.service.ts`: rama `crearEnZernio()` — `POST /v1/whatsapp/templates` con header de
+  imagen y botones `quick_reply`; nombre libre en la WABA (`nombreLibreEnWaba`, `_v2`…); el `contentSid` es el nombre.
+- `lib/zernio/templates.ts`: componente `buttons` + `buildZernioTemplateComponents()` (puro). `messaging.ts`:
+  `components` en el listado y **`sendZernioConversationMessage()`** (`POST /v1/inbox/conversations/{id}/messages`,
+  texto libre + foto en la ventana de 24 h, `Idempotency-Key`). `webhooks.ts`: `metadata` tipada y `readButtonPayload()`
+  (el payload va en el SOBRE, no en `message`; antes se leía del lugar equivocado).
+- `webhook/zernio`: el botón se reconoce por la etiqueta guardada y **se contesta en el acto** (antes: consentimiento sin acuse).
+- `/api/dashboard/templates`: consciente del proveedor (`?provider=zernio|twilio|golden_bullet`) y devuelve `provider`;
+  un tenant Zernio ya no recibe `[]`. Nuevo `lib/zernio/template-listing.ts` (proyección pura).
+- UI: pestaña Plantilla con «Mandar la difusión por la línea de coexistencia (Zernio)»; el asistente lista en el
+  proveedor de la difusión y etiqueta el costo. Contrato de Zernio: §8 y §8.a nuevos, verificados contra el OpenAPI.
+- Tests: `tests/unit/golden-bullet-zernio.test.ts` (16). Docs: `golden-bullet.md`, `zernio-messaging.md`, runbook §A.
+
 ## [docs] — 2026-09-12 — Runbook: Sushi Service de Twilio a Zernio por coexistencia
 
 **Contexto:** la línea prepago de Sushi Service en Twilio venció y el operador la retiró. El dueño decidió

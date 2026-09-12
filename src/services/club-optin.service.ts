@@ -36,7 +36,7 @@
 import { createClient } from '@supabase/supabase-js'
 import type { Tenant } from '@/types/tenant.types'
 import { resolveBranding } from '@/lib/branding'
-import { getMultipleSettings } from '@/services/settings.service'
+import { getMultipleSettings, getSettingValue } from '@/services/settings.service'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -114,7 +114,56 @@ export const CLUB_SETTING_KEYS = {
   nombreGenerico: 'golden_bullet_fallback_name',
   /** La foto que va arriba del mensaje 1 (URL pública del bucket). Se hornea en la plantilla al crearla. */
   fotoMensaje1: 'golden_bullet_template_image_url',
+  /**
+   * Por qué línea sale la DIFUSIÓN. Vacío = por la de la marca
+   * (`tenants.messaging_provider`). `'zernio'` = por la línea de coexistencia
+   * aunque la marca siga mandando lo normal por Twilio. Ver
+   * `resolveGoldenBulletProvider()`.
+   */
+  proveedor: 'golden_bullet_provider',
 } as const
+
+export type MessagingProvider = 'twilio' | 'zernio'
+
+/**
+ * Qué proveedor usa el Golden Bullet de una marca — listar/crear la plantilla,
+ * la prueba y cada envío de la cola.
+ *
+ * El caso que lo motiva (dueño, 2026-09-12): Sushi Service manda recibos y
+ * campañas por Twilio y eso funciona, pero a una base fría la línea de Twilio
+ * le parece un número falso. La difusión tiene que salir por la línea que la
+ * gente conoce —la de coexistencia, en Zernio— sin mover lo demás todavía.
+ *
+ * Reglas, en orden:
+ *   1. Si la marca YA manda todo por Zernio, el Golden Bullet también. Sin excepción.
+ *   2. Si el ajuste dice `zernio` y la marca tiene la cuenta de Zernio conectada
+ *      (`zernio_account_id` + `zernio_phone_number`), por Zernio.
+ *   3. Si el ajuste dice `zernio` pero NO hay cuenta: Twilio, y se avisa en el
+ *      log. Mandar por Zernio sin cuenta fallaría cerrado en `sendViaZernio()`,
+ *      pero fallar cerrado es para el envío, no para elegir en qué pantalla se
+ *      crea la plantilla: acá es mejor que el operador vea la de Twilio y un aviso.
+ *   4. Si no, el de la marca (Twilio).
+ *
+ * PURA en `goldenBulletProviderFor()`; `resolveGoldenBulletProvider()` solo lee el ajuste.
+ */
+export function goldenBulletProviderFor(
+  tenant: Pick<Tenant, 'messaging_provider' | 'zernio_account_id' | 'zernio_phone_number'>,
+  ajuste: string | null | undefined
+): MessagingProvider {
+  if (tenant.messaging_provider === 'zernio') return 'zernio'
+  const pedido = (ajuste ?? '').trim().toLowerCase()
+  if (pedido === 'zernio') {
+    if (tenant.zernio_account_id && tenant.zernio_phone_number) return 'zernio'
+    console.warn('[Club] golden_bullet_provider=zernio pero la marca no tiene cuenta de Zernio conectada — sale por Twilio')
+  }
+  return 'twilio'
+}
+
+export async function resolveGoldenBulletProvider(tenant: Tenant): Promise<MessagingProvider> {
+  if (tenant.messaging_provider === 'zernio') return 'zernio'
+  const ajuste = await getSettingValue(CLUB_SETTING_KEYS.proveedor, tenant.id).catch(() => null)
+  return goldenBulletProviderFor(tenant, ajuste)
+}
 
 export const NOMBRE_GENERICO_DEFECTO = 'cliente'
 

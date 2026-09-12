@@ -32,7 +32,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
-| Nombre editable de la plantilla en Meta (Dashboard › Plantillas: el dueño escribe el `name` que va a la WABA, para esquivar las 13 pegadas de Planeta Wings), dueño, 2026-09-12 | Opus 5 | `src/services/template.service.ts`, `src/app/api/dashboard/templates/catalog/[key]/{route,submit/route}.ts`, `src/components/dashboard/templates/{TemplateEditorDialog,TemplateCatalogEditor}.tsx`, `tests/unit/template-catalog.test.ts`, `docs/features/whatsapp-templates.md`, `ESTADO.md`, `CHANGELOG.md` | — | En vuelo |
+| Nombre editable de la plantilla en Meta (Dashboard › Plantillas: el dueño escribe el `name` que va a la WABA, para esquivar las 13 pegadas de Planeta Wings), dueño, 2026-09-12 | Opus 5 | `src/services/template.service.ts`, `src/constants/template-catalog.ts`, `src/types/template.types.ts`, `src/app/api/dashboard/templates/catalog/[key]/{route,submit/route}.ts`, `src/components/dashboard/templates/{TemplateEditorDialog,TemplateCatalogEditor}.tsx`, `tests/unit/template-catalog.test.ts`, `docs/features/whatsapp-templates.md`, `ESTADO.md`, `CHANGELOG.md` | — | En vuelo |
 
 ## 3. Siguiente, en orden
 

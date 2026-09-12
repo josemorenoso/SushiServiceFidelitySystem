@@ -32,6 +32,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Golden Bullet por Zernio (listar/crear la plantilla con botones por Zernio, acuse al «sí»/«no» por texto libre en la ventana de 24 h, asistente sin Twilio), dueño, 2026-09-12 | Opus 5 | `src/lib/zernio/{templates,messaging,webhooks}.ts`, `src/services/golden-bullet-template.service.ts`, `src/services/club-optin.service.ts`, `src/app/api/dashboard/templates/route.ts`, `src/app/api/dashboard/imported-contacts/template/route.ts`, `src/app/api/webhook/zernio/route.ts`, `src/components/dashboard/ImportedContacts{Uploader,Template}.tsx`, `tests/unit/golden-bullet-zernio.test.ts` (nuevo), `docs/features/golden-bullet.md`, `docs/RUNBOOK-SUSHI-SERVICE-A-ZERNIO.md`, `ESTADO.md`, `CHANGELOG.md` | — | En vuelo |
 
 ## 3. Siguiente, en orden
 

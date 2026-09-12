@@ -8,6 +8,22 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [2.x] — 2026-09-12 — Autorizados Domicilio pasa a ser una pestaña de Domicilios
+
+**Pedido del dueño:** «Mete autorizados domicilio dentro del apartado de domicilios». Dos entradas del menú
+para la misma cosa (los pedidos y quién puede mandarlos).
+
+- `dashboard/domicilios/page.tsx`: dos pestañas, **Domicilios** (lo que ya estaba) y **Autorizados**. La inicial
+  sale de `?tab=` con `useSyncExternalStore` sobre `window.location` — nunca `useSearchParams()` —, el mismo
+  patrón de Recompensas › Redenciones.
+- `components/dashboard/domicilios/AutorizadosPanel.tsx` (nuevo): el cuerpo de la pantalla vieja tal cual,
+  sin su `Toaster` (lo pone la página) y con título de sección en vez de `h1`.
+- `dashboard/authorized-numbers/page.tsx`: ahora solo redirige a `/dashboard/domicilios?tab=autorizados`.
+- `DashboardSidebar.tsx` / `DashboardHeader.tsx`: fuera la entrada «Autorizados Domicilio»; el menú móvil gana
+  «Domicilios», que no tenía. `ComoFuncionaCard` abre la pestaña con un botón; `WhatsappCard` enlaza a ella.
+- Sin migración ni cambios en `/api/dashboard/authorized-numbers`. Docs: `delivery-dashboard.md`,
+  `delivery-webhook.md`, `conexiones.md`, `RUNBOOK-DEPLOY.md`.
+
 ## [2.x] — 2026-09-12 — Plantillas: el dueño escribe el nombre con que queda en WhatsApp
 
 **Pedido del dueño:** en Planeta Wings las 13 plantillas creadas de golpe por el AIOS quedaron «en revisión»

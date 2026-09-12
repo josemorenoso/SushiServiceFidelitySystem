@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useDemo } from '@/contexts/DemoContext'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
-import { LogOut, Menu, QrCode, LayoutDashboard, Users, Gift, Megaphone, UtensilsCrossed, FileText, Settings, CalendarDays, UserCog, ShieldCheck, Crosshair, Palette, Store, KeyRound, Trophy } from 'lucide-react'
+import { LogOut, Menu, QrCode, LayoutDashboard, Users, Gift, Megaphone, UtensilsCrossed, FileText, Settings, CalendarDays, UserCog, Bike, Crosshair, Palette, Store, KeyRound, Trophy } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
@@ -39,7 +39,8 @@ export function DashboardHeader() {
     { href: '/dashboard/sedes', label: 'Mis sedes', icon: Store },
     { href: '/dashboard/templates', label: 'Plantillas', icon: FileText },
     { href: '/dashboard/staff', label: `${branding.staffLabelPlural} QR`, icon: UserCog },
-    { href: '/dashboard/authorized-numbers', label: 'Autorizados Domicilio', icon: ShieldCheck },
+    // Autorizados Domicilio vive DENTRO de Domicilios desde el 2026-09-12 (pestaña).
+    { href: '/dashboard/domicilios', label: 'Domicilios', icon: Bike },
     // Accesos justo antes de Ajustes: quien entra al panel y que ve cada uno.
     { href: '/dashboard/accesos', label: 'Accesos', icon: KeyRound },
     { href: '/dashboard/settings', label: 'Ajustes', icon: Settings },

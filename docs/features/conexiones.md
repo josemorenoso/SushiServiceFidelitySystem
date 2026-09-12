@@ -18,7 +18,8 @@ WhatsApp**, y el alta entera vivía en el panel del operador: el operador le cop
 1. **Por qué número sale tu WhatsApp**, y con qué proveedor.
 2. **Cuánto cupo te queda hoy** — reusa `/api/dashboard/line-budget` tal cual; la
    gobernanza de envío no se toca ni se duplica.
-3. **A dónde llegan tus pedidos de domicilio** → enlace a `/dashboard/authorized-numbers`.
+3. **A dónde llegan tus pedidos de domicilio** → enlace a `/dashboard/domicilios?tab=autorizados`
+   (la pestaña «Autorizados» de Domicilios; la ruta vieja `/dashboard/authorized-numbers` redirige).
 4. **Dónde están tus plantillas** → enlace a `/dashboard/templates`.
 
 Más el interruptor de §18.e y, si la línea no está lista, el **alta**.

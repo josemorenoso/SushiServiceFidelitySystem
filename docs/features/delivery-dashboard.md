@@ -67,8 +67,13 @@ Cuatro pasos escritos para el dueño del restaurante, no para nosotros. Más tre
 2. **Lo único imprescindible del mensaje**: el celular del cliente, 10 dígitos, empieza
    por 3. El resto lo saca la IA. Con el ejemplo real que ya está en `delivery-webhook.md`.
 
-3. **Quién puede mandarlo**: un enlace a `/dashboard/authorized-numbers`. Esa pantalla
-   **se reusa tal cual**; la gestión de números no se duplica en ningún sitio.
+3. **Quién puede mandarlo**: un botón que abre la pestaña **«Autorizados»** de esta misma
+   página. **Desde el 2026-09-12 (dueño) los números autorizados viven DENTRO de Domicilios**
+   como segunda pestaña (`AutorizadosPanel.tsx`, el cuerpo de la pantalla vieja tal cual);
+   `/dashboard/authorized-numbers` redirige a `/dashboard/domicilios?tab=autorizados` y ya
+   no tiene entrada en el menú. La pestaña inicial se lee de `?tab=` con `window.location`
+   vía `useSyncExternalStore` (nunca `useSearchParams()`), igual que en Recompensas. Los
+   endpoints `/api/dashboard/authorized-numbers` no cambian.
 
 **Si `tenants.config.has_delivery_webhook === false`** el apartado se muestra igual, con un
 aviso que explica que el flujo no está encendido en esa marca y cómo activarlo. Esconder la

@@ -13,7 +13,6 @@ import {
   UtensilsCrossed,
   FileText,
   Settings,
-  ShieldCheck,
   CalendarDays,
   UserCog,
   Crosshair,
@@ -53,8 +52,9 @@ export function DashboardSidebar({ isSuperAdmin = false }: { isSuperAdmin?: bool
     { href: '/dashboard/sedes', label: 'Mis sedes', icon: Store },
     { href: '/dashboard/templates', label: 'Plantillas', icon: FileText },
     { href: '/dashboard/staff', label: `${branding.staffLabelPlural} QR`, icon: UserCog },
+    // Autorizados Domicilio vive DENTRO de Domicilios desde el 2026-09-12 (pestaña). La
+    // ruta vieja redirige, así que no hace falta entrada propia.
     { href: '/dashboard/domicilios', label: 'Domicilios', icon: Bike },
-    { href: '/dashboard/authorized-numbers', label: 'Autorizados Domicilio', icon: ShieldCheck },
     // Solo super-admin (operador de Cada1): billeteras de todos los tenants.
     ...(isSuperAdmin ? [{ href: '/dashboard/admin/wallets', label: 'Billeteras', icon: Wallet }] : []),
     // Conexiones va JUSTO encima de Ajustes: es donde el negocio ve por qué

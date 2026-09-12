@@ -53,7 +53,8 @@ Es de dónde sale la sede de un pedido. La columna existe desde la **00043**, pe
 tenant_id}` y punto, así que todo el parque quedó en `NULL` y —con 2+ sedes— *todos* los
 domicilios de *todos* los locales caían al mismo cubo de «sede desconocida».
 
-Desde entonces `/dashboard/authorized-numbers` la pide al crear y la deja cambiar por fila
+Desde entonces la pestaña «Autorizados» de `/dashboard/domicilios` (antes `/dashboard/authorized-numbers`,
+que hoy redirige) la pide al crear y la deja cambiar por fila
 (columna «Sede»), y cuenta en ámbar los que siguen sin ella. `POST` y `PATCH` validan que la
 sede sea **activa y de esta marca**; el `PATCH` además rechaza una sede que quien llama no
 administre, y no deja que un administrador de sede se deje un número en `NULL` (dejaría de

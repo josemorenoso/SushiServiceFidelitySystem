@@ -5,24 +5,29 @@
  *
  * Doc: `docs/features/delivery-dashboard.md`.
  *
- * Tres bloques en una sola pantalla:
- *   1. Cómo funciona (incluido A QUÉ NÚMERO se manda el cuadro, que bajo coexistencia es
- *      distinto en cada marca).
- *   2. Los domicilios que SÍ entraron.
- *   3. Los que NO entraron + la alarma de silencio.
+ * Dos pestañas:
  *
- * **Es SOLO LECTURA.** No hay formulario de carga manual: el alcance que fijó el dueño
- * (2026-09-07) es que el apartado *muestre* los domicilios que ellos registran.
+ * · **Domicilios** — tres bloques: (1) cómo funciona (incluido A QUÉ NÚMERO se manda el
+ *   cuadro, que bajo coexistencia es distinto en cada marca); (2) los domicilios que SÍ
+ *   entraron; (3) los que NO entraron + la alarma de silencio. **Es SOLO LECTURA.** No hay
+ *   formulario de carga manual: el alcance que fijó el dueño (2026-09-07) es que el apartado
+ *   *muestre* los domicilios que ellos registran.
+ * · **Autorizados** — los celulares que pueden mandar un pedido y su sede
+ *   (`AutorizadosPanel`). Antes era una página aparte con entrada propia en el menú;
+ *   `/dashboard/authorized-numbers` sigue funcionando y redirige acá (dueño, 2026-09-12).
  *
  * ⚠️ **Ni un `useSearchParams()`.** En Next.js 16 fuerza el CSR bailout de todo el grupo
  * `(dashboard)`, que no tiene `loading.tsx` ni Suspense en ninguna página. Los filtros
  * viven en estado local y la sede en `localStorage`, exactamente igual que el selector de
  * sede: el `?location_id=` viaja en la query de cada `fetch()`, nunca en la barra de
- * direcciones.
+ * direcciones. La pestaña inicial se lee de `?tab=` con `window.location` vía
+ * `useSyncExternalStore`, igual que en Recompensas: el servidor pinta «domicilios», el
+ * cliente hidrata sin choque y después aplica la de la URL.
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
@@ -32,6 +37,7 @@ import { useLocationScope, LOCATION_ALL } from '@/contexts/LocationScopeContext'
 import { ComoFuncionaCard } from '@/components/dashboard/domicilios/ComoFuncionaCard'
 import { DomiciliosTable } from '@/components/dashboard/domicilios/DomiciliosTable'
 import { FallosPanel, SilenceAlert } from '@/components/dashboard/domicilios/FallosPanel'
+import { AutorizadosPanel } from '@/components/dashboard/domicilios/AutorizadosPanel'
 import type {
   DeliveryChannel,
   DeliveryFailureRow,
@@ -40,6 +46,17 @@ import type {
 } from '@/services/delivery-dashboard.service'
 
 const LIMIT = 25
+
+const TABS = new Set(['domicilios', 'autorizados'])
+
+const noSubscribe = () => () => {}
+const leerTabDeUrl = () => {
+  try {
+    return new URLSearchParams(window.location.search).get('tab')
+  } catch {
+    return null
+  }
+}
 
 /**
  * Fecha LOCAL del navegador en `YYYY-MM-DD`, solo para PRERRELLENAR los dos inputs.
@@ -60,6 +77,12 @@ function haceDias(dias: number): string {
 
 export default function DomiciliosPage() {
   const { selection: locationSelection } = useLocationScope()
+
+  // La URL no cambia mientras la página vive, así que no hay a qué suscribirse;
+  // lo que importa es el par cliente/servidor de snapshots.
+  const tabDeUrl = useSyncExternalStore(noSubscribe, leerTabDeUrl, () => null)
+  const [tabElegida, setTab] = useState<string | null>(null)
+  const tab = tabElegida ?? (tabDeUrl && TABS.has(tabDeUrl) ? tabDeUrl : 'domicilios')
 
   const [from, setFrom] = useState(haceDias(29))
   const [to, setTo] = useState(hoyISO())
@@ -195,143 +218,156 @@ export default function DomiciliosPage() {
           Domicilios
         </h1>
         <p className="text-sm" style={{ color: 'var(--brand-ink-soft)' }}>
-          Cómo funciona el flujo, los pedidos que entraron y los que no.
+          Cómo funciona el flujo, los pedidos que entraron y los que no, y quién puede mandarlos.
         </p>
       </div>
 
-      {/* ═══ BLOQUE 1 ═══ */}
-      <ComoFuncionaCard channel={channel} />
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList>
+          <TabsTrigger value="domicilios">Domicilios</TabsTrigger>
+          <TabsTrigger value="autorizados">Autorizados</TabsTrigger>
+        </TabsList>
 
-      {/* ═══ BLOQUE 2 ═══ */}
-      <Card className="premium-card">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-lg" style={{ color: 'var(--brand-ink)' }}>
-            <PackageCheck className="h-5 w-5" strokeWidth={1.5} />
-            Los domicilios registrados
-          </CardTitle>
-          <CardDescription style={{ color: 'var(--brand-ink-soft)' }}>
-            Cada pedido que entró por WhatsApp, con su cliente, su dirección y el mensaje original.
-          </CardDescription>
-        </CardHeader>
+        <TabsContent value="domicilios" className="mt-4 space-y-6">
+          {/* ═══ BLOQUE 1 ═══ */}
+          <ComoFuncionaCard channel={channel} onGestionarAutorizados={() => setTab('autorizados')} />
 
-        <CardContent className="space-y-4">
-          {/* ── Contadores ── */}
-          {summaryError ? (
-            <div className="flex gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4">
-              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-rose-900" strokeWidth={1.5} />
-              <p className="text-sm text-rose-800">
-                {summaryError} No estamos mostrando ceros porque <strong>no lo sabemos</strong>: un
-                cero acá sería mentira.
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-              <Contador etiqueta="Hoy" valor={summary?.hoy} />
-              <Contador etiqueta="Últimos 7 días" valor={summary?.ultimos7} />
-              <Contador etiqueta="Últimos 30 días" valor={summary?.ultimos30} />
-              <Contador
-                etiqueta="Clientes nuevos (30 días)"
-                valor={summary?.clientesNuevos30Disponible === false ? undefined : summary?.clientesNuevos30}
-                nota={
-                  summary?.clientesNuevos30Disponible === false
-                    ? 'No se pudo calcular'
-                    : 'Su primera visita en la marca fue un domicilio'
-                }
-              />
-            </div>
-          )}
+          {/* ═══ BLOQUE 2 ═══ */}
+          <Card className="premium-card">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg" style={{ color: 'var(--brand-ink)' }}>
+                <PackageCheck className="h-5 w-5" strokeWidth={1.5} />
+                Los domicilios registrados
+              </CardTitle>
+              <CardDescription style={{ color: 'var(--brand-ink-soft)' }}>
+                Cada pedido que entró por WhatsApp, con su cliente, su dirección y el mensaje original.
+              </CardDescription>
+            </CardHeader>
 
-          {/* ── Filtros ── */}
-          <div className="flex flex-wrap items-end gap-3">
-            <div>
-              <Label htmlFor="dom-from" className="text-xs" style={{ color: 'var(--brand-ink-soft)' }}>
-                Desde
-              </Label>
-              <Input
-                id="dom-from"
-                type="date"
-                value={from}
-                onChange={(e) => setFrom(e.target.value)}
-                className="input-premium mt-1 w-40"
-              />
-            </div>
-            <div>
-              <Label htmlFor="dom-to" className="text-xs" style={{ color: 'var(--brand-ink-soft)' }}>
-                Hasta
-              </Label>
-              <Input
-                id="dom-to"
-                type="date"
-                value={to}
-                onChange={(e) => setTo(e.target.value)}
-                className="input-premium mt-1 w-40"
-              />
-            </div>
-            <p className="pb-2 text-xs" style={{ color: 'var(--brand-ink-muted)' }}>
-              La sede se elige arriba, en el selector del panel. Las horas están en hora de Colombia.
-            </p>
-          </div>
-
-          {/* ── La lista ── */}
-          {ordersError ? (
-            <div className="flex gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4">
-              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-rose-900" strokeWidth={1.5} />
-              <div>
-                <p className="text-sm font-semibold text-rose-900">No pudimos leer los domicilios</p>
-                <p className="mt-1 text-sm text-rose-800">
-                  {ordersError} Eso <strong>no</strong> quiere decir que no haya habido pedidos:
-                  quiere decir que ahora mismo no lo sabemos. Recargá en un momento.
-                </p>
-              </div>
-            </div>
-          ) : (
-            <>
-              <DomiciliosTable orders={orders} loading={loadingOrders} />
-
-              {total > LIMIT && (
-                <div className="flex items-center justify-between">
-                  <p className="text-xs" style={{ color: 'var(--brand-ink-muted)' }}>
-                    {total} domicilio(s) · página {page} de {totalPaginas}
+            <CardContent className="space-y-4">
+              {/* ── Contadores ── */}
+              {summaryError ? (
+                <div className="flex gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4">
+                  <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-rose-900" strokeWidth={1.5} />
+                  <p className="text-sm text-rose-800">
+                    {summaryError} No estamos mostrando ceros porque <strong>no lo sabemos</strong>: un
+                    cero acá sería mentira.
                   </p>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="btn-secondary-premium"
-                      disabled={page <= 1 || loadingOrders}
-                      onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    >
-                      <ChevronLeft className="h-3.5 w-3.5" strokeWidth={1.5} />
-                      Anterior
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="btn-secondary-premium"
-                      disabled={page >= totalPaginas || loadingOrders}
-                      onClick={() => setPage((p) => p + 1)}
-                    >
-                      Siguiente
-                      <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.5} />
-                    </Button>
-                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                  <Contador etiqueta="Hoy" valor={summary?.hoy} />
+                  <Contador etiqueta="Últimos 7 días" valor={summary?.ultimos7} />
+                  <Contador etiqueta="Últimos 30 días" valor={summary?.ultimos30} />
+                  <Contador
+                    etiqueta="Clientes nuevos (30 días)"
+                    valor={summary?.clientesNuevos30Disponible === false ? undefined : summary?.clientesNuevos30}
+                    nota={
+                      summary?.clientesNuevos30Disponible === false
+                        ? 'No se pudo calcular'
+                        : 'Su primera visita en la marca fue un domicilio'
+                    }
+                  />
                 </div>
               )}
-            </>
-          )}
-        </CardContent>
-      </Card>
 
-      {/* ═══ BLOQUE 3 ═══ */}
-      {summary && <SilenceAlert silence={summary.silence} />}
+              {/* ── Filtros ── */}
+              <div className="flex flex-wrap items-end gap-3">
+                <div>
+                  <Label htmlFor="dom-from" className="text-xs" style={{ color: 'var(--brand-ink-soft)' }}>
+                    Desde
+                  </Label>
+                  <Input
+                    id="dom-from"
+                    type="date"
+                    value={from}
+                    onChange={(e) => setFrom(e.target.value)}
+                    className="input-premium mt-1 w-40"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="dom-to" className="text-xs" style={{ color: 'var(--brand-ink-soft)' }}>
+                    Hasta
+                  </Label>
+                  <Input
+                    id="dom-to"
+                    type="date"
+                    value={to}
+                    onChange={(e) => setTo(e.target.value)}
+                    className="input-premium mt-1 w-40"
+                  />
+                </div>
+                <p className="pb-2 text-xs" style={{ color: 'var(--brand-ink-muted)' }}>
+                  La sede se elige arriba, en el selector del panel. Las horas están en hora de Colombia.
+                </p>
+              </div>
 
-      <FallosPanel
-        failures={failures}
-        available={failuresAvailable}
-        loading={loadingFailures}
-        error={failuresError}
-        sedeSeleccionada={locationSelection !== LOCATION_ALL}
-      />
+              {/* ── La lista ── */}
+              {ordersError ? (
+                <div className="flex gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4">
+                  <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-rose-900" strokeWidth={1.5} />
+                  <div>
+                    <p className="text-sm font-semibold text-rose-900">No pudimos leer los domicilios</p>
+                    <p className="mt-1 text-sm text-rose-800">
+                      {ordersError} Eso <strong>no</strong> quiere decir que no haya habido pedidos:
+                      quiere decir que ahora mismo no lo sabemos. Recargá en un momento.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <DomiciliosTable orders={orders} loading={loadingOrders} />
+
+                  {total > LIMIT && (
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs" style={{ color: 'var(--brand-ink-muted)' }}>
+                        {total} domicilio(s) · página {page} de {totalPaginas}
+                      </p>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="btn-secondary-premium"
+                          disabled={page <= 1 || loadingOrders}
+                          onClick={() => setPage((p) => Math.max(1, p - 1))}
+                        >
+                          <ChevronLeft className="h-3.5 w-3.5" strokeWidth={1.5} />
+                          Anterior
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="btn-secondary-premium"
+                          disabled={page >= totalPaginas || loadingOrders}
+                          onClick={() => setPage((p) => p + 1)}
+                        >
+                          Siguiente
+                          <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.5} />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* ═══ BLOQUE 3 ═══ */}
+          {summary && <SilenceAlert silence={summary.silence} />}
+
+          <FallosPanel
+            failures={failures}
+            available={failuresAvailable}
+            loading={loadingFailures}
+            error={failuresError}
+            sedeSeleccionada={locationSelection !== LOCATION_ALL}
+          />
+        </TabsContent>
+
+        <TabsContent value="autorizados" className="mt-4">
+          <AutorizadosPanel />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

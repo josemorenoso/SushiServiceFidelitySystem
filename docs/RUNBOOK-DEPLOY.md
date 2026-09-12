@@ -196,7 +196,7 @@ Ninguna de las dos adivina la sede: la decisión es del dueño, persona por pers
 `authorized_numbers.location_id` existe desde la 00043 y hasta el 2026-09-09 el panel **nunca lo
 escribía**. Es la señal de la que sale la sede de un pedido (`resolveDeliveryLocation()`).
 
-- **Desde el panel**: `/dashboard/authorized-numbers` → columna «Sede».
+- **Desde el panel**: `/dashboard/domicilios` → pestaña «Autorizados» → columna «Sede».
 - **Con SQL**: `SQL-PARA-CORRER/authorized-numbers-sin-sede/`.
 
 ⚠️ Un celular existe **una sola vez por marca** (`authorized_numbers_phone_tenant_key`). Si las

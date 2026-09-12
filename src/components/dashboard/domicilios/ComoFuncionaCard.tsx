@@ -17,23 +17,20 @@
  */
 
 import { useState } from 'react'
-import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Button, buttonVariants } from '@/components/ui/button'
+import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
   Check,
   Copy,
   ShieldCheck,
   Smartphone,
-  ExternalLink,
   AlertTriangle,
   ChevronDown,
   ChevronRight,
   ClipboardList,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { cn } from '@/lib/utils'
 import type { DeliveryChannel } from '@/services/delivery-dashboard.service'
 
 const PASOS = [
@@ -94,7 +91,14 @@ Total: $
 Pago: (efectivo / transferencia / nequi / daviplata / tarjeta)
 Notas:`
 
-export function ComoFuncionaCard({ channel }: { channel: DeliveryChannel | null }) {
+export function ComoFuncionaCard({
+  channel,
+  onGestionarAutorizados,
+}: {
+  channel: DeliveryChannel | null
+  /** Abre la pestaña «Autorizados» de la misma página (desde el 2026-09-12 vive ahí). */
+  onGestionarAutorizados: () => void
+}) {
   const [copiado, setCopiado] = useState(false)
   const [modeloCopiado, setModeloCopiado] = useState(false)
   const [instruccionesAbiertas, setInstruccionesAbiertas] = useState(false)
@@ -308,16 +312,18 @@ export function ComoFuncionaCard({ channel }: { channel: DeliveryChannel | null 
                   otro número se trata como el mensaje de un cliente, no como un pedido — así es
                   como el sistema distingue una cosa de la otra.
                 </p>
-                {/* `Link` con las clases del botón, no `<Button asChild>`: este Button es
-                    base-ui y no expone `asChild`. Así la navegación sigue siendo un <a> de
-                    verdad — se puede abrir en otra pestaña — y se ve igual. */}
-                <Link
-                  href="/dashboard/authorized-numbers"
-                  className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'btn-secondary-premium mt-3')}
+                {/* Los autorizados son la otra pestaña de ESTA página: un botón que la abre,
+                    no un enlace a otra ruta. */}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="btn-secondary-premium mt-3"
+                  onClick={onGestionarAutorizados}
                 >
                   Gestionar números autorizados
-                  <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.5} />
-                </Link>
+                  <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.5} />
+                </Button>
               </div>
             </div>
           )}

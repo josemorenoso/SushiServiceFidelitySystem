@@ -247,6 +247,25 @@ revisa. Por eso cada versión necesita nombre propio: `bienvenida` → `bienveni
 importa: un tenant dado de alta por el AIOS (`aios_set_template_settings()`) tiene el puntero puesto y
 **cero filas** en `template_versions`; reusar ese nombre haría fallar la creación contra Zernio.
 
+### El dueño puede escribir el nombre (desde el 2026-09-12)
+
+`nextProviderRef()` solo ve lo que el producto sabe. Planeta Wings tenía 13 plantillas creadas de golpe
+por el AIOS que quedaron «en revisión» sin salir nunca (el dueño ya lo había visto en dos restaurantes:
+72 h y nada), y el panel intentaba crear `bienvenida` otra vez → Zernio 400. La salida fue crearlas
+**de a una, con otro nombre**, así que el editor tiene un campo **«Nombre en WhatsApp»**:
+
+- Viene lleno con `suggestedName` (= lo que `nextProviderRef()` elegiría). Se toca solo cuando choca.
+- Se normaliza al escribir (`normalizeTemplateName()`: minúsculas, sin tildes, espacios → `_`) y se
+  valida con `validateTemplateName()` (regla de Meta `^[a-z][a-z0-9_]*$`, ≤ 512). Las dos son puras,
+  en `template-catalog.ts`, con test.
+- El `PUT …/catalog/[key]` acepta `name` opcional; `submitTemplateBody()` lo valida y rechaza con 409
+  uno que este negocio ya usó (cualquier fila de `template_versions` o cualquier puntero): casi seguro
+  sigue en la WABA. Lo que no sabe el producto lo rechaza Meta, y desde el mismo día un **400 de
+  Zernio ya no dice «vuelve a intentarlo más tarde»** (no es transitorio): dice el motivo del proveedor
+  y manda a Editar para cambiar el nombre.
+- «Enviar a Meta» (el botón sin editor) sigue con el nombre automático: si choca, el 400 lo dice.
+- **El puntero no cambia por el nombre**: lo escribe `promoteVersion()` al aprobarse, como siempre.
+
 ## Archivos
 
 | Archivo | Rol |

@@ -26,6 +26,8 @@ import {
   detectTemplateStyle,
   renderTemplatePreview,
   validateTemplateBody,
+  normalizeTemplateName,
+  validateTemplateName,
 } from '@/constants/template-catalog'
 import { OPT_OUT_LINE } from '@/constants/template-texts'
 
@@ -277,5 +279,39 @@ describe('renderTemplatePreview', () => {
 
   it('deja intacta una variable inventada en vez de romperse', () => {
     expect(renderTemplatePreview('birthday', 'Hola {{1}} y {{7}} fin', MARCA)).toBe('Hola Sofía y {{7}} fin')
+  })
+})
+
+// El nombre con que la plantilla queda en Meta lo puede escribir el dueño desde
+// el 2026-09-12 (13 creadas de golpe por el AIOS quedaron pegadas «en revisión»
+// y la salida fue crearlas de a una con otro nombre). Estas dos funciones son
+// lo único que separa lo que tipea de lo que Meta acepta.
+describe('nombre de la plantilla en Meta', () => {
+  it('normaliza lo que el dueño tipea a lo que Meta acepta', () => {
+    expect(normalizeTemplateName('Bienvenida Planeta Wings')).toBe('bienvenida_planeta_wings')
+    expect(normalizeTemplateName('Cumpleaños-2')).toBe('cumpleanos_2')
+    expect(normalizeTemplateName('reactivación  suave!!')).toBe('reactivacion_suave')
+    expect(normalizeTemplateName('evento__video')).toBe('evento_video')
+  })
+
+  it('el resultado de normalizar siempre pasa la validación (o queda vacío)', () => {
+    for (const raw of ['Hola Mundo', 'ÁÉÍÓÚ ñ', 'x-y-z', 'ya_valido', '   ']) {
+      const name = normalizeTemplateName(raw)
+      if (name && /^[a-z]/.test(name)) expect(validateTemplateName(name)).toEqual([])
+    }
+  })
+
+  it('rechaza vacío, mayúsculas, empezar por número y pasarse de largo', () => {
+    expect(validateTemplateName('')).toHaveLength(1)
+    expect(validateTemplateName('Bienvenida')).toHaveLength(1)
+    expect(validateTemplateName('2bienvenida')).toHaveLength(1)
+    expect(validateTemplateName('a'.repeat(513))).toHaveLength(1)
+    expect(validateTemplateName('bienvenida_pw')).toEqual([])
+  })
+
+  it('los 13 nombres base del catálogo pasan la misma validación que el dueño', () => {
+    for (const t of TEMPLATE_CATALOG) {
+      expect(validateTemplateName(t.baseName), t.key).toEqual([])
+    }
   })
 })

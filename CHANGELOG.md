@@ -8,6 +8,20 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [2.x] — 2026-09-12 — Plantillas: el dueño escribe el nombre con que queda en WhatsApp
+
+**Pedido del dueño:** en Planeta Wings las 13 plantillas creadas de golpe por el AIOS quedaron «en revisión»
+sin salir nunca (ya le pasó con dos restaurantes: 72 h y nada) y el panel no dejaba crearlas de nuevo porque
+chocaba el nombre. Hay que poder editar el nombre además del texto, y crearlas de a una.
+
+- `TemplateEditorDialog.tsx`: campo **«Nombre en WhatsApp»**, lleno con el siguiente libre (`suggestedName`),
+  normalizado al escribir y validado con la regla de Meta. Viaja como `name` en el `PUT …/catalog/[key]`.
+- `template-catalog.ts`: `normalizeTemplateName()` y `validateTemplateName()` (puras, 4 tests nuevos).
+- `template.service.ts`: `requestedName` reemplaza a `nextProviderRef()` cuando viene; 409 si este negocio ya
+  usó ese nombre (fila o puntero); `suggestedName` en el estado del catálogo. **Un 400 de Zernio ya no dice
+  «vuelve a intentarlo más tarde»**: dice el motivo del proveedor y manda a Editar para cambiar el nombre.
+- Sin migración. El puntero sigue siendo cosa de `promoteVersion()`. Doc: `whatsapp-templates.md` § «Nombres».
+
 ## [2.x] — 2026-09-12 — Golden Bullet por Zernio: la difusión por la línea de coexistencia con la marca en Twilio
 
 **Pedido del dueño:** Twilio manda bien lo normal pero a la difusión la toman por número falso; la difusión

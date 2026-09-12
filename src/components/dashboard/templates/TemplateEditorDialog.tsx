@@ -10,8 +10,13 @@
  * De ahí las decisiones de esta pantalla:
  *  · El botón dice "Guardar cambios", no "Crear plantilla". Nunca aparecen las
  *    palabras "versión", "plantilla nueva" ni "SID".
- *  · El dueño no elige nombre, ni categoría, ni idioma, ni valores de ejemplo:
- *    todo eso lo pone el catálogo. Solo escribe el mensaje.
+ *  · El dueño no elige categoría, ni idioma, ni valores de ejemplo: todo eso
+ *    lo pone el catálogo. Escribe el mensaje y, desde el 2026-09-12, puede
+ *    cambiar el NOMBRE con que la plantilla queda en WhatsApp. Ese nombre es
+ *    la única parte de la mecánica que tuvo que asomarse: 13 plantillas
+ *    creadas de golpe por el AIOS quedaron «en revisión» sin salir nunca, y la
+ *    única salida fue crearlas de a una con otro nombre. El campo viene lleno
+ *    con el siguiente libre; solo hay que tocarlo cuando el sugerido choca.
  *  · Las variables no se explican como `{{1}}`: se muestran como fichas con
  *    nombre ("Nombre del cliente") y se insertan con un clic.
  *  · La vista previa muestra el mensaje YA armado con datos de ejemplo, que es
@@ -38,7 +43,12 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { AlertTriangle, Clock, Loader2, MessageSquare, RotateCcw, ShieldAlert, XCircle } from 'lucide-react'
-import { renderTemplatePreview, validateTemplateBody } from '@/constants/template-catalog'
+import {
+  normalizeTemplateName,
+  renderTemplatePreview,
+  validateTemplateBody,
+  validateTemplateName,
+} from '@/constants/template-catalog'
 import type { TemplateCatalogEntry } from '@/types/template.types'
 
 interface Props {
@@ -50,6 +60,7 @@ interface Props {
 
 export default function TemplateEditorDialog({ entry, brandName, onClose, onSaved }: Props) {
   const [body, setBody] = useState('')
+  const [name, setName] = useState('')
   const [accepted, setAccepted] = useState(false)
   const [saving, setSaving] = useState(false)
   const [serverError, setServerError] = useState<string | null>(null)
@@ -60,6 +71,7 @@ export default function TemplateEditorDialog({ entry, brandName, onClose, onSave
   useEffect(() => {
     if (!entry) return
     setBody(entry.current?.body ?? entry.suggestedBody)
+    setName(entry.suggestedName)
     setAccepted(false)
     setServerError(null)
   }, [entry])
@@ -72,6 +84,8 @@ export default function TemplateEditorDialog({ entry, brandName, onClose, onSave
     })
   }, [body, entry])
 
+  const nameIssues = useMemo(() => (entry ? validateTemplateName(name) : []), [name, entry])
+
   const preview = useMemo(() => {
     if (!entry) return ''
     return renderTemplatePreview(entry.definition.key, body, brandName)
@@ -81,7 +95,13 @@ export default function TemplateEditorDialog({ entry, brandName, onClose, onSave
 
   const { definition, current } = entry
   const unchanged = (current?.body ?? '').trim() === body.trim()
-  const canSave = accepted && issues.length === 0 && body.trim().length > 0 && !unchanged && !saving
+  const canSave =
+    accepted &&
+    issues.length === 0 &&
+    nameIssues.length === 0 &&
+    body.trim().length > 0 &&
+    !unchanged &&
+    !saving
 
   /** Inserta una variable donde está el cursor, no al final. */
   const insertVariable = (index: number) => {
@@ -107,7 +127,7 @@ export default function TemplateEditorDialog({ entry, brandName, onClose, onSave
       const res = await fetch(`/api/dashboard/templates/catalog/${definition.key}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ body: body.trim(), acceptedDisclaimer: true }),
+        body: JSON.stringify({ body: body.trim(), name: name.trim(), acceptedDisclaimer: true }),
       })
       const data = await res.json()
       if (!res.ok || !data.success) {
@@ -187,6 +207,40 @@ export default function TemplateEditorDialog({ entry, brandName, onClose, onSave
               <RotateCcw className="h-3 w-3" />
               Volver al texto sugerido para el estilo del negocio
             </button>
+
+            {/* El nombre con que la plantilla queda en WhatsApp. Viene lleno con
+                el siguiente libre; se cambia cuando ese nombre ya existe en la
+                cuenta (creado desde otro lado y pegado en revisión). Se
+                normaliza al escribir para que nunca falle por una mayúscula. */}
+            <div className="space-y-1.5 border-t pt-3">
+              <label htmlFor="template-name" className="text-xs font-medium">
+                Nombre en WhatsApp
+              </label>
+              <input
+                id="template-name"
+                type="text"
+                value={name}
+                onChange={(e) => setName(normalizeTemplateName(e.target.value))}
+                spellCheck={false}
+                autoComplete="off"
+                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 font-mono text-sm"
+              />
+              <p className="text-[10px] text-muted-foreground">
+                Así aparece en tu cuenta de WhatsApp Business. Si ya existe una plantilla con ese
+                nombre, cámbialo (por ejemplo, agrégale un número al final). Solo minúsculas, números
+                y guion bajo.
+              </p>
+              {nameIssues.length > 0 && (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-2.5 space-y-1">
+                  {nameIssues.map((issue) => (
+                    <p key={issue} className="text-[11px] text-red-700 flex items-start gap-1.5">
+                      <XCircle className="h-3 w-3 mt-0.5 shrink-0" />
+                      {issue}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="space-y-2">

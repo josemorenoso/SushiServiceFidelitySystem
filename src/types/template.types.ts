@@ -111,6 +111,14 @@ export interface TemplateCatalogEntry {
   /** Texto del banco: el punto de partida del editor. */
   suggestedBody: string
   /**
+   * `name` que el servidor le pondría a la próxima versión en Meta si el dueño
+   * no escribe otro (`bienvenida`, `bienvenida_v2`, …). Es el valor inicial del
+   * campo «Nombre en WhatsApp» del editor. Existe desde el 2026-09-12: 13
+   * plantillas creadas de golpe por el AIOS quedaron «en revisión» sin salir
+   * nunca, y la única salida era crearlas de a una con OTRO nombre.
+   */
+  suggestedName: string
+  /**
    * Nombre de una plantilla que `admin_settings` ya apunta pero que no creamos
    * nosotros (alta por el AIOS o carga manual en SQL). Está activa y enviando,
    * pero no tenemos su texto: la pantalla lo dice en vez de inventarlo.

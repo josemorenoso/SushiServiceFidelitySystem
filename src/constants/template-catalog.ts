@@ -443,6 +443,52 @@ export function validateTemplateBody(
   return issues
 }
 
+// ─────────────────────────────────────────────────────────────
+// Nombre de la plantilla en Meta
+// ─────────────────────────────────────────────────────────────
+
+/** Regla de Meta para `name`: minúsculas, dígitos y guion bajo. Empieza por letra. */
+export const TEMPLATE_NAME_REGEX = /^[a-z][a-z0-9_]*$/
+/** Límite de Meta para `name`. */
+export const TEMPLATE_NAME_MAX_LENGTH = 512
+
+/**
+ * Convierte lo que el dueño tipea en un nombre que Meta acepta: minúsculas,
+ * sin tildes, espacios y guiones a `_`, todo lo demás fuera. Se aplica en el
+ * campo mientras escribe, para que nunca vea un error por una mayúscula.
+ */
+export function normalizeTemplateName(raw: string): string {
+  return raw
+    .normalize('NFD')
+    // El rango son los diacríticos combinantes (U+0300–U+036F): quita la tilde
+    // que NFD separó de la vocal.
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_')
+    .replace(/[^a-z0-9_]/g, '')
+    .replace(/_+/g, '_')
+}
+
+/**
+ * Por qué un nombre NO sirve para Meta, en palabras del dueño. Vacía = sirve.
+ * Lo que NO chequea es si ya está usado: eso lo sabe solo el servidor
+ * (`template_versions` + punteros) y, en última instancia, la WABA.
+ */
+export function validateTemplateName(name: string): string[] {
+  const trimmed = name.trim()
+  if (!trimmed) return ['El nombre no puede quedar vacío.']
+  const issues: string[] = []
+  if (!TEMPLATE_NAME_REGEX.test(trimmed)) {
+    issues.push(
+      'WhatsApp solo acepta letras minúsculas, números y guion bajo, y el nombre tiene que empezar por una letra (ej: bienvenida_2).'
+    )
+  }
+  if (trimmed.length > TEMPLATE_NAME_MAX_LENGTH) {
+    issues.push(`Supera el límite de ${TEMPLATE_NAME_MAX_LENGTH} caracteres de WhatsApp.`)
+  }
+  return issues
+}
+
 /**
  * Auto-chequeo del banco: verifica los 13 textos contra las mismas reglas que
  * aplicamos a una edición del dueño. Existe para que un texto nuevo mal escrito

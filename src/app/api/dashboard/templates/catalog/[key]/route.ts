@@ -40,9 +40,15 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const payload = (await request.json().catch(() => ({}))) as {
       body?: unknown
       acceptedDisclaimer?: unknown
+      name?: unknown
     }
     if (typeof payload.body !== 'string') {
       return NextResponse.json({ error: 'Falta el texto del mensaje.' }, { status: 400 })
+    }
+    // `name` es opcional: si no viene, el servicio elige el siguiente libre. Si
+    // viene, tiene que ser texto; la regla de Meta la valida el servicio.
+    if (payload.name !== undefined && typeof payload.name !== 'string') {
+      return NextResponse.json({ error: 'El nombre de la plantilla no es válido.' }, { status: 400 })
     }
 
     const tenantId = await getTenantIdFromJwt()
@@ -59,6 +65,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       tenant,
       key,
       body: payload.body,
+      name: payload.name,
       acceptedDisclaimer: payload.acceptedDisclaimer === true,
       editor: { userId: user.id, email: user.email ?? null },
     })

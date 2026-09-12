@@ -40,8 +40,10 @@ import {
   detectTemplateStyle,
   resolveTemplateEmoji,
   validateTemplateBody,
+  validateTemplateName,
 } from '@/constants/template-catalog'
 import { createZernioTemplate, getZernioTemplateStatus } from '@/lib/zernio/templates'
+import { ZernioApiError } from '@/lib/zernio/client'
 import type { ZernioTemplateStatus } from '@/lib/zernio/templates'
 import { resolveBranding } from '@/lib/branding'
 import type { Tenant } from '@/types/tenant.types'
@@ -188,6 +190,7 @@ export async function getTemplateCatalogState(tenant: Tenant): Promise<TemplateC
       pending,
       lastRejected,
       suggestedBody: buildTemplateBody(definition.key, brandName, emoji),
+      suggestedName: nextProviderRef(definition, mine, pointers[definition.settingsKey] ?? null),
       // Puntero cargado fuera del panel (alta por el AIOS o SQL directo): la
       // plantilla está activa pero no tenemos su texto. La UI lo dice tal cual
       // en vez de inventarse un cuerpo que quizá no es el que se está enviando.
@@ -233,6 +236,25 @@ function nextProviderRef(
   }
 
   return maxVersion === 0 ? definition.baseName : `${definition.baseName}_v${maxVersion + 1}`
+}
+
+/**
+ * El motivo humano que viene en un error de Zernio, si lo hay. Zernio envuelve
+ * el error de Meta en `{ message }` o `{ error }`; a veces es texto plano.
+ */
+function zernioErrorDetail(body: unknown): string {
+  if (typeof body === 'string' && body.trim()) return body.trim().slice(0, 300)
+  if (body && typeof body === 'object') {
+    const o = body as Record<string, unknown>
+    for (const k of ['message', 'error', 'detail']) {
+      const v = o[k]
+      if (typeof v === 'string' && v.trim()) return v.trim().slice(0, 300)
+      if (v && typeof v === 'object' && typeof (v as Record<string, unknown>).message === 'string') {
+        return String((v as Record<string, unknown>).message).slice(0, 300)
+      }
+    }
+  }
+  return 'sin detalle del proveedor'
 }
 
 /**
@@ -283,6 +305,12 @@ export interface SaveTemplateInput {
    * solo se sostiene si queda registro de que la vio y la aceptó.
    */
   acceptedDisclaimer: boolean
+  /**
+   * `name` que el dueño quiere para la plantilla en Meta. `undefined` = lo elige
+   * el servidor (`nextProviderRef`). Va ya normalizado desde el campo; acá se
+   * valida contra la regla de Meta y contra los nombres que este negocio ya usó.
+   */
+  name?: string
 }
 
 export interface SaveTemplateResult {
@@ -317,6 +345,7 @@ export async function saveTemplateEdit(input: SaveTemplateInput): Promise<SaveTe
     // El texto lo escribió el dueño: la aceptación es real y queda fechada.
     disclaimerAcceptedAt: new Date().toISOString(),
     unchangedError: 'No cambiaste nada: el texto es idéntico al que estás enviando hoy.',
+    requestedName: input.name,
   })
 }
 
@@ -380,9 +409,17 @@ async function submitTemplateBody(args: {
   disclaimerAcceptedAt: string | null
   /** Qué decirle al dueño si el texto es idéntico al que ya está enviando. */
   unchangedError: string
+  /** Nombre elegido por el dueño para Meta; `undefined` = lo elige `nextProviderRef`. */
+  requestedName?: string
 }): Promise<SaveTemplateResult> {
   const { tenant, definition, body, editor } = args
   assertZernioTenant(tenant)
+
+  const requestedName = args.requestedName?.trim() || undefined
+  if (requestedName) {
+    const nameIssues = validateTemplateName(requestedName)
+    if (nameIssues.length > 0) throw new TemplateError(nameIssues.join(' '), 400)
+  }
 
   const issues = validateTemplateBody(body, {
     category: definition.category,
@@ -411,6 +448,22 @@ async function submitTemplateBody(args: {
 
   const pointers = await fetchPointers(tenant.id)
 
+  // Un nombre que este negocio ya usó —en cualquier mensaje, con cualquier
+  // resultado— casi seguro sigue existiendo en la WABA: Meta lo rechazaría
+  // por repetido. Se corta acá con un mensaje que dice qué hacer, en vez de
+  // dejar que Zernio devuelva un 400 genérico.
+  if (requestedName) {
+    const taken =
+      versions.some((v) => v.provider_ref === requestedName) ||
+      Object.values(pointers).includes(requestedName)
+    if (taken) {
+      throw new TemplateError(
+        `El nombre "${requestedName}" ya está usado en este negocio. Escribe uno distinto (por ejemplo, agrégale un número al final).`,
+        409
+      )
+    }
+  }
+
   return createAndSubmit({
     tenant,
     definition,
@@ -422,6 +475,7 @@ async function submitTemplateBody(args: {
     pointer: pointers[definition.settingsKey] ?? null,
     hasCurrent: Boolean(current) || Boolean(pointers[definition.settingsKey]),
     disclaimerAcceptedAt: args.disclaimerAcceptedAt,
+    requestedName,
   })
 }
 
@@ -442,6 +496,8 @@ interface CreateAndSubmitInput {
    * una aceptación que en el camino «Enviar a Meta» nunca ocurrió.
    */
   disclaimerAcceptedAt: string | null
+  /** Ya validado y libre en este negocio. `undefined` = `nextProviderRef`. */
+  requestedName?: string
 }
 
 /**
@@ -452,7 +508,8 @@ interface CreateAndSubmitInput {
 async function createAndSubmit(input: CreateAndSubmitInput): Promise<SaveTemplateResult> {
   const { tenant, definition, body, brandName, editor, disclaimerAcceptedAt } = input
   const supabase = getServiceClient()
-  const providerRef = nextProviderRef(definition, input.existing, input.pointer)
+  const providerRef =
+    input.requestedName ?? nextProviderRef(definition, input.existing, input.pointer)
   const now = new Date().toISOString()
 
   let header: { format: 'image' | 'video'; sampleUrl: string } | undefined
@@ -506,6 +563,17 @@ async function createAndSubmit(input: CreateAndSubmitInput): Promise<SaveTemplat
       submitted_at: now,
       resolved_at: now,
     })
+
+    // Un 400 NO es transitorio: es Meta diciendo que ese nombre ya existe en la
+    // cuenta (con otra categoría, con otro texto) o que algo del contenido no
+    // pasa. Invitar a «reintentar más tarde» era mentira (Planeta Wings,
+    // 2026-09-12 05:13 UTC): se le dice el motivo y qué hacer.
+    if (err instanceof ZernioApiError && err.status === 400) {
+      throw new TemplateError(
+        `WhatsApp no aceptó la plantilla "${providerRef}": ${zernioErrorDetail(err.body)}. Si dice que ya existe una con ese nombre, ábrela con Editar y ponle otro nombre.`,
+        400
+      )
+    }
 
     throw new TemplateError(
       'WhatsApp no aceptó el cambio en este momento. Tu mensaje actual sigue funcionando igual; vuelve a intentarlo más tarde.',

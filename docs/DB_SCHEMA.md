@@ -1,7 +1,7 @@
 # Esquema de Base de Datos
 
 **Base de datos:** Supabase (PostgreSQL)
-**Última actualización:** 2026-09-11 (rendimiento del equipo, 00065)
+**Última actualización:** 2026-09-12 (Golden Bullet por tandas: `imported_contacts` al día con la 00060 y las bases)
 
 ---
 
@@ -838,25 +838,28 @@ CREATE POLICY "service_update_message_logs" ON message_logs
 
 ### imported_contacts
 
-> Contactos importados desde CSV externos (Golden Bullet, v2.0.0, migración 00023). Separados de `customers` porque NO han dado consentimiento de marketing. Ver `docs/features/golden-bullet.md`.
+> Contactos importados desde CSV externos (Golden Bullet, migraciones 00023 y 00060). Separados de `customers` porque NO han dado consentimiento de marketing. Una **base** es un CSV confirmado (`source_batch`), guardado ENTERO desde el 2026-09-12; sale por **tandas**, cada una con su campaña (`campaign_id`). Ver `docs/features/golden-bullet.md` § «Bases y tandas».
 
 | Columna | Tipo | Nullable | Default | Descripción |
 |---------|------|----------|---------|-------------|
 | `id` | `uuid` | NO | `gen_random_uuid()` | PK |
-| `phone` | `text` | NO | - | Número (único) |
+| `phone` | `text` | NO | - | Número. Único **por marca** (`idx_imported_contacts_phone_tenant`, 00028): un teléfono existe UNA vez en `imported_contacts` por tenant, cualquiera sea su estado — es la regla anti-reenvío |
 | `name` | `text` | SI | `NULL` | Nombre si viene en el CSV |
 | `email` | `text` | SI | `NULL` | Email si viene |
 | `source_file` | `text` | NO | - | Nombre del CSV |
-| `source_batch` | `text` | NO | - | UUID del lote de importación |
-| `status` | `text` | NO | `'pending'` | `pending`\|`valid`\|`invalid`\|`sent`\|`delivered`\|`bounced`\|`converted`\|`blocked` (CHECK) |
+| `source_batch` | `text` | NO | - | UUID de la BASE (el CSV confirmado). Todas sus tandas lo comparten |
+| `status` | `text` | NO | `'pending'` | CHECK (00060): `pending` · `valid` = **en la base, sin programar** (espera la próxima tanda; en uso desde 2026-09-12) · `invalid` · `queued` = en `send_queue` esperando su bloque · `sent` · `delivered` · `bounced` · `converted` = volvió y se registró · `blocked` = no se le escribió por la regla anti-reenvío (decisión NUESTRA) · `opted_out` = tocó el botón de rechazo (decisión SUYA; evidencia, no se mezcla con `blocked`) |
 | `validation_error` | `text` | SI | `NULL` | Motivo de invalidez |
 | `message_sent_at` | `timestamptz` | SI | `NULL` | Cuándo se envió |
-| `twilio_sid` | `text` | SI | `NULL` | SID del mensaje Twilio |
+| `twilio_sid` | `text` | SI | `NULL` | SID del mensaje en el proveedor (Twilio `SM…` o el id de Zernio). Cruza con `message_logs.twilio_sid` para contar entregas |
 | `converted_to_customer_id` | `uuid` | SI | `NULL` | FK → customers(id) ON DELETE SET NULL. Si el contacto se registra |
-| `campaign_id` | `uuid` | SI | `NULL` | FK → campaigns(id) ON DELETE SET NULL |
-| `created_at` | `timestamptz` | NO | `now()` | - |
+| `campaign_id` | `uuid` | SI | `NULL` | FK → campaigns(id) ON DELETE SET NULL. La TANDA en la que entró; `NULL` mientras está `valid`. La campaña guarda en `filters` (`golden_bullet`, `batch_id`, `tanda`, `plan`, `template_sid`, `promo_text`, `fallback_name`, `consent_warning`) lo que la tanda siguiente hereda |
+| `tenant_id` | `uuid` | SI | puente (00028) | Marca. Todo INSERT lo lleva explícito |
+| `created_at` | `timestamptz` | NO | `now()` | Orden en que se guardó la base: es el orden en que salen las tandas siguientes |
 
-**Índices:** único `idx_imported_contacts_phone (phone)`, `idx_imported_contacts_batch (source_batch, status)`, `idx_imported_contacts_status`, `idx_imported_contacts_converted`.
+**Índices:** único `idx_imported_contacts_phone_tenant (phone, tenant_id)` (00028; el global de la 00023 lo tiró la 00025), `idx_imported_contacts_batch (source_batch, status)`, `idx_imported_contacts_status`, `idx_imported_contacts_converted`, parcial `idx_imported_contacts_optout (tenant_id, phone) WHERE status = 'opted_out'` (00060).
+
+> ⚠️ Toda lectura de una base entera pagina de a 1.000 (`leerTodo()` en `imported-contacts.service.ts`): PostgREST corta ahí en silencio.
 
 **RLS:** admin ALL (`auth.role()='authenticated'`); service SELECT/INSERT/UPDATE (`true`).
 

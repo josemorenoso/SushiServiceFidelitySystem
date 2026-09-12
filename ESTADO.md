@@ -32,6 +32,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Paso 4 del AIOS: estado real por plantilla (pendiente/aprobada/rechazada + motivo), Planeta Wings 0/13 tras 4 h · Opus 5 · 2026-09-12 | Opus 5 | AIOS: `src/lib/actions/provisioning.ts`, `src/components/clients/WhatsappWizard.tsx`, `src/types/database.types.ts`, `src/lib/zernio/provisioning-state.ts`, `CHANGELOG.md`, `package.json` · producto: `ESTADO.md` | — | abierta |
 
 ## 3. Siguiente, en orden
 

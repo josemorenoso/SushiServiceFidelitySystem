@@ -35,11 +35,16 @@ revisada). El paso 4 (las 13 plantillas) se puede hacer ya: no se usan hasta la 
 pero así Meta las aprueba con tiempo. **El paso 5 de la sede NO se corre** en el puente: pisaría
 los `HX…` de Twilio (y con la marca en `twilio` la función lo rechaza igual).
 
-**A.3 — Dejar los `zernio_*` en el tenant SIN cambiar de proveedor.** Dos formas; la primera no
-deja ventana:
+**A.3 — Dejar los `zernio_*` en el tenant SIN cambiar de proveedor: el botón del AIOS.**
+Con la **00067 aplicada** en el Supabase del producto y el AIOS ≥ v1.13.0: en la sede de Sushi
+Service (condición **Twilio**, sin cambiarla) → bloque **«4-bis. Zernio en paralelo»** → **«Conectar
+Zernio en paralelo (Twilio sigue)»**. Llama a `aios_attach_zernio_account()`: escribe los tres
+`zernio_*` y **nunca** `messaging_provider` (se niega si la marca ya es Zernio). No es el paso 4 y
+no cambia la condición de la sede. Sin ventana, sin SQL.
+
+Respaldo, si el AIOS no está desplegado o la 00067 no está aplicada (es lo mismo que hace la función):
 
 ```sql
--- (a) Directo. Los tres valores están en el wizard del propietario del AIOS (profile, número, cuenta).
 UPDATE tenants
    SET zernio_profile_id   = '<profileId>',
        zernio_account_id   = '<accountId>',
@@ -47,13 +52,6 @@ UPDATE tenants
  WHERE slug = 'sushi-service'
    AND messaging_provider = 'twilio';
 -- esperado: UPDATE 1. Si dice 0, la marca ya no está en twilio: mirar antes de seguir.
-```
-
-```sql
--- (b) O por el AIOS: paso 4 de la sede («Activar») y ACTO SEGUIDO volver el proveedor:
-UPDATE tenants SET messaging_provider = 'twilio' WHERE slug = 'sushi-service';
--- entre el paso 4 y este UPDATE la marca manda por Zernio con punteros HX → fallan. Segundos, pero a
--- una hora tranquila. (a) no tiene ese hueco; (b) deja además la fila de tenant_connections.
 ```
 
 Comprobar:
@@ -89,8 +87,8 @@ Manager (§6).
 `DELETE FROM admin_settings WHERE key = 'golden_bullet_provider' AND tenant_id = (SELECT id FROM tenants WHERE slug = 'sushi-service')`.
 Los `zernio_*` pueden quedarse: con el proveedor en `twilio` no hacen nada.
 
-**Cuando Twilio muera (≈ un mes):** seguir con los §4-§6 de abajo — paso 5 de la sede (o el
-`UPDATE` de `messaging_provider` a `zernio` si se usó A.3.a, y entonces sí el paso 5), el SQL de
+**Cuando Twilio muera (≈ un mes):** seguir con los §4-§6 de abajo — en el AIOS, Datos de la sede →
+«Falta instalar WhatsApp», paso 4 («Activar», que ahora sí cambia el proveedor) y paso 5; el SQL de
 las claves huérfanas (§5) y el cupo (§6). El §2 (guardar los `HX…`) se hace ANTES de eso.
 
 ## 0. Qué cambia y qué no

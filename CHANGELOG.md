@@ -8,6 +8,19 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [migración 00067] — 2026-09-12 — Zernio en paralelo a Twilio, desde el AIOS
+
+**Pedido del dueño:** poder conectar su Zernio (coexistencia) al mismo tiempo que su Twilio, desde el AIOS, sin SQL;
+es la excepción del Golden Bullet (la difusión por la línea de coexistencia) y tiene que quedar aislada y documentada.
+
+- `00067_aios_attach_zernio_account.sql`: `aios_attach_zernio_account(slug, profile, account, phone)` escribe los tres
+  `tenants.zernio_*` y **nunca** `messaging_provider`; se niega con `ya_es_zernio` si la marca ya manda por Zernio.
+  Función nueva, no sobrecarga (42725). Solo `aios_constelarys`. **Se aplica antes de usar el botón del AIOS.**
+- `tests/db/aios-attach-zernio.test.ts` (4): no cambia el proveedor, se niega en Zernio, valida E.164, y la
+  activación completa de después funciona sobre lo que dejó.
+- AIOS v1.13.0 (repo propio): bloque «4-bis. Zernio en paralelo (solo la difusión)» en la sede en Twilio.
+- Docs: `DB_SCHEMA.md`, `zernio-messaging.md` (tabla del contrato), runbook §A.3 (el botón; el `UPDATE` queda de respaldo).
+
 ## [2.x] — 2026-09-12 — El AIOS enciende los domicilios por WhatsApp de una marca (00066)
 
 **Pedido del dueño:** el panel de Planeta Wings decía «hace falta que Cada1 lo prenda en la ficha de tu marca»

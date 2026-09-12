@@ -32,6 +32,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Interruptor «Domicilios por WhatsApp» en la ficha de la sede del AIOS (`has_delivery_webhook` de la marca, vía función SECURITY DEFINER); Opus 5; 2026-09-12 | Opus 5 | `supabase/migrations/00066_aios_delivery_webhook.sql` · AIOS: `src/lib/product-db.ts`, `src/lib/actions/delivery.ts` (nuevo), `src/lib/data/sites.ts`, `src/components/sites/SiteSystemSection.tsx`, `CHANGELOG.md` · producto: `CHANGELOG.md`, `docs/features/delivery-dashboard.md`, `docs/DB_SCHEMA.md` | **00066** | en curso |
 
 ## 3. Siguiente, en orden
 

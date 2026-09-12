@@ -32,6 +32,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Golden Bullet por tandas desde el panel: la base entera se guarda, «En curso» muestra cada base (terminadas incluidas) con registrados/rechazos y deja programar la siguiente tanda sin resubir el CSV (dueño, 2026-09-12) | Opus 5 | `src/services/imported-contacts.service.ts` · `src/app/api/dashboard/imported-contacts/{confirm,progress,continue}/route.ts` · `src/components/dashboard/ImportedContactsProgress.tsx` · `ImportedContactsUploader.tsx` · `dashboard/imported-contacts/page.tsx` · `tests/unit/golden-bullet-*.test.ts` · `docs/features/golden-bullet.md` · `docs/API_DOCS.md` · `CHANGELOG.md` | — | en curso |
 
 ## 3. Siguiente, en orden
 

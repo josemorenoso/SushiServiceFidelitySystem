@@ -235,6 +235,14 @@ El punto 4 es el que convierte esto en una decisión de producto y no en una tar
 `tests/unit/opt-out-persistence.test.ts` deja clavada la asimetría para que quien alguna
 vez agregue un envío de texto libre por Zernio se tope con este apartado.
 
+> **Actualización 2026-09-12:** el texto libre por Zernio **ya existe** —
+> `sendZernioConversationMessage()` (`src/lib/zernio/messaging.ts`, contrato §8) manda texto y foto
+> dentro de la ventana de 24 h que abre el mensaje entrante, y es lo que usa el acuse a los
+> botones del Golden Bullet en `webhook/zernio`. Los pasos 1-3 de arriba (plantilla, aprobación,
+> catálogo) **ya no hacen falta** para confirmar el SALIR: la persona acaba de escribir, la
+> ventana está abierta. Queda el punto 4 (si consume presupuesto / exención de `isPhoneOptedOut()`)
+> y decidir el texto. Es una llamada a `contestarEnConversacion()` desde el bloque de opt-out.
+
 ---
 
 ## Checklist de replicación para nuevo cliente

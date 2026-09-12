@@ -137,9 +137,15 @@ y va en contra del motivo de ser de coexistencia (evitar líneas/números extra)
 
 **El problema en 3 líneas:** con Twilio, el operador recibía un TwiML de vuelta en la misma
 conversación ("✅ Nuevo cliente: Juan Pérez... " o el motivo del fallo). Zernio no permite
-responder con contenido dentro del webhook, y `src/lib/zernio/messaging.ts` solo manda
-plantillas aprobadas — nunca texto libre. Hoy, un operador en un tenant Zernio manda el cuadro y
-no se entera de nada: ni si funcionó, ni si falló.
+responder con contenido dentro del webhook, y hasta el 2026-09-12 `src/lib/zernio/messaging.ts`
+solo mandaba plantillas aprobadas. Hoy, un operador en un tenant Zernio manda el cuadro y no se
+entera de nada: ni si funcionó, ni si falló.
+
+> **Actualización 2026-09-12:** ya existe `sendZernioConversationMessage()` (texto libre + foto
+> en la ventana de 24 h, contrato §8; lo usa el acuse a los botones del Golden Bullet). El cuadro
+> del operador es un mensaje entrante, así que la ventana está abierta: **18.c ya no necesita
+> plantilla**, solo el texto de la confirmación y una llamada desde `webhook/zernio` —el mismo
+> `contestarEnConversacion()` que ya está ahí. Las opciones de abajo quedan como historia.
 
 | Opción | Costo | Qué rompe | Qué gana |
 |---|---|---|---|

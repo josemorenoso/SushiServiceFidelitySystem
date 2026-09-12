@@ -117,6 +117,9 @@ impide al rol `aios_constelarys` tocar `auth.users` — ver `docs/features/alta-
 | PUT | /api/dashboard/tenant-config | Escribe `tenants.config` con **whitelist por ruta** (merge profundo, no reemplazo) | Admin Cookie |
 | POST | /api/dashboard/brand-logo | Sube el logo de la marca al bucket `brand-assets` | Admin Cookie |
 | DELETE | /api/dashboard/brand-logo | Borra el logo de la marca | Admin Cookie |
+| GET | /api/dashboard/imported-contacts/template | Lo que la pestaña Plantilla necesita: textos, límites, respuestas, y por qué línea sale la difusión (`provider`, `brand_provider`, `provider_switchable`, `zernio_phone`) | Admin Cookie |
+| POST | /api/dashboard/imported-contacts/template | Crea la plantilla con botones en el proveedor de la difusión (Twilio o Zernio) y la somete a Meta. `contentSid` = `HX…` en Twilio, el **nombre** en Zernio | Admin Cookie + flag |
+| POST | /api/dashboard/imported-contacts/test-send | Manda el mensaje 1 a UN celular por la misma línea que la difusión; devuelve `provider` | Admin Cookie + flag |
 | POST | /api/dashboard/imported-contacts/validate | Validar CSV de contactos (sin insertar) | Admin Cookie + flag |
 | POST | /api/dashboard/imported-contacts/confirm | Confirmar e importar/enviar Golden Bullet | Admin Cookie + flag |
 | GET | /api/dashboard/imported-contacts | Listar lotes o contactos de un lote | Admin Cookie |
@@ -133,7 +136,7 @@ impide al rol `aios_constelarys` tocar `auth.users` — ver `docs/features/alta-
 | DELETE | /api/dashboard/authorized-numbers/:id | Eliminar un número autorizado **(sede)** | Admin Cookie |
 | GET | /api/dashboard/campaigns | Listar campañas del tenant (últimas 50) **(sede — no-op hoy, deuda #12)** | Admin Cookie |
 | GET | /api/dashboard/campaigns/efficiency | Eficiencia y revenue atribuido por campaña **(sede en el lado `campaigns`, no-op hoy, deuda #12)** | Admin Cookie |
-| GET | /api/dashboard/templates | Listar plantillas Twilio Content API | Admin Cookie |
+| GET | /api/dashboard/templates | Listar plantillas del proveedor (Twilio Content API o la WABA de Zernio, misma forma; `?provider=twilio\|zernio\|golden_bullet`; devuelve `provider`). Desde 2026-09-12 | Admin Cookie |
 | POST | /api/dashboard/templates | Crear plantilla + submit aprobación WhatsApp | Admin Cookie |
 | GET | /api/dashboard/templates/catalog | Estado del catálogo estándar (13 plantillas) — **solo Zernio** | Admin Cookie |
 | PUT | /api/dashboard/templates/catalog/:key | Editar una plantilla del catálogo | Admin Cookie |

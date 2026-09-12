@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getTenantTwilioCredentials } from '@/lib/twilio/tenant-credentials'
-import { requireTenantId, getTenantById } from '@/lib/tenant'
+import { getTenantIdFromJwt, getTenantById } from '@/lib/tenant'
 import { listZernioTemplates } from '@/lib/zernio/messaging'
 import { mapZernioTemplateToItem } from '@/lib/zernio/template-listing'
 import { resolveGoldenBulletProvider } from '@/services/club-optin.service'
@@ -30,7 +30,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
     }
 
-    const tenant = await getTenantById(await requireTenantId())
+    // Sin tenant en el JWT se sigue exactamente el camino de antes (Twilio con
+    // lo que `getTenantTwilioCredentials()` resuelva): esta ruta nunca exigió tenant.
+    const tenantId = await getTenantIdFromJwt()
+    const tenant = tenantId ? await getTenantById(tenantId) : null
     const pedido = request.nextUrl.searchParams.get('provider')
     const brandProvider = tenant?.messaging_provider === 'zernio' ? 'zernio' : 'twilio'
     const provider =

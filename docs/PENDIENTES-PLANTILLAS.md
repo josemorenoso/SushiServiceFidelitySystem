@@ -48,10 +48,11 @@ Además `reactivation_with_reward_template_sid` y el legacy `reactivation_templa
   categoría, muestras) + tarjeta «Del set estándar te faltan N». Las 2 de evento no se pueden crear ahí.
 - **Ajustes › Plantillas WhatsApp**: 13 dropdowns para pegar el puntero. En Twilio hay que crear en un lado,
   esperar 24-72 h y **acordarse** de asignar en el otro.
-- **Verificado:** en un tenant Zernio esa sección consulta `/api/dashboard/templates` (Twilio), recibe `[]` y
-  muestra «No hay plantillas aprobadas. Ve a Dashboard › Plantillas, créalas y espera aprobación». Es falso
-  y manda al dueño en círculos. (No borra punteros: el botón Guardar vive dentro de la rama con selectores,
-  que no se dibuja.)
+- ~~**Verificado:** en un tenant Zernio esa sección consulta `/api/dashboard/templates` (Twilio), recibe `[]`~~
+  **Resuelto el 2026-09-12:** `/api/dashboard/templates` es consciente del proveedor y a un tenant Zernio le
+  devuelve su WABA con la misma forma (`sid` = nombre). Ajustes › Plantillas, las campañas manuales y las
+  burbujas de riesgo ya tienen qué elegir en Zernio. Lo que sigue en pie es el resto de esta sección: tres
+  pantallas para una sola cosa.
 
 ### 1.4 «`promoteVersion()` es el único escritor del puntero» es verdad en un archivo, no en el sistema
 Escriben `admin_settings.*_template_sid`: `promoteVersion()`, `fillEmptyPointer()`,

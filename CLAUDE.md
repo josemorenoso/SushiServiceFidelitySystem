@@ -77,6 +77,7 @@ las migraciones en Supabase, y lo ordena él. La sesión de cierre se lo pide en
 - **`OPENAI_API_KEY` es server-only** y `src/lib/openai/client.ts` es el único sitio que instancia el SDK.
 - **`getTenantByDomain()` conserva su firma**: la sede viaja por `resolveHostContext()`. Cambiarla toca 16 archivos de golpe. Y las rutas de Zernio **no se inventan**: salen de `Level 2.0/aios-constelarys/docs/zernio-api-contract.md` §4.
 - Premios: `reward_grants.granted_location_id` y `reward_redemptions.redeemed_location_id` son DOS sedes distintas (dónde se ganó / dónde se entregó). Ningún premio tiene precio: solo conteos y tasas, **nunca pesos**.
+- **`options.provider` de `sendTemplateMessage()` lo fija SOLO el Golden Bullet** (`resolveGoldenBulletProvider()`, 2026-09-12): es lo que deja salir la difusión por la línea de coexistencia (Zernio) con la marca todavía en Twilio. Ningún otro emisor lo pasa; no relaja las guardas de `sendViaZernio()`. En Zernio la plantilla se identifica por NOMBRE y sus botones no llevan payload (Meta devuelve el texto): el detector reconoce por la etiqueta guardada. Texto libre en Zernio SOLO dentro de la ventana de 24 h (`sendZernioConversationMessage()`), nunca desde un cron.
 - "Quién es Black" difiere hoy entre la tarjeta (`src/lib/black-tier.ts`) y el panel (`POWER_RANKS`, 10+ visitas). Es la deuda 17.b: no se unifica por cuenta propia.
 
 ## Trampas verificadas (tu memoria está desactualizada)
@@ -108,6 +109,7 @@ las migraciones en Supabase, y lo ordena él. La sesión de cierre se lo pide en
 | Tarjeta del cliente | `docs/features/wallet-card.md` + `design-system.md` |
 | Logo, paleta, `tenants.config`, QR Studio | `docs/features/identidad-visual.md` (+ `qr-studio.md`) |
 | Premios, redenciones, escaneo del mesero | `docs/features/reward-grants.md` + `redemption-tracking.md` |
+| Golden Bullet, base importada, botones sí/no, por qué línea sale la difusión | `docs/features/golden-bullet.md` (+ `docs/RUNBOOK-SUSHI-SERVICE-A-ZERNIO.md` §A) |
 | Calendario de eventos | `docs/features/calendar.md` |
 | Cualquier `location_id`, sedes, `resolveHostContext()` | `docs/features/multi-sede.md` (diseño: `docs/superpowers/specs/2026-09-02-multisede-design.md`) |
 | Mensajería Zernio | `docs/features/zernio-messaging.md` |

@@ -32,7 +32,6 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
-| Hotfix AIOS: `getTemplateStatus` lee `status` en la raíz y Zernio lo manda en `template`; el paso 4b guarda `undefined` y `/clientes/[id]` revienta (Planeta Wings, 2026-09-12 14:08 UTC). Opus, 2026-09-12 | Opus 5 | `Level 2.0/aios-constelarys/src/lib/zernio/client.ts`, `src/components/clients/WhatsappWizard.tsx`, `CHANGELOG.md` (AIOS) | — | en curso |
 
 ## 3. Siguiente, en orden
 

@@ -27,7 +27,7 @@ panel y no tenemos su texto» (`adoptedRef`) — verificado en PENDIENTES §1.1.
   (`src/lib/zernio/messaging.ts:108`, ya verificado contra Zernio) y **adoptar** cada plantilla del
   catálogo que exista allí con nombre base o `_vN`: crear la fila en `template_versions` con
   `provider_ref`, `status` real (`PENDING`/`APPROVED`/`REJECTED` + motivo) y el texto del catálogo
-  estándar (`src/lib/template-texts.ts`, sin emojis horneados: hay un test que lo vigila).
+  estándar (`src/constants/template-texts.ts`, sin emojis horneados: hay un test que lo vigila).
 - `nextProviderRef()` pasa a mirar la unión de `template_versions` + nombres de la WABA (misma regla que
   `nextFreeName()` del AIOS: base, `_v2`, `_v3`…).
 - El botón «Enviar a Meta» se muestra **por plantilla**, con su estado al lado, y un «Actualizar estado»
@@ -36,7 +36,7 @@ panel y no tenemos su texto» (`adoptedRef`) — verificado en PENDIENTES §1.1.
 
 ### 2. Las dos claves que el catálogo no cubre
 `tier_unlocked_template_sid` y `reward_reminder_template_sid` las consume el código (PENDIENTES §1.2) y
-ninguna pantalla Zernio las puede crear. Agregalas a `src/lib/template-catalog.ts` con texto en
+ninguna pantalla Zernio las puede crear. Agregalas a `src/constants/template-catalog.ts` con texto en
 `template-texts.ts` (variables `{{n}}` fijas: el contrato de `template-catalog.ts` no se cambia) y
 al espejo del AIOS (`Level 2.0/aios-constelarys/src/lib/zernio/templates-catalog.ts`) con el MISMO texto.
 Sin esto, en Zernio el cruce de nivel es silencio total.
@@ -59,7 +59,7 @@ enlace a Dashboard › Plantillas, y no los 13 dropdowns.
 - Ningún servicio externo se dispara en tests: mockeá `listZernioTemplates` / `createZernioTemplate`.
 
 ## Cómo se prueba
-- `npx vitest run tests/**/template*` + los que agregues: adopción con nombre base y `_v2`, colisión de
+- `npx vitest run tests/unit/template-catalog.test.ts` + los que agregues: adopción con nombre base y `_v2`, colisión de
   nombre resuelta, `REJECTED` con motivo visible, webhook que ahora sí encuentra la versión.
 - Manual con Planeta Wings (tenant Zernio, 13 en la WABA «En revisión» desde el 2026-09-12 00:17 UTC):
   al abrir Plantillas se ven las 13 con su estado real, ninguna como «configurada fuera de este panel».

@@ -32,6 +32,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Cumpleaños 2 días antes (Opus 5, 2026-09-24) | Opus 5 | `src/services/campaign.service.ts`, `src/app/api/cron/birthday/route.ts`, `docs/features/campaigns.md`, `CHANGELOG.md` | — | en vuelo |
 
 ## 3. Siguiente, en orden
 

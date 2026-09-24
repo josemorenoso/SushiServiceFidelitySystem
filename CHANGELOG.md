@@ -8,6 +8,24 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [feat] — 2026-09-24 — El saludo de cumpleaños sale dos días antes
+
+**Pedido del dueño:** *"quiero que el mensaje de cumpleaños se envíe dos días antes del cumpleaños"*.
+
+- `src/constants/rewards.ts`: `BIRTHDAY_LEAD_DAYS = 2` (la anticipación, único sitio donde se cambia) y
+  `BIRTHDAY_DEDUPE_DAYS = 360`.
+- `campaign.service.ts` → `findBirthdayCustomers()`: la fecha objetivo es `hoy + BIRTHDAY_LEAD_DAYS`, no hoy.
+- `cron/birthday`: la dedup pasa de 365 a `BIRTHDAY_DEDUPE_DAYS`. **No es cosmético:** adelantar dos días acorta
+  el hueco contra el saludo del año pasado a 363, y con 365 el cron habría saltado a TODO cliente saludado el año
+  anterior sin registrar un solo error — la campaña habría quedado muda un año entero.
+- `tests/unit/birthday-lead.test.ts` (8): los dos días, el rollover de mes y de año, el 29 de febrero bisiesto,
+  el aislamiento por tenant y el invariante `BIRTHDAY_DEDUPE_DAYS < 365 − BIRTHDAY_LEAD_DAYS`.
+- Docs: `campaigns.md` (§ Cron Cumpleaños) y `PLANTILLAS.md` § 7 — donde además se corrigió la hora («8am» → 18:00 UTC).
+
+⚠️ **Dos cosas quedan para el dueño:** el texto aprobado sigue diciendo «¡Feliz cumpleaños!» y ahora llega dos días
+antes (cambiarlo es plantilla nueva en Meta, 24-48 h); y quien cumpla en los dos días siguientes al despliegue no
+recibe saludo este año — su ventana de −2 ya pasó. Es un hueco de una sola vez.
+
 ## [fix] — 2026-09-12 — «Tenant no encontrado» en la campaña manual era un fallo de base escondido
 
 **Qué pasó:** al confirmar una campaña manual (152 clientes) el modal dijo «Tenant no encontrado» (404, 18:35 UTC, una sola

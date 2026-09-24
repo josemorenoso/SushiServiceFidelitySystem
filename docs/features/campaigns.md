@@ -147,14 +147,19 @@ Al final del loop:
 ```
 
 ### Cron Cumpleaños (`/api/cron/birthday`)
+
+**El saludo sale DOS DÍAS ANTES del cumpleaños** (dueño, 2026-09-24). El cron de hoy
+no busca a quien cumple hoy sino a quien cumple pasado mañana: `BIRTHDAY_LEAD_DAYS`
+(`src/constants/rewards.ts`) es el único sitio donde se cambia esa anticipación.
+
 ```
 findBirthdayCustomers()
-  → cumpleaños hoy                           ✅ filtro existente
+  → cumpleaños en hoy + BIRTHDAY_LEAD_DAYS (= 2)   ✅ filtro existente, corrido
   → accepts_marketing = true                 ✅ filtro existente
   (NO aplica frequency cap — cumpleaños tiene prioridad absoluta)
 
 Por cada cliente:
-  → hasRecentCampaignMessage(type=birthday, 365d)     [dedup anual]
+  → hasRecentCampaignMessage(type=birthday, BIRTHDAY_DEDUPE_DAYS = 360d)   [dedup anual]
   → sendTemplateMessage()
   → recordCampaignMessage()
 
@@ -270,4 +275,7 @@ las tres cosas a la vez: el mensaje del cron, la ventana protegida y lo que mues
 | `accepts_marketing = false` | ❌ excluido | ❌ excluido | ❌ excluido |
 
 *Sujeto al frequency cap de 7 días
-**El cron de cumpleaños usa dedup por `campaign_messages` (365 días), no por `last_campaign_at`
+**El cron de cumpleaños usa dedup por `campaign_messages` (`BIRTHDAY_DEDUPE_DAYS`, 360 días), no por `last_campaign_at`.
+La ventana es de 360 y no de 365 **a propósito**: el año en que el envío se adelantó dos días el hueco
+contra el saludo anterior es de 363, y 365 habría saltado a todo cliente saludado el año pasado sin
+registrar un solo error — la campaña habría quedado muda un año entero

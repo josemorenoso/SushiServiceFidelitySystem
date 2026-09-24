@@ -9,6 +9,28 @@ export const REACTIVATION_AGGRESSIVE_DAYS = 25
 /** Mínimo de días entre mensajes de marketing por cliente (aplica a todos los canales) */
 export const FREQUENCY_CAP_DAYS = 7
 
+/** Días de ANTICIPACIÓN del mensaje de cumpleaños (dueño, 2026-09-24).
+ *
+ *  El cron de cumpleaños no busca a quien cumple HOY sino a quien cumple dentro
+ *  de `BIRTHDAY_LEAD_DAYS` días: el mensaje llega con tiempo para que la persona
+ *  alcance a planear la visita. Cambiar este número cambia a quién saluda el cron
+ *  de mañana, no a quién ya fue saludado.
+ *
+ *  ⚠️ Va de la mano con `BIRTHDAY_DEDUPE_DAYS`: adelantar el envío acorta el hueco
+ *  entre el saludo del año pasado y el de este, y una ventana de deduplicación más
+ *  larga que ese hueco apagaría la campaña un año entero en silencio. */
+export const BIRTHDAY_LEAD_DAYS = 2
+
+/** Ventana de deduplicación del saludo de cumpleaños, en días.
+ *
+ *  Tiene que ser MENOR que el hueco mínimo entre dos saludos legítimos. En régimen
+ *  ese hueco es 365, pero el año en que `BIRTHDAY_LEAD_DAYS` sube de 0 a 2 el hueco
+ *  baja a 363 (se saluda dos días antes que el año pasado). Con los 365 de antes,
+ *  TODO cliente saludado el año anterior se habría saltado sin dejar error: la
+ *  campaña habría quedado muda un año. 360 deja colchón y sigue impidiendo el
+ *  duplicado real, que solo puede ocurrir con dos corridas del mismo día. */
+export const BIRTHDAY_DEDUPE_DAYS = 360
+
 /** Días que la Recovery Zone abre ANTES del toque suave.
  *
  *  El margen existe porque el cron corre una vez al día: sin él, un cliente que

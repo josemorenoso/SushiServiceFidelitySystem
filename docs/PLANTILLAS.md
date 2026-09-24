@@ -298,7 +298,13 @@ _Responde SALIR para no recibir más mensajes._
 **Slot:** `birthday_template_sid`
 **Categoría Twilio:** `MARKETING`
 **Variables:** `{{1}}`=Nombre · `{{2}}`=Pts actuales
-**Cuándo se envía:** Cron diario a las 8am — detecta clientes con cumpleaños hoy
+**Cuándo se envía:** Cron diario a las 18:00 UTC (13:00 Bogotá, `vercel.json`) — detecta a los clientes
+que cumplen años **dentro de dos días** (`BIRTHDAY_LEAD_DAYS`, dueño 2026-09-24), no a los que cumplen hoy.
+
+> ⚠️ **El texto de abajo todavía dice «¡Feliz cumpleaños!» y ahora llega dos días antes.** Cambiarlo
+> es una plantilla NUEVA en Meta (24-48 h de aprobación) y una decisión del dueño: el código no puede
+> reescribir un texto ya aprobado. Redacción que calza con el nuevo envío: *«Se acerca tu cumpleaños
+> {{1}} 🎂 — en [Restaurante] queremos celebrarlo contigo»*.
 
 ```
 ¡Feliz cumpleaños {{1}}! 🎂🎉

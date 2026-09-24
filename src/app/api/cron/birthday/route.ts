@@ -12,6 +12,7 @@ import { sendTemplateMessage } from '@/services/whatsapp.service'
 import { getSettingValue } from '@/services/settings.service'
 import { buildTiersRoadmap } from '@/services/reward-tiers.service'
 import { getTenantBySlug, getActiveTenants } from '@/lib/tenant'
+import { BIRTHDAY_DEDUPE_DAYS } from '@/constants/rewards'
 import type { Tenant } from '@/types/tenant.types'
 
 interface TenantCronResult {
@@ -40,6 +41,8 @@ async function processTenant(tenant: Tenant): Promise<TenantCronResult> {
     }
   }
 
+  // No son los que cumplen HOY: son los que cumplen dentro de BIRTHDAY_LEAD_DAYS
+  // días (dueño, 2026-09-24). El corrimiento vive entero en findBirthdayCustomers().
   const customers = await findBirthdayCustomers(tenant.id)
 
   if (customers.length === 0) {
@@ -52,7 +55,10 @@ async function processTenant(tenant: Tenant): Promise<TenantCronResult> {
   const sentCustomerIds: string[] = []
 
   for (const customer of customers) {
-    const alreadySent = await hasRecentCampaignMessage(customer.id, 'birthday', 365)
+    // BIRTHDAY_DEDUPE_DAYS < 365 a propósito: el año en que el envío se adelantó
+    // dos días, el hueco contra el saludo anterior es de 363 y una ventana de 365
+    // se habría comido la campaña entera sin registrar un solo error.
+    const alreadySent = await hasRecentCampaignMessage(customer.id, 'birthday', BIRTHDAY_DEDUPE_DAYS)
     if (alreadySent) continue
 
     try {

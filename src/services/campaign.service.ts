@@ -4,6 +4,7 @@ import { isDbFailure, logDbFailure } from '@/lib/db-failure'
 import {
   REACTIVATION_DAYS,
   FREQUENCY_CAP_DAYS,
+  BIRTHDAY_LEAD_DAYS,
   MONTHLY_CAP_SOURCES,
   MONTHLY_MARKETING_CAP,
   DEFAULT_RECOVERY_ZONE,
@@ -20,13 +21,21 @@ function getServiceClient() {
 }
 
 /**
- * Finds customers whose birthday is today (matching day and month).
+ * Busca a los clientes que cumplen años dentro de `BIRTHDAY_LEAD_DAYS` días
+ * (dueño, 2026-09-24: el saludo se manda DOS DÍAS ANTES, no el día mismo).
+ *
+ * Solo se compara mes y día: el año del cumpleaños no interviene, así que el
+ * 29 de febrero sigue apareciendo únicamente en los años bisiestos — igual que
+ * cuando el envío era el día mismo.
  */
 export async function findBirthdayCustomers(tenantId: string): Promise<Customer[]> {
   const supabase = getServiceClient()
-  const today = new Date()
-  const month = String(today.getMonth() + 1).padStart(2, '0')
-  const day = String(today.getDate()).padStart(2, '0')
+  // Fecha OBJETIVO = hoy + los días de anticipación. `setDate` con un número mayor
+  // al último del mes rueda solo al mes (y al año) siguiente.
+  const target = new Date()
+  target.setDate(target.getDate() + BIRTHDAY_LEAD_DAYS)
+  const month = String(target.getMonth() + 1).padStart(2, '0')
+  const day = String(target.getDate()).padStart(2, '0')
 
   const { data, error } = await supabase
     .from('customers')
@@ -40,7 +49,7 @@ export async function findBirthdayCustomers(tenantId: string): Promise<Customer[
     throw new Error(`Error buscando cumpleañeros: ${error.message}`)
   }
 
-  // birthday is stored as date (YYYY-MM-DD); filter by month and day in JS
+  // birthday se guarda como date (YYYY-MM-DD); el mes y el día se filtran en JS
   return (data ?? []).filter(c => {
     if (!c.birthday) return false
     const parts = String(c.birthday).split('-')

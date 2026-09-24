@@ -270,11 +270,21 @@ describe('detectTemplateStyle', () => {
 
 describe('renderTemplatePreview', () => {
   it('sustituye cada variable por su valor de muestra', () => {
+    // El {{2}} de cumpleaños es el CAMINO DE NIVELES, no el saldo: el cron manda
+    // `buildTiersRoadmap(...)`. Decía «95» porque la muestra del catálogo mentía;
+    // el 2026-09-24 se corrigió a ROADMAP_SAMPLE y esta prueba la sigue.
     const body = buildTemplateBody('birthday', MARCA)
     const preview = renderTemplatePreview('birthday', body, MARCA)
     expect(preview).not.toMatch(/\{\{\d+\}\}/)
     expect(preview).toContain('Sofía')
-    expect(preview).toContain('95')
+    expect(preview).toContain('Bronce')
+  })
+
+  it('la muestra de un saldo sigue siendo un número donde SÍ es un saldo', () => {
+    // Control de que la corrección de arriba no se propagó de más: en
+    // `points_earned_far` el {{3}} sí es el saldo y tiene que seguir siéndolo.
+    const body = buildTemplateBody('points_earned_far', MARCA)
+    expect(renderTemplatePreview('points_earned_far', body, MARCA)).toMatch(/Tu saldo: \*\d+/)
   })
 
   it('deja intacta una variable inventada en vez de romperse', () => {

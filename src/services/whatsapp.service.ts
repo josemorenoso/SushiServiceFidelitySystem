@@ -13,7 +13,7 @@
  *   welcome:       {{1}}=nombre
  *   welcome_back:  {{1}}=nombre, {{2}}=total_visitas, {{3}}=hint_recompensa
  *   reward:        {{1}}=nombre, {{2}}=total_visitas, {{3}}=nombre_premio
- *   birthday:      {{1}}=nombre
+ *   birthday:      {{1}}=nombre, {{2}}=camino_niveles (¡no el saldo!)
  *   reactivation:  {{1}}=nombre, {{2}}=total_visitas, {{3}}=hint_recompensa
  *   campaign:      {{1}}=nombre, {{2}}=total_visitas, {{3}}=hint_recompensa
  *

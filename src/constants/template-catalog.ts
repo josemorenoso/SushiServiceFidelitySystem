@@ -226,11 +226,15 @@ export const TEMPLATE_CATALOG: readonly CatalogTemplate[] = [
     baseName: 'cumpleanos',
     category: 'MARKETING',
     label: 'Cumpleaños',
-    description: 'Felicita al cliente e invita a celebrarlo en el negocio.',
-    whenSent: 'El día del cumpleaños, en el envío automático diario.',
+    description: 'Saluda al cliente antes de su cumpleaños e invita a celebrarlo en el negocio.',
+    whenSent: 'DOS DÍAS ANTES del cumpleaños (BIRTHDAY_LEAD_DAYS), en el envío automático diario.',
     variables: [
       { index: 1, label: 'Nombre del cliente', sample: 'Sofía' },
-      { index: 2, label: 'Saldo total de puntos', sample: '95' },
+      // ⚠️ {{2}} es el CAMINO DE NIVELES, no el saldo. El cron manda
+      // `buildTiersRoadmap(...)` (varias líneas), igual que en welcome y reward_*.
+      // Decía «Saldo total de puntos / 95»: la vista previa del panel mostraba un
+      // número y al cliente le llegaba la escalera entera.
+      { index: 2, label: 'Camino de niveles', sample: ROADMAP_SAMPLE },
     ],
   },
   {

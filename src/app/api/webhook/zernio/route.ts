@@ -363,6 +363,151 @@ async function handleMessageReceived(payload: ZernioWebhookPayloadMessage): Prom
   return new NextResponse(null, { status: 200 })
 }
 
+/**
+ * `message.sent` — el pedido que el mesero escribio en el AUTO-CHAT de la propia linea.
+ *
+ * Un restaurante chico tiene UN numero, no dos: el mesero abre <<Envia mensajes a este
+ * mismo numero>> y escribe ahi el pedido. Meta NO entrega eso como entrante (un numero no
+ * se "recibe" a si mismo), asi que `handleMessageReceived()` jamas lo ve y hasta la 00068
+ * esos pedidos se perdian enteros — cuatro verificados en el log de Zernio del 2026-09-23.
+ *
+ * ⚠️ **`message.sent` tambien dispara con CADA plantilla y CADA campana** (193 en un solo
+ * dia en una marca). Lo unico que separa el auto-chat de una campana es el
+ * `conversationId`: el payload no trae destinatario, y en un saliente el `sender` es la
+ * marca en los dos casos. El destinatario solo podria estar en `payload.conversation`, que
+ * el contrato §5 no documenta y que el tipo trata como opaco — adivinarlo era justamente
+ * el riesgo de meter cada campana al parser de domicilios.
+ *
+ * Por eso el discriminador es `tenant_connections.self_conversation_id` (00068). Con la
+ * columna en NULL esta funcion NO tiene ningun efecto de negocio: solo deja la linea de
+ * log con la que se descubre el id. Y aun sabiendolo, el registro exige ademas que el
+ * numero propio este en `authorized_numbers` — el mismo opt-in por marca de siempre.
+ *
+ * Al reconocerlo llama al MISMO `processDeliveryMessage()` que el camino entrante: el
+ * registro, la plantilla que sale hacia el CLIENTE y el renglon de `message_logs` quedan
+ * exactamente como estaban.
+ */
+async function handleMessageSent(payload: ZernioWebhookPayloadMessage): Promise<NextResponse> {
+  const accountId = extractAccountId(payload.account)
+  const tenant = accountId ? await getTenantByZernioAccountId(accountId) : null
+  if (!tenant) {
+    // Sin tenant no hay nada que mirar. 200 igual: Zernio desactiva el webhook tras 10 fallos.
+    return new NextResponse(null, { status: 200 })
+  }
+
+  const message = payload.message
+  const conversationId = message.conversationId
+  const text = (message.text ?? '').trim()
+
+  let db: ReturnType<typeof getServiceClient>
+  try {
+    db = getServiceClient()
+  } catch (err) {
+    console.error(
+      `[Delivery][FALLO] reason=cliente_supabase tenant=${tenant.slug} origen=auto-chat detalle="${err instanceof Error ? err.message : String(err)}"`
+    )
+    return new NextResponse(null, { status: 200 })
+  }
+
+  // ⚠️ `error` SE LEE. supabase-js no lanza: un fallo vuelve como `{ data: null, error }` y
+  // mirar solo `data` haria que un timeout del pooler se viera igual que <<esta marca no
+  // tiene el auto-chat configurado>> — el fallo silencioso de §24 otra vez.
+  const { data: conn, error: connError } = await db
+    .from('tenant_connections')
+    .select('phone_e164, self_conversation_id')
+    .eq('tenant_id', tenant.id)
+    .eq('zernio_account_id', accountId)
+    .maybeSingle()
+
+  if (connError) {
+    console.error(
+      `[webhook/zernio] message.sent: no se pudo leer tenant_connections (tenant=${tenant.slug}): ${connError.message}`
+    )
+    return new NextResponse(null, { status: 200 })
+  }
+
+  const selfConversationId = (conn?.self_conversation_id as string | null) ?? null
+
+  if (!selfConversationId) {
+    // Todavia no sabemos cual es el auto-chat de esta marca. Se observa para descubrirlo:
+    // el pedido que el mesero mande ahi deja su `conversationId` aca, y ese valor es el que
+    // va a la columna. SIN texto: una conversacion con un cliente es privada y este log no
+    // es sitio para su contenido.
+    console.log(
+      `[webhook/zernio] message.sent sin auto-chat conocido tenant=${tenant.slug} conversationId=${conversationId} sentAt=${message.sentAt} chars=${text.length} (self_conversation_id NULL — ver 00068)`
+    )
+    return new NextResponse(null, { status: 200 })
+  }
+
+  if (conversationId !== selfConversationId) {
+    // Una campana, una plantilla, la respuesta de un agente. Nada que hacer, y sin log:
+    // son cientos por dia y ya estan en message_logs.
+    return new NextResponse(null, { status: 200 })
+  }
+
+  if (!text) {
+    // Una foto o un audio en el auto-chat. No hay pedido que parsear.
+    return new NextResponse(null, { status: 200 })
+  }
+
+  const ownPhone = normalizeZernioPhone(conn?.phone_e164 as string | null)
+  if (ownPhone.length !== 10) {
+    console.warn(
+      `[webhook/zernio] auto-chat de ${tenant.slug} sin phone_e164 usable ("${conn?.phone_e164 ?? ''}") — sin registrar`
+    )
+    return new NextResponse(null, { status: 200 })
+  }
+
+  // Dedup DESPUES de saber que es el auto-chat, no antes: `message.sent` llega cientos de
+  // veces por dia y marcarlos todos llenaria `webhook_events_seen` con eventos que nunca
+  // tuvieron efecto. Aca si hace falta — un reintento de Zernio seria una visita y unos
+  // puntos de mas en la cuenta de un cliente real.
+  const eventId = payload.id || message.id
+  if (await isDuplicateZernioEvent(eventId)) {
+    console.log(`[webhook/zernio] message.sent duplicado (${eventId}) — ignorado`)
+    return new NextResponse(null, { status: 200 })
+  }
+
+  // El opt-in del dueno, por marca: el numero propio tiene que estar en Domicilios →
+  // Autorizados. Mismo SELECT que el camino entrante, asi que la sede sale gratis (D9).
+  const { data: authorized, error: authError } = await db
+    .from('authorized_numbers')
+    .select('id, location_id')
+    .eq('phone', ownPhone)
+    .eq('tenant_id', tenant.id)
+    .eq('is_active', true)
+    .maybeSingle()
+
+  if (authError) {
+    await logDeliveryIntakeFailure({
+      tenant,
+      operatorPhone: ownPhone,
+      reason: 'remitente_no_verificable',
+      detail: authError.message,
+      rawMessage: text,
+    })
+    return NextResponse.json({ received: true, delivery: false }, { status: 200 })
+  }
+
+  if (!authorized) {
+    console.log(
+      `[webhook/zernio] auto-chat de ${tenant.slug}: el numero propio ${ownPhone} no esta en Autorizados — sin registrar`
+    )
+    return new NextResponse(null, { status: 200 })
+  }
+
+  console.log(`[webhook/zernio] pedido en el auto-chat de ${tenant.slug} → procesando domicilio`)
+
+  const outcome = await processDeliveryMessage({
+    tenant,
+    rawMessage: text,
+    operatorPhone: ownPhone,
+    operatorLocationId: (authorized.location_id as string | null) ?? null,
+  })
+
+  return NextResponse.json({ received: true, delivery: outcome.ok }, { status: 200 })
+}
+
 async function handleDeliveryStatus(payload: ZernioWebhookPayloadDeliveryStatus): Promise<NextResponse> {
   const db = getServiceClient()
   const messageId = payload.message.id
@@ -669,6 +814,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   if (payload.event === 'message.received') {
     return handleMessageReceived(payload)
+  }
+
+  // El auto-chat de la propia linea: la unica entrada de domicilios para una marca con UN
+  // solo numero. Ver handleMessageSent() y la 00068 — sin `self_conversation_id` no hace
+  // nada, asi que el evento es inerte hasta que esa marca lo tenga.
+  if (payload.event === 'message.sent') {
+    return handleMessageSent(payload)
   }
 
   if (payload.event === 'message.delivered' || payload.event === 'message.read' || payload.event === 'message.failed') {

@@ -1,6 +1,6 @@
 # ESTADO — RestaurantQR / Cada1
 
-> **Última actualización:** 2026-09-12 (interruptor «Domicilios por WhatsApp» en la ficha de la sede del AIOS, 00066 APLICADA, AIOS v1.12.0 pusheado; antes: Golden Bullet por tandas desde el panel: la base entera se guarda, pestaña «Bases», `POST /continue`, sin migración; antes: Autorizados Domicilio dentro de Domicilios, pusheado `1de033e`; Planeta Wings: timeout de Auth, estado por plantilla y registro en Cloud API en el AIOS; prompt de plantillas una por una; Opus 5)
+> **Última actualización:** 2026-09-25 (los domicilios escritos en el AUTO-CHAT de la propia línea ya entran: `message.sent` + `tenant_connections.self_conversation_id`, **00068 aplicada**; antes 2026-09-12: interruptor «Domicilios por WhatsApp» en la ficha de la sede del AIOS, 00066 APLICADA, AIOS v1.12.0 pusheado; antes: Golden Bullet por tandas desde el panel: la base entera se guarda, pestaña «Bases», `POST /continue`, sin migración; antes: Autorizados Domicilio dentro de Domicilios, pusheado `1de033e`; Planeta Wings: timeout de Auth, estado por plantilla y registro en Cloud API en el AIOS; prompt de plantillas una por una; Opus 5)
 > Toda sesión lo lee PRIMERO. Toda sesión que cierra un bloque lo ACTUALIZA al final. Límite: 150 líneas.
 > Lo obsoleto se **saca**, no se tacha: un ítem tachado sigue costando tokens cada vez que alguien lee esto.
 >
@@ -15,9 +15,9 @@
 | Qué | Estado |
 |-----|--------|
 | Código | **`origin/main` = `2bfae49`** (push 2026-09-12 por orden del dueño: Golden Bullet por tandas desde el panel, sin migración; Vercel lo despliega solo; antes `1de033e`: Autorizados Domicilio como pestaña de Domicilios, sin migración; antes `27e4ae2`, docs del Golden Bullet, y `8cf5ed4`: nombre editable de plantillas en Meta, `ac686b8`; antes `05b7eb8`) (pusheado el 2026-09-12 por orden del dueño: **`712ff58` Golden Bullet por Zernio con la marca en Twilio** —código, sin migraciones; Vercel lo despliega solo; el puente necesita `ZERNIO_API_KEY` y `ZERNIO_WEBHOOK_SECRET` en el Vercel del producto— más docs. Antes, el mismo día: solo docs —prompt de plantillas, `zernio-messaging.md`, este archivo— sobre `d38319c`, el drenador a 240 s/20 en paralelo; antes `9c34760` a las 06:00, por orden del dueño: Golden Bullet por tandas con la plata a la vista, foto en el mensaje 1, prueba a un celular, nombre genérico al lado del mensaje, los tres textos editables y `{nombre|alternativo}`; antes, `a55f574` a las 03:45: el flag, el Toaster y el normalizador de celulares). Antes, `d47ade8` + su commit de docs (02:30: rendimiento del equipo, 00065 **aplicada antes**). Antes, en el mismo día: `76d99b7` (AIOS + 00064, plantillas) y `3278f66` (invitaciones, 00063). **Local = remoto.** La carpeta sigue en `feat/multisede-aios` (= `main`). Sin mergear a propósito: `master`, `port/sushi-fun-2.8`, `sushi-sync`. **Variables que el código desplegado espera en Vercel:** `TWILIO_MASTER_TENANT_ID` (RUNBOOK §1.b'; sin ella Sushi Service deja de enviar por Twilio) y las tres de Meta (§1.b'', no bloquean) |
-| Verificación | ✅ 2026-09-12 (00066 + AIOS v1.12.0): producto `tsc` limpio, `tests/db/aios-delivery-webhook.test.ts` 6/6 sobre Postgres real (aplica las 62 migraciones, la 00066 incluida); AIOS `tsc` limpio y eslint limpio en lo tocado. La suite entera NO se corrió (solo el archivo nuevo). Antes, ✅ 2026-09-12 (Golden Bullet por tandas): `tsc` limpio · eslint limpio en lo tocado (los 7 errores del proyecto son los preexistentes) · **suite entera: 50 archivos / 787 tests en verde**. Antes, ✅ 2026-09-11 (06:00): `tsc` limpio · lint limpio en lo tocado · **suite entera: 48 archivos / 756 tests en verde** · eslint **7 errores preexistentes** (hooks y gráficas del panel, ninguno en lo tocado). El rojo de `aios-health` era del RELOJ (el helper mete dos pedidos con `now() - 1h`/`- 2h`, así que entre medianoche y las 2 a.m. el segundo cae en el día anterior): a esta hora pasa. Sigue sin corregirse. `build` no se corrió |
+| Verificación | ✅ 2026-09-25 (auto-chat de domicilios): `tsc` limpio · **suite entera: 54 archivos / 814 tests en verde** · eslint sin nada nuevo (los 14 errores son los preexistentes, ninguno en lo tocado). Antes, ✅ 2026-09-12 (00066 + AIOS v1.12.0): producto `tsc` limpio, `tests/db/aios-delivery-webhook.test.ts` 6/6 sobre Postgres real (aplica las 62 migraciones, la 00066 incluida); AIOS `tsc` limpio y eslint limpio en lo tocado. La suite entera NO se corrió (solo el archivo nuevo). Antes, ✅ 2026-09-12 (Golden Bullet por tandas): `tsc` limpio · eslint limpio en lo tocado (los 7 errores del proyecto son los preexistentes) · **suite entera: 50 archivos / 787 tests en verde**. Antes, ✅ 2026-09-11 (06:00): `tsc` limpio · lint limpio en lo tocado · **suite entera: 48 archivos / 756 tests en verde** · eslint **7 errores preexistentes** (hooks y gráficas del panel, ninguno en lo tocado). El rojo de `aios-health` era del RELOJ (el helper mete dos pedidos con `now() - 1h`/`- 2h`, así que entre medianoche y las 2 a.m. el segundo cae en el día anterior): a esta hora pasa. Sigue sin corregirse. `build` no se corrió |
 | Marcas vivas | **5**: sushi-service (542 clientes), demo-ventas (412), sushi-fun (251), don-alirio (244), cafe-frangal (8) |
-| Base de datos de producción | ✅ **Aplicadas hasta la `00056`** (dueño, 2026-09-08: `00047`, `00050`, `00051`, `00053`, `00054` y `00056`, todas). El esquema ya alcanza al código de `main`. La 00030 NUNCA aplicada (a propósito). La 00015 NO se aplica (reabre fuga). Huecos: `00048`, `00049`, `00052`, `00055`. **`00062` aplicada** (dueño, 2026-09-11, antes del push). **`00065` aplicada** (dueño, 2026-09-11, antes del push). **`00066` aplicada** (dueño, 2026-09-12, antes del push del AIOS v1.12.0). **Escritas sin aplicar: `00058`, `00059`, `00061`, `00064`, `00067`** (la 00067 = Zernio en paralelo; sin ella el 4-bis del AIOS dice «esa función todavía no existe» y no rompe nada) |
+| Base de datos de producción | ✅ **Aplicadas hasta la `00056`** (dueño, 2026-09-08: `00047`, `00050`, `00051`, `00053`, `00054` y `00056`, todas). El esquema ya alcanza al código de `main`. La 00030 NUNCA aplicada (a propósito). La 00015 NO se aplica (reabre fuga). Huecos: `00048`, `00049`, `00052`, `00055`. **`00062` aplicada** (dueño, 2026-09-11, antes del push). **`00065` aplicada** (dueño, 2026-09-11, antes del push). **`00066` aplicada** (dueño, 2026-09-12, antes del push del AIOS v1.12.0). **Escritas sin aplicar: `00058`, `00059`, `00061`, `00064`, `00067`, `00068`** (la 00067 = Zernio en paralelo; sin ella el 4-bis del AIOS dice «esa función todavía no existe» y no rompe nada) |
 | Migraciones: dónde están | El directorio muestra **solo la rama puesta**; el inventario real y el número de la próxima los da `node scripts/proxima-migracion.mjs`. **Desde el 07 la única reserva es la fila del tablero (§2)**: un número citado en cualquier otro doc no reserva nada. `00048`, `00049`, `00052` y `00055` son huecos: no se rellenan |
 | Crons | Los 5 en `vercel.json`, corriendo. `birthday` 18:00 y `reactivation` 20:00 UTC (= 13:00/15:00 Bogotá), verificado. ⚠️ **`reward-reminder` sigue en 16:00 UTC (11:00 Bogotá)**; la auditoría estimó ≈21:00 UTC. **Decisión del dueño** |
 | n8n | Apagado. `domicilios_whatsapp_v4.json` sigue en el VPS pero ya no dispara |
@@ -32,7 +32,6 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
-| Domicilios desde el auto-chat de la propia línea (Planeta Wings usa UN número para todo), 2026-09-25 | Opus 5 | `src/app/api/webhook/zernio/route.ts`, `src/lib/zernio/webhooks.ts`, `tests/unit/zernio-self-chat-delivery.test.ts`, `supabase/migrations/00068_*.sql`, `docs/features/delivery-webhook.md`, `docs/features/zernio-messaging.md`, `docs/DB_SCHEMA.md` | 00068 | en vuelo |
 
 ## 3. Siguiente, en orden
 
@@ -44,6 +43,20 @@
    `/clientes/[id]` (logs de Vercel: 14:10, 15:00, 15:30 UTC del 12; empezó el 11 a las 23:45). Calza con el
    incidente de Supabase «Nano projects unresponsive» del 10-11 (resuelto). Es del dueño: Settings → General →
    **Restart project**; si sigue lento, subir de Nano a Micro.
+0.AUTOCHAT **Los domicilios del auto-chat ya están en la rama (2026-09-25, sin desplegar). Tres gestos, en este orden.**
+   Planeta Wings usa UN número para todo: el mesero escribe el pedido en el chat de la línea consigo misma y
+   Meta no lo entrega como entrante, así que se perdía entero. Ahora el webhook atiende `message.sent`.
+   (1) **Aplicar la 00068** en Supabase ANTES de desplegar (agrega `tenant_connections.self_conversation_id` y
+   siembra el id del auto-chat de Planeta Wings, sacado del log de Zernio del 23-09).
+   (2) **Suscribir el evento `message.sent`** en el webhook de Zernio (`POST /v1/webhooks/settings`): sin eso no
+   llega nada y el camino es inerte. Es el único paso que no se puede verificar desde el código — la
+   `ZERNIO_API_KEY` es `sensitive` en Vercel y no se puede leer.
+   (3) **Agregar el celular REAL del mesero** (José: 311 672 9678) en Domicilios → Autorizados, con su sede. Lo
+   que hay hoy en esa lista es el número de la MARCA (300 903 3799), que no es de ningún mesero: ese sirve ahora
+   como el opt-in del auto-chat, pero un mesero con celular propio necesita su propia fila.
+   Si la conversación sembrada resultara ser la equivocada, se ve en el primer pedido y se corrige poniendo la
+   columna en NULL: el efecto se limita a esa conversación de esa marca.
+
 0.SUSHI **Sushi Service: la difusión por la línea de coexistencia (Zernio), lo normal por Twilio
    hasta que muera (dueño, 2026-09-12).** El operador desactivó la SIM de Twilio; el WhatsApp sigue
    vivo (~1 mes) y manda bien, pero a la difusión la toman por número falso. **Construido y pusheado el 12

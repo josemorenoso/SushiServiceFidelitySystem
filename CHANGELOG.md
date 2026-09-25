@@ -8,6 +8,25 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [feat] — 2026-09-25 — Los domicilios escritos en el auto-chat de la propia línea
+
+**Pedido:** «Jose de Planeta Wings trata de registrar domicilios pero no le funciona.»
+**Lo que pasaba:** la marca tiene UN número para todo y el mesero escribía el pedido en el chat
+de la línea consigo misma. Meta no entrega como entrante lo que un número se manda a sí mismo,
+así que `message.received` no ocurría y el pedido se perdía entero (4 verificados en el log de
+Zernio del 23-09, todos como `message.sent`). Aparte, el celular real del mesero (311 672 9678)
+tampoco estaba en Autorizados: lo que había registrado era el número de la marca.
+
+- `webhook/zernio` atiende ahora `message.sent`. Discriminador: `message.conversationId` contra
+  `tenant_connections.self_conversation_id` (00068). El payload NO trae destinatario y el evento
+  llega también con cada campaña, así que ese id es la única separación posible.
+- En NULL la rama es inerte: solo loguea el `conversationId` para descubrirlo. Y aun con el id,
+  exige el número propio en `authorized_numbers` — el opt-in del dueño, de donde sale la sede.
+- Al reconocerlo llama al MISMO `processDeliveryMessage()`: registro, plantilla al cliente y
+  `message_logs` quedan idénticos. Sin confirmación al auto-chat, y no hace falta.
+- 00068 siembra el id de Planeta Wings (evidencia del log). Tests: 8 casos, el primero es la
+  campaña que NO debe entrar. **Falta un gesto: suscribir `message.sent` en Zernio.**
+
 ## [fix] — 2026-09-12 — «Tenant no encontrado» en la campaña manual era un fallo de base escondido
 
 **Qué pasó:** al confirmar una campaña manual (152 clientes) el modal dijo «Tenant no encontrado» (404, 18:35 UTC, una sola

@@ -32,7 +32,6 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
-| Suscribir `message.sent` en Zernio con un script en vez de a mano, 2026-09-25 | Opus 5 | `scripts/zernio-webhook-eventos.mjs`, `docs/features/zernio-messaging.md`, `docs/features/delivery-webhook.md` | — | en vuelo |
 
 ## 3. Siguiente, en orden
 
@@ -49,9 +48,10 @@
    Meta no lo entrega como entrante, así que se perdía entero. Ahora el webhook atiende `message.sent`.
    (1) **Aplicar la 00068** en Supabase ANTES de desplegar (agrega `tenant_connections.self_conversation_id` y
    siembra el id del auto-chat de Planeta Wings, sacado del log de Zernio del 23-09).
-   (2) **Suscribir el evento `message.sent`** en el webhook de Zernio (`POST /v1/webhooks/settings`): sin eso no
-   llega nada y el camino es inerte. Es el único paso que no se puede verificar desde el código — la
-   `ZERNIO_API_KEY` es `sensitive` en Vercel y no se puede leer.
+   (2) **Suscribir el evento `message.sent`** en el webhook de Zernio: sin eso no llega nada y el camino es
+   inerte. Ya hay script: `node scripts/zernio-webhook-eventos.mjs` mira, y con `--aplicar` lo agrega
+   conservando el resto y verificando al releer. **Le falta una `ZERNIO_API_KEY` viva en `.env`:** la que hay
+   en `.env.local` (2026-09-02) devuelve 401, y la de Vercel es `sensitive` — no se puede leer de ahí.
    (3) **Agregar el celular REAL del mesero** (José: 311 672 9678) en Domicilios → Autorizados, con su sede. Lo
    que hay hoy en esa lista es el número de la MARCA (300 903 3799), que no es de ningún mesero: ese sirve ahora
    como el opt-in del auto-chat, pero un mesero con celular propio necesita su propia fila.

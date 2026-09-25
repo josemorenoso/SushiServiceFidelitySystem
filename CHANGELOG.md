@@ -25,7 +25,8 @@ tampoco estaba en Autorizados: lo que había registrado era el número de la mar
 - Al reconocerlo llama al MISMO `processDeliveryMessage()`: registro, plantilla al cliente y
   `message_logs` quedan idénticos. Sin confirmación al auto-chat, y no hace falta.
 - 00068 siembra el id de Planeta Wings (evidencia del log). Tests: 8 casos, el primero es la
-  campaña que NO debe entrar. **Falta un gesto: suscribir `message.sent` en Zernio.**
+  campaña que NO debe entrar. **Falta suscribir `message.sent` en Zernio**: hay script para eso
+  (`scripts/zernio-webhook-eventos.mjs`, aditivo y verifica releyendo), pero la key de `.env.local` da 401.
 
 ## [fix] — 2026-09-12 — «Tenant no encontrado» en la campaña manual era un fallo de base escondido
 

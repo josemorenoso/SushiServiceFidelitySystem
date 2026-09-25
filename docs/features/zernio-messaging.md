@@ -158,8 +158,10 @@ Contraparte de `twilio-incoming/route.ts` para tenants Zernio.
     rama es inerte: solo loguea el `conversationId` para poder descubrirlo. Ver
     `tests/unit/zernio-auto-chat-domicilios.test.ts`, cuyo primer caso es justamente la campaña
     que NO debe entrar.
-  - 📋 Exige que `message.sent` esté en la suscripción del webhook en Zernio
-    (`POST /v1/webhooks/settings`, contrato §5).
+  - 📋 Exige que `message.sent` esté en la suscripción del webhook en Zernio. Esa suscripción
+    **no vive en este repo** (es del Team, contrato §5), así que un despliegue correcto puede no
+    hacer nada sin que nada lo diga. Se mira y se arregla con
+    `node scripts/zernio-webhook-eventos.mjs [--aplicar]`, que es aditivo y verifica releyendo.
 - `message.delivered` / `message.read` / `message.failed` → `UPDATE message_logs WHERE twilio_sid =
   message.id` (status + `delivered_at` si delivered, `error_code`/`error_message` si failed). Esto es
   en realidad la **primera vez** que algo alimenta el status de entrega en `message_logs` — Twilio

@@ -32,6 +32,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Suscribir `message.sent` en Zernio con un script en vez de a mano, 2026-09-25 | Opus 5 | `scripts/zernio-webhook-eventos.mjs`, `docs/features/zernio-messaging.md`, `docs/features/delivery-webhook.md` | — | en vuelo |
 
 ## 3. Siguiente, en orden
 

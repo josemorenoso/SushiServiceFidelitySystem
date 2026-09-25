@@ -93,6 +93,26 @@ apuntando a otro camino es mucho más probable.
    El navegador del cliente habla solo con nuestras rutas.
 5. **Nada en `tenants.config`**, que es público y viaja al navegador en cada página.
 
+## `self_conversation_id` — el auto-chat de la línea (00068)
+
+La conversación de la línea **consigo misma** en Zernio: el chat que en el teléfono del
+negocio aparece como «Envía mensajes a este mismo número». Vive en esta tabla porque es una
+propiedad de la LÍNEA, no de la marca ni de la sede.
+
+Está acá por una razón concreta: un restaurante chico tiene un número, no dos, y el mesero
+escribe los pedidos de domicilio ahí. Meta no entrega como entrante lo que un número se manda
+a sí mismo, así que el único rastro es un `message.sent` — un evento que llega **también con
+cada plantilla y cada campaña**, y cuyo payload no dice a quién va. Este id es lo único que
+separa una cosa de la otra.
+
+- **NULL es el estado normal al nacer**, y significa «todavía no se sabe». El webhook entonces
+  no hace nada: solo loguea el `conversationId` de cada saliente para poder descubrirlo.
+- **No se adivina ni se backfillea en bloque.** Ponerle la conversación equivocada a una marca
+  convierte el chat de un cliente real en su entrada de domicilios.
+- Encenderlo no alcanza: el número propio tiene que estar además en Domicilios → Autorizados.
+
+Ver `docs/features/delivery-webhook.md` § "El auto-chat de la propia línea".
+
 ## Un cuerpo, dos puertas
 
 ```

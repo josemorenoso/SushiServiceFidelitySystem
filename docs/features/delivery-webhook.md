@@ -218,6 +218,39 @@ aprobadas, nunca texto libre. Devuelve `{"received":true,"delivery":true|false}`
 > registro del fallo va al log (`[Delivery][FALLO]`), no al status HTTP. **Esto es justo lo
 > que arregla la Fase 2**: antes devolvía 200 vacío y no registraba nada.
 
+### El auto-chat de la propia línea (`message.sent`, desde la 00068)
+
+**El caso de la marca que tiene UN número para todo.** El mesero no escribe desde su
+celular: abre en el teléfono del negocio «Envía mensajes a este mismo número» y manda ahí
+el pedido. Meta **no entrega como entrante lo que un número se manda a sí mismo**, así que
+`message.received` no ocurre nunca y hasta la 00068 esos pedidos se perdían enteros — cuatro
+verificados en el log de Zernio del 2026-09-23 (Planeta Wings), todos como `message.sent`.
+
+Desde la 00068 el webhook escucha también `message.sent`. El punto delicado:
+
+> ⚠️ **`message.sent` dispara con CADA plantilla y CADA campaña** — 193 en un solo día en una
+> sola marca. Y el payload **no dice a quién va**: en un saliente el `sender` es la marca
+> tanto en el auto-chat como en una campaña, y el destinatario solo podría estar en
+> `payload.conversation`, que el contrato de Zernio §5 no documenta y que el tipo trata como
+> opaco. Un filtro flojo aquí mete cada envío de campaña al parser de domicilios y fabrica
+> clientes y visitas que nadie hizo.
+
+Por eso el discriminador es el `conversationId`, que sí está tipado y es estable:
+
+| | |
+|---|---|
+| **Quién decide** | `tenant_connections.self_conversation_id` — el id de la conversación de la línea consigo misma, **por marca** |
+| **Si está en NULL** | el webhook no tiene ningún efecto de negocio: solo deja `[webhook/zernio] message.sent sin auto-chat conocido … conversationId=…`, que es de donde sale el valor a configurar (sin el texto del mensaje: una conversación con un cliente es privada) |
+| **Segunda llave** | aunque el id coincida, el registro exige que el **número propio de la marca** esté en Domicilios → Autorizados. Es el opt-in del dueño, y de ahí sale la sede (D9) |
+| **Qué pasa después** | el MISMO `processDeliveryMessage()` del camino entrante. El registro, la plantilla que sale hacia el **cliente** y el renglón de `message_logs` quedan idénticos |
+
+No hay confirmación de vuelta al auto-chat, y no hace falta: la plantilla de bienvenida sale
+hacia el cliente por la misma línea, así que el mesero la ve aparecer en el chat de esa
+persona desde su propio WhatsApp. Es exactamente lo que ya veía cuando el camino funcionaba.
+
+**Requiere un gesto en Zernio:** el evento `message.sent` tiene que estar en la suscripción
+del webhook (`POST /v1/webhooks/settings`). Sin eso no llega nada y el camino es inerte.
+
 ### POST /api/webhook/delivery
 
 Contrato sin cambios — ver `docs/API_DOCS.md`. Protegido por `x-webhook-secret`, 60 req/min
@@ -226,7 +259,11 @@ por IP, exige `tenant_slug` y `celular`.
 ## Restricciones
 - Solo se procesan como pedido los mensajes de números en `authorized_numbers` con
   `is_active = true` **y el `tenant_id` correcto** (el `service_role` no aísla: es ese filtro
-  escrito a mano)
+  escrito a mano). Vale igual para el auto-chat: el número propio de la marca tiene que estar
+  ahí, o no se registra nada
+- **`tenant_connections.self_conversation_id` no se adivina ni se backfillea en bloque**: es
+  por marca y sale del log de observación. Ponerle la conversación equivocada convierte el
+  chat de un cliente real en la entrada de domicilios de esa marca
 - `OPENAI_API_KEY` es obligatoria: sin ella no entra ni un domicilio (falla ruidosamente)
 - La API de `/api/webhook/delivery` valida `x-webhook-secret` (fail-closed: sin secret
   configurado responde 503)

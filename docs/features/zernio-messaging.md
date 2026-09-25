@@ -146,6 +146,20 @@ Contraparte de `twilio-incoming/route.ts` para tenants Zernio.
     manda texto libre dentro de la ventana de 24 h (`sendZernioConversationMessage()`, contrato §8; lo
     usa el acuse a los botones del Golden Bullet), así que ya no hace falta una plantilla: falta
     decidir el texto y llamarlo desde acá (18.c).
+- `message.sent` → **el auto-chat de la propia línea** (00068). Para una marca con UN solo
+  número es la única entrada posible de domicilios: lo que el mesero escribe en «Envía mensajes
+  a este mismo número» no genera `message.received`, porque Meta no entrega como entrante lo que
+  un número se manda a sí mismo. Solo se procesa si el `message.conversationId` coincide con
+  `tenant_connections.self_conversation_id` **y** el número propio está en `authorized_numbers`;
+  entonces llama al mismo `processDeliveryMessage()` del camino entrante.
+  - ⚠️ Este evento llega **también con cada plantilla y cada campaña** (cientos por día). El
+    payload no trae destinatario y el `sender` es la marca en los dos casos, así que el
+    `conversationId` es el único discriminador confiable. Con `self_conversation_id` en NULL la
+    rama es inerte: solo loguea el `conversationId` para poder descubrirlo. Ver
+    `tests/unit/zernio-auto-chat-domicilios.test.ts`, cuyo primer caso es justamente la campaña
+    que NO debe entrar.
+  - 📋 Exige que `message.sent` esté en la suscripción del webhook en Zernio
+    (`POST /v1/webhooks/settings`, contrato §5).
 - `message.delivered` / `message.read` / `message.failed` → `UPDATE message_logs WHERE twilio_sid =
   message.id` (status + `delivered_at` si delivered, `error_code`/`error_message` si failed). Esto es
   en realidad la **primera vez** que algo alimenta el status de entrega en `message_logs` — Twilio

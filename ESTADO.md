@@ -32,6 +32,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Domicilios desde el auto-chat de la propia línea (Planeta Wings usa UN número para todo), 2026-09-25 | Opus 5 | `src/app/api/webhook/zernio/route.ts`, `src/lib/zernio/webhooks.ts`, `tests/unit/zernio-self-chat-delivery.test.ts`, `supabase/migrations/00068_*.sql`, `docs/features/delivery-webhook.md`, `docs/features/zernio-messaging.md`, `docs/DB_SCHEMA.md` | 00068 | en vuelo |
 
 ## 3. Siguiente, en orden
 

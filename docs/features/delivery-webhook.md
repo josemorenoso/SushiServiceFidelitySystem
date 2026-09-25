@@ -249,7 +249,18 @@ hacia el cliente por la misma línea, así que el mesero la ve aparecer en el ch
 persona desde su propio WhatsApp. Es exactamente lo que ya veía cuando el camino funcionaba.
 
 **Requiere un gesto en Zernio:** el evento `message.sent` tiene que estar en la suscripción
-del webhook (`POST /v1/webhooks/settings`). Sin eso no llega nada y el camino es inerte.
+del webhook. Sin eso no llega nada y el camino es inerte — sin error, sin log, sin nada que
+mirar, porque esa suscripción no vive en este repo.
+
+```bash
+node scripts/zernio-webhook-eventos.mjs            # qué eventos hay hoy (no escribe nada)
+node scripts/zernio-webhook-eventos.mjs --aplicar   # agrega message.sent, conservando el resto
+```
+
+Necesita `ZERNIO_API_KEY` en `.env` (gitignoreado). **No se puede sacar de Vercel**: ahí está
+marcada `sensitive` y Vercel no devuelve ese valor ni por el dashboard ni por la API. Sale del
+panel de Zernio. El script es aditivo, relee después de escribir para verificar, y aborta si
+algún evento que estaba antes se perdió.
 
 ### POST /api/webhook/delivery
 

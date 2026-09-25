@@ -52,19 +52,26 @@
    `/clientes/[id]` (logs de Vercel: 14:10, 15:00, 15:30 UTC del 12; empezó el 11 a las 23:45). Calza con el
    incidente de Supabase «Nano projects unresponsive» del 10-11 (resuelto). Es del dueño: Settings → General →
    **Restart project**; si sigue lento, subir de Nano a Micro.
-0.AUTOCHAT **DESPLEGADO el 2026-09-25 (`8be572e`), con la 00068 ya aplicada. Quedan DOS gestos y sin ellos no entra ni un pedido.**
+0.AUTOCHAT **DESPLEGADO y CONECTADO el 2026-09-25 (`8be572e`, deploy READY; 00068 aplicada; `message.sent` suscrito).
+   Falta la PRUEBA REAL: que José mande un pedido al auto-chat y se vea el resultado.**
    Planeta Wings usa UN número para todo: el mesero escribe el pedido en el chat de la línea consigo misma y
    Meta no lo entrega como entrante, así que se perdía entero. Ahora el webhook atiende `message.sent`.
    (1) ~~Aplicar la 00068~~ — hecho por el dueño el 25.
-   (2) **Suscribir el evento `message.sent`** en el webhook de Zernio: sin eso no llega nada y el camino es
-   inerte. Ya hay script: `node scripts/zernio-webhook-eventos.mjs` mira, y con `--aplicar` lo agrega
-   conservando el resto y verificando al releer. **Le falta una `ZERNIO_API_KEY` viva en `.env`:** la que hay
-   en `.env.local` (2026-09-02) devuelve 401, y la de Vercel es `sensitive` — no se puede leer de ahí.
-   (3) **Agregar el celular REAL del mesero** (José: 311 672 9678) en Domicilios → Autorizados, con su sede. Lo
-   que hay hoy en esa lista es el número de la MARCA (300 903 3799), que no es de ningún mesero: ese sirve ahora
-   como el opt-in del auto-chat, pero un mesero con celular propio necesita su propia fila.
-   Si la conversación sembrada resultara ser la equivocada, se ve en el primer pedido y se corrige poniendo la
-   columna en NULL: el efecto se limita a esa conversación de esa marca.
+   (2) ~~Suscribir `message.sent`~~ — hecho el 25 con `node scripts/zernio-webhook-eventos.mjs --aplicar`.
+   El webhook `6a9e57fb44ed40ab69223879` (`hooks.constelarys.com/api/webhook/zernio`, dominio verificado de
+   `cada1`) pasó de 16 a 17 eventos, verificado releyendo. **NO estaba suscrito**: era el segundo motivo por el
+   que no entraba nada, aparte del auto-chat.
+   (3) **LA PRUEBA REAL, que es lo único que queda.** El opt-in del auto-chat ya está puesto: el número de la
+   MARCA (300 903 3799) está en Autorizados, y ése es justo el que la rama nueva exige. Así que **José escribe
+   un pedido en el auto-chat y tiene que pasar esto**: el cliente recibe la plantilla de bienvenida, aparece
+   «enviado» en el panel, y en los logs de Vercel sale `[webhook/zernio] pedido en el auto-chat de …`.
+   Si en cambio sale `message.sent sin auto-chat conocido conversationId=…`, la conversación sembrada en la
+   00068 era la equivocada: se pone ese `conversationId` en `tenant_connections.self_conversation_id` y listo.
+   (4) **Aparte, y solo si José va a usar SU celular**: agregar 311 672 9678 en Domicilios → Autorizados con su
+   sede. No hace falta para el auto-chat; hace falta para que pueda mandar pedidos desde su propio teléfono.
+   ⚠️ **Sin verificar: si la `ZERNIO_API_KEY` de Vercel sigue viva.** La de `.env.local` estaba muerta (401) y se
+   reemplazó por una nueva; la de producción es otra variable (`sensitive`, del 11-09) que no se puede leer. Si
+   las plantillas de las marcas en Zernio vienen saliendo bien, está viva y no hay nada que hacer.
 
 0.SUSHI **Sushi Service: la difusión por la línea de coexistencia (Zernio), lo normal por Twilio
    hasta que muera (dueño, 2026-09-12).** El operador desactivó la SIM de Twilio; el WhatsApp sigue

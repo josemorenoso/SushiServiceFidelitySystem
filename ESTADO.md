@@ -32,6 +32,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Auditoría «escala a 1000 clientes» (producto + AIOS), Claude Code, 2026-09-28 | Opus 5.5 planifica y sintetiza · subagentes Sonnet auditan y refutan | **Solo lectura** en todo el repo y en `Level 2.0/aios-constelarys`. Escribe: `docs/AUDITORIA-ESCALA-1000-2026-09-28.md` (nuevo) y, al cerrar, `ESTADO.md` + `CHANGELOG.md`. Sin vitest (no pisa el puerto de nadie) | — | en curso |
 
 ## 3. Siguiente, en orden
 

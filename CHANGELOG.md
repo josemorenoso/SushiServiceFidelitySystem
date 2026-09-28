@@ -8,6 +8,21 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [docs] — 2026-09-28 — Auditoría: qué falta para escalar a 1000 clientes (producto + AIOS)
+
+**Pedido:** «audita y dime qué me hace falta para que sea mejor, más fácil de implementar, de rastrear, para escalar
+a 1000 clientes», con el Método Maestro. **Cómo:** solo lectura; 6 auditores Sonnet por frente, 3 refutadores
+Sonnet, revisión Opus de lo crítico. Nada corregido. → `docs/AUDITORIA-ESCALA-1000-2026-09-28.md`.
+
+- 68 hallazgos: 49 confirmados, 12 corregidos, 1 refutado, 6 de Opus. Lo que no escala es la operación: ~17
+  acciones por alta, ~85 min/marca/mes, cero avisos, sin CI ni staging, 18/31 de la cola esperan al dueño.
+- ⚠️ Dos agujeros entre marcas (ESTADO §3 0.SEGURIDAD): `/api/mystery-box/resolve` (vivo en producción) y el
+  REVOKE incompleto de la 00067 y la 00057, que NO se aplican tal cual.
+- `ESTADO.md`: 0.SEGURIDAD, avisos en 0.SUSHI, 0.ter y §1, y 0.BETA al día.
+
+**Verificado:** cada hallazgo con `ruta:línea` y un refutador. **NO verificado:** nada contra producción.
+**Migración:** ninguna.
+
 ## [feat] — 2026-09-25 — Los domicilios escritos en el auto-chat de la propia línea
 
 **Pedido:** «Jose de Planeta Wings trata de registrar domicilios pero no le funciona.»

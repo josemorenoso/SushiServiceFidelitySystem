@@ -86,5 +86,7 @@ afuera), más cuatro arreglos chicos que no esperan.
 - Docs en el mismo commit: `docs/features/points-mystery-box.md` y `docs/03-security.md` cuentan el cambio;
   `ESTADO.md` (0.SEGURIDAD cerrado o con lo que falte, y el orden del deploy: qué migración aplicar antes del push);
   `CHANGELOG.md` ≤ 15 líneas (y el del AIOS); la auditoría §6 marca cerrado lo que cerraste.
-- Grafo: `graphify.exe` lo bloquea el Control de aplicaciones de Windows; el hook post-commit lo reconstruye solo.
+- Grafo: `graphify.exe` lo bloquea el Control de aplicaciones de Windows, pero el módulo corre:
+  `/c/Users/luisr/AppData/Roaming/uv/tools/graphifyy/Scripts/python.exe -m graphify query "…"` (y `update .` al
+  cerrar). El hook post-commit ya lo reconstruye solo.
 - Resumen en diez líneas y una línea que me pida el push con el hash y la migración que va antes.

@@ -32,6 +32,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Docs al día tras la auditoría + prompt de la ola 0, Claude Code, 2026-09-29 | Opus 5.5 | `ESTADO.md`, `CHANGELOG.md`, `CLAUDE.md` (una cifra), `docs/04-deployment.md`, `docs/features/scalability-analysis.md`, `docs/operaciones/DELEGACION_GUIDE.md`, `docs/operaciones/PROCESO_VENTAS_IMPLEMENTACION.md`, `docs/AUDITORIA-ESCALA-1000-2026-09-28.md`, `docs/prompts/2026-09-29-ola-0-seguridad.md` (nuevo) y tres comentarios: `scripts/seed-new-tenant.sql`, `.graphifyignore`, `vitest.config.mts`. Sin código | — | en curso |
 
 ## 3. Siguiente, en orden
 

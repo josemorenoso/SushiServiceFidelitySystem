@@ -94,7 +94,7 @@ las migraciones en Supabase, y lo ordena él. La sesión de cierre se lo pide en
 | n8n | ya no se usa | `domicilios_whatsapp_v4.json` sigue **ACTIVO** en el VPS y es lo único que lo mantiene vivo. Los 5 `cron_*.json` están en retirada (ya declarados en `vercel.json`) |
 
 ## Comandos
-`npm run dev` · `npm run build` · `npx tsc --noEmit` · `npm run lint` · `npx vitest run` (25 archivos / 418 tests)
+`npm run dev` · `npm run build` · `npx tsc --noEmit` · `npm run lint` · `npx vitest run` (54 archivos / 814 tests al 2026-09-25)
 `graphify query "…"` · `graphify affected "…"` · `graphify update .` (después de commitear; AST solo, sin costo)
 `node scripts/proxima-migracion.mjs` — **obligatorio antes de crear cualquier migración**
 

@@ -80,6 +80,14 @@ Cuando me envíes todo, en 48h tu sistema está listo.
 
 ---
 
+> ⚠️ **LAS TAREAS 4, 5 Y 6 ESTÁN OBSOLETAS (auditoría 2026-09-28, OPER-9): NO crear un Supabase, un Twilio
+> ni un Vercel por cliente, NO correr migraciones por cliente y NO crear el usuario a mano.** Desde la
+> migración multi-tenant un cliente nuevo es una fila en el Supabase compartido, y el alta técnica completa
+> (marca, sede, dominio, WhatsApp, plantillas y usuario del panel) se hace desde el AIOS
+> (`Level 2.0/aios-constelarys`, wizard de la sede). Ver `docs/operaciones/PROCESO_VENTAS_IMPLEMENTACION.md`
+> Fase 3 y `docs/features/alta-usuario-admin.md`. Estas tareas quedan por historia hasta que la guía se
+> reescriba contra el flujo real del AIOS (ola 2 de la auditoría).
+
 ## TAREA 4: Crear cuentas (Supabase, Twilio, Vercel)
 
 **Requiere:** Email dedicado del asistente (NO tu email personal).

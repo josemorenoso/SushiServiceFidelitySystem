@@ -8,6 +8,21 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [docs] — 2026-09-29 — Docs al día tras la auditoría + prompt de la ola 0
+
+**Pedido:** «actualiza los docs y dame el prompt para desarrollar la ola 0 […] en otra sesión», «actualiza también el
+graph» y «todas las migraciones están aplicadas».
+
+- `ESTADO.md`: todas aplicadas (dueño) → AISLA-2 pasa a VIVO, con el SQL de cierre en 0.SEGURIDAD. Por confirmar: la
+  00015 (abriría clientes y visitas a la anon key, OPUS-4), la 00030 y las del AIOS. Salen 0.ter, el ítem 1, el
+  bloqueo de la 00061 y la deuda de la 00053; 0.GAMMA, 0.AIOS y 0.quinquies al día; los crons son 6.
+- Docs que mentían: `04-deployment.md` (crons, Supabase, Zernio y OpenAI, precio), `scalability-analysis.md`
+  (obsoleto), `DELEGACION_GUIDE.md` (tareas 4-6), `PROCESO_VENTAS_IMPLEMENTACION.md` (AIOS, Meta 24-72 h),
+  `CLAUDE.md` (54/814) y los comentarios de `seed-new-tenant.sql`, `.graphifyignore` y `vitest.config.mts`.
+- `docs/prompts/2026-09-29-ola-0-seguridad.md`: el prompt, con el SQL del dueño delante. Auditoría §6: seguimiento.
+
+**Verificado:** sin código. **NO verificado:** si la 00015 y la 00030 corrieron en producción. **Migración:** ninguna.
+
 ## [docs] — 2026-09-28 — Auditoría: qué falta para escalar a 1000 clientes (producto + AIOS)
 
 **Pedido:** «audita y dime qué me hace falta para que sea mejor, más fácil de implementar, de rastrear, para escalar

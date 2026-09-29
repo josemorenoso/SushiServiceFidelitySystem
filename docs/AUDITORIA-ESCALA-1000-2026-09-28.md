@@ -66,7 +66,7 @@ que `ESTADO.md` §3 0.BETA/0.GAMMA dejaba «sin verificar»: está verificado, y
 **Qué haría falta:** `getTierById(tierId, tenantId)` con su `.eq('tenant_id', …)` (404 si no coincide), límite de tasa
 en la ruta y una guarda de reclamo para `tier_prize` (el `claimed_tier_key` de la 00059 o un UNIQUE parcial). Micro.
 
-### 1.2 AISLA-2 ✅ latente (Opus + refutador) — **la 00067 y la 00057 NO se aplican tal cual**
+### 1.2 AISLA-2 ✅ (Opus + refutador) — la 00067 y la 00057 abren funciones a la anon key: **VIVO desde que corrieron (29-09)**
 
 - `00067_aios_attach_zernio_account.sql:92` y `00057_aios_lee_sedes.sql:126` revocan EXECUTE **solo `FROM PUBLIC`**.
 - En Supabase, toda función nueva del esquema `public` nace con EXECUTE para `anon` y `authenticated` por privilegios
@@ -81,12 +81,13 @@ en la ruta y una guarda de reclamo para `tier_prize` (el `claimed_tier_key` de l
 - Barrido Opus de las **35** funciones `SECURITY DEFINER` de las migraciones: fuera de estas dos, las que escriben
   revocan bien (la 00064 y la 00066 son el modelo: `FROM PUBLIC, anon, authenticated`). Las cinco restantes sin revoke
   explícito son helpers de RLS (`is_super_admin`, `can_see_location`…) o un trigger: no preocupan.
-- **Hoy es riesgo de archivo**: ninguna de las dos figura aplicada (`ESTADO.md` §1; la 00057 sigue en §3 0.ter). Pero
-  la 00067 está en la cola (0.SUSHI, paso 2).
+- El 28 figuraban sin aplicar. **El 29 el dueño confirmó que todas las migraciones están aplicadas: el agujero está
+  abierto en producción** (§6).
 
-**Qué haría falta:** `REVOKE ALL … FROM PUBLIC, anon, authenticated` en las dos (una línea cada una) **antes** de
-aplicarlas, y un test de base que falle si alguna `SECURITY DEFINER` queda ejecutable por `anon` (el arnés tendría que
-imitar los privilegios por defecto de Supabase, que el Postgres embebido no trae).
+**Qué haría falta:** ya no se pueden editar (están aplicadas): el cierre inmediato es SQL del dueño
+(`REVOKE ALL … FROM PUBLIC, anon, authenticated` + `GRANT … TO aios_constelarys` en las dos), y la ola 0 lo deja en
+una migración nueva e idempotente, con un test de base que falle si alguna `SECURITY DEFINER` queda ejecutable por
+`anon` (el arnés tiene que imitar los privilegios por defecto de Supabase, que el Postgres embebido no trae).
 
 ### 1.3 Otros cuatro que no esperan a la ola que les toca
 
@@ -114,7 +115,7 @@ necesita todos. Aparte, y fuera del AIOS: la llamada de venta, la demo, el setup
 |---|---|---|---|---|
 | ALTA-3 | 🔴 | **El AIOS es de un solo usuario**: la RLS deja a cualquier `authenticated` ver todo; no se puede sumar un operador sin rehacer permisos | AIOS `README.md:387-388`, `supabase/migrations/00001_init.sql:129-135` | ✅ |
 | AISLA-3 | 🔴 | Sin MFA en el AIOS (cero `mfa/totp/aal` en `src/`): **una sesión robada resetea la contraseña de admin de cualquier marca** (`resetPassword`). Es diseño razonado (no expone la service role), pero a 1000 marcas es la puerta única | AIOS `src/lib/product-auth.ts:93-191`, `src/lib/auth.ts:35-75` | ✅ |
-| ALTA-1 | 🔴 | **La 00064 sigue sin aplicar**: sin ella no se puede borrar ni reiniciar un alta rota (Tepuy se arregló con SQL a mano) | `ESTADO.md:20`; `src/app/api/aios/tenant-delete/route.ts:199-224` | ✅ |
+| ALTA-1 | ✔️ | La 00064 estaba sin aplicar el 28 (sin ella no se podía borrar ni reiniciar un alta rota). **Cerrado el 29: el dueño la aplicó** | `src/app/api/aios/tenant-delete/route.ts:199-224` | ✅ → cerrado |
 | ALTA-4 | 🟠 | **No hay tablero de altas**: `/clientes` es de cobranza; todo bloqueo cae en un único «Falta un paso» | AIOS `src/lib/data/sites.ts:180-214`, `ClientsList.tsx` | ✅ |
 | ALTA-7 | 🟠 | La UI promete *«Meta contesta en horas (a lo sumo un día)»*; la realidad documentada es 24-72 h (Planeta Wings: 0/13 a las 4 h). El operador deja de mirar y el alta queda a medias | AIOS `src/components/clients/WhatsappWizard.tsx:739` | ✅ |
 | ALTA-2 | 🟠 | **El primer WhatsApp puede no salir sin que nadie se entere**: `no_template_configured` viaja en el JSON del check-in pero ninguna pantalla lo lee | `src/app/api/check-in/route.ts:114-147`; `CheckInSuccess.tsx` solo lee el de mystery-box | ✏️ (no es solo un `console.warn`; el efecto es el mismo) |
@@ -310,3 +311,26 @@ del AIOS (las acciones que escriben) y de los handlers de cron · flags para des
 podar `ESTADO.md` (563 → 150) y `CLAUDE.md` (126 → 100) · borrar el worktree de Kilo · permitir `graphify` en el
 Control de aplicaciones · MCP de Supabase con `read_only=true` · `middleware.ts` → `proxy.ts` · sacar del carril del
 dueño las tareas de la cola que no necesitan su firma.
+
+---
+
+## 6. Seguimiento — 2026-09-29
+
+- **El dueño confirmó que todas las migraciones están aplicadas.** Consecuencias: AISLA-2 pasó de latente a **vivo**
+  (§1.2); ALTA-1 quedó cerrado (la 00064 corrió); la guarda de AISLA-1 ya puede usar `claimed_tier_key` y
+  `claimed_threshold` (la 00059 corrió).
+- **OPUS-4 🔴 (nuevo, por confirmar en la base):** el directorio trae `00015_service_role_policies.sql`, que
+  `ESTADO.md` marcaba «NO se aplica (reabre fuga)». Sus cinco políticas (`service_role_*` sobre `customers` y
+  `visits`) son `USING (true)` / `WITH CHECK (true)` **sin `TO service_role`**, así que valen para todos los roles, y
+  ninguna migración posterior las borra ni revoca los permisos de tabla de `anon`. Si «todas» la incluyó, con la anon
+  key pública se leen, crean y editan clientes y visitas de TODAS las marcas. Se confirma con
+  `SELECT … FROM pg_policies WHERE tablename IN ('customers','visits') AND policyname LIKE 'service_role_%'`, y se
+  cierra con `DROP POLICY IF EXISTS` de las cinco (el service role no las usa: se salta RLS). La ola 0 las neutraliza
+  en una migración, para que aplicar el directorio entero nunca más abra nada.
+- **Por confirmar también:** si «todas» incluyó la 00030 (el DEFAULT puente) y las del Supabase del AIOS (00009, 00010).
+- **Docs corregidos el 29** (los que la auditoría probó falsos): `CLAUDE.md` (tests), `ESTADO.md` (crons),
+  `docs/04-deployment.md` (crons, Supabase, Zernio y OpenAI, precio), `docs/features/scalability-analysis.md`
+  (marcado obsoleto), `docs/operaciones/DELEGACION_GUIDE.md` (tareas 4-6 obsoletas),
+  `docs/operaciones/PROCESO_VENTAS_IMPLEMENTACION.md` (AIOS, 24-72 h, precio), y los comentarios de
+  `scripts/seed-new-tenant.sql`, `.graphifyignore` y `vitest.config.mts`.
+- **Ola 0:** la decidió el dueño; el prompt está en `docs/prompts/2026-09-29-ola-0-seguridad.md`.

@@ -99,6 +99,32 @@ la misma validación de variables, la misma regla de "una pendiente por plantill
 **"Enviar a Meta" solo existe mientras el mensaje no tenga nada vivo ni nada en revisión.** Reemplazar
 un mensaje que ya se está enviando pasa SIEMPRE por el editor, con su advertencia.
 
+### Plantillas aprobadas en Meta que el sistema no conocía: «Activar» (2026-10-02)
+
+El alta por el AIOS puede crear las 13 **en Meta** sin dejar filas en `template_versions` ni punteros.
+Meta las aprueba, el webhook no encuentra versión registrada (`sin versión registrada`) y el slot
+queda vacío: el panel decía «Pendiente de enviar», **el envío no las usaba** (check-in sin puntero =
+`no_template_configured`) y «Enviar a Meta» chocaba con *"Ya existe contenido en Spanish para esta
+plantilla"*. Le pasó a Planeta Wings: 12 aprobadas, sin un solo «puntos sumados» enviado.
+
+`getTemplateCatalogState()` ahora lee la WABA real (`listZernioTemplates`) y, para cada slot VACÍO
+(sin vigente, sin pendiente, sin puntero), busca con `findAdoptable()` una plantilla **APROBADA** del
+idioma del catálogo, con nombre `baseName` o `baseName_vN` (gana el N más alto), con **exactamente** las
+variables `{{1}}..{{N}}` de la definición y la misma portada (ninguna, imagen o video). Una versión que
+retiramos nosotros no vuelve. Si la encuentra, la entrada trae `approvedInWaba` y la pantalla muestra
+«Aprobado, falta activarlo» con un botón **Activar** (y uno para activar todas).
+
+`POST …/[key]/adopt` (`adoptApprovedTemplate()`) **no escribe el puntero**: registra la versión como
+`pending` (reutilizando la fila `failed` que deja un «Enviar a Meta» que chocó con ese nombre, porque
+`(tenant_id, provider_ref, language)` es único) y la pasa por `applyProviderTemplateStatus()` con
+`APPROVED`, la misma puerta que el webhook → `promoteVersion()`. Lo dispara el dueño, nunca solo: desde
+ese momento el mensaje les llega a sus clientes. `disclaimer_accepted_at` queda NULL (el texto no lo
+escribió él).
+
+Al final de la pantalla va la **lista real de la WABA** (`wabaTemplates`), con nombre, estado de Meta,
+si es del Golden Bullet y qué mensaje la está usando. Es la única excepción al vocabulario sin nombres
+técnicos de esta pantalla, pedida por el dueño: sin ella no había dónde ver si una plantilla salió.
+
 ### Las 2 de evento y su media de muestra
 
 Las del calendario llevan cabecera de imagen/video, y Meta **descarga** un archivo de muestra para
@@ -243,9 +269,11 @@ Detalle de columnas e índices: `docs/DB_SCHEMA.md`.
 El nombre de una plantilla es único por WABA, y la vieja **sigue existiendo** mientras la nueva se
 revisa. Por eso cada versión necesita nombre propio: `bienvenida` → `bienvenida_v2` → `bienvenida_v3`.
 
-`nextProviderRef()` mira tanto `template_versions` como el puntero actual de `admin_settings`. Esto
-importa: un tenant dado de alta por el AIOS (`aios_set_template_settings()`) tiene el puntero puesto y
-**cero filas** en `template_versions`; reusar ese nombre haría fallar la creación contra Zernio.
+`nextProviderRef()` mira `template_versions`, el puntero actual de `admin_settings` **y los nombres
+que de verdad hay en la WABA** (desde el 2026-10-02). Esto importa: un tenant dado de alta por el AIOS
+puede tener el puntero puesto y **cero filas** en `template_versions`, o directamente las plantillas
+creadas en Meta sin nada acá; reusar ese nombre hace fallar la creación contra Zernio. Un nombre
+escrito por el dueño que ya existe en la WABA se corta con 409 antes de llamar a Zernio.
 
 ### El dueño puede escribir el nombre (desde el 2026-09-12)
 

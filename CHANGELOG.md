@@ -8,6 +8,21 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [fix] — 2026-10-02 — Plantillas: activar las aprobadas en Meta + lista real de la WABA
+
+**Pedido:** «Zernio rechazó la creación… tras 10000ms» y «no puedo ver las plantillas reales creadas […] en Golden
+Bullet tampoco se muestra».
+
+- `zernio/client.ts` + `templates.ts`: crear plantilla espera 60 s (con foto Zernio sube la muestra a Meta); el 402 de
+  cuenta pausada sale claro. Golden Bullet: si el POST se corta y la plantilla ya está en la WABA, se da por creada.
+- `template.service.ts`: el catálogo lee la WABA real. `findAdoptable()` detecta la aprobada que el alta creó en Meta
+  sin registrar (Planeta Wings: 12 aprobadas, sin puntero, no se enviaban) → botón **Activar** (`POST …/adopt`), que
+  promueve por `applyProviderTemplateStatus()`. `nextProviderRef()` ya no elige un nombre que exista en la WABA.
+- Pantallas: «Todas tus plantillas en WhatsApp» al final de Plantillas; «Tus invitaciones en WhatsApp» en Golden Bullet.
+
+**Verificado:** tsc, lint de lo tocado, 822 tests; `findAdoptable()` contra la WABA real de Planeta Wings (13/13).
+**NO verificado:** el botón Activar contra la base de producción. **Migración:** ninguna.
+
 ## [docs] — 2026-09-29 — Docs al día tras la auditoría + prompt de la ola 0
 
 **Pedido:** «actualiza los docs y dame el prompt para desarrollar la ola 0 […] en otra sesión», «actualiza también el

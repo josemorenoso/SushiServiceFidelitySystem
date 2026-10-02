@@ -144,6 +144,7 @@ impide al rol `aios_constelarys` tocar `auth.users` — ver `docs/features/alta-
 | GET | /api/dashboard/templates/catalog | Estado del catálogo estándar (13 plantillas) — **solo Zernio** | Admin Cookie |
 | PUT | /api/dashboard/templates/catalog/:key | Editar una plantilla del catálogo | Admin Cookie |
 | POST | /api/dashboard/templates/catalog/:key/submit | Enviar a Meta el texto del catálogo **tal cual** | Admin Cookie |
+| POST | /api/dashboard/templates/catalog/:key/adopt | Activar la plantilla que **ya está aprobada** en la WABA | Admin Cookie |
 | GET | /api/dashboard/templates/standard | Qué le falta del set estándar — **solo Twilio** | Admin Cookie |
 | POST | /api/dashboard/templates/standard | Crear UNA plantilla estándar que falte (aditivo) | Admin Cookie |
 | GET | /api/dashboard/opt-outs | Clientes que pidieron salir — agnóstico de proveedor | Admin Cookie |
@@ -1288,11 +1289,20 @@ texto propone el estilo del negocio.
       "lastRejected": null,
       "suggestedBody": "¡Hola {{1}}! 🎉…",
       "adoptedRef": null,
+      "approvedInWaba": null,
       "blockedReason": null
     }
+  ],
+  "wabaTemplates": [
+    { "name": "puntos_sumados_lejos", "status": "approved", "category": "MARKETING", "language": "es", "body": "...", "has_media": false }
   ]
 }
 ```
+
+`approvedInWaba` no-nulo = el slot está vacío pero en la WABA hay una plantilla **ya aprobada** que
+sirve (mismo nombre base, mismas variables, misma portada): la pantalla ofrece «Activar» en vez de
+«Enviar a Meta». `wabaTemplates` es la lista real de la WABA (forma de `mapZernioTemplateToItem`);
+`null` si Zernio no respondió.
 
 `adoptedRef` no-nulo con `current: null` = el mensaje **está activo** pero se cargó fuera del panel
 (alta por el AIOS o SQL directo) y no tenemos su texto. La pantalla lo dice tal cual.
@@ -1373,6 +1383,21 @@ el puntero**: eso sigue siendo exclusivo de `promoteVersion()` con el `APPROVED`
 
 La pantalla no llega a ese 409 de media faltante: `GET /catalog` ya devuelve `blockedReason` por
 entrada y el botón sale deshabilitado con el motivo escrito.
+
+#### `POST /api/dashboard/templates/catalog/:key/adopt` — Admin JWT
+
+Empieza a usar para `:key` la plantilla que **ya está aprobada** en la WABA (`approvedInWaba` del
+`GET`). No crea nada en Meta. **No recibe body**: qué plantilla se conecta lo decide el servidor contra
+el listado real de Zernio (`adoptApprovedTemplate()` → `findAdoptable()`). Registra la versión y la
+promueve por `applyProviderTemplateStatus()` (→ `promoteVersion()`, único escritor del puntero).
+
+**Response 200:** `{ "success": true, "message": "...", "version": { …, "is_current": true } }`
+
+| Código | Cuándo |
+|---|---|
+| 404 | `:key` no existe, o no hay en la WABA una aprobada que sirva |
+| 409 | El mensaje ya tiene una activa o una en revisión; el negocio no es Zernio |
+| 502 | Zernio no respondió el listado |
 
 #### `GET /api/dashboard/templates/standard` — Admin JWT
 

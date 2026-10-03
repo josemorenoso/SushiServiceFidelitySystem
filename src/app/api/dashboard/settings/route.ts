@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { requireTenantId } from '@/lib/tenant'
+import { exigirAlcanceDeMarca } from '@/lib/alcance-de-marca'
 import { isDbFailure, logDbFailure } from '@/lib/db-failure'
 
 function getServiceClient() {
@@ -36,10 +37,25 @@ export async function GET() {
   return NextResponse.json(settings)
 }
 
+/**
+ * Escribe UNA clave de `admin_settings` de la marca.
+ *
+ * Los ajustes son de la MARCA (`admin_settings` es `(key, tenant_id)`: no hay ajuste
+ * por sede), así que escribir exige alcance de marca: `exigirAlcanceDeMarca()`. Hasta
+ * la ola 0 (OPER-4, auditoría 2026-09-28) bastaba con tener sesión, y un
+ * administrador de UNA sede pisaba cualquier clave de toda la marca —un
+ * `*_template_sid` vigente incluido—. El GET sigue abierto a cualquier sesión de la
+ * marca: leer no cruza marcas, y la pantalla de Ajustes la abren los dos roles.
+ *
+ * ⚠️ Qué claves acepta NO cambió acá: eso es 0.PLANTILLAS (`ESTADO.md` §3).
+ */
 export async function PUT(req: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  const guardia = await exigirAlcanceDeMarca(
+    req,
+    'Los ajustes son de la marca: solo un super usuario puede cambiarlos.'
+  )
+  if (!guardia.ok) return guardia.res
+  const tenantId = guardia.tenantId
 
   const body = await req.json()
   const { key, value } = body as { key: string; value: string }
@@ -48,7 +64,6 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: 'key y value son requeridos' }, { status: 400 })
   }
 
-  const tenantId = await requireTenantId()
   const service = getServiceClient()
 
   // Try update first, then insert if not exists.

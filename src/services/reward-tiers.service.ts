@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import type { RewardTier } from '@/types/database.types'
+import type { DbErrorLike } from '@/lib/db-failure'
 import { getTierEmoji } from '@/lib/tier-emojis'
 
 function getServiceClient() {
@@ -142,21 +143,55 @@ export async function getAllTiers(
 }
 
 /**
- * Obtiene un tier por ID.
+ * El nivel que la mystery box le OFRECE ahora a un cliente: de los niveles que
+ * gobiernan en su sede, el de mayor umbral que ya superó y todavía no reclamó.
+ * `nivel: null` = no hay nada que ofrecer.
+ *
+ * ES LA ÚNICA FUENTE DE VERDAD DE «QUÉ PREMIO PUEDE ELEGIR»
+ * ─────────────────────────────────────────────────────────
+ * `GET /api/check-in/status` lo muestra y `POST /api/mystery-box/resolve` solo
+ * otorga ése. Hasta la ola 0 (AISLA-1, auditoría 2026-09-28) resolve tomaba el
+ * `tier_id` del body, lo buscaba con un `getTierById()` que no filtraba por
+ * marca y solo comparaba puntos: cualquier cliente se generaba premios sin
+ * límite, con los niveles de su marca o con los de otra. Si las dos rutas
+ * calcularan esto por separado, la segunda volvería a ser la puerta de atrás.
+ *
+ * FALLA CERRADO
+ * ─────────────
+ * Si la lista de reclamos no se puede leer devuelve `ok: false` y el llamador
+ * no ofrece ni otorga nada. Equivocarse hacia «no hay premio» es recuperable
+ * (el cliente vuelve a consultar); hacia «tomá otro premio» le cuesta plata al
+ * restaurante y no se deshace.
+ *
+ * `niveles` es opcional para no leer dos veces: status ya los trae para el
+ * roadmap. Si se pasan, tienen que ser los de `getAllTiers(tenantId, locationId)`.
  */
-export async function getTierById(tierId: string): Promise<RewardTier | null> {
+export async function getNivelOfrecido(params: {
+  customerId: string
+  totalPoints: number
+  tenantId: string
+  locationId: string | null
+  niveles?: RewardTier[]
+}): Promise<{ ok: true; nivel: RewardTier | null } | { ok: false; error: DbErrorLike }> {
+  const { customerId, totalPoints, tenantId, locationId } = params
+  const niveles = params.niveles ?? (await getAllTiers(tenantId, locationId))
+  const superados = niveles.filter((t) => totalPoints >= t.point_threshold)
+  if (superados.length === 0) return { ok: true, nivel: null }
+
+  // Sin `.eq('tenant_id', …)` a propósito: `customerId` ya está resuelto dentro de
+  // la marca, y filtrar además por `tenant_id` haría que un reclamo con el tenant
+  // mal grabado (el DEFAULT puente que la 00030 nunca llegó a quitar) se leyera
+  // como «no reclamado» y le regalara el premio otra vez. Acá de más es barato;
+  // de menos, no.
   const supabase = getServiceClient()
-  const { data, error } = await supabase
-    .from('reward_tiers')
-    .select('*')
-    .eq('id', tierId)
-    .single()
+  const { data: reclamos, error } = await supabase
+    .from('mystery_box_results')
+    .select('claimed_tier_key, claimed_threshold')
+    .eq('customer_id', customerId)
 
-  if (error && error.code !== 'PGRST116') {
-    throw new Error(`Error obteniendo tier: ${error.message}`)
-  }
+  if (error) return { ok: false, error }
 
-  return data
+  return { ok: true, nivel: elegirNivelSinReclamar(superados, reclamos ?? []) ?? null }
 }
 
 /**

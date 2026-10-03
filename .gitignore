@@ -68,3 +68,7 @@ graphify-out/
 
 # Datos personales de contactos (WhatsApp/Google) y backups cifrados: nunca al repo
 Contactos/
+
+# Exports de logs (Vercel, Zernio): traen el texto de los pedidos = datos personales
+# (Ley 1581). Se miran en local y nunca se commitean. Auditoría 2026-09-28, OPUS-2.
+logs-*.csv

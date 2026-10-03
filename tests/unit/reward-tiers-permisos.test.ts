@@ -110,7 +110,9 @@ describe('la ruta de premios usa esa puerta en los tres verbos que escriben', ()
     )
 
   it('POST, PATCH y DELETE llaman a `exigirAlcanceDeMarca()`', () => {
-    const llamadas = fuente().match(/await exigirAlcanceDeMarca\(request\)/g) ?? []
+    // Desde la ola 0 el guardián vive en `src/lib/alcance-de-marca.ts` (lo comparte
+    // con `PUT /api/dashboard/settings`) y recibe el mensaje del 403.
+    const llamadas = fuente().match(/await exigirAlcanceDeMarca\(request, /g) ?? []
     expect(llamadas).toHaveLength(3)
   })
 

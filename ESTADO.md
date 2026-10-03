@@ -40,12 +40,11 @@
    otorga lo que `check-in/status` ofrece), AISLA-2 y OPUS-4 (migración **00069**), OPER-4 (`PUT` de settings con
    alcance de marca), AISLA-5 (`timingSafeEqual`), el CSV (`logs-*.csv` ignorado; el archivo sigue en la raíz) y
    ALTA-7. Detalle: `docs/AUDITORIA-ESCALA-1000-2026-09-28.md` §7. **Lo que falta, del dueño y en este orden:**
-   1. **AISLA-2 sigue VIVO en producción.** El SQL a mano del 29 se corrió en el **Supabase del AIOS**: (a) falló con
-      42883 y no cerró nada; (b) dio «sin filas» porque allí no existen `customers` ni `visits`. Lo que se pegó como
-      (c) era la salida de (d). Lo inmediato: en el **SQL Editor del proyecto del PRODUCTO** (el de `tenants`), pegar
-      la `00069` entera. Si se prefiere esperar, el (a) del prompt hace lo mismo para las dos funciones. Si la 00069
-      aborta con «siguen ejecutables por anon/authenticated: X», X es una función que no está en el repo: pasársela
-      a una sesión. Después, la consulta (c) del prompt **sola** en ese mismo proyecto: dice si la 00030 corrió.
+   1. **AISLA-2: las dos funciones ya están cerradas** (el dueño corrió el (a) del prompt el 03-10 sin error; el 29
+      lo había corrido en el Supabase del AIOS, donde falló). **Falta pegar la `00069` entera** en el SQL Editor del
+      proyecto del PRODUCTO (el de `tenants`): cierra el resto y las políticas de la 00015. Bien = «Success. No rows
+      returned». Si aborta con «siguen ejecutables por anon/authenticated: X», X es una función que no está en el
+      repo: pasársela a una sesión. Después, la consulta (c) del prompt de la ola 0 **sola**: dice si la 00030 corrió.
    2. **Desplegar.** El código **no necesita** la 00069 (ni ninguna migración nueva): se puede aplicar antes o después.
       Lo correcto es antes, porque cierra un agujero vivo. ⚠️ `main` no hace fast-forward sobre la rama (§1, Código), y
       la rama arrastra el cumpleaños (no se despliega) y los arreglos de plantillas del 02-10. Para desplegar SOLO la
@@ -53,6 +52,9 @@
       commit de cierre (ESTADO/CHANGELOG) se resuelve a mano como con el auto-chat. El AIOS v1.13.2 se pushea aparte.
    **Queda abierto, fuera de la ola:** la carrera de dos `resolve` simultáneos (`points-mystery-box.md` §7.4.ter) y
    `PUT /api/dashboard/tenant-config`, que un administrador de sede sigue pudiendo usar (`meta-pixel.md`).
+0.ESCALA **ESCALA-3 (el webhook de Zernio espera a OpenAI: 10 fallos apagan el webhook de TODAS las marcas Zernio) y
+   ESCALA-4 (la analítica se corta en 1000 filas en silencio).** Sin construir. Prompt listo para otra sesión:
+   `docs/prompts/2026-10-03-escala-3-4.md`.
 
 0.CUMPLE **El saludo de cumpleaños sale dos días antes: el código está en `feat/multisede-aios` y NO SE DESPLEGÓ**
    (decisión del dueño, 2026-09-25, al pushear el auto-chat). Sigue esperando los dos gestos de abajo; para

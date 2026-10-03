@@ -162,7 +162,8 @@ BEGIN
 
   IF v_abiertas IS NOT NULL THEN
     RAISE EXCEPTION '00069: siguen ejecutables por anon/authenticated: %. '
-      'Probablemente el editor SQL no es su dueño; revisar con `\df+` y revocar a mano.', v_abiertas;
+      'Probablemente el editor SQL no es su dueño (pg_get_userbyid(proowner) en pg_proc lo dice): '
+      'revocar a mano con REVOKE EXECUTE ... FROM PUBLIC, anon, authenticated, o con su dueño.', v_abiertas;
   END IF;
   IF v_politicas IS NOT NULL THEN
     RAISE EXCEPTION '00069: siguen las políticas de la 00015: %', v_politicas;

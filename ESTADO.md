@@ -32,6 +32,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Ola 0 de seguridad (AISLA-1/2/5, OPUS-4, OPER-4, CSV, ALTA-7), Claude Code, 2026-10-03 | Opus 5.5 | `src/app/api/mystery-box/resolve/route.ts` · `src/app/api/check-in/status/route.ts` · `src/services/reward-tiers.service.ts` · `src/app/api/dashboard/settings/route.ts` · `src/app/api/dashboard/reward-tiers/route.ts` · `src/lib/alcance-de-marca.ts` (nuevo) · `src/app/api/webhook/delivery/route.ts` · `.gitignore` · `supabase/migrations/00069_*.sql` · `tests/db/ola0-*.test.ts` y `tests/unit/{mystery-box-resolve,settings-permisos}*.test.ts` (nuevos) · docs: `points-mystery-box.md`, `03-security.md`, la auditoría §6, `ESTADO.md`, `CHANGELOG.md` · AIOS: `WhatsappWizard.tsx`, su `CHANGELOG.md` y `package.json`. **Corre vitest** (puerto 55432) | **00069** | en curso |
 
 ## 3. Siguiente, en orden
 

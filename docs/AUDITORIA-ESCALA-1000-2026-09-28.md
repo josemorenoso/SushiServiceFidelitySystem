@@ -334,3 +334,27 @@ dueño las tareas de la cola que no necesitan su firma.
   `docs/operaciones/PROCESO_VENTAS_IMPLEMENTACION.md` (AIOS, 24-72 h, precio), y los comentarios de
   `scripts/seed-new-tenant.sql`, `.graphifyignore` y `vitest.config.mts`.
 - **Ola 0:** la decidió el dueño; el prompt está en `docs/prompts/2026-09-29-ola-0-seguridad.md`.
+
+## 7. Seguimiento — 2026-10-03: ola 0 construida
+
+**Cerrado en código** (commits `0485098` + `ddfdf72` en `feat/multisede-aios`, **sin desplegar**; AIOS `b1b2465`, v1.13.2, sin
+pushear). Cada uno con un test que falla contra el código viejo:
+
+| ID | Estado | Cómo |
+|---|---|---|
+| AISLA-1 | ✅ cerrado en código | `resolve` solo otorga el nivel que `check-in/status` ofrece (`getNivelOfrecido()`), con límite de tasa. Queda la carrera de dos llamadas simultáneas (`points-mystery-box.md` §7.4.ter) |
+| AISLA-2 | ✅ cerrado en la **00069** — **sigue VIVO en producción** hasta que se aplique | Barre toda `SECURITY DEFINER` de `public`, salvo 4 helpers de RLS, y aborta si algo queda abierto |
+| OPUS-4 | ✅ cerrado en la 00069 | Borra las 5 políticas. En orden nunca existieron: la 00026 borra todas las de `customers`/`visits`. Solo muerden si la 00015 se pegó después de la 00026 |
+| OPUS-2 | ✅ | `logs-*.csv` en `.gitignore` (`git check-ignore` lo confirma). El archivo sigue en la raíz: borrarlo es del dueño |
+| OPER-4 | ✅ cerrado en código | `PUT /api/dashboard/settings` exige alcance de marca. La lista cerrada de claves NO se tocó (es 0.PLANTILLAS) |
+| AISLA-5 | ✅ cerrado en código | `timingSafeEqual`; mismo header y mismas respuestas |
+| ALTA-7 | ✅ AIOS v1.13.2 | El wizard dice 24-72 h |
+
+**El SQL a mano del 29 no corrió en el producto.** Lo que el dueño pegó como resultado de (d)
+(`clients_site_model_guard`, `aios_register_whatsapp_connection`…) es el catálogo del **Supabase del AIOS**:
+(a) falló con 42883 porque ahí `aios_attach_zernio_account` no existe, y (b) dio «sin filas» porque ahí no hay
+`customers` ni `visits`. Hay que repetirlo en el proyecto del producto. Lo que sí probó: **la 00010 del AIOS está
+aplicada** (su `aios_register_whatsapp_connection` existe y está abierta a `anon` por diseño, con candado adentro).
+
+**Encontrado de paso, sin tocar:** `PUT /api/dashboard/tenant-config` tiene la misma deuda que OPER-4 (un
+administrador de sede cambia logo, paleta, píxel… de la marca), ya anotada en `docs/features/meta-pixel.md`.

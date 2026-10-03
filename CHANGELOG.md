@@ -8,6 +8,20 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [fix] — 2026-10-03 — Ola 0 de seguridad: premios solo de la oferta, nada de `public` abierto a anon (00069)
+
+**Pedido:** `docs/prompts/2026-09-29-ola-0-seguridad.md` (auditoría 2026-09-28 §1 y §6).
+
+- **AISLA-1:** `mystery-box/resolve` otorga solo el nivel que `check-in/status` ofrece (`getNivelOfrecido()`, una
+  función para las dos); 409/503/429. Sale `getTierById()` (sin `tenant_id`). → `points-mystery-box.md` §7.4.ter.
+- **AISLA-2 + OPUS-4:** migración **00069** (idempotente): toda `SECURITY DEFINER` de `public` cerrada a
+  anon/authenticated salvo 4 helpers de RLS; borra las 5 políticas de la 00015; aborta si algo queda abierto.
+- **OPER-4:** `PUT /api/dashboard/settings` exige alcance de marca (`src/lib/alcance-de-marca.ts`). **AISLA-5:**
+  `timingSafeEqual` en `webhook/delivery`. **OPUS-2:** `logs-*.csv` ignorado. **ALTA-7:** AIOS v1.13.2 (24-72 h).
+
+**Verificado:** tsc, lint (14 errores = los de antes), **58 archivos / 841 tests**; los tests de AISLA-1, 00069 y OPER-4
+fallan contra el código viejo. **NO verificado:** nada contra producción. **Migración:** 00069, sin aplicar.
+
 ## [fix] — 2026-10-02 — Plantillas: activar las aprobadas en Meta + lista real de la WABA
 
 **Pedido:** «Zernio rechazó la creación… tras 10000ms» y «no puedo ver las plantillas reales creadas […] en Golden

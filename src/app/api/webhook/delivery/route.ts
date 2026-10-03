@@ -18,6 +18,7 @@
  * Ver `docs/features/delivery-webhook.md` y `docs/API_DOCS.md`.
  */
 
+import crypto from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { rateLimit, getClientIp } from '@/lib/rate-limit'
 import { getTenantBySlug } from '@/lib/tenant'
@@ -45,6 +46,23 @@ interface DeliveryRequestBody {
   remitente?: string | null
 }
 
+/**
+ * ¿El `x-webhook-secret` que llegó es el nuestro? En tiempo constante, como los otros
+ * tres validadores (`twilio.ts`, `zernio/webhooks.ts`, `aios-provision.ts`). Con `!==`
+ * la comparación corta en el primer byte distinto y el tiempo de respuesta delata
+ * cuántos acertó quien prueba (AISLA-5, auditoría 2026-09-28) — y es UN secreto para
+ * todas las marcas.
+ */
+function secretoCoincide(expected: string, received: string | null): boolean {
+  if (!received) return false
+  const a = Buffer.from(expected, 'utf-8')
+  const b = Buffer.from(received, 'utf-8')
+  // timingSafeEqual exige el mismo largo. Comparar largos antes no filtra nada útil:
+  // el largo de un secreto no es lo que se adivina byte a byte.
+  if (a.length !== b.length) return false
+  return crypto.timingSafeEqual(a, b)
+}
+
 export async function POST(request: NextRequest) {
   try {
     // ─── AUTH (fail-closed): rechaza si secret no configurado ───
@@ -56,7 +74,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Webhook no configurado' }, { status: 503 })
     }
 
-    if (authHeader !== expectedSecret) {
+    if (!secretoCoincide(expectedSecret, authHeader)) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
     }
 

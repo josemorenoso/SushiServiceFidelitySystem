@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { metaEventIdForVisit } from '@/lib/meta-pixel'
 import { validatePhone } from '@/lib/validators/phone'
 import { findCustomerByPhone } from '@/services/customer.service'
-import { getNextTier, getAllTiers, elegirNivelSinReclamar } from '@/services/reward-tiers.service'
+import { getNextTier, getAllTiers, getNivelOfrecido } from '@/services/reward-tiers.service'
 import { getPendingReward } from '@/services/redemption.service'
 import { getActiveGrants } from '@/services/reward-grant.service'
 import { rateLimit } from '@/lib/rate-limit'
@@ -168,6 +168,9 @@ export async function GET(request: NextRequest) {
     // una sede son COPIAS con ids nuevos, así que darle premios propios a una sede le
     // devolvía a TODA la base de clientes sus niveles «sin reclamar» allí. La regla
     // entera —y el porqué de sus dos claves— vive en `elegirNivelSinReclamar()`.
+    //
+    // `getNivelOfrecido()` es lo MISMO que `POST /api/mystery-box/resolve` exige para
+    // otorgar: lo que acá se ofrece es lo único que allá se entrega (AISLA-1).
     let tierUnlocked: {
       id: string
       name: string
@@ -177,46 +180,34 @@ export async function GET(request: NextRequest) {
       is_black: boolean
     } | null = null
 
-    const qualifiedTiers = allTiers.filter((t) => totalPoints >= t.point_threshold)
-    if (qualifiedTiers.length > 0) {
-      // Sin `.eq('tenant_id', …)` a propósito: `customer.id` ya está resuelto dentro
-      // de la marca, y filtrar además por `tenant_id` haría que un reclamo con el
-      // tenant mal grabado (el DEFAULT puente que la 00030 nunca llegó a quitar) se
-      // leyera como «no reclamado» y le regalara el premio otra vez. Acá de más es
-      // barato; de menos, no.
-      const { data: claimed, error: claimedError } = await supabase
-        .from('mystery_box_results')
-        .select('claimed_tier_key, claimed_threshold')
-        .eq('customer_id', customer.id)
+    const ofrecido = await getNivelOfrecido({
+      customerId: customer.id,
+      totalPoints,
+      tenantId: tenant.id,
+      locationId,
+      niveles: allTiers,
+    })
 
-      // El peor de este archivo. `claimed` se usa para EXCLUIR los tiers ya reclamados; un
-      // fallo de base lo dejaba en `null`, el Set salía vacío y entonces TODO tier superado
-      // contaba como "no reclamado". El cliente ve otra vez una Mystery Box que ya abrió y
-      // se le vuelve a ofrecer un premio ya entregado. Ante la duda no se ofrece nada:
-      // equivocarse hacia "no hay premio" es recuperable (vuelve a consultar); equivocarse
-      // hacia "toma otro premio" le cuesta plata al restaurante y no se deshace.
-      if (claimedError) {
-        logDbFailure({
-          scope: 'CheckInStatus',
-          reason: 'claimed_tiers_lookup_error',
-          error: claimedError,
-          context: { tenant: tenant.slug, customer_id: customer.id },
-        })
-      }
-      // De mayor a menor umbral, el primero no reclamado. Con `claimedError` no se ofrece
-      // NINGUNO: la lista de reclamados no es de fiar y ofrecer de más regala premios.
-      const unclaimed = claimedError
-        ? undefined
-        : elegirNivelSinReclamar(qualifiedTiers, claimed ?? [])
-      if (unclaimed) {
-        tierUnlocked = {
-          id: unclaimed.id,
-          name: unclaimed.tier_name,
-          safe_reward: unclaimed.safe_reward_title,
-          mystery_box_enabled: unclaimed.mystery_box_enabled,
-          mystery_prizes: unclaimed.mystery_prizes,
-          is_black: unclaimed.is_black,
-        }
+    // El peor de este archivo. La lista de reclamados se usa para EXCLUIR los tiers ya
+    // reclamados; un fallo de base la dejaba vacía y entonces TODO tier superado contaba
+    // como "no reclamado": el cliente ve otra vez una Mystery Box que ya abrió. Con el
+    // fallo no se ofrece NINGUNO (`getNivelOfrecido()` falla cerrado); acá queda el rastro.
+    if (!ofrecido.ok) {
+      logDbFailure({
+        scope: 'CheckInStatus',
+        reason: 'claimed_tiers_lookup_error',
+        error: ofrecido.error,
+        context: { tenant: tenant.slug, customer_id: customer.id },
+      })
+    } else if (ofrecido.nivel) {
+      const unclaimed = ofrecido.nivel
+      tierUnlocked = {
+        id: unclaimed.id,
+        name: unclaimed.tier_name,
+        safe_reward: unclaimed.safe_reward_title,
+        mystery_box_enabled: unclaimed.mystery_box_enabled,
+        mystery_prizes: unclaimed.mystery_prizes,
+        is_black: unclaimed.is_black,
       }
     }
 

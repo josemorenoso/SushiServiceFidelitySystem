@@ -66,6 +66,51 @@ lea, la lectura muere con el mismo 42501 silencioso.** Cambiarlo altera como se 
 RLS de cada tabla multitenant, asi que es una decision del dueno con su propia
 verificacion, no un efecto colateral.
 
+## Funciones `SECURITY DEFINER`: cerradas a la anon key (ola 0, migración 00069)
+
+**La trampa, que ya costó tres veces** (00036, 00037 y, el 2026-09-29, la 00057 y la 00067).
+En Supabase toda función nueva de `public` nace con EXECUTE para `PUBLIC` **y además** con un
+EXECUTE **nominal** para `anon` y `authenticated` (privilegios por defecto del proyecto;
+`tests/setup/bootstrap.sql` los imita). `REVOKE … FROM PUBLIC` quita el primero y deja los
+otros dos. Una `SECURITY DEFINER` corre como su dueño, así que con la anon key, que viaja en el
+JS público, cualquiera la llama por `POST /rest/v1/rpc/<nombre>`. La 00067 dejó así
+`aios_attach_zernio_account`, que reescribe los `zernio_*` de cualquier marca sabiendo solo su
+slug (AISLA-2). La 00057 dejó así `aios_list_locations`, que lee las sedes de cualquier marca.
+
+**La regla, desde la 00069:** ninguna `SECURITY DEFINER` de `public` es ejecutable por `anon`
+ni por `authenticated`, salvo **cuatro helpers de RLS**: `is_super_admin()`,
+`can_see_location(uuid)`, `current_dashboard_user_id()` y `tenant_active_location_count(uuid)`.
+Las políticas se evalúan COMO el rol que consulta, así que sin ellos el panel entero da 42501.
+Toda función nueva cierra con `REVOKE ALL … FROM PUBLIC, anon, authenticated` y abre con
+`GRANT … TO aios_constelarys` (o a nadie: la service role tiene su propio GRANT). Las 00064 y
+00066 son el molde. La 00069 no enumera funciones: barre todas, deja fuera las `event_trigger`
+(p. ej. `rls_auto_enable()`, que crea Supabase y no se puede llamar) y las de extensiones, y
+**aborta si algo queda abierto**. `tests/db/ola0-seguridad.test.ts` falla si una función futura
+se olvida del REVOKE: no hace falta anotarla en ninguna lista.
+
+**Y la 00015.** Sus cinco políticas `service_role_*` (sobre `customers` y `visits`) son
+`USING (true)` / `WITH CHECK (true)` **sin `TO service_role`**, así que valen para todos los
+roles. En orden no hacen daño, porque la 00026 borra todas las políticas de esas tablas. Pero
+si se pega **después** de la 00026, abre clientes y visitas de TODAS las marcas a la anon key
+(OPUS-4). La 00069 las borra, se haya aplicado o no. El service role no las necesita: se salta
+RLS.
+
+## Escrituras de la marca: solo con alcance de marca
+
+Lo que es de la MARCA lo escribe un super usuario (`role='brand'`) o el operador de Cada1,
+nunca un administrador de UNA sede. El guardián es `exigirAlcanceDeMarca()`
+(`src/lib/alcance-de-marca.ts`), y la decisión pura es `puedeEscribirEnLaMarca()`:
+
+| Ruta | Desde |
+|------|-------|
+| `POST/PATCH/DELETE /api/dashboard/reward-tiers` | 2026-09-09 |
+| `PUT /api/dashboard/settings` (todo `admin_settings`, `*_template_sid` incluidos) | ola 0, 2026-10-03 (OPER-4) |
+
+Las lecturas (`GET`) siguen abiertas a cualquier sesión de la marca: leer no cruza marcas.
+**Sigue abierta la misma deuda en `PUT /api/dashboard/tenant-config`** (`docs/features/meta-pixel.md`):
+autentica con `requireTenantId()`, así que un `role='location'` cambia logo, paleta, tarjeta,
+link de reseñas y píxel de la marca entera. No entró en la ola 0.
+
 ## Permisos de sede del dashboard (F7, D10)
 
 Migración `supabase/migrations/00045_permisos_por_sede.sql`. Doc completo:
@@ -139,7 +184,7 @@ con un `42501` que era del arnés, no del esquema. Se agregó el GRANT al bootst
 | `TWILIO_WHATSAPP_NUMBER` | Solo servidor | En .env.local |
 | `TWILIO_MASTER_TENANT_ID` | Solo servidor | uuid del ÚNICO tenant que puede usar las tres `TWILIO_*` de arriba. Sin ella nadie las usa (ver § "Cuenta Twilio master") |
 | `CRON_SECRET` | Solo servidor | Valida peticiones a /api/cron/* |
-| `WEBHOOK_DELIVERY_SECRET` | Solo servidor | Fail-closed: sin él `/api/webhook/delivery` responde 503 |
+| `WEBHOOK_DELIVERY_SECRET` | Solo servidor | Fail-closed: sin él `/api/webhook/delivery` responde 503. Se compara con `x-webhook-secret` **en tiempo constante** (`timingSafeEqual`, ola 0 / AISLA-5, 2026-10-03), como los otros tres validadores; antes era un `!==`, que delata byte a byte por el tiempo de respuesta. Mismo header y mismas respuestas (n8n lo llama) |
 | `OPENAI_API_KEY` | Solo servidor | Parseo con IA de los domicilios. **NUNCA con prefijo `NEXT_PUBLIC_`.** Solo la lee `src/lib/openai/client.ts`, desde API Routes |
 
 ## Validaciones de Entrada
@@ -173,6 +218,7 @@ con un `42501` que era del arnés, no del esquema. Se agregó el GRANT al bootst
 | `GET /api/public/customer-card` | 30 req/min por IP | `rateLimit()` en-memoria |
 | `GET /tarjeta` (SSR) | 30 req/min por IP | `rateLimit()` al inicio del Server Component |
 | `POST /api/webhook/delivery` | 60/min por IP | `rateLimit()` en-memoria |
+| `POST /api/mystery-box/resolve` | 5 cada 10 min por **teléfono** + 30/min por IP | `rateLimit()` en-memoria (ola 0, AISLA-1). El freno de verdad no es este: es que solo otorga el nivel que `check-in/status` ofrece (`docs/features/points-mystery-box.md` §7.4.ter) |
 
 > **`/api/check-in/status` se limita por teléfono, no por IP**, a propósito: el celular del cliente hace polling cada 5s (~12/min) mientras espera al mesero, y varios clientes comparten el WiFi del local o el NAT del operador móvil. Limitar por IP rompería el polling legítimo; limitar por teléfono bloquea la enumeración de la base (probar números secuenciales para extraer nombre/puntos/visitas) sin afectar el uso real.
 

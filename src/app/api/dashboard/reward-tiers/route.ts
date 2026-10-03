@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { requireTenantId } from '@/lib/tenant'
-import { isSuperAdmin } from '@/lib/admin'
-import { requireLocationScope, puedeEscribirEnLaMarca } from '@/lib/location-scope'
+import { exigirAlcanceDeMarca } from '@/lib/alcance-de-marca'
 import { isDbFailure, logDbFailure } from '@/lib/db-failure'
 import { elegirFilasDeSede } from '@/services/reward-tiers.service'
 
@@ -40,19 +39,11 @@ function sedePedida(raw: string | null | undefined): string | null {
  */
 
 /**
- * EL GUARDIÁN DE LAS ESCRITURAS. Los premios son de la MARCA: solo un super
- * usuario (`role='brand'`) —o el operador de Cada1— los crea, los edita o los
- * borra.
- *
- * QUÉ SE ARREGLÓ ACÁ, Y POR QUÉ ERA CARO
- * ──────────────────────────────────────
- * Hasta hoy los cuatro verbos autenticaban con `requireTenantId()`, que solo
- * comprueba que el JWT traiga una marca. Un **administrador de UNA sede**
- * (`role='location'`) pasaba esa puerta igual que el dueño: podía editar y
- * borrar los premios de la marca **y los de sus sedes hermanas**, y la pantalla
- * se los ofrecía por defecto porque su alcance por defecto es «la marca». Con
- * una sola sede daba lo mismo; con doce, el encargado de Laureles le cambiaba
- * los premios a Envigado sin salir de su pantalla.
+ * Las escrituras pasan por `exigirAlcanceDeMarca()` (`src/lib/alcance-de-marca.ts`):
+ * los premios son de la MARCA y solo un super usuario (`role='brand'`) —o el
+ * operador de Cada1— los crea, los edita o los borra. Hasta el 2026-09-09 un
+ * administrador de UNA sede editaba y borraba los de la marca y los de sus sedes
+ * hermanas, y la pantalla se los ofrecía por defecto.
  *
  * POR QUÉ EL GET NO PASA POR ACÁ
  * ──────────────────────────────
@@ -70,49 +61,7 @@ function sedePedida(raw: string | null | undefined): string | null {
  *
  * Ref: docs/features/multi-sede.md §3.septies · migraciones 00045 y 00058
  */
-async function exigirAlcanceDeMarca(
-  request: NextRequest
-): Promise<{ ok: true; tenantId: string } | { ok: false; res: NextResponse }> {
-  // El alcance de ESCRITURA depende del ROL, nunca de la sede que la petición
-  // esté mirando — así que se resuelve sobre una URL SIN `?location_id=`. No es
-  // decorativo: hoy ninguna escritura manda ese parámetro, pero el día que
-  // alguien copie el `?location_id=brand` del GET, `decideLocationScope()`
-  // contestaría 403 «Sede no válida» y el error diría "permisos" cuando el
-  // problema sería el formato.
-  const url = new URL(request.url)
-  url.searchParams.delete('location_id')
-
-  const scopeResult = await requireLocationScope(new Request(url.toString()))
-  const scope = scopeResult.ok ? scopeResult.scope : null
-  const esSuperAdmin = await isSuperAdmin()
-
-  if (puedeEscribirEnLaMarca({ scope, esSuperAdmin })) {
-    // `scope.tenantId` y `requireTenantId()` leen el MISMO `app_metadata.tenant_id`.
-    // La segunda solo hace falta para el operador de Cada1 cuando el alcance no
-    // se pudo resolver: sin marca en el JWT lanza, y el `catch` del verbo lo
-    // convierte en el 500 de siempre.
-    return { ok: true, tenantId: scope ? scope.tenantId : await requireTenantId() }
-  }
-
-  // Sin alcance y sin super-admin se contesta lo que dijo la fábrica —401 sin
-  // sesión, 403 sin permiso, **500 si la base falló**—, nunca un 403 genérico:
-  // confundir un fallo de base con "no tenés permiso" es lo que manda a alguien
-  // a revisar los accesos durante media hora.
-  if (!scopeResult.ok) {
-    return {
-      ok: false,
-      res: NextResponse.json({ error: scopeResult.error }, { status: scopeResult.status }),
-    }
-  }
-
-  return {
-    ok: false,
-    res: NextResponse.json(
-      { error: 'Los premios son de la marca: solo un super usuario puede cambiarlos.' },
-      { status: 403 }
-    ),
-  }
-}
+const SOLO_LA_MARCA = 'Los premios son de la marca: solo un super usuario puede cambiarlos.'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -171,7 +120,7 @@ export async function POST(request: NextRequest) {
   // La puerta va PRIMERO: antes se validaba el cuerpo entero y recién al final
   // se miraba quién llamaba, así que un administrador de sede recibía los
   // mensajes de validación de una pantalla que no le corresponde.
-  const guardia = await exigirAlcanceDeMarca(request)
+  const guardia = await exigirAlcanceDeMarca(request, SOLO_LA_MARCA)
   if (!guardia.ok) return guardia.res
   const tenantId = guardia.tenantId
 
@@ -368,7 +317,7 @@ export async function POST(request: NextRequest) {
 
 /** PATCH — Actualiza un reward tier existente. */
 export async function PATCH(request: NextRequest) {
-  const guardia = await exigirAlcanceDeMarca(request)
+  const guardia = await exigirAlcanceDeMarca(request, SOLO_LA_MARCA)
   if (!guardia.ok) return guardia.res
   const tenantId = guardia.tenantId
 
@@ -512,7 +461,7 @@ export async function PATCH(request: NextRequest) {
 
 /** DELETE — Soft-delete (desactiva) un tier. Si no tiene clientes, permite hard-delete. */
 export async function DELETE(request: NextRequest) {
-  const guardia = await exigirAlcanceDeMarca(request)
+  const guardia = await exigirAlcanceDeMarca(request, SOLO_LA_MARCA)
   if (!guardia.ok) return guardia.res
   const tenantId = guardia.tenantId
 

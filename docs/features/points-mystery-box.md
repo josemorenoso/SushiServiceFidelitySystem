@@ -578,6 +578,48 @@ lo reclamó; a partir de la 00059, no. Era un regalo silencioso.
 la regla vieja (por `tier_id`) con la nueva sobre las mismas filas, así que el verde distingue
 «lo arreglé» de «el escenario nunca falló».
 
+### 7.4.ter Solo se otorga lo que se ofrece (ola 0, AISLA-1, 2026-10-03)
+
+**El agujero, vivo en producción hasta este cambio** (auditoría 2026-09-28,
+`docs/AUDITORIA-ESCALA-1000-2026-09-28.md` §1.1). La 00059 dejó bien la OFERTA, pero
+`POST /api/mystery-box/resolve` no la miraba: tomaba el `tier_id` del body, lo buscaba con un
+`getTierById()` **sin filtro de marca** y solo comparaba puntos contra el umbral. La ruta es
+pública y no tenía límite de tasa. Así, cualquier cliente de una marca se generaba premios
+**sin límite**, con los niveles de su marca o con los de **otra** (los ids los expone
+`check-in/status`). Cada llamada dejaba un `mystery_box_results`, un `reward_grant` que el
+mesero ve para entregar y un WhatsApp que paga la marca.
+
+**La regla.** Resolve otorga **solo** el nivel que `GET /api/check-in/status` le ofrecería en
+ese momento: el de mayor umbral entre los que gobiernan en la sede del host, ya alcanzado y sin
+reclamar. Las dos rutas lo calculan con **la misma función**, `getNivelOfrecido()`
+(`src/services/reward-tiers.service.ts`), que por dentro es `getAllTiers()` +
+`elegirNivelSinReclamar()` de §7.4.bis. No hay una segunda definición de «ya reclamado». El
+`tier_id` del body ya no elige nada: solo confirma que el cliente contesta a esa oferta. Si no
+coincide, la respuesta es **409** con un único mensaje («ya fue reclamado o no está
+disponible»), sea de otra marca, ya reclamado, no alcanzado o un escalón más bajo que el
+ofrecido. Es un solo mensaje a propósito, para no contarle a quien prueba ids qué niveles tiene
+cada marca. `getTierById()` desapareció: era la única lectura por `id` de `src/services/` sin
+`tenant_id`.
+
+**Falla cerrado.** Si la lista de reclamos no se puede leer, status no ofrece nada (como antes)
+y resolve responde **503** sin escribir.
+
+**Límite de tasa** (`rate-limit.ts`, en memoria de cada instancia): 5 cada 10 minutos por
+celular (se elige premio una vez por nivel; sobra para reintentos) y 30 por minuto por IP (el
+WiFi del local lo comparten todos). Pasado el límite: **429** con `Retry-After`.
+
+**Lo que esto NO tapa:** dos llamadas **simultáneas** del mismo cliente pueden leer la oferta
+antes de que la primera escriba su `mystery_box_results`, y entonces las dos otorgan. El
+límite de tasa acota cuántas entran (por instancia), pero no lo vuelve imposible. Cerrarlo del
+todo exige que la base rechace el segundo reclamo de forma atómica (un trigger con
+`pg_advisory_xact_lock` por cliente que aplique la misma regla OR). Eso sería un espejo SQL de
+`elegirNivelSinReclamar()`, con su propia prueba, y no se hizo en la ola 0.
+
+**Pruebas:** `tests/unit/mystery-box-resolve.test.ts`, con una base en memoria que respeta los
+`.eq()`. Fallan contra la ruta vieja y pasan con la nueva: el nivel de otra marca, el ya
+reclamado (por `tier_key` y por umbral), uno que no es el ofrecido, el fallo de base y el
+límite de tasa. El camino legítimo sigue otorgando.
+
 ### 7.5 Nueva tabla: `mystery_box_global_caps`
 
 | Columna | Tipo | Descripción |
@@ -629,10 +671,17 @@ La tabla `rewards` actual se mantiene por compatibilidad pero se marca como **le
 
 ### 8.2 `POST /api/mystery-box/resolve` (nuevo)
 
-**Body:** `{ customerId, tierId, choice: 'safe' | 'mystery' }`
+**Body:** `{ phone, tier_id, choice: 'safe' | 'mystery' }` — pública, sin sesión; la marca y la
+sede salen del host.
+
+**Respuestas que no son 200:** 400 (datos o teléfono inválidos) · 404 (marca o cliente no
+encontrados) · **409** (ese nivel no es el que se le ofrece: otra marca, ya reclamado o no
+alcanzado) · **429** (límite de tasa) · **503** (no se pudo leer la lista de reclamos). Las
+tres en negrita son de la ola 0 (§7.4.ter).
 
 **Lógica:**
-1. Valida que el cliente efectivamente alcanzó el tier
+1. Valida que `tier_id` es **el nivel que `check-in/status` le ofrece ahora**
+   (`getNivelOfrecido()`, §7.4.ter). Antes solo miraba si alcanzaba el umbral.
 2. Si `choice === 'safe'` → registra resultado → envía plantilla WhatsApp
 3. Si `choice === 'mystery'`:
    a. Verifica pity timer → ¿Golden Box?

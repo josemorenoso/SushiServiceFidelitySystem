@@ -32,6 +32,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| **Cumpleaños de una vez** (plantilla nueva «se acerca» en el catálogo, cambio automático por marca a 2 días antes cuando esté aprobada, el `.like` de `getDashboardMetrics`, y desplegar uniendo `main` con la rama), Claude Code, 2026-10-04 | Opus 5.5 | `src/constants/template-{catalog,texts}.ts` · `src/types/template.types.ts` · `src/services/{template,twilio-catalog,campaign,dashboard}.service.ts` · `src/app/api/cron/birthday/route.ts` · `src/constants/rewards.ts` · `src/components/dashboard/templates/*` · `dashboard/{settings,campaigns}/page.tsx` · tests de plantillas y cumpleaños · docs `PLANTILLAS.md`, `whatsapp-templates.md`, `campaigns.md` · AIOS `templates-catalog.ts` + CHANGELOG + versión · worktree `.worktrees/merge-main` al desplegar. **Corre vitest** | — | en curso |
 
 ## 3. Siguiente, en orden
 

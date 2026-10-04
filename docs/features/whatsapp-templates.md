@@ -99,6 +99,32 @@ la misma validación de variables, la misma regla de "una pendiente por plantill
 **"Enviar a Meta" solo existe mientras el mensaje no tenga nada vivo ni nada en revisión.** Reemplazar
 un mensaje que ya se está enviando pasa SIEMPRE por el editor, con su advertencia.
 
+### Plantillas aprobadas en Meta que el sistema no conocía: «Activar» (2026-10-02)
+
+El alta por el AIOS puede crear las 13 **en Meta** sin dejar filas en `template_versions` ni punteros.
+Meta las aprueba, el webhook no encuentra versión registrada (`sin versión registrada`) y el slot
+queda vacío: el panel decía «Pendiente de enviar», **el envío no las usaba** (check-in sin puntero =
+`no_template_configured`) y «Enviar a Meta» chocaba con *"Ya existe contenido en Spanish para esta
+plantilla"*. Le pasó a Planeta Wings: 12 aprobadas, sin un solo «puntos sumados» enviado.
+
+`getTemplateCatalogState()` ahora lee la WABA real (`listZernioTemplates`) y, para cada slot VACÍO
+(sin vigente, sin pendiente, sin puntero), busca con `findAdoptable()` una plantilla **APROBADA** del
+idioma del catálogo, con nombre `baseName` o `baseName_vN` (gana el N más alto), con **exactamente** las
+variables `{{1}}..{{N}}` de la definición y la misma portada (ninguna, imagen o video). Una versión que
+retiramos nosotros no vuelve. Si la encuentra, la entrada trae `approvedInWaba` y la pantalla muestra
+«Aprobado, falta activarlo» con un botón **Activar** (y uno para activar todas).
+
+`POST …/[key]/adopt` (`adoptApprovedTemplate()`) **no escribe el puntero**: registra la versión como
+`pending` (reutilizando la fila `failed` que deja un «Enviar a Meta» que chocó con ese nombre, porque
+`(tenant_id, provider_ref, language)` es único) y la pasa por `applyProviderTemplateStatus()` con
+`APPROVED`, la misma puerta que el webhook → `promoteVersion()`. Lo dispara el dueño, nunca solo: desde
+ese momento el mensaje les llega a sus clientes. `disclaimer_accepted_at` queda NULL (el texto no lo
+escribió él).
+
+Al final de la pantalla va la **lista real de la WABA** (`wabaTemplates`), con nombre, estado de Meta,
+si es del Golden Bullet y qué mensaje la está usando. Es la única excepción al vocabulario sin nombres
+técnicos de esta pantalla, pedida por el dueño: sin ella no había dónde ver si una plantilla salió.
+
 ### Las 2 de evento y su media de muestra
 
 Las del calendario llevan cabecera de imagen/video, y Meta **descarga** un archivo de muestra para
@@ -142,13 +168,32 @@ vía `Level 2.0/aios-constelarys/src/lib/zernio/templates-catalog.ts`.
 | Nivel desbloqueado (premio seguro) | `reward_safe_template_sid` | MARKETING | 4 |
 | Mystery Box — resultado | `mystery_box_result_template_sid` | MARKETING | 4 |
 | Golden Box — resultado | `golden_box_result_template_sid` | MARKETING | 3 |
-| Cumpleaños | `birthday_template_sid` | MARKETING | 2 |
+| Cumpleaños — dos días antes | `birthday_upcoming_template_sid` | MARKETING | 2 |
 | Reactivación suave | `reactivation_no_reward_template_sid` | MARKETING | 3 |
 | Reactivación insistente | `reactivation_aggressive_template_sid` | MARKETING | 3 |
 | Campaña → domicilio | `campaign_presencial_to_domicilio_template_sid` | MARKETING | 3 |
 | Campaña → presencial | `campaign_domicilio_to_presencial_template_sid` | MARKETING | 3 |
 | Evento con imagen | `event_template_image_sid` | MARKETING | 5 + header |
 | Evento con video | `event_template_video_sid` | MARKETING | 5 + header |
+
+### Una plantilla reemplazada: el cumpleaños del día mismo (2026-10-04)
+
+`TEMPLATE_CATALOG` tiene **14 entradas**, y un negocio nuevo necesita **13** (`CATALOG_SIZE`). La 14ª es
+`birthday` («¡Feliz cumpleaños!», `birthday_template_sid`), marcada `replacedBy: 'birthday_upcoming'`.
+El saludo pasó a salir hasta dos días antes, y ese texto dicho dos días antes está mal. Como un texto
+aprobado no se reescribe, la redacción nueva es **otra** plantilla con **otro** puntero.
+
+- **Una entrada reemplazada no se ofrece a quien no la tiene.** En Zernio, `getTemplateCatalogState()` la
+  muestra solo si la marca tiene algo de ella (vigente, en revisión, puntero o una aprobada que activar), y
+  `submitSuggestedTemplate()` contesta 409. En Twilio, `getStandardCatalogReport()` la omite si no tiene
+  puntero, y `createStandardTemplate()` contesta 400.
+- **Nadie la borra.** Las marcas que la tienen la siguen usando, y el cron elige por marca
+  (`elegirPlantillaDeCumpleanos()`): con `birthday_upcoming` **aprobada** manda esa, hasta dos días antes;
+  si no, la vieja el día mismo. En Zernio, puntero = aprobada (lo garantizan `promoteVersion()` y el AIOS).
+  En Twilio el panel escribe el puntero al CREAR, así que el cron pregunta a Twilio
+  (`isTwilioTemplateApproved()`); ante la duda, la vieja.
+- **El mismo contrato de variables en las dos** (un test lo fija): el cron les manda los mismos valores.
+- El AIOS crea la nueva en lugar de la vieja desde la v1.14.0: Tepuy y toda marca nueva nacen con ella.
 
 ### El contrato de variables es sagrado
 
@@ -243,9 +288,11 @@ Detalle de columnas e índices: `docs/DB_SCHEMA.md`.
 El nombre de una plantilla es único por WABA, y la vieja **sigue existiendo** mientras la nueva se
 revisa. Por eso cada versión necesita nombre propio: `bienvenida` → `bienvenida_v2` → `bienvenida_v3`.
 
-`nextProviderRef()` mira tanto `template_versions` como el puntero actual de `admin_settings`. Esto
-importa: un tenant dado de alta por el AIOS (`aios_set_template_settings()`) tiene el puntero puesto y
-**cero filas** en `template_versions`; reusar ese nombre haría fallar la creación contra Zernio.
+`nextProviderRef()` mira `template_versions`, el puntero actual de `admin_settings` **y los nombres
+que de verdad hay en la WABA** (desde el 2026-10-02). Esto importa: un tenant dado de alta por el AIOS
+puede tener el puntero puesto y **cero filas** en `template_versions`, o directamente las plantillas
+creadas en Meta sin nada acá; reusar ese nombre hace fallar la creación contra Zernio. Un nombre
+escrito por el dueño que ya existe en la WABA se corta con 409 antes de llamar a Zernio.
 
 ### El dueño puede escribir el nombre (desde el 2026-09-12)
 

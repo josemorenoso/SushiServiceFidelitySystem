@@ -72,9 +72,10 @@ const autoCampaigns: AutoCampaignDef[] = [
     color: 'text-pink-600',
     bg: 'bg-pink-50',
     border: 'border-pink-200',
-    description: () => 'Envía un saludo automático a los clientes que cumplen años hoy. Prioridad absoluta: ignora el cap de frecuencia.',
-    cron: 'Todos los días a las 8:00 AM',
-    templateSettingKeys: ['birthday_template_sid'],
+    description: () =>
+      'Saluda solo a los clientes que cumplen años: hasta dos días antes con «Cumpleaños — dos días antes», o el día mismo mientras esa plantilla no esté aprobada. Prioridad absoluta: ignora el cap de frecuencia.',
+    cron: 'Todos los días a la 1:00 PM',
+    templateSettingKeys: ['birthday_upcoming_template_sid', 'birthday_template_sid'],
   },
   {
     type: 'reactivation',

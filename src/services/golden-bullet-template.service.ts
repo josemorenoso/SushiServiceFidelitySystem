@@ -415,6 +415,29 @@ async function crearEnZernio(
     const zernioErr = error instanceof ZernioApiError ? error : null
     const detail = error instanceof Error ? error.message : String(error)
     console.error('[GoldenBulletTemplate] zernio create', zernioErr?.status ?? 'n/a', detail)
+
+    // Status 0 = sin respuesta (corte por tiempo o red): Zernio pudo haberla
+    // creado igual. Si ya aparece en la WABA, está sometida a Meta; reportarla
+    // como error haría que el reintento cree un `_v2` duplicado.
+    if (zernioErr?.status === 0) {
+      const yaCreada = await listZernioTemplates(tenant.zernio_account_id)
+        .then((l) => (l.templates ?? []).some((t) => t.name === friendlyName))
+        .catch(() => false)
+      if (yaCreada) {
+        return {
+          contentSid: friendlyName,
+          friendlyName,
+          body: args.body,
+          botonSi: args.botonSi,
+          botonNo: args.botonNo,
+          imageUrl: args.imageUrl,
+          approvalSubmitted: true,
+          approvalError: null,
+          provider: 'zernio',
+        }
+      }
+    }
+
     throw new GoldenBulletTemplateError(
       `Zernio rechazó la creación de la plantilla${zernioErr?.status ? ` (HTTP ${zernioErr.status})` : ''}. ${detail.slice(0, 300)}`,
       502

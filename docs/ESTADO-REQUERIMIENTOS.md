@@ -1,5 +1,10 @@
 # ESTADO DE LOS REQUERIMIENTOS — §1 a §25, auditado contra el código
 
+> ⚠️ **REEMPLAZADO el 2026-10-04 por [ESTADO-CONSOLIDADO-2026-10-04.md](ESTADO-CONSOLIDADO-2026-10-04.md)** (224 pedidos
+> verificados contra el código de hoy, cruzados con la auditoría de 1000 clientes). Este archivo se conserva como historia: su
+> tabla da por abiertas cosas ya hechas (§18.e, §19) y por hechas cosas que cambiaron (§7, §12 con «3 estilos y 26 textos»).
+> No se consulta para decidir qué falta.
+
 > **Auditado:** 2026-09-04 · **revisado el 2026-09-06** contra `main` desplegado (`f90282f`).
 > Fuente: `docs/requerimientos/REQUERIMIENTOS_AGOSTO_2026.md`,
 > verificado **contra el código**, no contra lo que dice el requerimiento.

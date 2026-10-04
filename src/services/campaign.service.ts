@@ -1,9 +1,11 @@
 import { createClient } from '@supabase/supabase-js'
 import type { Customer, Campaign, CampaignMessage, RestaurantEvent } from '@/types/database.types'
 import { isDbFailure, logDbFailure } from '@/lib/db-failure'
+import { leerTodo } from '@/lib/leer-todo'
 import {
   REACTIVATION_DAYS,
   FREQUENCY_CAP_DAYS,
+  BIRTHDAY_LEAD_DAYS,
   MONTHLY_CAP_SOURCES,
   MONTHLY_MARKETING_CAP,
   DEFAULT_RECOVERY_ZONE,
@@ -19,33 +21,98 @@ function getServiceClient() {
   return createClient(url, key)
 }
 
-/**
- * Finds customers whose birthday is today (matching day and month).
- */
-export async function findBirthdayCustomers(tenantId: string): Promise<Customer[]> {
-  const supabase = getServiceClient()
-  const today = new Date()
-  const month = String(today.getMonth() + 1).padStart(2, '0')
-  const day = String(today.getDate()).padStart(2, '0')
+/** Con qué plantilla y con cuánta anticipación saluda el cron de cumpleaños a UNA marca. */
+export interface PlantillaDeCumpleanos {
+  /** El puntero (ContentSid de Twilio o nombre de Zernio) que se manda. */
+  sid: string
+  /** Hasta cuántos días antes del cumpleaños entra el cliente en la ventana. */
+  diasDeAnticipacion: number
+  /** `se_acerca` = `birthday_upcoming_template_sid`; `el_dia` = `birthday_template_sid`. */
+  cual: 'se_acerca' | 'el_dia'
+}
 
-  const { data, error } = await supabase
-    .from('customers')
-    .select('*')
-    .eq('tenant_id', tenantId)
-    .not('birthday', 'is', null)
-    .eq('accepts_marketing', true)
-    .is('whatsapp_opt_out_at', null)
+/**
+ * Qué plantilla de cumpleaños usa una marca HOY. PURA: la regla entera, probable sin red.
+ *
+ * El saludo pasó a salir dos días antes (dueño, 2026-09-24), pero el texto aprobado dice
+ * «¡Feliz cumpleaños!» y no se puede reescribir: la redacción nueva es OTRA plantilla
+ * (`birthday_upcoming`, 2026-10-04). Mientras una marca no la tenga APROBADA, sigue como
+ * siempre: el texto viejo, el día mismo. El día que Meta la aprueba, la marca se cambia
+ * sola. Así nadie recibe «¡Feliz cumpleaños!» dos días antes.
+ *
+ * `nuevaAprobada` la decide quien llama: en Zernio el puntero solo existe aprobado
+ * (`promoteVersion()` y el AIOS solo escriben aprobadas); en Twilio el panel lo escribe al
+ * CREAR la plantilla, así que hay que preguntarle a Twilio. Ante la duda, `false`: mandar
+ * la vieja el día mismo es lo que la marca ya hacía.
+ */
+export function elegirPlantillaDeCumpleanos(input: {
+  nueva: string | null
+  nuevaAprobada: boolean
+  vieja: string | null
+}): PlantillaDeCumpleanos | null {
+  if (input.nueva && input.nuevaAprobada) {
+    return { sid: input.nueva, diasDeAnticipacion: BIRTHDAY_LEAD_DAYS, cual: 'se_acerca' }
+  }
+  if (input.vieja) return { sid: input.vieja, diasDeAnticipacion: 0, cual: 'el_dia' }
+  return null
+}
+
+/**
+ * Los «MM-DD» que caen entre hoy y `diasDeAnticipacion` días después, ambos incluidos.
+ * PURA. `setDate` con un número mayor al último del mes rueda solo al mes (y al año)
+ * siguiente, así que el 29 de febrero aparece únicamente en los años bisiestos.
+ */
+export function diasDeLaVentanaDeCumpleanos(hoy: Date, diasDeAnticipacion: number): Set<string> {
+  const dias = new Set<string>()
+  for (let d = 0; d <= diasDeAnticipacion; d++) {
+    const fecha = new Date(hoy)
+    fecha.setDate(hoy.getDate() + d)
+    dias.add(`${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`)
+  }
+  return dias
+}
+
+/**
+ * Los clientes que cumplen años entre HOY y `diasDeAnticipacion` días después.
+ *
+ * POR QUÉ UNA VENTANA Y NO UN DÍA EXACTO
+ * ──────────────────────────────────────
+ * Con un día exacto (hoy + 2), el día que una marca pasa de la plantilla vieja (el día
+ * mismo) a la nueva (dos días antes) se queda sin saludo quien cumple mañana o pasado:
+ * su «hoy + 2» ya pasó y el «el día mismo» ya no corre. Con la ventana, ese día entran
+ * los tres y el saludo sale una vez a cada uno; los días siguientes cada cliente entra a
+ * la ventana dos días antes y la dedup (`BIRTHDAY_DEDUPE_DAYS`) impide repetirlo. De
+ * paso, si el cron no corre un día, al siguiente igual saluda (tarde, pero no nunca).
+ * Con `diasDeAnticipacion = 0` es exactamente el comportamiento de siempre.
+ *
+ * Solo se compara mes y día: el año de nacimiento no interviene. Pagina de a 1.000
+ * (`leerTodo()`): PostgREST corta ahí en silencio y una marca grande perdía cumpleañeros.
+ */
+export async function findBirthdayCustomers(
+  tenantId: string,
+  diasDeAnticipacion: number = BIRTHDAY_LEAD_DAYS
+): Promise<Customer[]> {
+  const supabase = getServiceClient()
+  const ventana = diasDeLaVentanaDeCumpleanos(new Date(), diasDeAnticipacion)
+
+  const { data, error } = await leerTodo<Customer>((desde, hasta) =>
+    supabase
+      .from('customers')
+      .select('*')
+      .eq('tenant_id', tenantId)
+      .not('birthday', 'is', null)
+      .eq('accepts_marketing', true)
+      .is('whatsapp_opt_out_at', null)
+      .order('id', { ascending: true })
+      .range(desde, hasta)
+  )
 
   if (error) {
     throw new Error(`Error buscando cumpleañeros: ${error.message}`)
   }
 
-  // birthday is stored as date (YYYY-MM-DD); filter by month and day in JS
-  return (data ?? []).filter(c => {
-    if (!c.birthday) return false
-    const parts = String(c.birthday).split('-')
-    return parts[1] === month && parts[2] === day
-  })
+  // birthday se guarda como date (YYYY-MM-DD); el mes y el día se filtran en JS
+  return data.filter((c) => typeof c.birthday === 'string' && ventana.has(c.birthday.slice(5, 10)))
 }
 
 /**

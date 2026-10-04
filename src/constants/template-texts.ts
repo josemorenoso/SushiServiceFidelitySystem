@@ -1,5 +1,6 @@
 /**
- * BANCO DE TEXTOS de las plantillas de WhatsApp — las 13, en UN solo estilo.
+ * BANCO DE TEXTOS de las plantillas de WhatsApp — las 13 de un negocio nuevo (más el
+ * cumpleaños del día mismo, reemplazado el 2026-10-04 y vivo solo donde ya está), en UN solo estilo.
  *
  * Hasta el 2026-09-10 había tres estilos (cálido, elegante, urbano). El dueño
  * los quitó, textual: "siempre cálido, nada de eso sirve". Quedó el cálido,
@@ -147,6 +148,18 @@ export const TEMPLATE_TEXTS: Record<TemplateKey, TemplateBodyBuilder> = {
   // ─────────────────────────────────────────────────────────────
   birthday: (brand) =>
     `¡Feliz cumpleaños {{1}}! 🎂🎉\n\nEn *${brand}* queremos celebrarlo contigo 🎁\n\nVen esta semana, menciona tu cumple y llévate una *sorpresa especial*\n\nTus puntos: *{{2}}* — cada visita te acerca más a una nueva recompensa 🔥\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
+
+  // ─────────────────────────────────────────────────────────────
+  // 7-bis · Cumpleaños, dos días antes — MARKETING (dueño, 2026-10-04)
+  //     {{1}} nombre · {{2}} camino de niveles (el mismo contrato que la 7)
+  //     Reemplaza a la 7 en cuanto Meta la aprueba. Tiene que leerse bien dos días
+  //     antes, un día antes Y el día mismo: el día que la marca se cambia, el cron
+  //     saluda en un solo envío a quien cumple hoy, mañana o pasado (sin huecos).
+  //     Por eso «ya está aquí» y no «¡feliz cumpleaños!» ni «faltan dos días».
+  //     La promesa (la sorpresa) es la misma de la 7: no se inventa una nueva.
+  // ─────────────────────────────────────────────────────────────
+  birthday_upcoming: (brand, emoji) =>
+    `¡Hola {{1}}! Tu cumpleaños ya está aquí 🎂🎉\n\nEn *${brand}* queremos celebrarlo contigo ${emoji}\n\nVen en estos días, cuéntanos que estás de cumple y llévate una *sorpresa especial* 🎁\n\nAsí vas en tu camino de premios:\n\n{{2}}\n\nCada visita te acerca más a una nueva recompensa 🔥\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
 
   // ─────────────────────────────────────────────────────────────
   // 8 · Reactivación suave — MARKETING

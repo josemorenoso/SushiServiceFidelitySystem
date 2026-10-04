@@ -1,12 +1,12 @@
 # ESTADO — RestaurantQR / Cada1
 
-> **Última actualización:** 2026-09-25 (los domicilios escritos en el AUTO-CHAT de la propia línea ya entran: `message.sent` + `tenant_connections.self_conversation_id`, **00068 aplicada**; antes 2026-09-12: interruptor «Domicilios por WhatsApp» en la ficha de la sede del AIOS, 00066 APLICADA, AIOS v1.12.0 pusheado; antes: Golden Bullet por tandas desde el panel: la base entera se guarda, pestaña «Bases», `POST /continue`, sin migración; antes: Autorizados Domicilio dentro de Domicilios, pusheado `1de033e`; Planeta Wings: timeout de Auth, estado por plantilla y registro en Cloud API en el AIOS; prompt de plantillas una por una; Opus 5)
+> **Última actualización:** 2026-10-04 (cumpleaños resuelto y DESPLEGADO: plantilla nueva «Cumpleaños — dos días antes», cambio solo por marca al aprobarse; `main` y la rama vuelven a ser lo mismo → §3 0.CUMPLE); antes 2026-10-04 (consolidado de los requerimientos de agosto y la auditoría de 1000 clientes, solo docs, verificado contra el código: `docs/ESTADO-CONSOLIDADO-2026-10-04.md`; antes, el mismo día: ESCALA-3 y ESCALA-4 DESPLEGADAS: `main` = `9a06670`, Vercel READY, sin migración — el webhook de Zernio contesta antes de la IA y la analítica pagina → §3 0.ESCALA; la ola 0 también está en `main`, falta aplicar la 00069); antes 2026-10-03 (ola 0 de seguridad construida: `0485098` + migración **00069**, sin aplicar y sin desplegar; el SQL a mano del 29 corrió en el Supabase del AIOS, NO en el del producto → AISLA-2 sigue vivo: §3 0.SEGURIDAD); antes 2026-09-29 (el dueño confirma TODAS las migraciones aplicadas → AISLA-2 está VIVO y la 00015 queda por confirmar: §3 0.SEGURIDAD; docs que mentían corregidos; prompt de la ola 0 en `docs/prompts/2026-09-29-ola-0-seguridad.md`); antes 2026-09-28 (auditoría «qué falta para 1000 clientes», solo lectura: dos agujeros entre marcas → §3 0.SEGURIDAD, la 00067 y la 00057 NO se aplican tal cual; `docs/AUDITORIA-ESCALA-1000-2026-09-28.md`); antes 2026-09-25 (los domicilios del AUTO-CHAT de la propia línea: `message.sent` + `tenant_connections.self_conversation_id`, **00068 APLICADA y PUSHEADO a main** por orden del dueño — `8be572e`; **cumpleaños NO se desplegó, queda en la rama**; antes 2026-09-24: el saludo de cumpleaños sale dos días antes: `BIRTHDAY_LEAD_DAYS`, dedup a 360; sin migración, sin desplegar; antes 2026-09-12: interruptor «Domicilios por WhatsApp» en la ficha de la sede del AIOS, 00066 APLICADA, AIOS v1.12.0 pusheado; antes: Golden Bullet por tandas desde el panel: la base entera se guarda, pestaña «Bases», `POST /continue`, sin migración; antes: Autorizados Domicilio dentro de Domicilios, pusheado `1de033e`; Planeta Wings: timeout de Auth, estado por plantilla y registro en Cloud API en el AIOS; prompt de plantillas una por una; Opus 5)
 > Toda sesión lo lee PRIMERO. Toda sesión que cierra un bloque lo ACTUALIZA al final. Límite: 150 líneas.
 > Lo obsoleto se **saca**, no se tacha: un ítem tachado sigue costando tokens cada vez que alguien lee esto.
 >
 > **Sus dos hermanos:**
 > - [docs/RUNBOOK-DEPLOY.md](docs/RUNBOOK-DEPLOY.md) — los pasos exactos del despliegue, en orden, verificados contra el código.
-> - [docs/ESTADO-REQUERIMIENTOS.md](docs/ESTADO-REQUERIMIENTOS.md) — §1–§25 del encargo, auditados contra el código. Ahí vive **qué falta desarrollar**.
+> - [docs/ESTADO-CONSOLIDADO-2026-10-04.md](docs/ESTADO-CONSOLIDADO-2026-10-04.md) — los 224 pedidos de agosto (§0–§25) y los 68 hallazgos de la auditoría, verificados contra el código el 04-10, con la propuesta de prioridades. Ahí vive **qué falta desarrollar**. (Reemplaza a `docs/ESTADO-REQUERIMIENTOS.md`, del 06-09.)
 
 ---
 
@@ -14,15 +14,15 @@
 
 | Qué | Estado |
 |-----|--------|
-| Código | **`origin/main` = `2bfae49`** (push 2026-09-12 por orden del dueño: Golden Bullet por tandas desde el panel, sin migración; Vercel lo despliega solo; antes `1de033e`: Autorizados Domicilio como pestaña de Domicilios, sin migración; antes `27e4ae2`, docs del Golden Bullet, y `8cf5ed4`: nombre editable de plantillas en Meta, `ac686b8`; antes `05b7eb8`) (pusheado el 2026-09-12 por orden del dueño: **`712ff58` Golden Bullet por Zernio con la marca en Twilio** —código, sin migraciones; Vercel lo despliega solo; el puente necesita `ZERNIO_API_KEY` y `ZERNIO_WEBHOOK_SECRET` en el Vercel del producto— más docs. Antes, el mismo día: solo docs —prompt de plantillas, `zernio-messaging.md`, este archivo— sobre `d38319c`, el drenador a 240 s/20 en paralelo; antes `9c34760` a las 06:00, por orden del dueño: Golden Bullet por tandas con la plata a la vista, foto en el mensaje 1, prueba a un celular, nombre genérico al lado del mensaje, los tres textos editables y `{nombre|alternativo}`; antes, `a55f574` a las 03:45: el flag, el Toaster y el normalizador de celulares). Antes, `d47ade8` + su commit de docs (02:30: rendimiento del equipo, 00065 **aplicada antes**). Antes, en el mismo día: `76d99b7` (AIOS + 00064, plantillas) y `3278f66` (invitaciones, 00063). **Local = remoto.** La carpeta sigue en `feat/multisede-aios` (= `main`). Sin mergear a propósito: `master`, `port/sushi-fun-2.8`, `sushi-sync`. **Variables que el código desplegado espera en Vercel:** `TWILIO_MASTER_TENANT_ID` (RUNBOOK §1.b'; sin ella Sushi Service deja de enviar por Twilio) y las tres de Meta (§1.b'', no bloquean) |
-| Verificación | ✅ 2026-09-25 (auto-chat de domicilios): `tsc` limpio · **suite entera: 54 archivos / 814 tests en verde** · eslint sin nada nuevo (los 14 errores son los preexistentes, ninguno en lo tocado). Antes, ✅ 2026-09-12 (00066 + AIOS v1.12.0): producto `tsc` limpio, `tests/db/aios-delivery-webhook.test.ts` 6/6 sobre Postgres real (aplica las 62 migraciones, la 00066 incluida); AIOS `tsc` limpio y eslint limpio en lo tocado. La suite entera NO se corrió (solo el archivo nuevo). Antes, ✅ 2026-09-12 (Golden Bullet por tandas): `tsc` limpio · eslint limpio en lo tocado (los 7 errores del proyecto son los preexistentes) · **suite entera: 50 archivos / 787 tests en verde**. Antes, ✅ 2026-09-11 (06:00): `tsc` limpio · lint limpio en lo tocado · **suite entera: 48 archivos / 756 tests en verde** · eslint **7 errores preexistentes** (hooks y gráficas del panel, ninguno en lo tocado). El rojo de `aios-health` era del RELOJ (el helper mete dos pedidos con `now() - 1h`/`- 2h`, así que entre medianoche y las 2 a.m. el segundo cae en el día anterior): a esta hora pasa. Sigue sin corregirse. `build` no se corrió |
+| Código | **`main` y `feat/multisede-aios` vuelven a ser LA MISMA historia** (2026-10-04, orden del dueño: «pushea» el cumpleaños). Un merge con el árbol de la rama, que ya estaba probado entero (61 archivos / 889 tests). Antes de unir se comprobó con `merge-tree` que `main` no aportaba nada que la rama no tuviera: solo chocaban `ESTADO`, `CHANGELOG` y `dashboard.md`, docs que la rama ya tenía más nuevos. Entraron a producción el cumpleaños (septiembre + la plantilla nueva) y las plantillas del 02-10 (`9514c2b`, `0b4ec8e`). **Desde acá, un push de la rama a `main` vuelve a ser fast-forward.** Antes **`origin/main` = `ff9fd90`** (HOTFIX 2026-10-04, `4907512` de la rama: con ESCALA-4 desplegada la analítica daba **500 en las 5 marcas** —el panel en ceros— porque «cumpleaños hoy» hacía `LIKE` sobre `birthday` (`date`, 42883); ahora se cuenta en memoria. Producción se volvió a `c055e8e` con un rollback de Vercel mientras se arreglaba; verificado en worktree: tsc limpio, **59 archivos / 863 tests**. ⚠️ **Después de un rollback, Vercel deja de publicar solo los push a `main`: el `ff9fd90` se promovió A MANO.** Si el próximo push no aparece en los dominios de las marcas, es eso: promoverlo en Vercel). Antes **`origin/main` = `9a06670`** (push 2026-10-04 por orden del dueño: ESCALA-3 y ESCALA-4, el `bb177cd` de la rama rehecho sobre `c055e8e` por `cherry-pick` limpio; verificado en un worktree con `npm ci` propio, ya borrado: tsc limpio, lint 7 errores = base de `main`, **59 archivos / 864 tests**; Vercel `cada1` READY en ~40 s con los alias de producción —`hooks.constelarys.com` incluido— y un POST con firma inválida al webhook contesta 401). La rama conserva `bb177cd` y su cierre `d71311a`; los docs de seguimiento (`ESTADO`, `CHANGELOG`, auditoría) viven solo en la rama, como con la ola 0. Antes **`origin/main` = `c055e8e`** (push 2026-10-04 por orden del dueño: SOLO la ola 0 de seguridad, rehecha sobre `8be572e` como `e287817` + `c055e8e` = `0485098` + `ddfdf72` de la rama; verificado en un worktree con `npm ci` propio: tsc limpio, lint 7 errores = base de `main`, **56 archivos / 824 tests**; Vercel `cada1` en producción). **Siguen SIN desplegar** el cumpleaños y los arreglos de plantillas del 02-10 (`9514c2b`, `0b4ec8e`). AIOS: `origin/main` = `b1b2465` (v1.13.2). Antes **`origin/main` = `8be572e`** (push 2026-09-25 por orden del dueño: SOLO el auto-chat de domicilios — los 4 commits de `message.sent` + la 00068 + el script de Zernio; Vercel lo despliega solo). ⚠️ **LEER ESTO ANTES DE PUSHEAR:** `main` y `feat/multisede-aios` **YA NO SON LO MISMO**. El dueño pidió desplegar lo del auto-chat y dejar el cumpleaños sin desplegar, y los 3 commits de cumpleaños estaban DEBAJO de los 4 del auto-chat en la historia. Así que los 4 del auto-chat se rehicieron sobre `origin/main` (SHAs nuevos: `0513c69 e299f6c 7f829a9 8be572e`) y se pushearon; la rama conserva los originales (`d9bda05 371123b b93b2e5 f6ed9d5`) **más** los 3 de cumpleaños. El contenido de código es IDÉNTICO (verificado archivo por archivo); lo único que difiere son `ESTADO.md` y `CHANGELOG.md`, donde la versión de `main` no menciona cumpleaños. **Un `git push feat/multisede-aios:main` ahora NO es fast-forward y no hay que forzarlo.** Para desplegar el cumpleaños cuando su plantilla esté lista: rehacer los 3 commits sobre `origin/main` igual que se hizo con estos (worktree, `cherry-pick`, resolver `ESTADO`/`CHANGELOG`, pushear). Respaldo del árbol completo anterior al push: rama local `respaldo/antes-push-autochat-2026-09-25` (`f6ed9d5`). Antes `2bfae49` (push 2026-09-12 por orden del dueño: Golden Bullet por tandas desde el panel, sin migración; Vercel lo despliega solo; antes `1de033e`: Autorizados Domicilio como pestaña de Domicilios, sin migración; antes `27e4ae2`, docs del Golden Bullet, y `8cf5ed4`: nombre editable de plantillas en Meta, `ac686b8`; antes `05b7eb8`) (pusheado el 2026-09-12 por orden del dueño: **`712ff58` Golden Bullet por Zernio con la marca en Twilio** —código, sin migraciones; Vercel lo despliega solo; el puente necesita `ZERNIO_API_KEY` y `ZERNIO_WEBHOOK_SECRET` en el Vercel del producto— más docs. Antes, el mismo día: solo docs —prompt de plantillas, `zernio-messaging.md`, este archivo— sobre `d38319c`, el drenador a 240 s/20 en paralelo; antes `9c34760` a las 06:00, por orden del dueño: Golden Bullet por tandas con la plata a la vista, foto en el mensaje 1, prueba a un celular, nombre genérico al lado del mensaje, los tres textos editables y `{nombre|alternativo}`; antes, `a55f574` a las 03:45: el flag, el Toaster y el normalizador de celulares). Antes, `d47ade8` + su commit de docs (02:30: rendimiento del equipo, 00065 **aplicada antes**). Antes, en el mismo día: `76d99b7` (AIOS + 00064, plantillas) y `3278f66` (invitaciones, 00063). **Local = remoto.** La carpeta sigue en `feat/multisede-aios` (= `main`). Sin mergear a propósito: `master`, `port/sushi-fun-2.8`, `sushi-sync`. **Variables que el código desplegado espera en Vercel:** `TWILIO_MASTER_TENANT_ID` (RUNBOOK §1.b'; sin ella Sushi Service deja de enviar por Twilio) y las tres de Meta (§1.b'', no bloquean) |
+| Verificación | ✅ 2026-10-04 (ESCALA-3/4, rama completa): `tsc` limpio · eslint 14 errores = los preexistentes, ninguno en lo tocado · **suite entera: 61 archivos / 881 tests en verde** (+3 archivos y +40 tests: los de esas dos tareas); sus tests fallan contra el código anterior (el de ESCALA-3, contra una copia de la ruta vieja). **Sobre el árbol de `main` + `bb177cd` (worktree, antes del push):** `tsc` limpio · eslint 7 errores = la base de `main`, ninguno en lo tocado · **59 archivos / 864 tests en verde**. En vivo solo se comprobó el 401 del POST con firma inválida; **NO verificado**: un pedido real por Zernio (<5 s) ni la analítica con la base real. Antes, ✅ 2026-10-03 (ola 0, rama completa): `tsc` limpio · eslint 14 errores = los preexistentes, ninguno en lo tocado · **suite entera: 58 archivos / 841 tests en verde**; AIOS `tsc` y eslint limpios en lo tocado. Antes, ✅ 2026-09-25 **sobre el árbol que se pusheó a main** (no sobre la rama): `tsc` limpio · **suite entera: 53 archivos / 805 tests en verde** (los 9 que faltan contra la rama son los de cumpleaños, que no van). Sobre la rama completa, el mismo día: `tsc` limpio · **54 archivos / 814 tests en verde** · eslint sin nada nuevo (los 14 errores son los preexistentes, ninguno en lo tocado). Antes, ✅ 2026-09-12 (00066 + AIOS v1.12.0): producto `tsc` limpio, `tests/db/aios-delivery-webhook.test.ts` 6/6 sobre Postgres real (aplica las 62 migraciones, la 00066 incluida); AIOS `tsc` limpio y eslint limpio en lo tocado. La suite entera NO se corrió (solo el archivo nuevo). Antes, ✅ 2026-09-12 (Golden Bullet por tandas): `tsc` limpio · eslint limpio en lo tocado (los 7 errores del proyecto son los preexistentes) · **suite entera: 50 archivos / 787 tests en verde**. Antes, ✅ 2026-09-11 (06:00): `tsc` limpio · lint limpio en lo tocado · **suite entera: 48 archivos / 756 tests en verde** · eslint **7 errores preexistentes** (hooks y gráficas del panel, ninguno en lo tocado). El rojo de `aios-health` era del RELOJ (el helper mete dos pedidos con `now() - 1h`/`- 2h`, así que entre medianoche y las 2 a.m. el segundo cae en el día anterior): a esta hora pasa. Sigue sin corregirse. `build` no se corrió |
 | Marcas vivas | **5**: sushi-service (542 clientes), demo-ventas (412), sushi-fun (251), don-alirio (244), cafe-frangal (8) |
-| Base de datos de producción | ✅ **Aplicadas hasta la `00056`** (dueño, 2026-09-08: `00047`, `00050`, `00051`, `00053`, `00054` y `00056`, todas). El esquema ya alcanza al código de `main`. La 00030 NUNCA aplicada (a propósito). La 00015 NO se aplica (reabre fuga). Huecos: `00048`, `00049`, `00052`, `00055`. **`00062` aplicada** (dueño, 2026-09-11, antes del push). **`00065` aplicada** (dueño, 2026-09-11, antes del push). **`00066` aplicada** (dueño, 2026-09-12, antes del push del AIOS v1.12.0). **Escritas sin aplicar: `00058`, `00059`, `00061`, `00064`, `00067`, `00068`** (la 00067 = Zernio en paralelo; sin ella el 4-bis del AIOS dice «esa función todavía no existe» y no rompe nada) |
+| Base de datos de producción | ✅ **Todas aplicadas, según el dueño (2026-09-29)**, incluidas las que figuraban escritas sin aplicar: `00057`, `00058`, `00059`, `00061`, `00064` y `00067`. ⚠️ **Con la 00067 y la 00057 aplicadas, AISLA-2 está VIVO** (su REVOKE dejó EXECUTE a `anon`), y **sigue vivo**: el SQL a mano del 29 se corrió en el Supabase del AIOS (§3 0.SEGURIDAD). Lo cierra la **00069** (escrita el 03-10, **sin aplicar**). ⚠️ **Por confirmar con SQL** (0.SEGURIDAD): si «todas» incluyó la `00015` —NO se aplica: sus políticas `USING (true)` sin `TO service_role` abren clientes y visitas de TODAS las marcas a la anon key— y la `00030` (quita el DEFAULT puente; hasta hoy nunca aplicada, a propósito). Del Supabase del AIOS: la `00010` **está aplicada** (su función aparece en el catálogo, 03-10); la `00009`, sin confirmar. Huecos: `00048`, `00049`, `00052`, `00055` |
 | Migraciones: dónde están | El directorio muestra **solo la rama puesta**; el inventario real y el número de la próxima los da `node scripts/proxima-migracion.mjs`. **Desde el 07 la única reserva es la fila del tablero (§2)**: un número citado en cualquier otro doc no reserva nada. `00048`, `00049`, `00052` y `00055` son huecos: no se rellenan |
-| Crons | Los 5 en `vercel.json`, corriendo. `birthday` 18:00 y `reactivation` 20:00 UTC (= 13:00/15:00 Bogotá), verificado. ⚠️ **`reward-reminder` sigue en 16:00 UTC (11:00 Bogotá)**; la auditoría estimó ≈21:00 UTC. **Decisión del dueño** |
+| Crons | Los 6 en `vercel.json` (los 5 de campañas + `line-health` cada hora), corriendo. `birthday` 18:00 y `reactivation` 20:00 UTC (= 13:00/15:00 Bogotá), verificado. **`birthday` saluda a quien cumple DENTRO DE DOS DÍAS** (`BIRTHDAY_LEAD_DAYS`, dueño 2026-09-24), no a quien cumple hoy. ⚠️ **`reward-reminder` sigue en 16:00 UTC (11:00 Bogotá)**; la auditoría estimó ≈21:00 UTC. **Decisión del dueño** |
 | n8n | Apagado. `domicilios_whatsapp_v4.json` sigue en el VPS pero ya no dispara |
-| AIOS (`Level 2.0/aios-constelarys`) | **`origin/main` = `c7e6dd5` (v1.13.1: el wizard del propietario aparece con la sede en Twilio, sin cambiar el selector; v1.13.0, pusheado el 2026-09-12 por orden del dueño; Vercel `cada1_aios` lo despliega solo)**: «4-bis. Zernio en paralelo (solo la difusión)» en la sede en Twilio — `aios_attach_zernio_account`, **necesita la 00067 del producto** (sin ella dice «esa función todavía no existe»). Antes, `6323ced` (v1.12.0): interruptor «Domicilios por WhatsApp» de la marca en la tarjeta Sistema de la sede (`getDeliveryWebhook`/`setDeliveryWebhook`, `actions/delivery.ts`), sobre la **00066 del producto, ya aplicada**. Encima de `5108550` (v1.11.3: `getTemplateStatus` lee `template.status`, el 500 de `/clientes/[id]` por `toLowerCase`) y `c70f348` (docs contrato §8). Antes, **`origin/main` = `62e8c13` (v1.11.2, pusheado el 2026-09-12 por orden del dueño; Vercel `cada1_aios` lo despliega solo)**: paso 3 con botón «Registrar número en Cloud API» (coexistencia deja el número «sin registrar»; nunca se llamaba `POST …/whatsapp/register`); el paso 4 guarda y muestra el estado de CADA plantilla (aprobada/pendiente/rechazada + motivo) — antes un rechazo era invisible para siempre; y la lista resuelve `_v2`. Planeta Wings: 13 creadas a las 00:17 UTC, 0/13 aprobadas 4 h después, estado real desconocido hasta desplegar esto o mirar el WhatsApp Manager. Antes, **`origin/main` = `1a9f558` (v1.11.1, pusheado el 2026-09-11 23:55)**: un `Gateway Timeout` de Supabase Auth ya no te saca al login en medio de una acción (pasó en el alta de Planeta Wings al apretar «Crear plantillas»: el paso 4 nunca corrió; es reintentar, no un bug del paso). Antes, `c8a1917` (v1.11.0): borrar propietario entero, lista Twilio \| Zernio con recarga, reinicio de WhatsApp, Embedded Signup que se anota solo (00010 del AIOS, sin aplicar), `ZERNIO_SIMULATE` solo con `true`. Necesita la **00064 del producto** aplicada y `ZERNIO_API_KEY` vigente en su Vercel. Antes: **`origin/main` = `b6fd308` (v1.10.0), pusheado el 2026-09-10**: las 13 plantillas copiadas del producto (sin 🍣, emoji por rubro), media de muestra desde `ZERNIO_TEMPLATE_SAMPLE_{IMAGE,VIDEO}_URL` **del Vercel del AIOS** (las dos son obligatorias o el paso 4 no arranca), y nombres `_v2` cuando el base ya existe en la WABA |
-| Grafo | Reconstruido a mano el 2026-09-11 04:30 (5.535 nodos, 539 comunidades). Hook post-commit instalado el 07 (`graphify hook status`): se actualiza solo en cada commit. ⚠️ 169 comunidades renombradas por su hub: `graphify label` las refresca (cuesta LLM, no se corrió) |
+| AIOS (`Level 2.0/aios-constelarys`) | **`origin/main` = `f489ad9` (v1.14.0, 2026-10-04: el alta crea «Cumpleaños — dos días antes» en vez de «¡Feliz cumpleaños!»; antes `b1b2465` v1.13.2, 24-72 h)**. Antes **`origin/main` = `c7e6dd5` (v1.13.1: el wizard del propietario aparece con la sede en Twilio, sin cambiar el selector; v1.13.0, pusheado el 2026-09-12 por orden del dueño; Vercel `cada1_aios` lo despliega solo)**: «4-bis. Zernio en paralelo (solo la difusión)» en la sede en Twilio — `aios_attach_zernio_account`, **necesita la 00067 del producto** (sin ella dice «esa función todavía no existe»). Antes, `6323ced` (v1.12.0): interruptor «Domicilios por WhatsApp» de la marca en la tarjeta Sistema de la sede (`getDeliveryWebhook`/`setDeliveryWebhook`, `actions/delivery.ts`), sobre la **00066 del producto, ya aplicada**. Encima de `5108550` (v1.11.3: `getTemplateStatus` lee `template.status`, el 500 de `/clientes/[id]` por `toLowerCase`) y `c70f348` (docs contrato §8). Antes, **`origin/main` = `62e8c13` (v1.11.2, pusheado el 2026-09-12 por orden del dueño; Vercel `cada1_aios` lo despliega solo)**: paso 3 con botón «Registrar número en Cloud API» (coexistencia deja el número «sin registrar»; nunca se llamaba `POST …/whatsapp/register`); el paso 4 guarda y muestra el estado de CADA plantilla (aprobada/pendiente/rechazada + motivo) — antes un rechazo era invisible para siempre; y la lista resuelve `_v2`. Planeta Wings: 13 creadas a las 00:17 UTC, 0/13 aprobadas 4 h después, estado real desconocido hasta desplegar esto o mirar el WhatsApp Manager. Antes, **`origin/main` = `1a9f558` (v1.11.1, pusheado el 2026-09-11 23:55)**: un `Gateway Timeout` de Supabase Auth ya no te saca al login en medio de una acción (pasó en el alta de Planeta Wings al apretar «Crear plantillas»: el paso 4 nunca corrió; es reintentar, no un bug del paso). Antes, `c8a1917` (v1.11.0): borrar propietario entero, lista Twilio \| Zernio con recarga, reinicio de WhatsApp, Embedded Signup que se anota solo (00010 del AIOS, sin aplicar), `ZERNIO_SIMULATE` solo con `true`. Necesita la **00064 del producto** aplicada y `ZERNIO_API_KEY` vigente en su Vercel. Antes: **`origin/main` = `b6fd308` (v1.10.0), pusheado el 2026-09-10**: las 13 plantillas copiadas del producto (sin 🍣, emoji por rubro), media de muestra desde `ZERNIO_TEMPLATE_SAMPLE_{IMAGE,VIDEO}_URL` **del Vercel del AIOS** (las dos son obligatorias o el paso 4 no arranca), y nombres `_v2` cuando el base ya existe en la WABA |
+| Grafo | Docs re-extraídos el 2026-09-29 (Haiku por `claude-cli`, incremental, ~2 M tokens de la suscripción) + `cluster-only` + `label`: **5.860 nodos, 10.780 aristas, 543 comunidades**. El hook post-commit reconstruye el código solo en cada commit. ⚠️ **`graphify.exe` lo bloquea el Control de aplicaciones de Windows**: se usa el módulo, `/c/Users/luisr/AppData/Roaming/uv/tools/graphifyy/Scripts/python.exe -m graphify query "…"` (y `update .`, `extract`, `label`). 8 docs viejos no dieron nodos nuevos (`scalability-analysis.md`, `DELEGACION_GUIDE.md` y otros 6: conservan los del 08) |
 | Deadline | ~2026-09-10 — onboarding de los 25 clientes de Zernio |
 
 ## 2. En vuelo ahora mismo
@@ -35,6 +35,43 @@
 
 ## 3. Siguiente, en orden
 
+0.SEGURIDAD **Ola 0: DESPLEGADA el 2026-10-04 (`main` = `c055e8e`; AIOS `b1b2465` v1.13.2). Falta que el dueño
+   aplique la 00069 (punto 1).** Cerrado en código, cada uno con un test que falla contra el código viejo: AISLA-1 (`resolve` solo
+   otorga lo que `check-in/status` ofrece), AISLA-2 y OPUS-4 (migración **00069**), OPER-4 (`PUT` de settings con
+   alcance de marca), AISLA-5 (`timingSafeEqual`), el CSV (`logs-*.csv` ignorado; el archivo sigue en la raíz) y
+   ALTA-7. Detalle: `docs/AUDITORIA-ESCALA-1000-2026-09-28.md` §7. **Lo que falta, del dueño y en este orden:**
+   1. **AISLA-2: las dos funciones ya están cerradas** (el dueño corrió el (a) del prompt el 03-10 sin error; el 29
+      lo había corrido en el Supabase del AIOS, donde falló). **Falta pegar la `00069` entera** en el SQL Editor del
+      proyecto del PRODUCTO (el de `tenants`): cierra el resto y las políticas de la 00015. Bien = «Success. No rows
+      returned». Si aborta con «siguen ejecutables por anon/authenticated: X», X es una función que no está en el
+      repo: pasársela a una sesión. Después, la consulta (c) del prompt de la ola 0 **sola**: dice si la 00030 corrió.
+   2. ~~Desplegar~~ — hecho el 04 (§1, Código). El código no necesita la 00069; la 00069 cierra un agujero vivo.
+      `ESTADO.md`, `CHANGELOG.md` y la auditoría §7 viven solo en la rama (en `main` quedaron las versiones viejas).
+   **Queda abierto, fuera de la ola:** la carrera de dos `resolve` simultáneos (`points-mystery-box.md` §7.4.ter) y
+   `PUT /api/dashboard/tenant-config`, que un administrador de sede sigue pudiendo usar (`meta-pixel.md`).
+   **Prompt listo para otra sesión (propuesta; el dueño ordena la cola):** `docs/prompts/2026-10-04-seg2-resolve-y-tenant-config.md`.
+0.ESCALA **ESCALA-3 (Zernio contesta antes de la IA) y ESCALA-4 (la analítica pagina): DESPLEGADAS el 2026-10-04 (y la
+   analítica corregida con el hotfix `ff9fd90`: ver §1, Código)
+   (`main` = `9a06670`, Vercel READY), sin migración.** Falta mirar con un pedido REAL (lo cubre la prueba de
+   0.AUTOCHAT) que en los logs de Vercel `webhook/zernio` conteste enseguida y que detrás salgan las líneas `[Delivery]`. **Queda abierto:** (a) el hueco
+   residual de ESCALA-3: si la plataforma mata la función durante el trabajo diferido no queda fila en
+   `delivery_intake_failures` (cerrarlo es una cola con reintento: otra decisión); (b) si una marca llega a decenas de
+   miles de visitas en 6 meses, la analítica pasa a agregar en SQL (requiere migración); (c) ninguna pantalla del panel
+   lee el `error` de `useDashboardAnalytics()`: con un 500 las tarjetas muestran **0** y las gráficas quedan vacías, sin aviso (es lo que se vio el 04-10:
+   un fallo de la analítica se ve como «0 clientes»; lo visible de verdad es el 500 y `[Analytics][FALLO]` en el log). Detalle: auditoría §8.
+
+0.CUMPLE **Cumpleaños: el código está DESPLEGADO (2026-10-04). Falta solo crear la plantilla nueva en cada marca.**
+   Mientras una marca no tenga APROBADA «Cumpleaños — dos días antes» (`birthday_upcoming_template_sid`,
+   `cumpleanos_se_acerca`), sigue con «¡Feliz cumpleaños!» el día mismo, como siempre. El día que Meta la
+   aprueba, esa marca pasa SOLA a saludar hasta dos días antes, sin huecos y sin repetir
+   (`docs/features/campaigns.md` § Cron Cumpleaños). Lo del dueño, por marca:
+   · **Planeta Wings (Zernio):** Plantillas → «Cumpleaños — dos días antes» → **Enviar a Meta**.
+   · **Sushi Service, Sushi Fun, Don Alirio (Twilio):** Plantillas → «Del set estándar te faltan…» →
+     «Cumpleaños — dos días antes» → **Crear** (crea y somete a Meta en su cuenta Twilio). O crearla a mano
+     en Twilio y elegirla en Ajustes → «Cumpleaños — dos días antes».
+   · **Tepuy:** nada. Sin WABA todavía; el AIOS v1.14.0 ya crea la nueva en el alta.
+   · Frangal y demo-ventas: igual que las Twilio, si se quiere el saludo ahí.
+
 0.DOMI **Planeta Wings ve «Los domicilios por WhatsApp no están activados en tu marca»: el botón ya está
    desplegado (AIOS v1.12.0, 00066 aplicada, 12).** Queda el gesto del dueño: en el AIOS, Planeta Wings → sede →
    tarjeta Sistema → «Domicilios por WhatsApp» → **Encender**, cuando la línea ya reciba y el celular del
@@ -43,20 +80,26 @@
    `/clientes/[id]` (logs de Vercel: 14:10, 15:00, 15:30 UTC del 12; empezó el 11 a las 23:45). Calza con el
    incidente de Supabase «Nano projects unresponsive» del 10-11 (resuelto). Es del dueño: Settings → General →
    **Restart project**; si sigue lento, subir de Nano a Micro.
-0.AUTOCHAT **Los domicilios del auto-chat ya están en la rama (2026-09-25, sin desplegar). Tres gestos, en este orden.**
+0.AUTOCHAT **DESPLEGADO y CONECTADO el 2026-09-25 (`8be572e`, deploy READY; 00068 aplicada; `message.sent` suscrito).
+   Falta la PRUEBA REAL: que José mande un pedido al auto-chat y se vea el resultado.**
    Planeta Wings usa UN número para todo: el mesero escribe el pedido en el chat de la línea consigo misma y
    Meta no lo entrega como entrante, así que se perdía entero. Ahora el webhook atiende `message.sent`.
-   (1) **Aplicar la 00068** en Supabase ANTES de desplegar (agrega `tenant_connections.self_conversation_id` y
-   siembra el id del auto-chat de Planeta Wings, sacado del log de Zernio del 23-09).
-   (2) **Suscribir el evento `message.sent`** en el webhook de Zernio: sin eso no llega nada y el camino es
-   inerte. Ya hay script: `node scripts/zernio-webhook-eventos.mjs` mira, y con `--aplicar` lo agrega
-   conservando el resto y verificando al releer. **Le falta una `ZERNIO_API_KEY` viva en `.env`:** la que hay
-   en `.env.local` (2026-09-02) devuelve 401, y la de Vercel es `sensitive` — no se puede leer de ahí.
-   (3) **Agregar el celular REAL del mesero** (José: 311 672 9678) en Domicilios → Autorizados, con su sede. Lo
-   que hay hoy en esa lista es el número de la MARCA (300 903 3799), que no es de ningún mesero: ese sirve ahora
-   como el opt-in del auto-chat, pero un mesero con celular propio necesita su propia fila.
-   Si la conversación sembrada resultara ser la equivocada, se ve en el primer pedido y se corrige poniendo la
-   columna en NULL: el efecto se limita a esa conversación de esa marca.
+   (1) ~~Aplicar la 00068~~ — hecho por el dueño el 25.
+   (2) ~~Suscribir `message.sent`~~ — hecho el 25 con `node scripts/zernio-webhook-eventos.mjs --aplicar`.
+   El webhook `6a9e57fb44ed40ab69223879` (`hooks.constelarys.com/api/webhook/zernio`, dominio verificado de
+   `cada1`) pasó de 16 a 17 eventos, verificado releyendo. **NO estaba suscrito**: era el segundo motivo por el
+   que no entraba nada, aparte del auto-chat.
+   (3) **LA PRUEBA REAL, que es lo único que queda.** El opt-in del auto-chat ya está puesto: el número de la
+   MARCA (300 903 3799) está en Autorizados, y ése es justo el que la rama nueva exige. Así que **José escribe
+   un pedido en el auto-chat y tiene que pasar esto**: el cliente recibe la plantilla de bienvenida, aparece
+   «enviado» en el panel, y en los logs de Vercel sale `[webhook/zernio] pedido en el auto-chat de …`.
+   Si en cambio sale `message.sent sin auto-chat conocido conversationId=…`, la conversación sembrada en la
+   00068 era la equivocada: se pone ese `conversationId` en `tenant_connections.self_conversation_id` y listo.
+   (4) **Aparte, y solo si José va a usar SU celular**: agregar 311 672 9678 en Domicilios → Autorizados con su
+   sede. No hace falta para el auto-chat; hace falta para que pueda mandar pedidos desde su propio teléfono.
+   ⚠️ **Sin verificar: si la `ZERNIO_API_KEY` de Vercel sigue viva.** La de `.env.local` estaba muerta (401) y se
+   reemplazó por una nueva; la de producción es otra variable (`sensitive`, del 11-09) que no se puede leer. Si
+   las plantillas de las marcas en Zernio vienen saliendo bien, está viva y no hay nada que hacer.
 
 0.SUSHI **Sushi Service: la difusión por la línea de coexistencia (Zernio), lo normal por Twilio
    hasta que muera (dueño, 2026-09-12).** El operador desactivó la SIM de Twilio; el WhatsApp sigue
@@ -70,7 +113,7 @@
    §A** (modo puente doble) y §1-§9 (migración completa, para cuando Twilio muera). Lo que el
    dueño tiene que hacer, en orden: (1) **verificación del negocio en Meta**, HOY — la línea de
    coexistencia nace en 250 únicos/día y los 1.000 solo llegan verificada; (2) el alta en el AIOS
-   (§3 del runbook) + **aplicar la 00067** y el botón «4-bis. Zernio en paralelo» de la sede en el
+   (§3 del runbook) + **la 00067 ya corrió (dueño, 29) — ⚠️ con el REVOKE incompleto: lo cierra la 00069, 0.SEGURIDAD punto 1** y el botón «4-bis. Zernio en paralelo» de la sede en el
    AIOS v1.13.0 (`aios_attach_zernio_account`: los `zernio_*` sin tocar el proveedor; §A.3, con el
    `UPDATE` como respaldo); (3) `ZERNIO_API_KEY`
    y `ZERNIO_WEBHOOK_SECRET` en el Vercel del PRODUCTO y desplegar; (4) el botón, la plantilla,
@@ -78,9 +121,8 @@
    de código: `tier_unlocked_template_sid` y `reward_reminder_template_sid` fuera del catálogo
    del AIOS (§5 del runbook) — solo pesa en la migración completa.
 0.AIOS **Antes de que el dueño registre el número real de Tepuy (mañana, 2026-09-12).** En orden:
-   1. **Aplicar la `00064`** en el Supabase del producto (borrado, `aios_deactivate_whatsapp`,
-      `aios_wallet_topup`; riesgo nulo salvo la primera, que lleva tres candados) y la **`00010`** en
-      el Supabase del AIOS (el retorno del Embedded Signup se anota solo).
+   1. La `00064` ya corrió (dueño, 29): borrar y reiniciar un alta rota funciona desde el AIOS. Falta
+      confirmar la **`00010`** en el Supabase del AIOS (el retorno del Embedded Signup se anota solo).
    2. **Vercel del AIOS:** `ZERNIO_API_KEY` vigente (la de `.env.local` da 401), **`ZERNIO_SIMULATE`
       fuera** (desde v1.11.0 solo simula con `true`), y `AIOS_ADMIN_PROVISION_SECRET` igual al del producto.
    3. Desplegar producto (`tenant-delete`) y AIOS (v1.11.0). En el AIOS: Tepuy → «Reiniciar el alta de
@@ -158,19 +200,16 @@
    de la cuenta, incluida la síntesis). Se corrigieron ya: el selector fantasma, el 409 sin
    pantalla, el 409 falso del PATCH de niveles, las filas heredadas editables y las dos guardas
    del POST de accesos, y el 09 **el agujero de permisos de `/api/dashboard/reward-tiers`**
-   (era el más caro): sus escrituras exigen alcance de MARCA. **Quedan SIN verificar**:
-   `/api/mystery-box/resolve` (otorga premios sin visita ni límite de tasa) y la coordenada
-   con decimales en «Mis sedes».
-0.GAMMA **Recompensas por sede: ya se pueden usar, con la `00059` aplicada ANTES.** Los dos
+   (era el más caro): sus escrituras exigen alcance de MARCA. **Queda SIN verificar** la coordenada
+   con decimales en «Mis sedes». `/api/mystery-box/resolve` se verificó el 28 (cruzaba marcas) y se
+   cerró en código el 03-10 → 0.SEGURIDAD.
+0.GAMMA **Recompensas por sede: ya se pueden usar — la `00059` corrió (dueño, 29).** Los dos
    agujeros están cerrados en el código (09): el «ya reclamé» dejó de llevarse por `tier_id`
    —copiarle los niveles a una sede ya NO le gana un premio a nadie— y `current_tier` pasa a ser
    **el nivel de la MARCA** (se elige la salida «b»; el porqué en `points-mystery-box.md`
-   §7.1.bis). **Hasta que la `00059` corra en Supabase, seguir sin apretar «Darle premios
-   propios»**: sin ella el código nuevo pide `claimed_tier_key` y PostgREST devuelve 42703.
-   Lo que la 00059 NO tapa: `/api/mystery-box/resolve` **no tiene ninguna guarda de «ya
-   reclamé»** —ni por id ni por umbral—, así que el único freno sigue siendo que
-   `check-in/status` no lo ofrezca. Es el mismo endpoint del 0.BETA y ahora tiene con qué
-   guardarse (`claimed_tier_key` / `claimed_threshold`); falta hacerlo. Tampoco se tocó
+   §7.1.bis). `/api/mystery-box/resolve` ya tiene la guarda de «ya reclamé»
+   (ola 0, 03-10, sin desplegar): solo otorga lo que `check-in/status` ofrece, con la misma
+   función (`points-mystery-box.md` §7.4.ter). No se tocó
    `mystery_box_global_caps`, que sigue por `tier_id`: con premios propios el cupo global de
    premios altos pasaría a ser **por sede** sin que nadie lo haya decidido.
 0.DELTA **Un administrador de sede abre un panel VACÍO.** `role='location'` nunca ve el cubo
@@ -225,23 +264,13 @@
       tenant. Zernio (AIOS v1.10.x, Pedacito/Tepuy): «Crear plantillas» cuando tengan el paso 3 y
       las dos `ZERNIO_TEMPLATE_SAMPLE_*_URL` en el Vercel **del AIOS**. Producto y AIOS con el
       cuerpo corregido: **sin pushear** (`675fdbe` en el AIOS).
-0.quinquies **Aplicar la `00058` y la `00059` en Supabase** (producto) y la **`00009` en el Supabase del AIOS**,
-   en ese orden y ANTES de desplegar. Sin la 00058, `/dashboard/sedes` responde **503** al guardar
-   (`merge_location_config_deep()` no existe) y las columnas `location_id` de recompensas tampoco.
-   Sin la 00009 del AIOS, guardar un cliente revienta con el CHECK viejo en cuanto alguien elija
-   «grupo» o «franquicia». La `00060` (10) y la `00063` (11) ya las corrió el dueño antes de cada push. Las dos que
-   quedan son de RIESGO BAJO: no tocan una sola fila de historia. **Y la `00061`** (`tenant_integration_secrets`, el token de la API
-   de Conversiones por marca): tabla nueva, riesgo cero, puede ir después del código; hasta que corra, el panel
-   responde 503 al guardar el token de una marca. La `00062` (meseros rotativos) ya está aplicada (11). La `00065` (rendimiento del equipo) ya está aplicada (11).
+0.quinquies **Supabase del AIOS: la `00010` está aplicada (03-10: su `aios_register_whatsapp_connection` apareció
+   en el catálogo); la `00009`, sin confirmar.** Sin la 00009, guardar un cliente «grupo» o «franquicia» revienta con
+   el CHECK viejo. Se confirma guardando uno, o en el SQL Editor **del AIOS** con `SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid = 'clients'::regclass AND contype = 'c';` (tiene que nombrar `franchise`).
 0.quater **Falta el autoservicio de contraseña** («olvidé mi contraseña» en `/login`). Ya se puede
    cambiar una clave desde «Accesos» y desde el AIOS, así que nadie queda encerrado — pero mientras
    no exista el autoservicio, cada olvido sigue pasando por una persona. Depende de que el SMTP del
    proyecto de Supabase esté configurado, que **no está comprobado**: comprobarlo es el primer paso.
-0.ter **Aplicar la `00057` en Supabase** (`aios_list_locations()`, `SECURITY DEFINER`). Sin ella el AIOS
-   **no puede leer las sedes**: el paso 3 del alta falla con `42501 permission denied for schema auth` en todo
-   negocio con dos locales. No bloquea el alta —el paso 3 solo comprueba—, pero deja la verificación a ojo.
-   ⚠️ Su primera versión hacía `GRANT USAGE ON SCHEMA auth` y **no sirve**: en Supabase ese esquema es de
-   `supabase_auth_admin` y el GRANT sale como WARNING, no como error. → `docs/features/multi-sede.md` §3.sexies.
 0. **`AIOS_ADMIN_PROVISION_SECRET` en los DOS Vercel**, la MISMA cadena — el dueño la estaba cargando el 08,
    con el código ya desplegado. Sin ella el producto responde **503** y la tarjeta «Usuario del panel» se ve
    pero dice que está apagada. Comprobarla dando de alta a **Pedacito de Amor**, que espera su usuario;
@@ -255,9 +284,6 @@
    **Corre prisa**: los dos subdominios responden, y el primer check-in convierte esto en otro problema.
    La clienta pidió **un celular por sede**: eso es **F9** (`location_messaging`, cupo y plantillas por línea)
    y choca con **D6**; por ahora comparten línea. Sin decidir.
-1. ✅ **Las seis migraciones (00047–00056) del producto y la `00007` del AIOS están aplicadas** (dueño, 2026-09-08).
-   Del AIOS queda **desplegar la v1.6.0** (mergear `feat/multisede-aios` → `main` del AIOS), que lo está puliendo
-   otra sesión del dueño el 08. Recién ahí se da de alta Tepuy y la sede 2 engancha.
 1.bis **Pusheado `c96bce5` a `main` el 08 (noche).** Falta la mirada del dueño: abrir `/dashboard/marca` (ahora "Tarjeta principal"), cargar redes/sellos de una marca y abrir
    su `/tarjeta` en un celular. Sin config nueva, ninguna marca cambia.
 2. **Smoke test** del `docs/RUNBOOK-DEPLOY.md` §5 con Sushi Service real, apenas terminen las cinco:
@@ -281,9 +307,10 @@
 7. **De §18 quedan DOS** (`docs/DECISION-18-DOMICILIOS-COEXISTENCIA.md`): **18.e** (a los clientes de Sushi Fun
    se les contesta que ese número «es exclusivo para mensajes automáticos») y **18.c** (plantilla de fallo de Zernio).
 8. **De `docs/AUDITORIA-POST-DEPLOY-2026-09-06.md`** queda vivo el AMARILLO de `reward-reminder` (Crons). El
-   ROJO 3 está entero en `main` y vive solo hasta que corra la 00053. Siguen stale: `docs/ESTADO-REQUERIMIENTOS.md`
-   (además da por abierta la **18.e**, que ya está hecha en Conexiones C1) y `docs/04-deployment.md`.
-9. **Aplicar la 00030** en ventana tranquila (cierra el riesgo del DEFAULT puente).
+   ROJO 3 está entero en `main` y vive solo hasta que corra la 00053. Sigue stale `docs/04-deployment.md`.
+   (`docs/ESTADO-REQUERIMIENTOS.md` quedó reemplazado el 04-10; la **18.e** ya está hecha: el punto 7 se puede cerrar.)
+9. **Aplicar la 00030** en ventana tranquila (cierra el riesgo del DEFAULT puente). **¿Ya corrió con «todas» (29)?**
+   Se confirma con la consulta (2) del prompt de la ola 0; si corrió, `CLAUDE.md` y el §6 cambian.
 10. **Onboarding de los 25**: wildcard DNS ya resuelto y probado con Sushi Fun.
 
 **El norte** (dueño, 2026-09-05, corregido el 09-11): **Meta ya está entera** — píxel + API de Conversiones, y
@@ -294,8 +321,6 @@ automatizaciones dentro del restaurante y **Google** para reseñas.
 
 ## 4. Bloqueado: solo lo puede destrabar el dueño
 
-- **Aplicar la `00061` en Supabase** (`tenant_integration_secrets`). Es lo ÚNICO que un restaurante necesita de
-  nuestro lado para conectar su píxel: sin ella el panel responde 503 al guardarle el token. Riesgo cero.
 - **Ver la API de Conversiones funcionar UNA vez** con el píxel de un restaurante real y el código de «Probar
   eventos» de SU Administrador de eventos: es la única verificación que esta feature no tuvo
   (`docs/features/meta-pixel.md` § Cómo se verifica). `NEXT_PUBLIC_META_PIXEL_ID` y
@@ -308,13 +333,32 @@ automatizaciones dentro del restaurante y **Google** para reseñas.
   `preview/capa-visual`) y el **stash** olvidado de `fix/opt-out-visible` (`git stash show -p stash@{0}` para mirarlo).
 - **Borrar el Supabase de Sushi Fun.** Esperar a un fin de semana de operación normal. El respaldo son los
   `SQL-PARA-CORRER/sushi-fun/*.sql` (1.421 filas), que **NO cubren** Auth, RLS ni storage. El Vercel viejo queda **pausado**.
-- **Las preguntas abiertas de producto** (§18.a–d, §16.a–e, §17.a–d, §15.b, §12, §9): `docs/ESTADO-REQUERIMIENTOS.md`.
+- **Las 25 preguntas abiertas de producto** (§16.a–e, §17.a–d, §15.a–b, §9, §4, §8, §22, D-8…D-10, el aviso §24-P2…): `docs/ESTADO-CONSOLIDADO-2026-10-04.md` §7.
 - **Separación de una sede** (venta, franquicia, socio distinto) — aplazada por el dueño, 2026-09-02.
 - Decisiones ya CERRADAS que no se reabren: **D6** (N líneas por marca, la sede no obliga a ninguna; `multi-sede.md` §5) ·
   **D21** (un subdominio por sede, todas pares; con 2+ sedes el dominio RAÍZ deja de registrar, 409; `multi-sede.md` §3.5).
 
 ## 5. Hecho reciente
 
+- **ESCALA-3 y ESCALA-4** (2026-10-04, `bb177cd` → `main` `9a06670`, sin migración, **DESPLEGADO**): `POST /api/webhook/zernio` contesta 200 y deja
+  el parseo con IA y el registro para después de la respuesta (`after()`), así que un mal día de OpenAI ya no le apaga el
+  webhook a las marcas Zernio (Zernio pide 2xx en 5 s y lo apaga tras 10 fallos; la IA tardaba hasta ~16 s). El embudo sigue
+  siendo único (motivo nuevo `intake_inesperado`). `getFullAnalytics()` pagina de a 1.000 (`leerTodo()` ahora en `src/lib/`),
+  con orden total, y un fallo de base da 500 en vez de ceros. → `delivery-webhook.md`, `dashboard.md`, auditoría §8.
+- **Ola 0 de seguridad** (2026-10-03, `0485098` + `ddfdf72`, migración **00069 sin aplicar**, sin desplegar; AIOS
+  v1.13.2 `b1b2465`, sin pushear): `mystery-box/resolve` solo otorga lo que `check-in/status` ofrece
+  (`getNivelOfrecido()`, una sola función) y tiene límite de tasa; la 00069 cierra toda `SECURITY DEFINER` de `public` a
+  la anon key (salvo 4 helpers de RLS) y borra las políticas de la 00015; el `PUT` de settings exige alcance de marca
+  (`src/lib/alcance-de-marca.ts`); `timingSafeEqual` en `webhook/delivery`; `logs-*.csv` ignorado; el AIOS dice
+  24-72 h. → `points-mystery-box.md` §7.4.ter, `03-security.md`, auditoría §7.
+- **Docs al día tras la auditoría** (2026-09-29, sin código): el dueño confirmó todas las migraciones aplicadas (§1;
+  AISLA-2 pasó a vivo → 0.SEGURIDAD); corregidos los docs que mentían (`04-deployment.md` crons y costos,
+  `scalability-analysis.md` marcado obsoleto, `DELEGACION_GUIDE.md`, `PROCESO_VENTAS_IMPLEMENTACION.md`, `CLAUDE.md`,
+  tres comentarios) y escrito el prompt de la ola 0 (`docs/prompts/2026-09-29-ola-0-seguridad.md`).
+- **Auditoría «qué falta para 1000 clientes»** (2026-09-28, solo lectura, sin código ni migración): producto + AIOS,
+  6 auditores y 3 refutadores Sonnet, revisión Opus de lo crítico. 68 hallazgos (49 confirmados, 12 corregidos, 1
+  refutado, 6 de Opus). Lo que no escala es la operación: ~17 acciones por alta, ~85 min/marca/mes, cero avisos, 18/31
+  de la cola esperan al dueño. Dos agujeros entre marcas → §3 0.SEGURIDAD. → `docs/AUDITORIA-ESCALA-1000-2026-09-28.md`.
 - **Autorizados Domicilio dentro de Domicilios** (2026-09-12, `1de033e`, pusheado, sin migración): dos pestañas
   en `/dashboard/domicilios` —«Domicilios» y «Autorizados» (`AutorizadosPanel.tsx`, la pantalla vieja tal cual)—;
   `/dashboard/authorized-numbers` redirige a `?tab=autorizados` y salió del menú. Patrón de Recompensas ›
@@ -517,13 +561,13 @@ sin UNIQUE por tenant · **D4** diagrama ER de DB_SCHEMA obsoleto · **D5** cont
 **D19** un mesero sin teléfono en dos sedes cuenta como dos · **D20** quién activó un aparato solo queda en `device_name`.
 
 **Fuera de multi-sede:**
-- **00030 sin aplicar**: DEFAULT puente → un INSERT sin `tenant_id` se va calladito a Sushi Service.
+- **00030 sin aplicar** (¿corrió el 29 con «todas»? §3 ítem 9): DEFAULT puente → un INSERT sin `tenant_id` se va
+  calladito a Sushi Service. La auditoría del 28 no encontró ninguno en `src/`: el riesgo es la falta de red.
   Y **17.b**: "quién es Black" difiere entre la tarjeta (`black-tier.ts`) y el panel (`POWER_RANKS`).
-- **Domicilios perdidos sin rastro** (ROJO 3): entero en `main`, pero **no sirve hasta que corra la 00053**.
 - **Huecos de migración**: `00048` y `00049` los citó el diseño (F9 se escribió, pero como `00058`; F10 no);
   `00052` y `00055` los fabricó el script viejo al leer una cita como reserva. Ninguno se rellena.
 - **Choques de migración en ramas muertas**: `sushi-sync` (00015) y `port/sushi-fun-2.8` (00028).
-- **Catálogo de producto sin empezar** (referidos, push, fatiga, §7, §8, §18): `docs/ESTADO-REQUERIMIENTOS.md`.
+- **Catálogo de producto sin empezar** (referidos, push, fatiga, tier máximo, multi-sede F5/F6): `docs/ESTADO-CONSOLIDADO-2026-10-04.md` §1 y §9 (P8).
 - **Plantillas (2026-09-11)**: cinco escritores de `admin_settings.*_template_sid` (el invariante de
   `promoteVersion()` vale en un archivo, no en el sistema) · `tier_unlocked` y `reward_reminder` fuera del
   catálogo · una plantilla PAUSED por Meta sigue apuntada y falla en silencio · `no_template_configured` no

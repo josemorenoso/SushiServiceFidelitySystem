@@ -48,7 +48,12 @@ export const DEFAULT_TEMPLATE_STYLE: TemplateStyle = 'calido'
 /** Idioma de las plantillas del catálogo. */
 export const TEMPLATE_LANGUAGE = 'es'
 
-/** Cuántas plantillas tiene el catálogo — y cuántas aprobaciones de Meta cuesta. */
+/**
+ * Cuántas plantillas necesita un negocio NUEVO — y cuántas aprobaciones de Meta cuesta.
+ *
+ * No es el largo de `TEMPLATE_CATALOG`: una entrada con `replacedBy` (hoy, el cumpleaños
+ * del día mismo) sigue ahí para las marcas que todavía la usan, pero a nadie se le ofrece.
+ */
 export const CATALOG_SIZE = 13
 
 /**
@@ -220,17 +225,45 @@ export const TEMPLATE_CATALOG: readonly CatalogTemplate[] = [
       { index: 3, label: 'Camino de niveles', sample: ROADMAP_SAMPLE },
     ],
   },
+  // ⚠️ LAS DOS DE CUMPLEAÑOS (dueño, 2026-10-04). El saludo pasó a salir DOS DÍAS ANTES
+  // (`BIRTHDAY_LEAD_DAYS`), y el texto aprobado dice «¡Feliz cumpleaños!»: mandarlo dos días
+  // antes es decirlo mal. Un texto aprobado no se reescribe, así que la nueva es OTRA
+  // plantilla, con otro puntero. El cron elige por marca (`elegirPlantillaDeCumpleanos()`):
+  // con `birthday_upcoming` APROBADA manda esa, hasta dos días antes; si no, sigue con
+  // `birthday` el día mismo, como siempre. El cambio es solo, marca por marca, el día que
+  // Meta aprueba la nueva. `birthday` queda reemplazada: no se le ofrece a quien no la tiene.
   {
     key: 'birthday',
     settingsKey: 'birthday_template_sid',
     baseName: 'cumpleanos',
     category: 'MARKETING',
-    label: 'Cumpleaños',
-    description: 'Felicita al cliente e invita a celebrarlo en el negocio.',
-    whenSent: 'El día del cumpleaños, en el envío automático diario.',
+    label: 'Cumpleaños — el día (versión anterior)',
+    description:
+      'El «¡Feliz cumpleaños!» de siempre. Se sigue enviando solo hasta que «Cumpleaños — dos días antes» esté aprobada.',
+    whenSent: 'El día del cumpleaños, y solo mientras la marca no tenga aprobada «Cumpleaños — dos días antes».',
+    replacedBy: 'birthday_upcoming',
     variables: [
       { index: 1, label: 'Nombre del cliente', sample: 'Sofía' },
-      { index: 2, label: 'Saldo total de puntos', sample: '95' },
+      // ⚠️ {{2}} es el CAMINO DE NIVELES, no el saldo. El cron manda
+      // `buildTiersRoadmap(...)` (varias líneas), igual que en welcome y reward_*.
+      // Decía «Saldo total de puntos / 95»: la vista previa del panel mostraba un
+      // número y al cliente le llegaba la escalera entera.
+      { index: 2, label: 'Camino de niveles', sample: ROADMAP_SAMPLE },
+    ],
+  },
+  {
+    key: 'birthday_upcoming',
+    settingsKey: 'birthday_upcoming_template_sid',
+    baseName: 'cumpleanos_se_acerca',
+    category: 'MARKETING',
+    label: 'Cumpleaños — dos días antes',
+    description: 'Le avisa al cliente que su cumpleaños ya está aquí y lo invita a celebrarlo en el negocio.',
+    whenSent:
+      'Hasta dos días antes del cumpleaños, en el envío automático diario. Al aprobarse reemplaza sola a «Cumpleaños — el día».',
+    // El MISMO contrato que `birthday`: el cron manda los mismos dos valores a cualquiera de las dos.
+    variables: [
+      { index: 1, label: 'Nombre del cliente', sample: 'Sofía' },
+      { index: 2, label: 'Camino de niveles', sample: ROADMAP_SAMPLE },
     ],
   },
   {

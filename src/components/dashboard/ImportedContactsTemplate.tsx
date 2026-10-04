@@ -20,8 +20,103 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Loader2, MessageSquarePlus, CheckCircle2, ImagePlus, Save, Reply } from 'lucide-react'
+import { Loader2, MessageSquarePlus, CheckCircle2, ImagePlus, Save, Reply, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
+
+interface InvitacionEnWhatsapp {
+  name?: string
+  friendly_name?: string
+  status: string
+  has_media?: boolean
+}
+
+const ESTADO_INVITACION: Record<string, { label: string; className: string }> = {
+  approved: { label: 'Aprobada', className: 'text-green-700 bg-green-50 border-green-200' },
+  pending: { label: 'En revisión', className: 'text-amber-700 bg-amber-50 border-amber-200' },
+  received: { label: 'En revisión', className: 'text-amber-700 bg-amber-50 border-amber-200' },
+  in_appeal: { label: 'En revisión', className: 'text-amber-700 bg-amber-50 border-amber-200' },
+  rejected: { label: 'Rechazada', className: 'text-red-700 bg-red-50 border-red-200' },
+  unsubmitted: { label: 'Sin enviar a Meta', className: 'text-blue-700 bg-blue-50 border-blue-200' },
+  paused: { label: 'Pausada por Meta', className: 'text-red-700 bg-red-50 border-red-200' },
+  disabled: { label: 'Desactivada por Meta', className: 'text-red-700 bg-red-50 border-red-200' },
+}
+
+/**
+ * Las invitaciones del Golden Bullet que HAY en la línea de la difusión, con el
+ * estado que les dio Meta. Antes, después de crear una, no había dónde ver si
+ * salió ni si ya la aprobaron (dueño, 2026-10-02): el paso 4 solo lista las
+ * aprobadas. Se reconocen por el prefijo que les pone `metaName()`.
+ */
+function InvitacionesEnWhatsapp({ recargar }: { recargar: number }) {
+  const [items, setItems] = useState<InvitacionEnWhatsapp[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [cargando, setCargando] = useState(false)
+
+  const cargar = useCallback(async () => {
+    setCargando(true)
+    try {
+      const res = await fetch('/api/dashboard/templates?provider=golden_bullet')
+      const d = await res.json()
+      if (!res.ok || d.error) setError(d.error || 'No se pudo consultar WhatsApp.')
+      else setError(null)
+      setItems(
+        ((d.templates ?? []) as InvitacionEnWhatsapp[]).filter((t) =>
+          (t.name ?? t.friendly_name ?? '').startsWith('club_invite_')
+        )
+      )
+    } catch {
+      setError('No se pudo conectar. Revisa tu internet e inténtalo de nuevo.')
+    } finally {
+      setCargando(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void cargar()
+  }, [cargar, recargar])
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="text-base">Tus invitaciones en WhatsApp</CardTitle>
+          <Button variant="outline" size="sm" onClick={() => void cargar()} disabled={cargando} className="gap-1.5">
+            <RefreshCw className={`h-3.5 w-3.5 ${cargando ? 'animate-spin' : ''}`} />
+            Actualizar
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {error && <p className="rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">{error}</p>}
+        {items === null ? (
+          <p className="text-xs text-muted-foreground">Consultando…</p>
+        ) : items.length === 0 ? (
+          <p className="text-xs text-muted-foreground">Todavía no hay ninguna invitación creada en esta línea.</p>
+        ) : (
+          <ul className="divide-y rounded-md border">
+            {items.map((t) => {
+              const nombre = t.name ?? t.friendly_name ?? ''
+              const estado = ESTADO_INVITACION[t.status] ?? {
+                label: t.status,
+                className: 'text-muted-foreground bg-muted border-border',
+              }
+              return (
+                <li key={nombre} className="flex flex-wrap items-center gap-2 px-3 py-2">
+                  <code className="text-xs break-all">{nombre}</code>
+                  <span className={`rounded border px-1.5 py-0.5 text-[10px] ${estado.className}`}>{estado.label}</span>
+                  {t.has_media && <span className="text-[10px] text-muted-foreground">con foto</span>}
+                </li>
+              )
+            })}
+          </ul>
+        )}
+        <p className="text-[11px] text-muted-foreground">
+          Meta tarda entre 24 y 48 horas en revisar. Solo las aprobadas se pueden usar en el paso 4.
+        </p>
+      </CardContent>
+    </Card>
+  )
+}
 
 interface Creada {
   contentSid: string
@@ -130,6 +225,8 @@ export function ImportedContactsTemplate() {
   const [subiendoM1, setSubiendoM1] = useState(false)
   const [creando, setCreando] = useState(false)
   const [creada, setCreada] = useState<Creada | null>(null)
+  /** Sube al crear una invitación, para que la lista de arriba la muestre sin recargar. */
+  const [recargarInvitaciones, setRecargarInvitaciones] = useState(0)
   const [cambiandoLinea, setCambiandoLinea] = useState(false)
 
   // ── Respuestas a los botones ──
@@ -304,6 +401,7 @@ export function ImportedContactsTemplate() {
         return
       }
       setCreada(data)
+      setRecargarInvitaciones((n) => n + 1)
       toast.success(
         data.approvalSubmitted
           ? 'Plantilla creada y enviada a Meta. Tarda entre 24 y 48 horas.'
@@ -372,6 +470,8 @@ export function ImportedContactsTemplate() {
 
   return (
     <div className="space-y-5">
+      <InvitacionesEnWhatsapp recargar={recargarInvitaciones} />
+
       {/* ── 1. La plantilla ── */}
       {creada ? (
         <Card>

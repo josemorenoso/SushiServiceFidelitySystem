@@ -171,8 +171,13 @@ LIMIT 1;
 -- ═══════════════════════════════════════════════════════════════
 -- PASOS MANUALES (fuera de este script)
 -- ═══════════════════════════════════════════════════════════════
+-- Hoy el alta completa va por el AIOS (wizard de la sede): este script y estos
+-- pasos son el camino manual de RESPALDO, no el normal.
 --
--- A) Admin del cliente — Supabase → Authentication → Users → Add user
+-- A) Admin del cliente — desde 2026-09-08 lo crea el AIOS (tarjeta «Usuario del
+--    panel» → POST /api/aios/tenant-admin). Lo de abajo es el respaldo a mano
+--    (docs/features/alta-usuario-admin.md §7).
+--    Supabase → Authentication → Users → Add user
 --    (email + password), y luego tagear su tenant en el JWT:
 --
 --    UPDATE auth.users

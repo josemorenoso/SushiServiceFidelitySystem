@@ -21,6 +21,8 @@
 
 import { zernioFetch } from './client'
 
+const CREATE_TEMPLATE_TIMEOUT_MS = 60_000
+
 export type ZernioTemplateStatus =
   | 'APPROVED'
   | 'PENDING'
@@ -147,16 +149,24 @@ export async function createZernioTemplate(
 ): Promise<ZernioTemplateMutationResult> {
   const components = buildZernioTemplateComponents(input)
 
-  return zernioFetch<ZernioTemplateMutationResult>('/whatsapp/templates', {
-    method: 'POST',
-    body: JSON.stringify({
-      accountId: input.accountId,
-      name: input.name,
-      category: input.category,
-      language: input.language,
-      components,
-    }),
-  })
+  return zernioFetch<ZernioTemplateMutationResult>(
+    '/whatsapp/templates',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        accountId: input.accountId,
+        name: input.name,
+        category: input.category,
+        language: input.language,
+        components,
+      }),
+    },
+    // Con header de foto, Zernio descarga la muestra y la sube a Meta ANTES de
+    // responder: los 10 s por defecto no alcanzan (2026-10-01, Golden Bullet con
+    // foto). Si aun así se corta, la plantilla puede haber quedado creada: el
+    // caller lo verifica en el listado antes de dar el error.
+    { timeoutMs: CREATE_TEMPLATE_TIMEOUT_MS }
+  )
 }
 
 export interface ZernioTemplateDetail {

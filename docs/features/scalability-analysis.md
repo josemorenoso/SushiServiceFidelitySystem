@@ -2,6 +2,12 @@
 
 > v0.23.0
 
+> ⚠️ **OBSOLETO (auditoría 2026-09-28, ESCALA-12). No usar para decidir.** Describe el sistema de v0.23.0: 3
+> restaurantes, n8n disparando los crons, Supabase free, 60 s de tope por función. Hoy los crons son de Vercel,
+> las rutas largas declaran `maxDuration = 300`, hay Zernio además de Twilio y hay multi-sede. Y «¿se va a
+> caer? No» dejó de ser cierto como regla general. El análisis vigente, con el número de marcas a las que se
+> rompe cada cuello de botella, está en [`docs/AUDITORIA-ESCALA-1000-2026-09-28.md`](../AUDITORIA-ESCALA-1000-2026-09-28.md) §2.3.
+
 ## Arquitectura actual
 
 ```

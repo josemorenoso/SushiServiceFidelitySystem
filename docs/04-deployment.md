@@ -199,19 +199,23 @@ fila en `tenants` (ver §6) con:
 ```json
 {
   "crons": [
-    { "path": "/api/cron/birthday", "schedule": "0 13 * * *" },
-    { "path": "/api/cron/reactivation", "schedule": "0 15 * * *" },
+    { "path": "/api/cron/birthday", "schedule": "0 18 * * *" },
+    { "path": "/api/cron/reactivation", "schedule": "0 20 * * *" },
     { "path": "/api/cron/reward-reminder", "schedule": "0 16 * * *" },
     { "path": "/api/cron/calendar-dispatch", "schedule": "*/15 * * * *" },
-    { "path": "/api/cron/queue-drain", "schedule": "*/15 * * * *" }
+    { "path": "/api/cron/queue-drain", "schedule": "*/15 * * * *" },
+    { "path": "/api/cron/line-health", "schedule": "0 * * * *" }
   ]
 }
 ```
 
-**Estado vigente desde 2026-09-02** (Fase 1 de la migración n8n → Vercel, §25 de
-`docs/requerimientos/REQUERIMIENTOS_AGOSTO_2026.md`). Las 5 expresiones son un calco 1:1
-de las que tenían los Schedule Trigger de n8n: **cero cambio de cadencia**. Horas en UTC;
-`0 13`/`0 15`/`0 16` = 8:00/10:00/11:00 AM Colombia — ver la nota UTC de §1.
+**Estado vigente** (copiado de `vercel.json` el 2026-09-29): seis crons. Los cinco primeros entraron
+en la Fase 1 de la migración n8n → Vercel (2026-09-02, §25 de
+`docs/requerimientos/REQUERIMIENTOS_AGOSTO_2026.md`). `birthday` y `reactivation` se corrieron
+después a `0 18`/`0 20` UTC (= 13:00/15:00 Bogotá, la hora real que tenía n8n: ver el ROJO 1 de
+`docs/AUDITORIA-POST-DEPLOY-2026-09-06.md`). `reward-reminder` sigue en `0 16` UTC (11:00
+Bogotá) por decisión pendiente del dueño. `line-health` (cada hora) entró con la 00060
+(2026-09-10) y escribe `messaging_daily_limit`. Horas en UTC — ver la nota UTC de §1.
 
 **Por qué no hizo falta código.** Los 5 endpoints ya exportaban `GET` (el método que invoca
 Vercel Cron) y `validateCronSecret()` (`src/lib/validators/cron.ts`) ya espera
@@ -976,7 +980,7 @@ El orden importa: al revés se envía desde el master.
 | Servicio | Plan | USD/mes | Notas |
 |----------|------|:-------:|-------|
 | Vercel | Hobby (gratis) → **Pro** | $0 → **$20/mes por EQUIPO** | Hobby **prohíbe el uso comercial** y no admite crons `*/15`. Pro se cobra por equipo, no por proyecto: los $20 cubren los ~20 proyectos de `josemorenosos-projects` (producto + AIOS), con $20 de crédito de uso incluido. Repartido entre clientes es ~$1/cliente. Ver §25 de requerimientos. |
-| Supabase | Free tier | $0 | 500 MB DB, 2 GB storage, 50K auth users. |
+| Supabase | ⚠️ sin confirmar | ? | El tier real del proyecto de producción no está documentado en ningún lado (auditoría 2026-09-28, ESCALA-2). El Supabase del AIOS es Nano y ya dio Gateway Timeout. |
 | VPS n8n | Compartido entre clientes | ~$3-5 | Un VPS de $15-20/mes para 3-5 clientes. |
 | Dominio | Opcional | $0-1 | Vercel subdomain gratis o dominio custom. |
 
@@ -987,6 +991,17 @@ El orden importa: al revés se envía desde el master.
 | MARKETING | ~$0.0058 | ~$3.50/mes |
 | UTILITY | ~$0.003 | ~$1.80/mes |
 | MMS (media) | ~$0.0079 extra | Solo si se usan plantillas de calendario con media |
+
+### Zernio y OpenAI (variables, sin medición por marca)
+
+Ninguno de los dos se puede atribuir hoy a una marca (auditoría 2026-09-28, OPER-7 y OPER-8):
+
+- **Zernio** se factura al Team completo: no hay saldo por profile ni por tenant
+  (`docs/features/zernio-messaging.md`). Es el proveedor de casi todas las marcas nuevas.
+- **OpenAI**: una sola `OPENAI_API_KEY` de servidor; cada domicilio por WhatsApp es una llamada a
+  `gpt-4o-mini` y ningún contador guarda cuánto gasta cada marca (`src/lib/openai/client.ts`).
+
+Los totales de abajo no los incluyen.
 
 ### Totales por escenario
 
@@ -1012,6 +1027,9 @@ El orden importa: al revés se envía desde el master.
 > implementación (tiempo del operador) bajó sin cambiar el precio al cliente.
 
 ### Pricing sugerido al cliente final
+
+> ⚠️ Estos tres planes contradicen el precio único de `docs/operaciones/PROCESO_VENTAS_IMPLEMENTACION.md`
+> ($250.000 COP/mes, ilimitado). Cuál manda es decisión del dueño (auditoría 2026-09-28, OPER-9).
 
 | Plan | COP/mes | Incluye |
 |------|:-------:|---------|

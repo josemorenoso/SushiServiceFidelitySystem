@@ -42,8 +42,11 @@
 4. **Mostrar el dashboard:** "Así ves tú quién vino, cuándo, y qué premios ganaron"
 5. **Mencionar lo que NO necesitan:** No app, no tarjetas, no hardware
 6. **Precio único:** $250.000 COP/mes — clientes ilimitados, campañas ilimitadas, soporte incluido
+   (⚠️ no coincide con los tres planes de `docs/04-deployment.md` §8: cuál manda es decisión del dueño)
 7. **Setup:** Pago único $1.200.000 COP (implementación completa en 2-4 horas)
 8. **Cierre:** "¿Empezamos esta semana? Te mando el contrato y el pago del setup, y en 48h estás operando."
+   (⚠️ en 48 h opera el check-in; el WhatsApp sale cuando Meta aprueba las plantillas, que tarda 24-72 h y
+   no depende de nosotros)
 
 ### Paso 2.3 — Después de la reunión
 - Actualizar Notion: Estado → `Cierre pendiente` o `Venta cerrada`
@@ -59,7 +62,10 @@
 **Duración:** ~1-1.5 horas (bajó de 3-4h desde que el sistema es multitenant — ver
 `docs/04-deployment.md` §6). **No se crea proyecto Supabase ni Vercel nuevo, ni se clona el
 repo.** Un cliente nuevo es una fila en el Supabase compartido + un dominio en el Vercel
-compartido.
+compartido. **El alta técnica se hace en el AIOS** (`Level 2.0/aios-constelarys`): el formulario del
+propietario y el wizard de la sede crean la marca, verifican el dominio, conectan WhatsApp, crean las
+plantillas y el usuario del panel. El camino real, paso por paso, está en
+`docs/AUDITORIA-ESCALA-1000-2026-09-28.md` §2.1.
 
 ### Paso 3.1 — Recolectar datos del cliente (15 min)
 Crear carpeta en Notion o Drive: `Clientes / [Nombre Restaurante]`
@@ -199,4 +205,6 @@ Lead nuevo → Reunión agendada → Venta cerrada → Setup (2 días) → Clien
 - **NO improvises.** Si un paso no está aquí, no lo hagas. Pregunta primero.
 - **Si algo técnico falla y no sabes qué es:** Crear un ticket en Notion con el error exacto y asignarlo a desarrollo.
 - **El setup debe hacerse en máximo 48h después del pago.** Si se demora más, el cliente pierde confianza.
+  Ojo: las plantillas de WhatsApp las aprueba Meta en 24-72 h y eso no depende de nosotros; el check-in y
+  los puntos funcionan antes. Decirlo desde la venta.
 - **Siempre enviar actualización al cliente cada 24h durante el setup:** "Hoy hicimos X, mañana terminamos Y."

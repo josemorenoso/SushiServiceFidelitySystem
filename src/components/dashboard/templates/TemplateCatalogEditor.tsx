@@ -13,6 +13,10 @@
  *
  * Lo único que sí se le cuenta es lo que le afecta: que un cambio tarda 1-3 días
  * y que mientras tanto sus clientes siguen recibiendo el mensaje anterior.
+ *
+ * La excepción, pedida por el dueño (2026-10-02): al final va la lista REAL de
+ * la WABA, con nombres y estado de Meta, porque sin ella no había dónde ver si
+ * una plantilla recién creada (la del Golden Bullet, por ejemplo) salió o no.
  */
 
 import { useCallback, useEffect, useState } from 'react'
@@ -24,6 +28,7 @@ import {
   CheckCircle,
   Clock,
   FileText,
+  Link2,
   Loader2,
   Pencil,
   RefreshCw,
@@ -32,6 +37,25 @@ import {
 } from 'lucide-react'
 import TemplateEditorDialog from './TemplateEditorDialog'
 import type { TemplateCatalogEntry, TemplateCatalogResponse } from '@/types/template.types'
+
+/** Estado de Meta (en minúsculas, como lo deja `mapZernioTemplateToItem`) en palabras del dueño. */
+function wabaStatusOf(status: string) {
+  switch (status) {
+    case 'approved':
+      return { label: 'Aprobada', className: 'text-green-700 bg-green-50 border-green-200' }
+    case 'pending':
+    case 'in_appeal':
+      return { label: 'En revisión', className: 'text-amber-700 bg-amber-50 border-amber-200' }
+    case 'rejected':
+      return { label: 'Rechazada', className: 'text-red-700 bg-red-50 border-red-200' }
+    case 'paused':
+      return { label: 'Pausada por Meta', className: 'text-red-700 bg-red-50 border-red-200' }
+    case 'disabled':
+      return { label: 'Desactivada por Meta', className: 'text-red-700 bg-red-50 border-red-200' }
+    default:
+      return { label: status, className: 'text-muted-foreground bg-muted border-border' }
+  }
+}
 
 /** Qué se le muestra al dueño según el estado real del slot. */
 function statusOf(entry: TemplateCatalogEntry) {
@@ -56,6 +80,13 @@ function statusOf(entry: TemplateCatalogEntry) {
       className: 'text-green-700 bg-green-50 border-green-200',
     }
   }
+  if (entry.approvedInWaba) {
+    return {
+      label: 'Aprobado, falta activarlo',
+      icon: Link2,
+      className: 'text-teal-700 bg-teal-50 border-teal-200',
+    }
+  }
   // No es un estado de error: es el estado NORMAL de un negocio recién dado de
   // alta. "Sin configurar" sonaba a algo roto y no decía qué hacer; "Pendiente
   // de enviar" nombra la acción que tiene al lado.
@@ -68,7 +99,12 @@ function statusOf(entry: TemplateCatalogEntry) {
 
 /** Un mensaje que todavía no existe en WhatsApp y no tiene nada en revisión. */
 function isUnsent(entry: TemplateCatalogEntry): boolean {
-  return !entry.current && !entry.adoptedRef && !entry.pending
+  return !entry.current && !entry.adoptedRef && !entry.pending && !entry.approvedInWaba
+}
+
+/** Ya aprobado en WhatsApp pero sin conectar: el sistema todavía no lo envía. */
+function isAdoptable(entry: TemplateCatalogEntry): boolean {
+  return !entry.current && !entry.adoptedRef && !entry.pending && Boolean(entry.approvedInWaba)
 }
 
 export default function TemplateCatalogEditor() {
@@ -80,6 +116,7 @@ export default function TemplateCatalogEditor() {
   const [editing, setEditing] = useState<TemplateCatalogEntry | null>(null)
   const [submitting, setSubmitting] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [adoptingAll, setAdoptingAll] = useState(false)
 
   const load = useCallback(async () => {
     setRefreshing(true)
@@ -139,6 +176,50 @@ export default function TemplateCatalogEditor() {
     }
   }
 
+  /** Una llamada al servidor; el servidor decide QUÉ plantilla conecta. */
+  const adoptOne = async (entry: TemplateCatalogEntry): Promise<string | null> => {
+    try {
+      const res = await fetch(`/api/dashboard/templates/catalog/${entry.definition.key}/adopt`, {
+        method: 'POST',
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) return data.error || 'No se pudo activar.'
+      return null
+    } catch {
+      return 'No se pudo conectar. Revisa tu internet e inténtalo de nuevo.'
+    }
+  }
+
+  const handleAdopt = async (entry: TemplateCatalogEntry) => {
+    setSubmitting(entry.definition.key)
+    setActionError(null)
+    setNotice(null)
+    const err = await adoptOne(entry)
+    if (err) setActionError(`"${entry.definition.label}": ${err}`)
+    else setNotice(`"${entry.definition.label}": ya está activo y tus clientes empiezan a recibirlo.`)
+    setSubmitting(null)
+    await load()
+  }
+
+  /** De a una, en orden: cada activación escribe su propia fila y su puntero. */
+  const handleAdoptAll = async (entries: TemplateCatalogEntry[]) => {
+    setAdoptingAll(true)
+    setActionError(null)
+    setNotice(null)
+    const failures: string[] = []
+    for (const entry of entries) {
+      setSubmitting(entry.definition.key)
+      const err = await adoptOne(entry)
+      if (err) failures.push(`"${entry.definition.label}": ${err}`)
+    }
+    setSubmitting(null)
+    setAdoptingAll(false)
+    const ok = entries.length - failures.length
+    if (ok > 0) setNotice(`Listo: ${ok === 1 ? '1 mensaje quedó activo' : `${ok} mensajes quedaron activos`}.`)
+    if (failures.length > 0) setActionError(failures.join(' · '))
+    await load()
+  }
+
   if (loading) {
     return (
       <div className="space-y-3">
@@ -162,6 +243,17 @@ export default function TemplateCatalogEditor() {
 
   const pendingCount = state.entries.filter((e) => e.pending).length
   const unsentCount = state.entries.filter(isUnsent).length
+  const adoptable = state.entries.filter(isAdoptable)
+
+  // Qué mensaje del catálogo está usando cada plantilla de la WABA, para la
+  // lista de abajo. Solo las vigentes: una pendiente todavía no se envía.
+  const inUseBy = new Map<string, string>()
+  for (const e of state.entries) {
+    const ref = e.current?.provider_ref ?? e.adoptedRef
+    if (ref) inUseBy.set(ref, e.definition.label)
+  }
+  const wabaBodyOf = (name: string) =>
+    state.wabaTemplates?.find((t) => t.name === name)?.body ?? null
 
   return (
     <div className="space-y-6">
@@ -209,6 +301,32 @@ export default function TemplateCatalogEditor() {
         </div>
       )}
 
+      {/* Aprobadas en Meta pero sin conectar: el alta las creó allá sin
+          registrarlas acá. Mientras no se activen, el sistema NO las envía. */}
+      {adoptable.length > 0 && (
+        <div className="rounded-lg border border-teal-200 bg-teal-50 p-3 text-sm text-teal-900 flex items-start gap-2">
+          <Link2 className="h-4 w-4 mt-0.5 shrink-0" />
+          <div className="flex-1 space-y-2">
+            <p>
+              {adoptable.length === 1
+                ? 'Tienes 1 mensaje que WhatsApp ya aprobó pero que todavía no está activo.'
+                : `Tienes ${adoptable.length} mensajes que WhatsApp ya aprobó pero que todavía no están activos.`}{' '}
+              <strong>Mientras no los actives, tus clientes no los reciben.</strong> No hace falta
+              enviarlos a Meta otra vez.
+            </p>
+            <Button
+              size="sm"
+              className="gap-1.5"
+              onClick={() => handleAdoptAll(adoptable)}
+              disabled={submitting !== null || adoptingAll}
+            >
+              {adoptingAll ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Link2 className="h-3.5 w-3.5" />}
+              {adoptable.length === 1 ? 'Activarlo' : `Activar los ${adoptable.length}`}
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* El estado de un negocio recién dado de alta: nada enviado todavía. Se
           dice acá arriba porque es lo primero que hay que hacer en esta
           pantalla, y hasta ahora no lo decía nada. */}
@@ -241,7 +359,8 @@ export default function TemplateCatalogEditor() {
         {state.entries.map((entry) => {
           const status = statusOf(entry)
           const StatusIcon = status.icon
-          const shownBody = entry.current?.body ?? null
+          const shownBody =
+            entry.current?.body ?? (entry.approvedInWaba ? wabaBodyOf(entry.approvedInWaba) : null)
 
           return (
             <Card key={entry.definition.key}>
@@ -314,6 +433,23 @@ export default function TemplateCatalogEditor() {
                       nada enviado: reemplazar un mensaje vivo pasa SIEMPRE por
                       el editor, con su advertencia. */}
                   <div className="flex shrink-0 flex-col gap-2">
+                    {isAdoptable(entry) && (
+                      <Button
+                        size="sm"
+                        className="gap-1.5"
+                        onClick={() => handleAdopt(entry)}
+                        disabled={submitting !== null || adoptingAll}
+                        title="WhatsApp ya la aprobó: solo falta empezar a usarla"
+                      >
+                        {submitting === entry.definition.key ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Link2 className="h-3.5 w-3.5" />
+                        )}
+                        Activar
+                      </Button>
+                    )}
+
                     {isUnsent(entry) && (
                       <Button
                         size="sm"
@@ -332,7 +468,7 @@ export default function TemplateCatalogEditor() {
                     )}
 
                     <Button
-                      variant={isUnsent(entry) ? 'outline' : 'default'}
+                      variant={isUnsent(entry) || isAdoptable(entry) ? 'outline' : 'default'}
                       size="sm"
                       className="gap-1.5"
                       onClick={() => setEditing(entry)}
@@ -355,6 +491,58 @@ export default function TemplateCatalogEditor() {
           )
         })}
       </div>
+
+      {/* La WABA tal cual: todo lo que existe en WhatsApp, del catálogo o no. */}
+      <Card>
+        <CardContent className="py-4 space-y-3">
+          <div>
+            <h2 className="text-base font-semibold">Todas tus plantillas en WhatsApp</h2>
+            <p className="text-xs text-muted-foreground">
+              Lo que hay de verdad en tu cuenta de WhatsApp y en qué estado lo tiene Meta: los mensajes
+              de arriba, las invitaciones del Golden Bullet y cualquier otra. Usa «Actualizar» para ver
+              el último estado.
+            </p>
+          </div>
+
+          {state.wabaTemplates === null ? (
+            <p className="text-xs text-amber-800 rounded border border-amber-200 bg-amber-50 px-2 py-1.5">
+              No se pudo consultar WhatsApp en este momento. Prueba de nuevo con «Actualizar».
+            </p>
+          ) : state.wabaTemplates.length === 0 ? (
+            <p className="text-xs text-muted-foreground">Tu cuenta de WhatsApp todavía no tiene plantillas.</p>
+          ) : (
+            <ul className="divide-y rounded-md border">
+              {state.wabaTemplates.map((t) => {
+                const st = wabaStatusOf(t.status)
+                const usedBy = inUseBy.get(t.name)
+                return (
+                  <li key={`${t.name}-${t.language}`} className="px-3 py-2.5 space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-mono text-xs break-all">{t.name}</span>
+                      <Badge variant="outline" className={`h-5 border text-[10px] ${st.className}`}>
+                        {st.label}
+                      </Badge>
+                      {t.name.startsWith('club_invite_') && (
+                        <Badge variant="outline" className="h-5 text-[10px]">Golden Bullet</Badge>
+                      )}
+                      {usedBy && (
+                        <Badge variant="outline" className="h-5 text-[10px] text-green-700 border-green-200">
+                          En uso: {usedBy}
+                        </Badge>
+                      )}
+                      <span className="text-[10px] text-muted-foreground">
+                        {t.language} · {t.category.toLowerCase()}
+                        {t.has_media ? ' · con foto/video' : ''}
+                      </span>
+                    </div>
+                    <p className="line-clamp-2 whitespace-pre-wrap text-[11px] text-foreground/70">{t.body}</p>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
 
       <TemplateEditorDialog
         entry={editing}

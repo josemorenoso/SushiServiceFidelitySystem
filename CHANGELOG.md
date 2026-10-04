@@ -8,6 +8,115 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [feat] — 2026-10-04 — Cumpleaños de una vez: plantilla «dos días antes» y cambio solo por marca
+
+**Pedido:** «resuelve ese error de cumpleaños y ayúdame a terminar de resolver los cumpleaños de una vez, pushea».
+
+- Plantilla nueva `birthday_upcoming` (`cumpleanos_se_acerca`, «¡Hola {{1}}! Tu cumpleaños ya está aquí»), mismo
+  contrato que la vieja. La vieja queda `replacedBy`: no se le ofrece a quien no la tiene.
+- El cron elige por marca (`elegirPlantillaDeCumpleanos()`): con la nueva APROBADA saluda en la ventana [hoy, hoy+2];
+  si no, la vieja el día mismo. En Twilio pregunta la aprobación. Ventana = sin hueco el día del cambio. Paginado.
+- `getDashboardMetrics()` contaba cumpleaños con `LIKE` sobre `date` (0 en silencio): ahora en memoria.
+- Ajustes: selector de la nueva. AIOS v1.14.0: el alta la crea en lugar de la vieja.
+- `main` y la rama unidas: entran también el cumpleaños de septiembre y las plantillas del 02-10.
+
+**Verificado:** tsc, lint de lo tocado, 61 archivos / 889 tests. **NO verificado:** un envío real con la nueva (falta
+que Meta la apruebe en alguna marca). **Migración:** ninguna.
+
+## [fix] — 2026-10-04 — La analítica daba 500 en las 5 marcas (cumpleaños con `LIKE` sobre `date`)
+
+Con ESCALA-4 desplegada, «cumpleaños hoy» (`.like` sobre `date`, 42883, que siempre falló en silencio) tumbó la
+analítica entera. Rollback de Vercel a `c055e8e`, arreglo en `ff9fd90` (cuenta en memoria) y promoción a mano.
+
+## [docs] — 2026-10-04 — Consolidado: requerimientos de agosto × auditoría de 1000 clientes × cola, con prioridades
+
+**Pedido:** «un archivo con todos los requerimientos que hice y los que completamos, cruzado con la auditoría; saber el estado,
+los huecos nombrados y los resueltos, y juntar todo para escoger prioridades».
+
+- **`docs/ESTADO-CONSOLIDADO-2026-10-04.md`** (nuevo): los 224 pedidos de agosto (§0–§25) verificados contra el código por 5
+  auditores Sonnet (88 hechos · 44 parciales · 35 sin empezar · 12 diferidos · 20 obsoletos · **25 preguntas abiertas al dueño**);
+  los 68 hallazgos de la auditoría del 28-09 re-verificados hoy (45 abiertos, 13 críticos); 18 hallazgos nuevos (el N18: ESCALA-4
+  llegó a producción rota —500 en la analítica— y se revirtió; los tests usaban un doble); la cola de
+  `ESTADO.md` §3 clasificada (29 de 31 piden algo del dueño); 17 contradicciones entre docs; y la propuesta de olas P0–P8.
+- `docs/ESTADO-REQUERIMIENTOS.md` (06-09) queda **reemplazado** (aviso en su cabecera). Punteros de `ESTADO.md` ajustados.
+
+**Verificado:** lectura de código y git, no se corrió tsc/lint/vitest (solo docs). **NO verificado:** nada contra producción ni las
+consolas de Vercel, Meta, Zernio o Twilio (lista en §11 del consolidado). **Migración:** ninguna. **Sin código ni push.**
+
+## [fix] — 2026-10-04 — ESCALA-3 y ESCALA-4: Zernio contesta antes de la IA; la analítica deja de cortarse en 1.000 filas
+
+**Pedido:** `docs/prompts/2026-10-03-escala-3-4.md` (auditoría 2026-09-28 §1.3).
+
+- **ESCALA-3:** `POST /api/webhook/zernio` contesta 200 y hace el parseo con IA y el registro DESPUÉS (`after()`), en el
+  entrante y en el auto-chat. Firma, dedup y `authorized_numbers` siguen antes. El embudo sigue siendo único: un fallo
+  inesperado diferido llega a `logDeliveryIntakeFailure()` (`intake_inesperado`). `maxDuration = 300`; el cuerpo ahora
+  dice `deferred: true`. → `delivery-webhook.md`.
+- **ESCALA-4:** `getFullAnalytics()` pagina de a 1.000 (`leerTodo()` pasa a `src/lib/`) con orden total, lee de
+  `campaign_messages` solo las campañas de reactivación de la ventana y exige el `error` de sus lecturas (la API da 500;
+  la pantalla sigue mostrando 0). Sin migración. → `dashboard.md`.
+
+**Verificado:** tsc, lint (sin errores nuevos), **61 archivos / 881 tests** (en `main`: 59 / 864); los tests nuevos fallan antes.
+**Desplegado** 2026-10-04 (`main` = `9a06670`, Vercel READY). **NO verificado:** Zernio real ni la base real. **Migración:** ninguna.
+
+## [fix] — 2026-10-03 — Ola 0 de seguridad: premios solo de la oferta, nada de `public` abierto a anon (00069)
+
+**Pedido:** `docs/prompts/2026-09-29-ola-0-seguridad.md` (auditoría 2026-09-28 §1 y §6).
+
+- **AISLA-1:** `mystery-box/resolve` otorga solo el nivel que `check-in/status` ofrece (`getNivelOfrecido()`, una
+  función para las dos); 409/503/429. Sale `getTierById()` (sin `tenant_id`). → `points-mystery-box.md` §7.4.ter.
+- **AISLA-2 + OPUS-4:** migración **00069** (idempotente): toda `SECURITY DEFINER` de `public` cerrada a
+  anon/authenticated salvo 4 helpers de RLS; borra las 5 políticas de la 00015; aborta si algo queda abierto.
+- **OPER-4:** `PUT /api/dashboard/settings` exige alcance de marca (`src/lib/alcance-de-marca.ts`). **AISLA-5:**
+  `timingSafeEqual` en `webhook/delivery`. **OPUS-2:** `logs-*.csv` ignorado. **ALTA-7:** AIOS v1.13.2 (24-72 h).
+
+**Verificado:** tsc, lint (14 errores = los de antes), **58 archivos / 841 tests**; los tests de AISLA-1, 00069 y OPER-4
+fallan contra el código viejo. **NO verificado:** nada contra producción. **Migración:** 00069, sin aplicar.
+
+## [fix] — 2026-10-02 — Plantillas: activar las aprobadas en Meta + lista real de la WABA
+
+**Pedido:** «Zernio rechazó la creación… tras 10000ms» y «no puedo ver las plantillas reales creadas […] en Golden
+Bullet tampoco se muestra».
+
+- `zernio/client.ts` + `templates.ts`: crear plantilla espera 60 s (con foto Zernio sube la muestra a Meta); el 402 de
+  cuenta pausada sale claro. Golden Bullet: si el POST se corta y la plantilla ya está en la WABA, se da por creada.
+- `template.service.ts`: el catálogo lee la WABA real. `findAdoptable()` detecta la aprobada que el alta creó en Meta
+  sin registrar (Planeta Wings: 12 aprobadas, sin puntero, no se enviaban) → botón **Activar** (`POST …/adopt`), que
+  promueve por `applyProviderTemplateStatus()`. `nextProviderRef()` ya no elige un nombre que exista en la WABA.
+- Pantallas: «Todas tus plantillas en WhatsApp» al final de Plantillas; «Tus invitaciones en WhatsApp» en Golden Bullet.
+
+**Verificado:** tsc, lint de lo tocado, 822 tests; `findAdoptable()` contra la WABA real de Planeta Wings (13/13).
+**NO verificado:** el botón Activar contra la base de producción. **Migración:** ninguna.
+
+## [docs] — 2026-09-29 — Docs al día tras la auditoría + prompt de la ola 0
+
+**Pedido:** «actualiza los docs y dame el prompt para desarrollar la ola 0 […] en otra sesión», «actualiza también el
+graph» y «todas las migraciones están aplicadas».
+
+- `ESTADO.md`: todas aplicadas (dueño) → AISLA-2 pasa a VIVO, con el SQL de cierre en 0.SEGURIDAD. Por confirmar: la
+  00015 (abriría clientes y visitas a la anon key, OPUS-4), la 00030 y las del AIOS. Salen 0.ter, el ítem 1, el
+  bloqueo de la 00061 y la deuda de la 00053; 0.GAMMA, 0.AIOS y 0.quinquies al día; los crons son 6.
+- Docs que mentían: `04-deployment.md` (crons, Supabase, Zernio y OpenAI, precio), `scalability-analysis.md`
+  (obsoleto), `DELEGACION_GUIDE.md` (tareas 4-6), `PROCESO_VENTAS_IMPLEMENTACION.md` (AIOS, Meta 24-72 h),
+  `CLAUDE.md` (54/814) y los comentarios de `seed-new-tenant.sql`, `.graphifyignore` y `vitest.config.mts`.
+- `docs/prompts/2026-09-29-ola-0-seguridad.md`: el prompt, con el SQL del dueño delante. Auditoría §6: seguimiento.
+
+**Verificado:** sin código. **NO verificado:** si la 00015 y la 00030 corrieron en producción. **Migración:** ninguna.
+
+## [docs] — 2026-09-28 — Auditoría: qué falta para escalar a 1000 clientes (producto + AIOS)
+
+**Pedido:** «audita y dime qué me hace falta para que sea mejor, más fácil de implementar, de rastrear, para escalar
+a 1000 clientes», con el Método Maestro. **Cómo:** solo lectura; 6 auditores Sonnet por frente, 3 refutadores
+Sonnet, revisión Opus de lo crítico. Nada corregido. → `docs/AUDITORIA-ESCALA-1000-2026-09-28.md`.
+
+- 68 hallazgos: 49 confirmados, 12 corregidos, 1 refutado, 6 de Opus. Lo que no escala es la operación: ~17
+  acciones por alta, ~85 min/marca/mes, cero avisos, sin CI ni staging, 18/31 de la cola esperan al dueño.
+- ⚠️ Dos agujeros entre marcas (ESTADO §3 0.SEGURIDAD): `/api/mystery-box/resolve` (vivo en producción) y el
+  REVOKE incompleto de la 00067 y la 00057, que NO se aplican tal cual.
+- `ESTADO.md`: 0.SEGURIDAD, avisos en 0.SUSHI, 0.ter y §1, y 0.BETA al día.
+
+**Verificado:** cada hallazgo con `ruta:línea` y un refutador. **NO verificado:** nada contra producción.
+**Migración:** ninguna.
+
 ## [feat] — 2026-09-25 — Los domicilios escritos en el auto-chat de la propia línea
 
 **Pedido:** «Jose de Planeta Wings trata de registrar domicilios pero no le funciona.»
@@ -27,6 +136,24 @@ tampoco estaba en Autorizados: lo que había registrado era el número de la mar
 - 00068 siembra el id de Planeta Wings (evidencia del log). Tests: 8 casos, el primero es la
   campaña que NO debe entrar. **Falta suscribir `message.sent` en Zernio**: hay script para eso
   (`scripts/zernio-webhook-eventos.mjs`, aditivo y verifica releyendo), pero la key de `.env.local` da 401.
+
+## [feat] — 2026-09-24 — El saludo de cumpleaños sale dos días antes
+
+**Pedido del dueño:** *"quiero que el mensaje de cumpleaños se envíe dos días antes del cumpleaños"*.
+
+- `src/constants/rewards.ts`: `BIRTHDAY_LEAD_DAYS = 2` (la anticipación, único sitio donde se cambia) y
+  `BIRTHDAY_DEDUPE_DAYS = 360`.
+- `campaign.service.ts` → `findBirthdayCustomers()`: la fecha objetivo es `hoy + BIRTHDAY_LEAD_DAYS`, no hoy.
+- `cron/birthday`: la dedup pasa de 365 a `BIRTHDAY_DEDUPE_DAYS`. **No es cosmético:** adelantar dos días acorta
+  el hueco contra el saludo del año pasado a 363, y con 365 el cron habría saltado a TODO cliente saludado el año
+  anterior sin registrar un solo error — la campaña habría quedado muda un año entero.
+- `tests/unit/birthday-lead.test.ts` (8): los dos días, el rollover de mes y de año, el 29 de febrero bisiesto,
+  el aislamiento por tenant y el invariante `BIRTHDAY_DEDUPE_DAYS < 365 − BIRTHDAY_LEAD_DAYS`.
+- Docs: `campaigns.md` (§ Cron Cumpleaños) y `PLANTILLAS.md` § 7 — donde además se corrigió la hora («8am» → 18:00 UTC).
+
+⚠️ **Dos cosas quedan para el dueño:** el texto aprobado sigue diciendo «¡Feliz cumpleaños!» y ahora llega dos días
+antes (cambiarlo es plantilla nueva en Meta, 24-48 h); y quien cumpla en los dos días siguientes al despliegue no
+recibe saludo este año — su ventana de −2 ya pasó. Es un hueco de una sola vez.
 
 ## [fix] — 2026-09-12 — «Tenant no encontrado» en la campaña manual era un fallo de base escondido
 

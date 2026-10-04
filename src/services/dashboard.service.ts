@@ -71,22 +71,48 @@ export async function getDashboardMetrics(scope: LocationScope): Promise<Dashboa
     { count: totalCustomers },
     { count: visitsToday },
     { count: visitsThisWeek },
-    { data: birthdayData },
+    lecturaCumples,
     { count: inactiveCustomers },
     { data: recentCustomers },
   ] = await Promise.all([
     supabase.from('customers').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId),
     visitsTodayQuery,
     visitsWeekQuery,
-    supabase.from('customers').select('id').eq('tenant_id', tenantId).not('birthday', 'is', null).like('birthday', `%-${month}-${day}`),
+    // `birthday` es `date` y LIKE no existe para `date` (42883): la consulta que había acá
+    // fallaba SIEMPRE y, como el error no se miraba, «cumpleaños hoy» daba 0 desde el
+    // principio. Se leen las fechas (paginado: puede pasar de mil) y se cuenta en memoria.
+    leerTodo<{ birthday: string }>((desde, hasta) =>
+      supabase
+        .from('customers')
+        .select('birthday')
+        .eq('tenant_id', tenantId)
+        .not('birthday', 'is', null)
+        .order('id', { ascending: true })
+        .range(desde, hasta)
+    ),
     supabase.from('customers').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId).lt('last_visit_at', inactiveCutoff).not('last_visit_at', 'is', null),
     supabase.from('customers').select('*').eq('tenant_id', tenantId).order('created_at', { ascending: false }).limit(5),
   ])
 
+  // Un fallo acá deja el log y cuenta 0, como el resto de esta función: es un número de
+  // tarjeta, no vale tumbar el panel (eso es lo que hizo la analítica el 2026-10-04).
+  if (lecturaCumples.error) {
+    logDbFailure({
+      scope: 'DashboardMetrics',
+      reason: 'cumpleanos_hoy',
+      error: lecturaCumples.error,
+      context: { tenant: tenantId },
+    })
+  }
+  const birthdaysToday = lecturaCumples.error
+    ? 0
+    : lecturaCumples.data.filter((c) => typeof c.birthday === 'string' && c.birthday.slice(5, 10) === `${month}-${day}`)
+        .length
+
   return {
     brand: {
       totalCustomers: totalCustomers ?? 0,
-      birthdaysToday: birthdayData?.length ?? 0,
+      birthdaysToday,
       inactiveCustomers: inactiveCustomers ?? 0,
       recentCustomers: recentCustomers ?? [],
     },

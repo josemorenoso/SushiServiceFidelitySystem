@@ -147,19 +147,42 @@ Al final del loop:
 ```
 
 ### Cron Cumpleaños (`/api/cron/birthday`)
+
+**El saludo sale hasta DOS DÍAS ANTES del cumpleaños** (dueño, 2026-09-24) — **pero solo con la
+plantilla que lo dice bien** (2026-10-04). El texto aprobado de siempre dice «¡Feliz cumpleaños!», y
+mandarlo dos días antes es decirlo mal. Por eso son dos plantillas y el cron elige por marca
+(`elegirPlantillaDeCumpleanos()`, `src/services/campaign.service.ts`):
+
+| La marca tiene… | Plantilla | A quién saluda |
+|---|---|---|
+| `birthday_upcoming_template_sid` **aprobada** | «Cumpleaños — dos días antes» | quien cumple entre hoy y dentro de `BIRTHDAY_LEAD_DAYS` (= 2) días |
+| solo `birthday_template_sid` (o la nueva en revisión) | «¡Feliz cumpleaños!» | quien cumple hoy, como siempre |
+| ninguna | — | nadie (`ok: false` con el motivo) |
+
+En Zernio el puntero solo existe aprobado. En Twilio se escribe al crear la plantilla, así que el cron
+le pregunta a Twilio (`isTwilioTemplateApproved()`); ante la duda, usa la vieja. **El cambio es solo**:
+el día que Meta aprueba la nueva, esa marca pasa a saludar dos días antes.
+
+**Una ventana, no un día exacto.** Con «hoy + 2» exacto, el día del cambio se quedaba sin saludo quien
+cumplía mañana o pasado. Con la ventana `[hoy, hoy+2]` ese día entran los tres y cada uno recibe un
+saludo; después, cada cliente entra a la ventana dos días antes y la dedup impide repetirlo. Si el cron
+falla un día, al siguiente igual saluda.
+
 ```
-findBirthdayCustomers()
-  → cumpleaños hoy                           ✅ filtro existente
-  → accepts_marketing = true                 ✅ filtro existente
+elegirPlantillaDeCumpleanos()        → { sid, diasDeAnticipacion: 2 | 0 }
+findBirthdayCustomers(diasDeAnticipacion)
+  → cumpleaños (mes-día) entre hoy y hoy + diasDeAnticipacion
+  → accepts_marketing = true, sin opt-out, paginado de a 1.000
   (NO aplica frequency cap — cumpleaños tiene prioridad absoluta)
 
 Por cada cliente:
-  → hasRecentCampaignMessage(type=birthday, 365d)     [dedup anual]
+  → hasRecentCampaignMessage(type=birthday, BIRTHDAY_DEDUPE_DAYS = 360d)   [dedup anual]
   → sendTemplateMessage()
   → recordCampaignMessage()
 
 Al final del loop:
-  → updateCustomerLastCampaignAt(sentCustomerIds)     ✅ NUEVO
+  → updateCustomerLastCampaignAt(sentCustomerIds)
+  → respuesta por marca con `plantilla: 'se_acerca' | 'el_dia'`
 ```
 
 ### Campaña Manual (`/api/dashboard/campaigns/manual`)
@@ -270,4 +293,7 @@ las tres cosas a la vez: el mensaje del cron, la ventana protegida y lo que mues
 | `accepts_marketing = false` | ❌ excluido | ❌ excluido | ❌ excluido |
 
 *Sujeto al frequency cap de 7 días
-**El cron de cumpleaños usa dedup por `campaign_messages` (365 días), no por `last_campaign_at`
+**El cron de cumpleaños usa dedup por `campaign_messages` (`BIRTHDAY_DEDUPE_DAYS`, 360 días), no por `last_campaign_at`.
+La ventana es de 360 y no de 365 **a propósito**: el año en que el envío se adelantó dos días el hueco
+contra el saludo anterior es de 363, y 365 habría saltado a todo cliente saludado el año pasado sin
+registrar un solo error — la campaña habría quedado muda un año entero

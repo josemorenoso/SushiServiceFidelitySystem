@@ -22,8 +22,13 @@
 const ZERNIO_BASE_URL = 'https://zernio.com/api/v1'
 
 /** Corte duro para no quedar colgados si Zernio no responde (la API no
- * garantiza latencia; los flujos que llaman esto corren en serverless). */
+ * garantiza latencia; los flujos que llaman esto corren en serverless).
+ * Una llamada lenta POR DISEÑO (crear plantilla con foto) lo sube con `timeoutMs`. */
 const ZERNIO_TIMEOUT_MS = 10_000
+
+export interface ZernioFetchOptions {
+  timeoutMs?: number
+}
 
 export class ZernioApiError extends Error {
   constructor(
@@ -47,9 +52,10 @@ function getApiKey(): string {
 /**
  * Llamada genérica a la API de Zernio. `path` es relativo a /v1 (ej. '/inbox/conversations').
  */
-export async function zernioFetch<T>(path: string, init?: RequestInit): Promise<T> {
+export async function zernioFetch<T>(path: string, init?: RequestInit, options?: ZernioFetchOptions): Promise<T> {
+  const timeoutMs = options?.timeoutMs ?? ZERNIO_TIMEOUT_MS
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), ZERNIO_TIMEOUT_MS)
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
 
   let res: Response
   try {
@@ -66,7 +72,7 @@ export async function zernioFetch<T>(path: string, init?: RequestInit): Promise<
     const detail = err instanceof Error ? err.message : String(err)
     throw new ZernioApiError(
       controller.signal.aborted
-        ? `Zernio API sin respuesta en ${path} tras ${ZERNIO_TIMEOUT_MS}ms`
+        ? `Zernio API sin respuesta en ${path} tras ${timeoutMs}ms`
         : `Zernio API inalcanzable en ${path}: ${detail}`,
       0,
       null
@@ -89,6 +95,16 @@ export async function zernioFetch<T>(path: string, init?: RequestInit): Promise<
       }
       body = raw
     }
+  }
+
+  if (res.status === 402) {
+    // La cuenta de Zernio entera queda pausada por falta de pago: TODAS las
+    // rutas devuelven esto. Decirlo claro ahorra buscar el error en la plantilla.
+    throw new ZernioApiError(
+      `Zernio pausó la cuenta por falta de pago (HTTP 402 en ${path}). Hay que ponerse al día en zernio.com/dashboard/billing.`,
+      res.status,
+      body
+    )
   }
 
   if (!res.ok) {

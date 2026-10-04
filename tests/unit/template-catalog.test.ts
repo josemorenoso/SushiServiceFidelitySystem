@@ -35,8 +35,26 @@ const MARCA = 'Sabor Urbano'
 const RESTAURANTE = TEMPLATE_EMOJI_BY_BUSINESS_TYPE.restaurant
 
 describe('catálogo estándar', () => {
-  it('tiene exactamente las 13 plantillas que declara CATALOG_SIZE', () => {
-    expect(TEMPLATE_CATALOG).toHaveLength(CATALOG_SIZE)
+  it('un negocio nuevo necesita exactamente las CATALOG_SIZE que no están reemplazadas', () => {
+    expect(TEMPLATE_CATALOG.filter((t) => !t.replacedBy)).toHaveLength(CATALOG_SIZE)
+    // La única reemplazada hoy: el cumpleaños del día mismo (2026-10-04).
+    expect(TEMPLATE_CATALOG.filter((t) => t.replacedBy).map((t) => t.key)).toEqual(['birthday'])
+  })
+
+  it('una reemplazada apunta a una vigente con EL MISMO contrato de variables', () => {
+    // El cron manda los mismos valores a cualquiera de las dos: si la nueva cambiara la
+    // aridad o el significado de un {{n}}, el día que una marca se cambia fallaría el envío.
+    for (const vieja of TEMPLATE_CATALOG.filter((t) => t.replacedBy)) {
+      const nueva = TEMPLATE_CATALOG.find((t) => t.key === vieja.replacedBy)
+      expect(nueva, vieja.key).toBeDefined()
+      expect(nueva?.replacedBy, vieja.key).toBeUndefined()
+      expect(nueva?.variables.map((v) => v.label)).toEqual(vieja.variables.map((v) => v.label))
+      expect(nueva?.category).toBe(vieja.category)
+    }
+  })
+
+  it('la nueva de cumpleaños no dice «feliz cumpleaños»: sale hasta dos días antes', () => {
+    expect(buildTemplateBody('birthday_upcoming', MARCA, RESTAURANTE).toLowerCase()).not.toContain('feliz cumpleaños')
   })
 
   it('no repite settingsKey ni baseName — los dos son identificadores', () => {
@@ -270,11 +288,21 @@ describe('detectTemplateStyle', () => {
 
 describe('renderTemplatePreview', () => {
   it('sustituye cada variable por su valor de muestra', () => {
+    // El {{2}} de cumpleaños es el CAMINO DE NIVELES, no el saldo: el cron manda
+    // `buildTiersRoadmap(...)`. Decía «95» porque la muestra del catálogo mentía;
+    // el 2026-09-24 se corrigió a ROADMAP_SAMPLE y esta prueba la sigue.
     const body = buildTemplateBody('birthday', MARCA)
     const preview = renderTemplatePreview('birthday', body, MARCA)
     expect(preview).not.toMatch(/\{\{\d+\}\}/)
     expect(preview).toContain('Sofía')
-    expect(preview).toContain('95')
+    expect(preview).toContain('Bronce')
+  })
+
+  it('la muestra de un saldo sigue siendo un número donde SÍ es un saldo', () => {
+    // Control de que la corrección de arriba no se propagó de más: en
+    // `points_earned_far` el {{3}} sí es el saldo y tiene que seguir siéndolo.
+    const body = buildTemplateBody('points_earned_far', MARCA)
+    expect(renderTemplatePreview('points_earned_far', body, MARCA)).toMatch(/Tu saldo: \*\d+/)
   })
 
   it('deja intacta una variable inventada en vez de romperse', () => {

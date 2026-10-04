@@ -28,8 +28,8 @@ export default defineConfig({
     include: ['tests/**/*.test.ts'],
     exclude: ['**/node_modules/**', 'Level 2.0/**', '.next/**'],
 
-    // Las pruebas de base de datos arrancan un Postgres real y replican las 37
-    // migraciones. Eso tarda del orden de 10-20 s la primera vez.
+    // Las pruebas de base de datos arrancan un Postgres real y replican todas las
+    // migraciones de supabase/migrations/. Eso tarda del orden de 10-20 s la primera vez.
     globalSetup: ['./tests/setup/global-postgres.ts'],
     testTimeout: 60_000,
     hookTimeout: 120_000,

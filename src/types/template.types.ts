@@ -7,6 +7,8 @@
  * importa los textos: tenerlos aquí evita el ciclo de imports.
  */
 
+import type { ListedTemplateItem } from '@/lib/zernio/template-listing'
+
 /**
  * El único estilo del banco. Hubo tres (cálido, elegante, urbano) hasta el
  * 2026-09-10; el dueño los quitó ("siempre cálido"). Sigue siendo una lista
@@ -31,6 +33,7 @@ export type TemplateKey =
   | 'mystery_box_result'
   | 'golden_box_result'
   | 'birthday'
+  | 'birthday_upcoming'
   | 'reactivation_no_reward'
   | 'reactivation_aggressive'
   | 'campaign_presencial_to_domicilio'
@@ -69,6 +72,13 @@ export interface CatalogTemplate {
   variables: readonly TemplateVariable[]
   /** Solo las 2 plantillas de evento del calendario. */
   header?: { format: 'image' | 'video' }
+  /**
+   * La plantilla que REEMPLAZA a esta. Una entrada reemplazada sigue en el catálogo solo
+   * porque hay marcas que todavía la usan: no se le ofrece a quien no la tiene (ni
+   * «Enviar a Meta» en Zernio ni «Crear» en Twilio) y no cuenta en `CATALOG_SIZE`.
+   * Hoy, solo `birthday` → `birthday_upcoming` (2026-10-04).
+   */
+  replacedBy?: TemplateKey
 }
 
 /** Fila de `template_versions` (migración 00039). */
@@ -126,6 +136,14 @@ export interface TemplateCatalogEntry {
    */
   adoptedRef: string | null
   /**
+   * Nombre de una plantilla que YA está aprobada en la WABA y sirve para este
+   * mensaje, cuando el slot está vacío (sin vigente, sin pendiente, sin
+   * puntero). Pasa cuando el alta las creó en Meta sin registrarlas acá. La UI
+   * ofrece «Usar la aprobada» en vez de «Enviar a Meta», que chocaría por
+   * nombre repetido. `null` = no hay, o Zernio no respondió.
+   */
+  approvedInWaba: string | null
+  /**
    * Por qué este mensaje NO se puede enviar a revisión todavía, en palabras del
    * dueño. `null` = se puede.
    *
@@ -142,4 +160,10 @@ export interface TemplateCatalogResponse {
   provider: 'twilio' | 'zernio'
   brandName: string
   entries: TemplateCatalogEntry[]
+  /**
+   * TODAS las plantillas que hay de verdad en la WABA, con el estado de Meta:
+   * las 13 del catálogo, las del Golden Bullet, las de prueba. `null` si Zernio
+   * no respondió (la pantalla sigue con lo que sabe la base).
+   */
+  wabaTemplates: ListedTemplateItem[] | null
 }

@@ -202,12 +202,19 @@ tasa de reactivación, y un fallo de base se veía como «cero», que es lo mism
   Había una con `.like('birthday', '%-MM-DD')`, y `birthday` es `date`: Postgres contesta **42883**
   («operator does not exist: date ~~ unknown»). Mientras el error se ignoraba, «Cumpleaños hoy» daba 0 en
   silencio desde siempre. Al desplegarse la regla de abajo tumbó la analítica entera de las 5 marcas: panel en
-  ceros hasta que se volvió atrás en Vercel. `getDashboardMetrics()` todavía tiene el mismo `.like` y lo ignora
-  (sigue dando 0); no se tocó.
+  ceros hasta que se volvió atrás en Vercel. `getDashboardMetrics()` tenía el mismo `.like` (daba 0 en
+  silencio): desde el 2026-10-04 lee las fechas paginadas y cuenta en memoria; si esa lectura falla deja
+  `[DashboardMetrics][FALLO] reason=cumpleanos_hoy` y cuenta 0, sin tumbar la tarjeta.
 - **Un `error` de base es un error.** Las seis lecturas se exigen: dejan `[Analytics][FALLO]
   reason=analitica_…` (`clientes`, `visitas_30d`, `visitas_6m`, `campanas`, `mensajes`, `ajustes`) y
-  `getFullAnalytics()` lanza; `/api/dashboard/analytics` contesta 500 en vez de pintar un panel
-  en ceros. Un fallo en la SEGUNDA página también lanza: lo leído hasta ahí no es «toda la base».
+  `getFullAnalytics()` lanza; `/api/dashboard/analytics` contesta 500 en vez de devolver
+  ceros. Un fallo en la SEGUNDA página también lanza: lo leído hasta ahí no es «toda la base».
+  ⚠️ **Eso vale en la API, NO en la pantalla.** Ninguna página lee el `error` de `useDashboardAnalytics()`
+  (`dashboard`, `customers` y `campaigns` solo toman `data` y `loading`) y `MetricsCards` pinta
+  `summary?.[clave] ?? 0`: con un 500 las tarjetas muestran **0** y las gráficas quedan vacías —o con los
+  datos del último sondeo bueno, que se reintenta cada 60 s—, **sin ningún aviso**. Es exactamente lo que
+  se vio el 2026-10-04: un fallo de la analítica se ve como «0 clientes». Lo visible de verdad es el 500 y la
+  línea `[Analytics][FALLO]` del log de Vercel. Un aviso en pantalla queda pendiente.
 - **Las reglas de sede no se tocaron.** El mapa de calor y las visitas por día son DE LA SEDE
   (`locationMatches()`; `location_id` NULL se sigue mostrando a quien ve «sin sede»). El reloj de reactivación,
   el ROI y los totales son de la MARCA.

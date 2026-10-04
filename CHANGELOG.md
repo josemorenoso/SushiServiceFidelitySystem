@@ -20,8 +20,8 @@
   `campaign_messages` solo las campañas de reactivación de la ventana y exige el `error` de sus 7 lecturas (500, no
   ceros). Sin migración. → `dashboard.md`.
 
-**Verificado:** tsc, lint (14 errores = los de antes), **61 archivos / 881 tests**; los tests nuevos fallan contra el código
-viejo. **NO verificado:** nada contra producción (Zernio real, base real). **Migración:** ninguna.
+**Verificado:** tsc, lint (sin errores nuevos), **61 archivos / 881 tests** (en `main`: 59 / 864); los tests nuevos fallan antes.
+**Desplegado** 2026-10-04 (`main` = `9a06670`, Vercel READY). **NO verificado:** Zernio real ni la base real. **Migración:** ninguna.
 
 ## [fix] — 2026-10-03 — Ola 0 de seguridad: premios solo de la oferta, nada de `public` abierto a anon (00069)
 

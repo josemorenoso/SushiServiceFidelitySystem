@@ -361,7 +361,7 @@ administrador de sede cambia logo, paleta, píxel… de la marca), ya anotada en
 
 ## 8. Seguimiento — 2026-10-04: ESCALA-3 y ESCALA-4 cerradas en código
 
-**Cerrado en código** (en `feat/multisede-aios`, **sin desplegar**; sin migración). Cada uno con un test que falla contra
+**Cerrado en código** (`bb177cd` en `feat/multisede-aios`; **desplegado en `main` como `9a06670`** el 2026-10-04, Vercel READY; sin migración). Cada uno con un test que falla contra
 el código viejo:
 
 | ID | Estado | Cómo |
@@ -378,4 +378,4 @@ el código viejo:
 - **ESCALA-4, el costo:** paginar es una ida a la base por cada 1.000 filas. Una marca con decenas de miles de visitas en 6
   meses empezará a sentirlo; la salida de fondo es agregar en SQL (lo que esta auditoría proponía), que requiere migración y no se hizo.
 - **Verificado solo con dobles.** Los dos tests usan un doble de PostgREST y un doble de `after()`: **NO verificado contra
-  producción** (ni la respuesta real de Zernio en menos de 5 s, ni la analítica de Sushi Service con su base real).
+  producción** (ni la respuesta real de Zernio en menos de 5 s, ni la analítica de Sushi Service con su base real). Lo único comprobado en vivo: un `POST` con firma inválida a `hooks.constelarys.com` contesta 401, o sea que la ruta nueva responde y la puerta de la firma sigue cerrada.

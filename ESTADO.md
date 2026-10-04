@@ -33,6 +33,7 @@
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
 | Despliegue de la ola 0 a `main` (orden del dueño), Claude Code, 2026-10-04 | Opus 5.5 | **Worktree `.worktrees/deploy-ola0`** sobre `origin/main` con `npm ci` propio: `cherry-pick 0485098 ddfdf72`, tsc + vitest ahí, push a `main`. Se borra al terminar. En la rama solo `ESTADO.md`. **Corre vitest** (puerto 55432) | — (la 00069 la aplica el dueño) | en curso |
+| **ESCALA-3 y ESCALA-4** (2026-10-04): el webhook de Zernio contesta 200 antes de llamar a OpenAI (`after()`) y la analítica del panel pagina de a 1.000 — prompt `docs/prompts/2026-10-03-escala-3-4.md` | Sonnet 5.5 | `src/app/api/webhook/zernio/route.ts` · `src/services/delivery.service.ts` + `src/lib/delivery-reasons.ts` (solo el motivo del embudo para un fallo inesperado del trabajo diferido) · `src/services/dashboard.service.ts` · `src/services/imported-contacts.service.ts` + `src/lib/leer-todo.ts` nuevo (`leerTodo` sale a `src/lib/`, sin cambiarle el comportamiento) · tests nuevos `tests/unit/zernio-despues-domicilios.test.ts` y `tests/unit/dashboard-analytics-paginacion.test.ts` · `docs/features/delivery-webhook.md` · `docs/features/delivery-ai-parsing.md` · `docs/features/dashboard.md` · `docs/AUDITORIA-ESCALA-1000-2026-09-28.md` · `ESTADO.md` · `CHANGELOG.md`. **No corro vitest mientras la fila de arriba siga viva** (mismo puerto 55432) | Ninguna (sin migración) | en construcción |
 
 ## 3. Siguiente, en orden
 

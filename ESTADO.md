@@ -32,6 +32,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Rediseño del ciclo de recuperación (campañas + calendario en una pantalla, pipeline de 90 días, fatiga, invitaciones que vencen) — SOLO DISEÑO: spec, prototipo HTML y prompt para la sesión que construye · Fable · 2026-10-04 | Fable 5.1 | `docs/superpowers/specs/2026-10-04-ciclo-de-recuperacion-design.md` (nuevo) · `docs/superpowers/specs/2026-10-04-ciclo-de-recuperacion-mockup.html` (nuevo) · `docs/prompts/2026-10-04-ciclo-fase-0-y-1.md` (nuevo) · una línea de puntero en `docs/features/campaigns.md` · `ESTADO.md` · `CHANGELOG.md` | ninguna (la fase 1 la tomará con el script; hoy el script dice 00070, pero esto NO reserva) | en vuelo |
 
 ## 3. Siguiente, en orden
 

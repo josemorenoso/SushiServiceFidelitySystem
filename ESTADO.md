@@ -32,6 +32,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| **URGENTE: la analítica del panel da 500 en todas las marcas** (ESCALA-4 desplegada: «cumpleaños hoy» hace `LIKE` sobre `date`, 42883). Producción devuelta a `c055e8e` por rollback de Vercel. Claude Code, 2026-10-04 | Opus 5.5 | `src/services/dashboard.service.ts` · su test de analítica · worktree `.worktrees/hotfix-analitica` sobre `origin/main` (npm ci propio). **Corre vitest** (puerto 55432) | — | en curso |
 | Consolidado de requerimientos de agosto + auditoría de 1000 clientes + prioridades (solo docs; lee el código, no lo toca), Claude Code, 2026-10-04 | Sonnet 5.5 | **Archivo NUEVO `docs/ESTADO-CONSOLIDADO-2026-10-04.md`** y, al cerrar, el aviso de «reemplazado» en la cabecera de `docs/ESTADO-REQUERIMIENTOS.md`. Subagentes de solo lectura. **No corre vitest ni tsc** (el puerto 55432 es de la fila de arriba) | — | en curso |
 
 ## 3. Siguiente, en orden

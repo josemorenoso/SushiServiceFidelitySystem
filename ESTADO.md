@@ -33,6 +33,7 @@
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
 | Rediseño del ciclo de recuperación (campañas + calendario en una pantalla, pipeline de 90 días, fatiga, invitaciones que vencen) — SOLO DISEÑO: spec, prototipo HTML y prompt para la sesión que construye · Fable · 2026-10-04 | Fable 5.1 | `docs/superpowers/specs/2026-10-04-ciclo-de-recuperacion-design.md` (nuevo) · `docs/superpowers/specs/2026-10-04-ciclo-de-recuperacion-mockup.html` (nuevo) · `docs/prompts/2026-10-04-ciclo-fase-0-y-1.md` (nuevo) · una línea de puntero en `docs/features/campaigns.md` · `ESTADO.md` · `CHANGELOG.md` | ninguna (la fase 1 la tomará con el script; hoy el script dice 00070, pero esto NO reserva) | en vuelo |
+| Integrar la lista de requerimientos de septiembre del dueño en el consolidado (solo docs; lee el código, no lo toca), Claude Code, 2026-10-04 | Sonnet 5.5 | **Solo `docs/ESTADO-CONSOLIDADO-2026-10-04.md`** (§10 y las menciones de despliegue que quedaron viejas). Subagentes de solo lectura. No toca el spec del ciclo (es de la fila de arriba) ni corre vitest/tsc | — | en curso |
 
 ## 3. Siguiente, en orden
 

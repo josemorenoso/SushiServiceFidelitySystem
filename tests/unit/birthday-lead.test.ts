@@ -22,7 +22,11 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { findBirthdayCustomers } from '@/services/campaign.service'
+import {
+  findBirthdayCustomers,
+  elegirPlantillaDeCumpleanos,
+  diasDeLaVentanaDeCumpleanos,
+} from '@/services/campaign.service'
 import { BIRTHDAY_LEAD_DAYS, BIRTHDAY_DEDUPE_DAYS } from '@/constants/rewards'
 
 // ═══════════════════════════════════════════════════════════════
@@ -85,18 +89,35 @@ afterEach(() => {
 // ═══════════════════════════════════════════════════════════════
 
 describe('findBirthdayCustomers — anticipación', () => {
-  it('elige a quien cumple pasado mañana y deja fuera a quien cumple hoy', async () => {
+  it('con la plantilla nueva: la VENTANA de hoy a pasado mañana, y nada fuera de ella', async () => {
+    // Una ventana y no un día exacto (2026-10-04): el día que una marca pasa de la
+    // plantilla vieja (el día mismo) a la nueva, quien cumple hoy o mañana no se queda
+    // sin saludo. Los días siguientes la dedup impide repetirlo.
     hoyEs(2026, 3, 10)
     filas = [
+      { id: 'ayer', birthday: '1989-03-09' },
       { id: 'hoy', birthday: '1990-03-10' },
       { id: 'manana', birthday: '1991-03-11' },
       { id: 'objetivo', birthday: '1992-03-12' },
       { id: 'pasado', birthday: '1993-03-13' },
     ]
 
-    const elegidos = await findBirthdayCustomers(TENANT)
+    const elegidos = await findBirthdayCustomers(TENANT, BIRTHDAY_LEAD_DAYS)
 
-    expect(elegidos.map(c => c.id)).toEqual(['objetivo'])
+    expect(elegidos.map(c => c.id)).toEqual(['hoy', 'manana', 'objetivo'])
+  })
+
+  it('con la plantilla vieja (0 días): solo quien cumple hoy, exactamente como siempre', async () => {
+    hoyEs(2026, 3, 10)
+    filas = [
+      { id: 'hoy', birthday: '1990-03-10' },
+      { id: 'manana', birthday: '1991-03-11' },
+      { id: 'objetivo', birthday: '1992-03-12' },
+    ]
+
+    const elegidos = await findBirthdayCustomers(TENANT, 0)
+
+    expect(elegidos.map(c => c.id)).toEqual(['hoy'])
   })
 
   it('la consulta sigue acotada al tenant', async () => {
@@ -127,25 +148,28 @@ describe('findBirthdayCustomers — bordes de calendario', () => {
   it('rueda al mes siguiente (30 de enero → 1 de febrero)', async () => {
     hoyEs(2026, 1, 30)
     filas = [
-      { id: 'enero', birthday: '1990-01-30' },
+      { id: 'enero-29', birthday: '1990-01-29' },
+      { id: 'enero-31', birthday: '1990-01-31' },
       { id: 'febrero', birthday: '1990-02-01' },
+      { id: 'febrero-2', birthday: '1990-02-02' },
     ]
 
     const elegidos = await findBirthdayCustomers(TENANT)
 
-    expect(elegidos.map(c => c.id)).toEqual(['febrero'])
+    expect(elegidos.map(c => c.id)).toEqual(['enero-31', 'febrero'])
   })
 
   it('rueda al año siguiente (30 de diciembre → 1 de enero)', async () => {
     hoyEs(2026, 12, 30)
     filas = [
-      { id: 'diciembre', birthday: '1990-12-30' },
+      { id: 'diciembre-31', birthday: '1990-12-31' },
       { id: 'enero', birthday: '1990-01-01' },
+      { id: 'enero-2', birthday: '1990-01-02' },
     ]
 
     const elegidos = await findBirthdayCustomers(TENANT)
 
-    expect(elegidos.map(c => c.id)).toEqual(['enero'])
+    expect(elegidos.map(c => c.id)).toEqual(['diciembre-31', 'enero'])
   })
 
   it('el 29 de febrero se saluda en año bisiesto (27 de febrero de 2028)', async () => {
@@ -161,6 +185,53 @@ describe('findBirthdayCustomers — bordes de calendario', () => {
 // ═══════════════════════════════════════════════════════════════
 // 3. La ventana de dedup tiene que caber en el hueco acortado
 // ═══════════════════════════════════════════════════════════════
+
+describe('diasDeLaVentanaDeCumpleanos', () => {
+  it('cuenta hoy y los días de anticipación, ambos incluidos', () => {
+    expect([...diasDeLaVentanaDeCumpleanos(new Date(2026, 2, 10), 2)]).toEqual(['03-10', '03-11', '03-12'])
+    expect([...diasDeLaVentanaDeCumpleanos(new Date(2026, 2, 10), 0)]).toEqual(['03-10'])
+  })
+
+  it('el 29 de febrero solo existe en año bisiesto', () => {
+    expect(diasDeLaVentanaDeCumpleanos(new Date(2027, 1, 27), 2).has('02-29')).toBe(false)
+    expect(diasDeLaVentanaDeCumpleanos(new Date(2028, 1, 27), 2).has('02-29')).toBe(true)
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════
+// 3-bis. Qué plantilla, y con cuánta anticipación (2026-10-04)
+// ═══════════════════════════════════════════════════════════════
+
+describe('elegirPlantillaDeCumpleanos — nadie recibe «¡Feliz cumpleaños!» dos días antes', () => {
+  it('con la nueva APROBADA: la nueva, con BIRTHDAY_LEAD_DAYS de anticipación', () => {
+    expect(elegirPlantillaDeCumpleanos({ nueva: 'HX_nueva', nuevaAprobada: true, vieja: 'HX_vieja' })).toEqual({
+      sid: 'HX_nueva',
+      diasDeAnticipacion: BIRTHDAY_LEAD_DAYS,
+      cual: 'se_acerca',
+    })
+  })
+
+  it('con la nueva EN REVISIÓN: la vieja, el día mismo (lo de siempre)', () => {
+    expect(elegirPlantillaDeCumpleanos({ nueva: 'HX_nueva', nuevaAprobada: false, vieja: 'HX_vieja' })).toEqual({
+      sid: 'HX_vieja',
+      diasDeAnticipacion: 0,
+      cual: 'el_dia',
+    })
+  })
+
+  it('la vieja NUNCA sale con anticipación', () => {
+    const r = elegirPlantillaDeCumpleanos({ nueva: null, nuevaAprobada: false, vieja: 'HX_vieja' })
+    expect(r?.diasDeAnticipacion).toBe(0)
+  })
+
+  it('una marca nueva solo con la nueva aprobada la usa; sin ninguna, no hay saludo', () => {
+    expect(elegirPlantillaDeCumpleanos({ nueva: 'cumpleanos_se_acerca', nuevaAprobada: true, vieja: null })?.cual).toBe(
+      'se_acerca'
+    )
+    expect(elegirPlantillaDeCumpleanos({ nueva: 'HX_nueva', nuevaAprobada: false, vieja: null })).toBeNull()
+    expect(elegirPlantillaDeCumpleanos({ nueva: null, nuevaAprobada: false, vieja: null })).toBeNull()
+  })
+})
 
 describe('BIRTHDAY_DEDUPE_DAYS', () => {
   it('es menor que el hueco del año de transición (365 − BIRTHDAY_LEAD_DAYS)', () => {

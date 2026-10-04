@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { validateCronSecret } from '@/lib/validators/cron'
 import {
+  elegirPlantillaDeCumpleanos,
   findBirthdayCustomers,
   getOrCreateTodayCampaign,
   hasRecentCampaignMessage,
@@ -10,6 +11,7 @@ import {
 } from '@/services/campaign.service'
 import { sendTemplateMessage } from '@/services/whatsapp.service'
 import { getSettingValue } from '@/services/settings.service'
+import { isTwilioTemplateApproved } from '@/services/twilio-catalog.service'
 import { buildTiersRoadmap } from '@/services/reward-tiers.service'
 import { getTenantBySlug, getActiveTenants } from '@/lib/tenant'
 import { BIRTHDAY_DEDUPE_DAYS } from '@/constants/rewards'
@@ -22,13 +24,37 @@ interface TenantCronResult {
   sent: number
   failed: number
   total_birthday_customers: number
+  /** Con cuál salió: `se_acerca` (hasta dos días antes) o `el_dia` (la vieja, el día mismo). */
+  plantilla?: 'se_acerca' | 'el_dia'
   error?: string
 }
 
-async function processTenant(tenant: Tenant): Promise<TenantCronResult> {
-  const templateSid = await getSettingValue('birthday_template_sid', tenant.id)
+/**
+ * ¿Ya está aprobada la plantilla «Cumpleaños — dos días antes» de esta marca?
+ * En Zernio el puntero solo existe aprobado; en Twilio se escribe al crearla y hay que
+ * preguntar (ver `isTwilioTemplateApproved()`).
+ */
+async function nuevaAprobada(tenant: Tenant, sid: string | null): Promise<boolean> {
+  if (!sid) return false
+  if (tenant.messaging_provider === 'zernio') return true
+  return isTwilioTemplateApproved(tenant, sid)
+}
 
-  if (!templateSid) {
+async function processTenant(tenant: Tenant): Promise<TenantCronResult> {
+  // Dos plantillas posibles (dueño, 2026-10-04): la nueva («ya está aquí», hasta dos días
+  // antes) en cuanto la marca la tenga APROBADA; si no, la vieja («¡Feliz cumpleaños!»)
+  // el día mismo, como siempre. La regla entera vive en `elegirPlantillaDeCumpleanos()`.
+  const [nueva, vieja] = await Promise.all([
+    getSettingValue('birthday_upcoming_template_sid', tenant.id),
+    getSettingValue('birthday_template_sid', tenant.id),
+  ])
+  const plantilla = elegirPlantillaDeCumpleanos({
+    nueva,
+    nuevaAprobada: await nuevaAprobada(tenant, nueva),
+    vieja,
+  })
+
+  if (!plantilla) {
     console.warn(`[Cron Birthday] (${tenant.slug}) No hay plantilla configurada para cumpleaños.`)
     return {
       tenant_slug: tenant.slug,
@@ -37,16 +63,20 @@ async function processTenant(tenant: Tenant): Promise<TenantCronResult> {
       sent: 0,
       failed: 0,
       total_birthday_customers: 0,
-      error: 'No hay plantilla de cumpleaños configurada. Ve a Dashboard > Ajustes y selecciona una plantilla aprobada.',
+      error: nueva
+        ? 'La plantilla «Cumpleaños — dos días antes» todavía no está aprobada por Meta. Sale sola en cuanto la aprueben.'
+        : 'No hay plantilla de cumpleaños. Ve a Dashboard > Plantillas y envía «Cumpleaños — dos días antes» a aprobación.',
     }
   }
+  const templateSid = plantilla.sid
 
-  // No son los que cumplen HOY: son los que cumplen dentro de BIRTHDAY_LEAD_DAYS
-  // días (dueño, 2026-09-24). El corrimiento vive entero en findBirthdayCustomers().
-  const customers = await findBirthdayCustomers(tenant.id)
+  // Con la nueva: quien cumple entre hoy y dentro de BIRTHDAY_LEAD_DAYS días (una VENTANA,
+  // para que el día del cambio nadie se quede sin saludo; la dedup evita repetirlo). Con la
+  // vieja: solo quien cumple hoy. Ver `findBirthdayCustomers()`.
+  const customers = await findBirthdayCustomers(tenant.id, plantilla.diasDeAnticipacion)
 
   if (customers.length === 0) {
-    return { tenant_slug: tenant.slug, ok: true, campaign_id: null, sent: 0, failed: 0, total_birthday_customers: 0 }
+    return { tenant_slug: tenant.slug, ok: true, campaign_id: null, sent: 0, failed: 0, total_birthday_customers: 0, plantilla: plantilla.cual }
   }
 
   const campaign = await getOrCreateTodayCampaign('birthday', `template:${templateSid}`, tenant.id)
@@ -108,6 +138,7 @@ async function processTenant(tenant: Tenant): Promise<TenantCronResult> {
     sent,
     failed,
     total_birthday_customers: customers.length,
+    plantilla: plantilla.cual,
   }
 }
 

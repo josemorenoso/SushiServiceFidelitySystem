@@ -41,7 +41,7 @@
  */
 
 import { createClient as createServiceClient } from '@supabase/supabase-js'
-import { getTenantTwilioCredentials } from '@/lib/twilio/tenant-credentials'
+import { getTenantTwilioCredentials, resolveTwilioAccount } from '@/lib/twilio/tenant-credentials'
 import { resolveBranding } from '@/lib/branding'
 import {
   TEMPLATE_CATALOG,
@@ -208,7 +208,13 @@ export async function getStandardCatalogReport(tenant: Tenant): Promise<Standard
   const brandName = resolveBranding(tenant.config).name
   const emoji = resolveTemplateEmoji(tenant.business_type, tenant.config?.template_emoji)
 
-  const templates: StandardTemplateStatus[] = TEMPLATE_CATALOG.map((definition) => {
+  // Una entrada reemplazada (`replacedBy`, hoy el cumpleaños del día mismo) solo se muestra
+  // si la marca ya la tiene: a quien no la tiene no se le ofrece crear un texto retirado.
+  const vigentes = TEMPLATE_CATALOG.filter(
+    (definition) => !definition.replacedBy || pointers[definition.settingsKey]
+  )
+
+  const templates: StandardTemplateStatus[] = vigentes.map((definition) => {
     const pointer = pointers[definition.settingsKey] ?? null
     const approval = pointer ? approvals.bySid.get(pointer) : undefined
 
@@ -337,6 +343,14 @@ export async function createStandardTemplate(
   }
   const definition = TEMPLATE_CATALOG_BY_KEY[key]
 
+  if (definition.replacedBy) {
+    const nueva = TEMPLATE_CATALOG_BY_KEY[definition.replacedBy]
+    throw new TwilioCatalogError(
+      `"${definition.label}" ya no se crea: la reemplazó "${nueva.label}". Crea esa.`,
+      400
+    )
+  }
+
   if (definition.header) {
     throw new TwilioCatalogError(
       `"${definition.label}" lleva imagen o video en la cabecera y se crea con el script de media, no desde acá.`,
@@ -438,5 +452,40 @@ export async function createStandardTemplate(
     approvalSubmitted,
     approvalError,
     pointerWritten,
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Lectura puntual: ¿esta plantilla ya la aprobó Meta?
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * ¿Meta ya aprobó esta plantilla de Twilio? Lo pregunta el cron de cumpleaños antes de
+ * pasar una marca a «Cumpleaños — dos días antes» (`elegirPlantillaDeCumpleanos()`).
+ *
+ * Hace falta porque en Twilio el puntero NO significa «aprobada»: `createStandardTemplate()`
+ * lo escribe al crear (`fillEmptyPointer()`), con la plantilla todavía en revisión. Mandar
+ * una plantilla sin aprobar falla en Meta, y un saludo fallido cuenta igual para la dedup:
+ * ese cliente se quedaría sin cumpleaños un año entero.
+ *
+ * Pregunta con la MISMA cuenta que envía (`resolveTwilioAccount`, igual que el calendario).
+ * Ante cualquier duda —sin cuenta, error de red, respuesta rara— devuelve `false`, y el cron
+ * sigue con la plantilla vieja el día mismo, que es lo que la marca ya hacía.
+ */
+export async function isTwilioTemplateApproved(tenant: Tenant, contentSid: string): Promise<boolean> {
+  const account = resolveTwilioAccount(tenant)
+  if (!account) return false
+  const auth = 'Basic ' + Buffer.from(`${account.accountSid}:${account.authToken}`).toString('base64')
+  try {
+    const res = await fetch(`${TWILIO_CONTENT_API}/${contentSid}/ApprovalRequests`, {
+      headers: { Authorization: auth },
+      cache: 'no-store',
+    })
+    if (!res.ok) return false
+    const data = (await res.json()) as { whatsapp?: { status?: string } }
+    return data.whatsapp?.status?.toLowerCase() === 'approved'
+  } catch (error) {
+    console.error('[twilio-catalog] approval de', contentSid, error)
+    return false
   }
 }

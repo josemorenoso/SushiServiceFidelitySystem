@@ -202,8 +202,9 @@ tasa de reactivación, y un fallo de base se veía como «cero», que es lo mism
   Había una con `.like('birthday', '%-MM-DD')`, y `birthday` es `date`: Postgres contesta **42883**
   («operator does not exist: date ~~ unknown»). Mientras el error se ignoraba, «Cumpleaños hoy» daba 0 en
   silencio desde siempre. Al desplegarse la regla de abajo tumbó la analítica entera de las 5 marcas: panel en
-  ceros hasta que se volvió atrás en Vercel. `getDashboardMetrics()` todavía tiene el mismo `.like` y lo ignora
-  (sigue dando 0); no se tocó.
+  ceros hasta que se volvió atrás en Vercel. `getDashboardMetrics()` tenía el mismo `.like` (daba 0 en
+  silencio): desde el 2026-10-04 lee las fechas paginadas y cuenta en memoria; si esa lectura falla deja
+  `[DashboardMetrics][FALLO] reason=cumpleanos_hoy` y cuenta 0, sin tumbar la tarjeta.
 - **Un `error` de base es un error.** Las seis lecturas se exigen: dejan `[Analytics][FALLO]
   reason=analitica_…` (`clientes`, `visitas_30d`, `visitas_6m`, `campanas`, `mensajes`, `ajustes`) y
   `getFullAnalytics()` lanza; `/api/dashboard/analytics` contesta 500 en vez de devolver

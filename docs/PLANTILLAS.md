@@ -47,7 +47,8 @@
 | Tier desbloqueado | MARKETING | ✅ Sí |
 | Mystery Box resultado | MARKETING | ✅ Sí |
 | Golden Box resultado | MARKETING | ✅ Sí |
-| Cumpleaños | MARKETING | ✅ Sí |
+| Cumpleaños — dos días antes (7-bis) | MARKETING | ✅ Sí |
+| Cumpleaños — el día (7, reemplazada) | MARKETING | ✅ Sí |
 | Reactivación suave (21d) | MARKETING | ✅ Sí |
 | Reactivación agresiva (25d) | MARKETING | ✅ Sí |
 | Campaña manual | MARKETING | ✅ Sí |
@@ -68,7 +69,7 @@ Esta tabla es la verdad única del sistema. El backend envía exactamente estas 
 | **Tier desbloqueado** | Nombre | Nombre tier | Premio safe | Roadmap tiers |
 | **Mystery Box resultado** | Nombre | Nombre tier | Premio ganado | Roadmap tiers |
 | **Golden Box resultado** | Nombre | Premio ganado | Roadmap tiers | — |
-| **Cumpleaños** | Nombre | Pts actuales | — | — |
+| **Cumpleaños** (7 y 7-bis, el mismo contrato) | Nombre | Camino de niveles (`buildTiersRoadmap`, NO el saldo) | — | — |
 | **Reactivación suave (21d)** | Nombre | Pts actuales | Premio próximo | — |
 | **Reactivación agresiva (25d)** | Nombre | Pts actuales | Premio próximo | **Recompensa especial** (si configura admin) |
 | **Campaña manual** | Nombre | Pts actuales | Premio próximo | — |
@@ -293,18 +294,49 @@ _Responde SALIR para no recibir más mensajes._
 
 ---
 
-## Plantilla 7 — Cumpleaños
+## Plantilla 7-bis — Cumpleaños, dos días antes (la vigente desde 2026-10-04)
+
+**Slot:** `birthday_upcoming_template_sid` · **Nombre en Meta:** `cumpleanos_se_acerca` (Twilio le agrega la marca)
+**Categoría:** `MARKETING`
+**Variables:** `{{1}}`=Nombre · `{{2}}`=Camino de niveles (el MISMO contrato que la 7)
+**Cuándo se envía:** cron diario a las 18:00 UTC (13:00 Bogotá) a quien cumple **entre hoy y dentro de dos
+días** (`BIRTHDAY_LEAD_DAYS`), una sola vez (`BIRTHDAY_DEDUPE_DAYS`). **Solo cuando está APROBADA**: hasta
+entonces la marca sigue con la 7 el día mismo. El cambio es solo, marca por marca (`elegirPlantillaDeCumpleanos()`).
+
+```
+¡Hola {{1}}! Tu cumpleaños ya está aquí 🎂🎉
+
+En *[Restaurante]* queremos celebrarlo contigo [emoji del rubro]
+
+Ven en estos días, cuéntanos que estás de cumple y llévate una *sorpresa especial* 🎁
+
+Así vas en tu camino de premios:
+
+{{2}}
+
+Cada visita te acerca más a una nueva recompensa 🔥
+
+_— [Restaurante]_
+
+_Responde SALIR para no recibir más mensajes._
+```
+
+**Por qué «ya está aquí».** Se lee bien dos días antes, un día antes y el día mismo. El día mismo pasa
+una sola vez: el día que la marca se cambia, el cron saluda en un solo envío a quien cumple hoy,
+mañana o pasado, para que nadie se quede sin saludo. La sorpresa es la misma promesa de la 7.
+
+**Cómo se crea:** Zernio → Plantillas → «Cumpleaños — dos días antes» → **Enviar a Meta**. Twilio →
+Plantillas → «Del set estándar te faltan…» → **Crear** (o creada a mano y elegida en Ajustes). El AIOS ya
+la crea en el alta (v1.14.0) en lugar de la 7.
+
+## Plantilla 7 — Cumpleaños, el día (REEMPLAZADA por la 7-bis)
 
 **Slot:** `birthday_template_sid`
 **Categoría Twilio:** `MARKETING`
-**Variables:** `{{1}}`=Nombre · `{{2}}`=Pts actuales
-**Cuándo se envía:** Cron diario a las 18:00 UTC (13:00 Bogotá, `vercel.json`) — detecta a los clientes
-que cumplen años **dentro de dos días** (`BIRTHDAY_LEAD_DAYS`, dueño 2026-09-24), no a los que cumplen hoy.
-
-> ⚠️ **El texto de abajo todavía dice «¡Feliz cumpleaños!» y ahora llega dos días antes.** Cambiarlo
-> es una plantilla NUEVA en Meta (24-48 h de aprobación) y una decisión del dueño: el código no puede
-> reescribir un texto ya aprobado. Redacción que calza con el nuevo envío: *«Se acerca tu cumpleaños
-> {{1}} 🎂 — en [Restaurante] queremos celebrarlo contigo»*.
+**Variables:** `{{1}}`=Nombre · `{{2}}`=Camino de niveles (decía «pts actuales»: el cron siempre mandó la escalera)
+**Cuándo se envía:** el día del cumpleaños, **solo** en las marcas que todavía no tienen aprobada la 7-bis.
+No se le ofrece a ninguna marca que no la tenga, y no se borra: la sigue usando quien la tiene hasta que la
+7-bis se apruebe.
 
 ```
 ¡Feliz cumpleaños {{1}}! 🎂🎉
@@ -322,7 +354,8 @@ _Responde SALIR para no recibir más mensajes._
 
 **Samples:**
 - `{{1}}` → `Sofía`
-- `{{2}}` → `95`
+- `{{2}}` → el camino de niveles (`🥉 Bronce (150 pts) → Bebida gratis — te faltan 23 pts 🔥 · 🥈 Plata…`). Decía `95`:
+  por eso al cliente le llegaba «Tus puntos: *Bronce (150 pts) → …*». La 7-bis lo presenta como camino.
 
 ---
 
@@ -633,7 +666,7 @@ CLIENTE FRECUENTE → Escanea QR → Recibe puntos aleatorios
 │       └── Faltan >30 pts → Plantilla 2 (Lejos — "seguí sumando")
 
 AUTOMATIZACIONES
-├── Cumpleaños (cron 8am)     → Plantilla 7
+├── Cumpleaños (13:00 Bogotá) → Plantilla 7-bis (hasta 2 días antes) o, sin ella aprobada, la 7 el día mismo
 ├── Día 21 sin visitar        → Plantilla 8 (Reactivación suave)
 ├── Día 25+ sin visitar       → Plantilla 9 (Reactivación agresiva)
 └── Evento programado (*/15m) → Plantilla 12 o 13 (Calendar)
@@ -656,7 +689,8 @@ CAMPAÑAS MANUALES
 | `reward_safe_template_sid` | Premio seguro (después de elegir 'a la segura') | {{1}}=nombre, {{2}}=tier, {{3}}=premio, {{4}}=roadmap |
 | `mystery_box_result_template_sid` | Mystery Box resultado | {{1}}=nombre, {{2}}=tier, {{3}}=premio, {{4}}=roadmap |
 | `golden_box_result_template_sid` | Golden Box resultado | {{1}}=nombre, {{2}}=premio, {{3}}=roadmap |
-| `birthday_template_sid` | Cumpleaños | {{1}}=nombre, {{2}}=pts actuales |
+| `birthday_upcoming_template_sid` | Cumpleaños — dos días antes | {{1}}=nombre, {{2}}=camino de niveles |
+| `birthday_template_sid` | Cumpleaños — el día (reemplazada) | {{1}}=nombre, {{2}}=camino de niveles |
 | `reactivation_no_reward_template_sid` | Reactivación suave (21d) | {{1}}=nombre, {{2}}=pts actuales, {{3}}=premio |
 | `reactivation_aggressive_template_sid` | Reactivación agresiva (25d) | {{1}}=nombre, {{2}}=pts actuales, {{3}}=premio, {{4}}=recompensa especial (opcional) |
 

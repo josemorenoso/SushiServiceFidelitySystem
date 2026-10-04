@@ -11,10 +11,12 @@ export const FREQUENCY_CAP_DAYS = 7
 
 /** Días de ANTICIPACIÓN del mensaje de cumpleaños (dueño, 2026-09-24).
  *
- *  El cron de cumpleaños no busca a quien cumple HOY sino a quien cumple dentro
- *  de `BIRTHDAY_LEAD_DAYS` días: el mensaje llega con tiempo para que la persona
- *  alcance a planear la visita. Cambiar este número cambia a quién saluda el cron
- *  de mañana, no a quién ya fue saludado.
+ *  El cron de cumpleaños saluda a quien cumple entre HOY y dentro de
+ *  `BIRTHDAY_LEAD_DAYS` días: el mensaje llega con tiempo para que la persona
+ *  alcance a planear la visita. **Solo en las marcas que ya tienen APROBADA la
+ *  plantilla «Cumpleaños — dos días antes»** (`birthday_upcoming`, 2026-10-04): las
+ *  demás siguen con «¡Feliz cumpleaños!» el día mismo, porque ese texto dicho dos
+ *  días antes está mal. Ver `elegirPlantillaDeCumpleanos()` y `findBirthdayCustomers()`.
  *
  *  ⚠️ Va de la mano con `BIRTHDAY_DEDUPE_DAYS`: adelantar el envío acorta el hueco
  *  entre el saludo del año pasado y el de este, y una ventana de deduplicación más

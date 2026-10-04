@@ -211,7 +211,12 @@ export async function getTemplateCatalogState(tenant: Tenant): Promise<TemplateC
   return {
     provider: 'zernio',
     brandName,
-    entries,
+    // Una entrada reemplazada (`replacedBy`, hoy el cumpleaños del día mismo) solo aparece si
+    // la marca ya tiene algo de ella —vigente, en revisión, un puntero o una aprobada que
+    // activar—. A quien no la tiene no se le ofrece mandar un texto retirado.
+    entries: entries.filter(
+      (e) => !e.definition.replacedBy || e.current || e.pending || e.adoptedRef || e.approvedInWaba
+    ),
     wabaTemplates: waba ? waba.map(mapZernioTemplateToItem) : null,
   }
 }
@@ -559,6 +564,12 @@ export async function submitSuggestedTemplate(input: {
 
   const definition = TEMPLATE_CATALOG_BY_KEY[key]
   if (!definition) throw new TemplateError('Esa plantilla no existe en el catálogo.', 404)
+  if (definition.replacedBy) {
+    throw new TemplateError(
+      `Este mensaje ya no se manda a Meta: lo reemplazó «${TEMPLATE_CATALOG_BY_KEY[definition.replacedBy].label}».`,
+      409
+    )
+  }
 
   const body = buildTemplateBody(key, brandNameOf(tenant), emojiOf(tenant))
 

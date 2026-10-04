@@ -115,6 +115,7 @@ export default function SettingsPage() {
   const [rewards, setRewards] = useState<RewardOption[]>([])
   const [welcomeTemplateSid, setWelcomeTemplateSid] = useState('')
   const [birthdayTemplateSid, setBirthdayTemplateSid] = useState('')
+  const [birthdayUpcomingTemplateSid, setBirthdayUpcomingTemplateSid] = useState('')
   const [reactivationNoRewardSid, setReactivationNoRewardSid] = useState('')
   const [reactivationWithRewardSid, setReactivationWithRewardSid] = useState('')
   const [reactivationRewardId, setReactivationRewardId] = useState('')
@@ -249,6 +250,7 @@ export default function SettingsPage() {
         }
         if (settingsData.welcome_template_sid) setWelcomeTemplateSid(settingsData.welcome_template_sid)
         if (settingsData.birthday_template_sid) setBirthdayTemplateSid(settingsData.birthday_template_sid)
+        if (settingsData.birthday_upcoming_template_sid) setBirthdayUpcomingTemplateSid(settingsData.birthday_upcoming_template_sid)
         // reactivación: legacy reactivation_template_sid migra a reactivation_no_reward por defecto
         const legacyReact = settingsData.reactivation_template_sid ?? ''
         setReactivationNoRewardSid(settingsData.reactivation_no_reward_template_sid ?? legacyReact)
@@ -360,6 +362,7 @@ export default function SettingsPage() {
       await Promise.all([
         saveSetting('welcome_template_sid', welcomeTemplateSid),
         saveSetting('birthday_template_sid', birthdayTemplateSid),
+        saveSetting('birthday_upcoming_template_sid', birthdayUpcomingTemplateSid),
         saveSetting('reactivation_no_reward_template_sid', reactivationNoRewardSid),
         saveSetting('reactivation_with_reward_template_sid', reactivationWithRewardSid),
         saveSetting('reactivation_reward_id', reactivationRewardId),
@@ -1310,11 +1313,21 @@ export default function SettingsPage() {
               templates={approvedTemplates}
             />
 
-            {/* Birthday */}
+            {/* Birthday — dos días antes (la nueva, 2026-10-04) */}
             <TemplateSelector
-              label="Cumpleaños (cron diario)"
+              label="Cumpleaños — dos días antes"
               icon={<CalendarHeart className="h-3.5 w-3.5" style={{ color: '#EC4899' }} />}
-              hint="Variables: {{1}}=nombre · {{2}}=pts actuales"
+              hint="Variables: {{1}}=nombre · {{2}}=camino de niveles. Aprobada, reemplaza sola a la de abajo y el saludo sale hasta dos días antes."
+              value={birthdayUpcomingTemplateSid}
+              onChange={setBirthdayUpcomingTemplateSid}
+              templates={approvedTemplates}
+            />
+
+            {/* Birthday — el día mismo (la anterior) */}
+            <TemplateSelector
+              label="Cumpleaños — el día (versión anterior)"
+              icon={<CalendarHeart className="h-3.5 w-3.5" style={{ color: '#EC4899' }} />}
+              hint="Variables: {{1}}=nombre · {{2}}=camino de niveles. Se usa solo mientras la de arriba no esté aprobada."
               value={birthdayTemplateSid}
               onChange={setBirthdayTemplateSid}
               templates={approvedTemplates}

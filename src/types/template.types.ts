@@ -33,6 +33,7 @@ export type TemplateKey =
   | 'mystery_box_result'
   | 'golden_box_result'
   | 'birthday'
+  | 'birthday_upcoming'
   | 'reactivation_no_reward'
   | 'reactivation_aggressive'
   | 'campaign_presencial_to_domicilio'
@@ -71,6 +72,13 @@ export interface CatalogTemplate {
   variables: readonly TemplateVariable[]
   /** Solo las 2 plantillas de evento del calendario. */
   header?: { format: 'image' | 'video' }
+  /**
+   * La plantilla que REEMPLAZA a esta. Una entrada reemplazada sigue en el catálogo solo
+   * porque hay marcas que todavía la usan: no se le ofrece a quien no la tiene (ni
+   * «Enviar a Meta» en Zernio ni «Crear» en Twilio) y no cuenta en `CATALOG_SIZE`.
+   * Hoy, solo `birthday` → `birthday_upcoming` (2026-10-04).
+   */
+  replacedBy?: TemplateKey
 }
 
 /** Fila de `template_versions` (migración 00039). */

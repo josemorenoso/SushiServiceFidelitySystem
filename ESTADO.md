@@ -32,6 +32,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Ciclo de recuperación, segunda pasada: aplicar la revisión del dueño al spec, al prototipo y al prompt (aprobar en vez de crear, vocabulario de dueño, cajas por etapa en vez de histograma, ritmo del negocio, primer uso, adaptador por defecto, pausa del ciclo en blackout, latido vs cooldown, cruce de canal con bandera, hora y domingo, grupo de control, «Regalo que vence») · Fable · 2026-10-04 | Fable 5.1 | `docs/superpowers/specs/2026-10-04-ciclo-de-recuperacion-design.md` · `docs/superpowers/specs/2026-10-04-ciclo-de-recuperacion-mockup.html` · `docs/prompts/2026-10-04-ciclo-fase-0-y-1.md` · una línea en `docs/features/campaigns.md` · `ESTADO.md` · `CHANGELOG.md` | ninguna | en vuelo |
 
 ## 3. Siguiente, en orden
 

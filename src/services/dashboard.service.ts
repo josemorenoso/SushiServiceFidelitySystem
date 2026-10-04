@@ -1,6 +1,8 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { Customer, Reward } from '@/types/database.types'
 import { POWER_RANKS, RISK_LEVELS, TOP_CUSTOMERS_LIMIT, getCustomerRank } from '@/constants/rankings'
+import { logDbFailure, type DbErrorLike } from '@/lib/db-failure'
+import { leerTodo } from '@/lib/leer-todo'
 import { getUnscopedServiceClient } from '@/lib/supabase/unscoped'
 import { applyLocationFilter, locationMatches, type LocationScope } from '@/lib/location-scope'
 import type {
@@ -181,6 +183,113 @@ function daysBetween(d1: Date, d2: Date): number {
   return Math.floor((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24))
 }
 
+// ─── Lecturas de la analítica (ESCALA-4, 2026-10-04) ───────────────────────────
+//
+// PostgREST corta TODA respuesta en 1.000 filas, en silencio. `getFullAnalytics()` leía clientes,
+// visitas de 6 meses y mensajes de campaña sin `.range()` y sin mirar `error`: en una marca que
+// pasara de mil filas en cualquiera de ellas salían mal el total de clientes, el mapa de calor
+// día × hora y la tasa de reactivación, y un fallo de base se veía como «cero». Ahora todo lo que
+// puede pasar de mil pagina con `leerTodo()` y todo `error` se vuelve un fallo visible.
+
+/** Lo que la analítica lee de `visits`. */
+interface VisitaLeida {
+  id: string
+  customer_id: string
+  source: string
+  created_at: string
+  location_id: string | null
+}
+
+/** Lo que la analítica lee de `campaigns`. */
+interface CampanaLeida {
+  id: string
+  type: string
+  executed_at: string | null
+}
+
+/** Lo único que la tasa de reactivación necesita de `campaign_messages`. */
+interface MensajeLeido {
+  campaign_id: string
+  customer_id: string
+}
+
+/**
+ * Cuántos ids de campaña van en un `.in()`. Viajan en la URL del GET de PostgREST (36 caracteres
+ * cada uno). Con una campaña de reactivación por día serían ~180 en seis meses, unos 6.700
+ * caracteres en una sola URL, y el tope del gateway no es algo que este código controle ni haya
+ * medido. En lotes de 100 son ~3.700.
+ */
+const CAMPANAS_POR_CONSULTA = 100
+
+/**
+ * Convierte la respuesta de una lectura en sus filas, o en un fallo VISIBLE.
+ *
+ * ⚠️ `supabase-js` no lanza: un error vuelve como `{ data: null, error }` y `leerTodo()` devuelve
+ * `[]` más el `error`. Quien solo lea `data` ve «cero filas», que es exactamente lo que ve un
+ * restaurante recién abierto. Aquí el error se registra con contexto (`[Analytics][FALLO]`) y se
+ * lanza: `/api/dashboard/analytics` lo contesta con un 500 en vez de pintar un panel en ceros.
+ */
+function exigirLectura<T>(
+  lectura: { data: T[]; error: DbErrorLike | null },
+  razon: string,
+  tenantId: string
+): T[] {
+  if (lectura.error) {
+    logDbFailure({ scope: 'Analytics', reason: razon, error: lectura.error, context: { tenant: tenantId } })
+    throw new Error(`Error leyendo la analítica (${razon}): ${lectura.error.message}`)
+  }
+  return lectura.data
+}
+
+/**
+ * TODAS las visitas de la marca desde `desdeStr`. Ordenadas por `created_at, id`: ninguna de las
+ * dos cambia, así que una visita nueva a mitad de la lectura cae al final y no mueve las páginas
+ * ya leídas; y `id` desempata las que comparten instante (un domicilio y un QR en el mismo
+ * segundo), que sin él se pisarían entre páginas.
+ */
+function leerVisitas(supabase: SupabaseClient, tenantId: string, desdeStr: string) {
+  return leerTodo<VisitaLeida>((desde, hasta) =>
+    supabase
+      .from('visits')
+      .select('id, customer_id, source, created_at, location_id')
+      .eq('tenant_id', tenantId)
+      .gte('created_at', desdeStr)
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true })
+      .range(desde, hasta)
+  )
+}
+
+/**
+ * Los mensajes de ESAS campañas y de ninguna otra. Antes se traía `campaign_messages` entero de
+ * la marca (cada difusión del Golden Bullet, cada cumpleaños) para quedarse en JS con los pocos
+ * de reactivación. Sin campañas no hay nada que preguntar: cero idas.
+ */
+async function leerMensajesDeCampanas(
+  supabase: SupabaseClient,
+  tenantId: string,
+  campaignIds: string[]
+): Promise<{ data: MensajeLeido[]; error: DbErrorLike | null }> {
+  const lotes: string[][] = []
+  for (let i = 0; i < campaignIds.length; i += CAMPANAS_POR_CONSULTA) {
+    lotes.push(campaignIds.slice(i, i + CAMPANAS_POR_CONSULTA))
+  }
+  const lecturas = await Promise.all(
+    lotes.map((lote) =>
+      leerTodo<MensajeLeido>((desde, hasta) =>
+        supabase
+          .from('campaign_messages')
+          .select('campaign_id, customer_id')
+          .eq('tenant_id', tenantId)
+          .in('campaign_id', lote)
+          .order('id', { ascending: true })
+          .range(desde, hasta)
+      )
+    )
+  )
+  return { data: lecturas.flatMap((l) => l.data), error: lecturas.find((l) => l.error)?.error ?? null }
+}
+
 export async function getFullAnalytics(scope: LocationScope): Promise<DashboardAnalytics> {
   const supabase = getUnscopedServiceClient()
   const tenantId = scope.tenantId
@@ -198,30 +307,66 @@ export async function getFullAnalytics(scope: LocationScope): Promise<DashboardA
   sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6)
   const sixMonthsAgoStr = formatDate(sixMonthsAgo)
 
-  const [
-    { data: allCustomers },
-    { data: recentVisits },
-    { data: birthdayData },
-    { data: allVisits6m },
-    { data: reactivationCampaigns },
-    { data: reactivationMessages },
-    { data: settingsData },
-  ] = await Promise.all([
-    supabase.from('customers').select('*').eq('tenant_id', tenantId).order('total_visits', { ascending: false }),
-    supabase.from('visits').select('id, customer_id, source, created_at, location_id').eq('tenant_id', tenantId).gte('created_at', thirtyDaysAgoStr),
-    supabase.from('customers').select('id').eq('tenant_id', tenantId).not('birthday', 'is', null).like('birthday', `%-${month}-${day}`),
-    supabase.from('visits').select('id, customer_id, source, created_at, location_id').eq('tenant_id', tenantId).gte('created_at', sixMonthsAgoStr),
-    supabase.from('campaigns').select('id, type, executed_at').eq('tenant_id', tenantId).eq('type', 'reactivation').not('executed_at', 'is', null),
-    supabase.from('campaign_messages').select('id, campaign_id, customer_id, sent_at, status').eq('tenant_id', tenantId),
-    supabase.from('admin_settings').select('key, value').eq('tenant_id', tenantId).eq('key', 'avg_ticket'),
-  ])
+  // Las lecturas van en paralelo entre sí; cada una pagina por dentro (ver `leerTodo()`).
+  //
+  // `customers` NO se ordena por `total_visits` en la base: esa columna cambia con cada check-in,
+  // y uno a mitad de la lectura movería a un cliente de página (saldría dos veces o ninguna). Se
+  // pagina por `created_at, id`, que no cambian, y se ordena por visitas enseguida, en memoria.
+  const [lecturaClientes, lecturaVisitas30d, lecturaCumples, lecturaVisitas6m, lecturaCampanas, lecturaAjustes] =
+    await Promise.all([
+      leerTodo<Customer>((desde, hasta) =>
+        supabase
+          .from('customers')
+          .select('*')
+          .eq('tenant_id', tenantId)
+          .order('created_at', { ascending: true })
+          .order('id', { ascending: true })
+          .range(desde, hasta)
+      ),
+      leerVisitas(supabase, tenantId, thirtyDaysAgoStr),
+      leerTodo<{ id: string }>((desde, hasta) =>
+        supabase
+          .from('customers')
+          .select('id')
+          .eq('tenant_id', tenantId)
+          .not('birthday', 'is', null)
+          .like('birthday', `%-${month}-${day}`)
+          .order('id', { ascending: true })
+          .range(desde, hasta)
+      ),
+      leerVisitas(supabase, tenantId, sixMonthsAgoStr),
+      leerTodo<CampanaLeida>((desde, hasta) =>
+        supabase
+          .from('campaigns')
+          .select('id, type, executed_at')
+          .eq('tenant_id', tenantId)
+          .eq('type', 'reactivation')
+          .not('executed_at', 'is', null)
+          .order('id', { ascending: true })
+          .range(desde, hasta)
+      ),
+      // Una fila (la clave es única por marca): no se pagina, pero su `error` también se exige.
+      supabase.from('admin_settings').select('key, value').eq('tenant_id', tenantId).eq('key', 'avg_ticket'),
+    ])
 
-  const customers: Customer[] = allCustomers ?? []
+  const customers: Customer[] = exigirLectura(lecturaClientes, 'analitica_clientes', tenantId).sort(
+    (a, b) => (b.total_visits ?? 0) - (a.total_visits ?? 0)
+  )
+  const recentVisits = exigirLectura(lecturaVisitas30d, 'analitica_visitas_30d', tenantId)
+  const birthdayData = exigirLectura(lecturaCumples, 'analitica_cumpleanos', tenantId)
+  const allVisits6m = exigirLectura(lecturaVisitas6m, 'analitica_visitas_6m', tenantId)
+  const reactivationCampaigns = exigirLectura(lecturaCampanas, 'analitica_campanas', tenantId)
+  const settingsData = exigirLectura(
+    { data: lecturaAjustes.data ?? [], error: lecturaAjustes.error },
+    'analitica_ajustes',
+    tenantId
+  )
+
   // `visits` (30 días) es de LA SEDE: se recorta al alcance de la petición antes
   // de construir el mapa diario. `reactivationRate` más abajo usa su propio
   // `visits6m` SIN recortar — el reloj de reactivación es de la marca (§8.2) — así
   // que las dos vistas de la misma tabla conviven sin pisarse.
-  const visits = (recentVisits ?? []).filter((v) => locationMatches(scope, v.location_id))
+  const visits = recentVisits.filter((v) => locationMatches(scope, v.location_id))
 
   const visitsMap: Record<string, { qr: number; delivery: number }> = {}
   const newCustMap: Record<string, number> = {}
@@ -330,7 +475,7 @@ export async function getFullAnalytics(scope: LocationScope): Promise<DashboardA
   }
   // El heatmap es de LA SEDE (igual que `visitsPerDay`); `reactivationRate` más
   // abajo relee `allVisits6m` SIN este recorte porque esa métrica es de la marca.
-  for (const v of (allVisits6m ?? []).filter((vv) => locationMatches(scope, vv.location_id))) {
+  for (const v of allVisits6m.filter((vv) => locationMatches(scope, vv.location_id))) {
     const vDate = new Date(v.created_at)
     const colombiaStr = vDate.toLocaleString('en-US', { timeZone: 'America/Bogota' })
     const colombiaDate = new Date(colombiaStr)
@@ -380,9 +525,7 @@ export async function getFullAnalytics(scope: LocationScope): Promise<DashboardA
     })
 
   // --- REACTIVATION RATE (por mes, últimos 6 meses) ---
-  const campaigns6m = (reactivationCampaigns ?? [])
-  const messages6m = (reactivationMessages ?? [])
-  const visits6m = (allVisits6m ?? [])
+  const visits6m = allVisits6m
 
   const reactivationMap: Record<string, { sent: Set<string>; returned: Set<string> }> = {}
   for (let i = 5; i >= 0; i--) {
@@ -391,25 +534,46 @@ export async function getFullAnalytics(scope: LocationScope): Promise<DashboardA
     reactivationMap[key] = { sent: new Set(), returned: new Set() }
   }
 
+  // Solo cuentan las campañas cuyo mes está en el mapa (las demás se saltaban igual), así que solo
+  // de ESAS se leen los mensajes. Antes se traía el `campaign_messages` entero de la marca.
+  const campaigns6m = reactivationCampaigns.filter(
+    (c): c is CampanaLeida & { executed_at: string } =>
+      !!c.executed_at && reactivationMap[c.executed_at.substring(0, 7)] !== undefined
+  )
+  const messages6m = exigirLectura(
+    await leerMensajesDeCampanas(
+      supabase,
+      tenantId,
+      campaigns6m.map((c) => c.id)
+    ),
+    'analitica_mensajes',
+    tenantId
+  )
+
+  // A quién se le escribió, por campaña. `Set` y no un arreglo con `includes()`: ahora que las
+  // lecturas vienen completas, «cada visita × cada campaña × cada destinatario» ya no es un
+  // cálculo de mil filas. La fecha de cada visita se parsea UNA vez, no una por campaña.
+  const destinatarios = new Map<string, Set<string>>()
+  for (const m of messages6m) {
+    const de = destinatarios.get(m.campaign_id) ?? new Set<string>()
+    de.add(m.customer_id)
+    destinatarios.set(m.campaign_id, de)
+  }
+  const instantes = visits6m.map((v) => new Date(v.created_at).getTime())
+
   for (const campaign of campaigns6m) {
-    if (!campaign.executed_at) continue
     const campaignMonth = campaign.executed_at.substring(0, 7)
-    if (!reactivationMap[campaignMonth]) continue
+    const campaignStart = new Date(campaign.executed_at).getTime()
+    const sevenDaysLater = campaignStart + 7 * 24 * 60 * 60 * 1000
 
-    const campaignDate = new Date(campaign.executed_at)
-    const sevenDaysLater = new Date(campaignDate.getTime() + 7 * 24 * 60 * 60 * 1000)
-
-    const campaignMsgs = messages6m.filter((m: { campaign_id: string }) => m.campaign_id === campaign.id)
-    const customerIds = campaignMsgs.map((m: { customer_id: string }) => m.customer_id)
-
+    const customerIds = destinatarios.get(campaign.id) ?? new Set<string>()
     for (const cid of customerIds) {
       reactivationMap[campaignMonth].sent.add(cid)
     }
 
-    for (const v of visits6m) {
-      const vDate = new Date(v.created_at)
-      if (customerIds.includes(v.customer_id) && vDate >= campaignDate && vDate <= sevenDaysLater) {
-        reactivationMap[campaignMonth].returned.add(v.customer_id)
+    for (let i = 0; i < visits6m.length; i++) {
+      if (customerIds.has(visits6m[i].customer_id) && instantes[i] >= campaignStart && instantes[i] <= sevenDaysLater) {
+        reactivationMap[campaignMonth].returned.add(visits6m[i].customer_id)
       }
     }
   }
@@ -448,7 +612,7 @@ export async function getFullAnalytics(scope: LocationScope): Promise<DashboardA
         newCustomersToday: newToday,
         newCustomersWeek: newWeek,
         frequentCustomers: customers.filter((c) => c.total_visits >= 3).length,
-        birthdaysToday: birthdayData?.length ?? 0,
+        birthdaysToday: birthdayData.length,
       },
       newCustomersPerDay,
       customerTiers,

@@ -859,7 +859,7 @@ CREATE POLICY "service_update_message_logs" ON message_logs
 
 **Índices:** único `idx_imported_contacts_phone_tenant (phone, tenant_id)` (00028; el global de la 00023 lo tiró la 00025), `idx_imported_contacts_batch (source_batch, status)`, `idx_imported_contacts_status`, `idx_imported_contacts_converted`, parcial `idx_imported_contacts_optout (tenant_id, phone) WHERE status = 'opted_out'` (00060).
 
-> ⚠️ Toda lectura de una base entera pagina de a 1.000 (`leerTodo()` en `imported-contacts.service.ts`): PostgREST corta ahí en silencio.
+> ⚠️ Toda lectura de una base entera pagina de a 1.000 (`leerTodo()` en `src/lib/leer-todo.ts`): PostgREST corta ahí en silencio.
 
 **RLS:** admin ALL (`auth.role()='authenticated'`); service SELECT/INSERT/UPDATE (`true`).
 

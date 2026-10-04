@@ -178,6 +178,45 @@ ahora sale de `.brand.X` o de `.location.X` según de qué tabla venga.
 ### Heatmap — Zona horaria Colombia
 El heatmap de visitas (`src/services/dashboard.service.ts`) convierte `created_at` (UTC) a `America/Bogota` (UTC-5) usando `Intl` nativo antes de extraer `getDay()` y `getHours()`. Sin esta conversión las visitas de las 9 AM Colombia aparecerían en la franja de las 14hs (UTC).
 
+### La analítica pagina de a 1.000 (ESCALA-4, 2026-10-04)
+
+**El problema.** PostgREST corta TODA respuesta en 1.000 filas, **en silencio**. `getFullAnalytics()` leía
+clientes, visitas de 6 meses y mensajes de campaña sin `.range()` y sin mirar `error`: en una marca que
+pasaba de mil filas salían mal el total de clientes, el mapa de calor día × hora, las visitas por día y la
+tasa de reactivación, y un fallo de base se veía como «cero», que es lo mismo que un restaurante nuevo.
+
+**Cómo lee ahora** (sin migración):
+
+- Todo lo que puede pasar de mil pagina con `leerTodo()` (`src/lib/leer-todo.ts`, antes privado de
+  `imported-contacts.service.ts`; mismo cuerpo). Las lecturas siguen en paralelo entre sí; cada una pagina
+  por dentro.
+- **Cada consulta va ordenada con un orden TOTAL que termina en la PK (`id`)**, y donde se puede sobre
+  columnas que no cambian: `visits` por `created_at, id`; `customers` por `created_at, id` y **no** por
+  `total_visits`, porque esa cambia con cada check-in y uno a mitad de la lectura movería a un cliente de
+  página (saldría dos veces o ninguna). El orden por visitas se aplica en memoria. Sin un orden total las
+  páginas se pisan, sin error.
+- **`campaign_messages` ya no se lee entera.** Solo los mensajes de las campañas de reactivación cuyo mes
+  cae en los 6 de la gráfica, en lotes de 100 ids por `.in()` (la URL de PostgREST no es infinita). Sin esas
+  campañas no se pregunta nada.
+- **Un `error` de base es un error.** Las siete lecturas se exigen: dejan `[Analytics][FALLO]
+  reason=analitica_…` (`clientes`, `visitas_30d`, `cumpleanos`, `visitas_6m`, `campanas`, `mensajes`,
+  `ajustes`) y `getFullAnalytics()` lanza; `/api/dashboard/analytics` contesta 500 en vez de pintar un panel
+  en ceros. Un fallo en la SEGUNDA página también lanza: lo leído hasta ahí no es «toda la base».
+- **Las reglas de sede no se tocaron.** El mapa de calor y las visitas por día son DE LA SEDE
+  (`locationMatches()`; `location_id` NULL se sigue mostrando a quien ve «sin sede»). El reloj de reactivación,
+  el ROI y los totales son de la MARCA.
+- La reactivación compara con `Set` y parsea cada fecha de visita una sola vez: con las lecturas completas,
+  «cada visita × cada campaña × cada destinatario» dejó de ser un cálculo de mil filas.
+
+**Costo y límite.** Cada página es una ida a la base, en serie dentro de su lectura: una marca con ~50.000
+visitas en 6 meses hace ~50 idas para esa lectura (con cientos de clientes y miles de visitas son de 1 a 5).
+Si una marca llega a decenas de miles, el siguiente paso es agregar en SQL —una función que devuelva el
+heatmap y la reactivación ya contados—, que **requiere migración y no se hizo**: se eligió primero el
+arreglo sin migración.
+
+**Prueba:** `tests/unit/dashboard-analytics-paginacion.test.ts` (un doble de PostgREST que corta en 1.000
+como el real, y que falla contra el código anterior) y `tests/unit/leer-todo.test.ts`.
+
 ## Restricciones
 - Solo admins autenticados acceden al dashboard
 - La ruta `/check-in` NO requiere auth (es pública)

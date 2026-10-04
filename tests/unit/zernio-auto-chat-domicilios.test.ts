@@ -85,6 +85,24 @@ vi.mock('@/services/delivery.service', () => ({
   logDeliveryIntakeFailure: (...args: unknown[]) => registrarFallo(...(args as [])),
 }))
 
+/**
+ * Lo que la ruta le pidió a `after()`. Desde ESCALA-3 (2026-10-04) el parseo y el registro del
+ * domicilio corren DESPUÉS de contestar, y `after()` fuera de un request de Next LANZA: el doble
+ * lo captura y `postear()` lo ejecuta a mano, en el orden que impone Next. El orden de «contesta
+ * primero, procesa después» se prueba en `zernio-despues-domicilios.test.ts`.
+ */
+const pendientes: Array<() => unknown> = []
+
+vi.mock('next/server', async (importOriginal) => {
+  const original = (await importOriginal()) as Record<string, unknown>
+  return {
+    ...original,
+    after: (trabajo: () => unknown) => {
+      pendientes.push(trabajo)
+    },
+  }
+})
+
 // ═══════════════════════════════════════════════════════════════
 // Utilidades
 // ═══════════════════════════════════════════════════════════════
@@ -123,7 +141,12 @@ async function postear(sobre: unknown) {
     headers: { 'content-type': 'application/json', 'x-zernio-signature': firma },
   })
   // La ruta tipa su parámetro como NextRequest, pero solo usa `headers` y `text()`.
-  return POST(req as never)
+  const res = await POST(req as never)
+  // Se vacía SIEMPRE, también en las pruebas de lo que NO debe registrarse: sin esto, un
+  // `expect(procesarDomicilio).not.toHaveBeenCalled()` pasaría en vacío aunque la ruta hubiera
+  // programado el trabajo y nadie lo hubiera corrido.
+  while (pendientes.length > 0) await pendientes.shift()!()
+  return res
 }
 
 /** La marca ya sabe cuál es su auto-chat y tiene su número propio en Autorizados. */
@@ -144,6 +167,7 @@ beforeEach(() => {
   process.env.ZERNIO_WEBHOOK_SECRET = SECRET
   respuestas = {}
   tablasVistas = []
+  pendientes.length = 0
   tenantResuelto = TENANT
   procesarDomicilio.mockClear()
   registrarFallo.mockClear()

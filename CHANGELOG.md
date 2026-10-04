@@ -8,6 +8,23 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [docs] — 2026-10-04 — Diseño del ciclo de recuperación (campañas + calendario en una pantalla, pipeline de 90 días)
+
+**Pedido:** «hacer que vuelvan los clientes… dos comunicaciones en un mes y ya se acabó… una línea de tiempo de 90 días…
+calendario y campañas en el mismo lugar… más fácil, más visual y dopamínico». Solo diseño, sin código ni migración.
+
+- **Spec** `docs/superpowers/specs/2026-10-04-ciclo-de-recuperacion-design.md`: diagnóstico contra el código (el «insistente»
+  se repite cada ~30 días sin tope, N4; un fallo calla 30 días, N3; tres escalas de días en una pantalla), máquina de estados
+  activo → dormido → archivado con reinicio por visita y atribución a 14 días, cinco toques 12·24·38·56·80 con huecos
+  crecientes, fatiga a las 6 (contesta 16.a–e con defaults), latido trimestral, escalera de premios con cooldown de 180 d,
+  UNA plantilla nueva (`invite_expiring`), triggers/endpoints/tests, fases 0–3, métricas (retorno por toque, segunda visita).
+- **Prototipo** `…-mockup.html` (y <https://claude.ai/artifact/EKRPox4mCdvsSwiGbETDB5>): línea de 90 días con los clientes
+  encima, toques editables, vista por fecha con proyección, crear invitación en 3 campos con vista previa del WhatsApp.
+- **Prompt** `docs/prompts/2026-10-04-ciclo-fase-0-y-1.md` · puntero en `campaigns.md` · `ESTADO.md` §3 0.CICLO.
+
+**Verificado:** tsc limpio · lint 14 errores = los preexistentes (no se tocó código). **Migración:** ninguna (la fase 1 la toma
+con el script). **Del dueño:** ver el prototipo, las 10 decisiones del spec §9, ordenar fases 0 y 1.
+
 ## [feat] — 2026-10-04 — Cumpleaños de una vez: plantilla «dos días antes» y cambio solo por marca
 
 **Pedido:** «resuelve ese error de cumpleaños y ayúdame a terminar de resolver los cumpleaños de una vez, pushea».

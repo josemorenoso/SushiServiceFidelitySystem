@@ -32,7 +32,6 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
-| Integrar la lista de requerimientos de septiembre del dueño en el consolidado (solo docs; lee el código, no lo toca), Claude Code, 2026-10-04 | Sonnet 5.5 | **Solo `docs/ESTADO-CONSOLIDADO-2026-10-04.md`** (§10 y las menciones de despliegue que quedaron viejas). Subagentes de solo lectura. No toca el spec del ciclo (es de la fila de arriba) ni corre vitest/tsc | — | en curso |
 
 ## 3. Siguiente, en orden
 

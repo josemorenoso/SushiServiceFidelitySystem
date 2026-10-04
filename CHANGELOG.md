@@ -51,10 +51,13 @@ analítica entera. Rollback de Vercel a `c055e8e`, arreglo en `ff9fd90` (cuenta 
 los huecos nombrados y los resueltos, y juntar todo para escoger prioridades».
 
 - **`docs/ESTADO-CONSOLIDADO-2026-10-04.md`** (nuevo): los 224 pedidos de agosto (§0–§25) verificados contra el código por 5
-  auditores Sonnet (88 hechos · 44 parciales · 35 sin empezar · 12 diferidos · 20 obsoletos · **25 preguntas abiertas al dueño**);
-  los 68 hallazgos de la auditoría del 28-09 re-verificados hoy (45 abiertos, 13 críticos); 18 hallazgos nuevos (el N18: ESCALA-4
-  llegó a producción rota —500 en la analítica— y se revirtió; los tests usaban un doble); la cola de
-  `ESTADO.md` §3 clasificada (29 de 31 piden algo del dueño); 17 contradicciones entre docs; y la propuesta de olas P0–P8.
+  auditores Sonnet (90 hechos · 42 parciales · 35 sin empezar · 12 diferidos · 20 obsoletos · **25 preguntas abiertas al dueño**);
+  los 68 hallazgos de la auditoría del 28-09 re-verificados hoy (45 abiertos, 13 críticos); 23 hallazgos nuevos (p. ej. N18: el
+  primer deploy de ESCALA-4 dio 500 en la analítica y se revirtió; sus tests usaban un doble); la cola de `ESTADO.md` §3
+  clasificada (29 de 31 piden algo del dueño); 16 contradicciones entre docs; y la propuesta de olas P0–P9.
+- **§10 + Anexo A:** la lista de septiembre del dueño (texto original íntegro y 56 filas: contexto, flujo/ciclo cruzado con el spec
+  de la sesión del ciclo —12 de 18 pedidos ya diseñados—, tareas 1 a 7 verificadas contra el código, 13 preguntas, olas P2/P5/P9).
+  Un choque a resolver: el spec deja «Premios» en Campañas y el dueño lo pide en Recompensas.
 - `docs/ESTADO-REQUERIMIENTOS.md` (06-09) queda **reemplazado** (aviso en su cabecera). Punteros de `ESTADO.md` ajustados.
 
 **Verificado:** lectura de código y git, no se corrió tsc/lint/vitest (solo docs). **NO verificado:** nada contra producción ni las

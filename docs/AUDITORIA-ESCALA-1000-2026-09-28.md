@@ -95,8 +95,8 @@ una migración nueva e idempotente, con un test de base que falle si alguna `SEC
 |---|---|---|---|
 | OPUS-2 👁️ | `logs-2026-09-24-06-48-56.csv` (1,7 MB, export de Zernio **con el texto de los pedidos**) está en la raíz del repo, sin versionar y **sin ignorar** (`git status` → `??`). Un `git add -A` de cualquier herramienta lo publica en GitHub (Ley 1581) | `.gitignore` cubre `Contactos/` pero no `*.csv` | Sacarlo del repo e ignorar `logs-*.csv` |
 | OPER-4 ✅ (peor) | El `PUT /api/dashboard/settings` escribe cualquier `key` sin validar y **sin exigir rol de marca**: un administrador de sede pisa un `*_template_sid` vigente de toda la marca. Es uno de los **cinco** escritores de punteros de plantilla, aunque `promoteVersion()` se declara el único | `src/app/api/dashboard/settings/route.ts:39-49`; los otros: `template.service.ts:651-699`, `twilio-catalog.service.ts:284-320`, `00036:261`, pegado manual | `exigirAlcanceDeMarca()` como en `reward-tiers` (09), y lista cerrada de claves |
-| ESCALA-3 ✅ | El webhook de Zernio **espera a OpenAI** (timeout 8 s, peor caso ~16 s) antes de responder, contra los 5 s que pide Zernio; **10 fallos seguidos apagan el webhook para TODAS las marcas Zernio** (el propio código lo dice), y todas las marcas nuevas van por Zernio | `src/app/api/webhook/zernio/route.ts:289-296,640-641`; `src/constants/delivery-ai.ts:33-40`; no hay `after()` en la ruta | Responder 200 y leer el pedido fuera del request (`after()` o cola) |
-| ESCALA-4 ✅ | `getFullAnalytics()` trae `customers`, las `visits` de 6 meses y **todo** `campaign_messages` sin `.limit/.range`: PostgREST corta en 1000 filas **en silencio**. Quedan mal el mapa de calor día × hora y la tasa de reactivación de cualquier marca que pase las 1000 filas (probablemente ya Sushi Service; no verificable sin la base) | `src/services/dashboard.service.ts:210,213,215` → `/api/dashboard/analytics` | Agregar en SQL (RPC) en vez de traer filas |
+| ESCALA-3 ✅ → **cerrado en código (2026-10-04, §8)** | El webhook de Zernio **espera a OpenAI** (timeout 8 s, peor caso ~16 s) antes de responder, contra los 5 s que pide Zernio; **10 fallos seguidos apagan el webhook para TODAS las marcas Zernio** (el propio código lo dice), y todas las marcas nuevas van por Zernio | `src/app/api/webhook/zernio/route.ts:289-296,640-641`; `src/constants/delivery-ai.ts:33-40`; no hay `after()` en la ruta | Responder 200 y leer el pedido fuera del request (`after()` o cola) |
+| ESCALA-4 ✅ → **cerrado en código (2026-10-04, §8)** | `getFullAnalytics()` trae `customers`, las `visits` de 6 meses y **todo** `campaign_messages` sin `.limit/.range`: PostgREST corta en 1000 filas **en silencio**. Quedan mal el mapa de calor día × hora y la tasa de reactivación de cualquier marca que pase las 1000 filas (probablemente ya Sushi Service; no verificable sin la base) | `src/services/dashboard.service.ts:210,213,215` → `/api/dashboard/analytics` | Agregar en SQL (RPC) en vez de traer filas |
 
 ---
 
@@ -167,8 +167,8 @@ y por qué? **Hoy no.** Todo es «ir a mirar», y hay señales que ni mirando se
 
 | Cuello de botella | Se rompe a ~N marcas | La cuenta | Veredicto |
 |---|---|---|---|
-| Webhook Zernio con OpenAI adentro (§1.3) | Ya marginal hoy | 8 s de IA contra 5 s de presupuesto; 10 fallos = apagón compartido | ✅ |
-| Analítica truncada (§1.3) | Por marca, apenas pasa 1000 filas | Límite de PostgREST | ✅ |
+| Webhook Zernio con OpenAI adentro (§1.3) | Ya marginal hoy | 8 s de IA contra 5 s de presupuesto; 10 fallos = apagón compartido | ✅ → cerrado en código (§8) |
+| Analítica truncada (§1.3) | Por marca, apenas pasa 1000 filas | Límite de PostgREST | ✅ → cerrado en código (§8) |
 | `queue-drain` | **~100-150 con cola a la vez** | Hasta 23 viajes en serie por marca y vuelta ≈ 2,3 s → 240 s ÷ 2,3 s ≈ 104 | ✅ (inferido) |
 | `birthday` / `reactivation` / `reward-reminder` | Bajos cientos (depende de las conexiones del plan) | `Promise.allSettled` sobre **todas** las marcas en el mismo segundo, sin `maxDuration` ni cursor | ✅ |
 
@@ -358,3 +358,24 @@ aplicada** (su `aios_register_whatsapp_connection` existe y está abierta a `ano
 
 **Encontrado de paso, sin tocar:** `PUT /api/dashboard/tenant-config` tiene la misma deuda que OPER-4 (un
 administrador de sede cambia logo, paleta, píxel… de la marca), ya anotada en `docs/features/meta-pixel.md`.
+
+## 8. Seguimiento — 2026-10-04: ESCALA-3 y ESCALA-4 cerradas en código
+
+**Cerrado en código** (en `feat/multisede-aios`, **sin desplegar**; sin migración). Cada uno con un test que falla contra
+el código viejo:
+
+| ID | Estado | Cómo |
+|---|---|---|
+| ESCALA-3 | ✅ cerrado en código | `POST /api/webhook/zernio` contesta 200 y deja el parseo con IA y el registro para DESPUÉS de la respuesta (`after()`; `procesarDomicilioDespuesDeResponder()`), en el camino entrante y en el del auto-chat. La firma, el dedup y la consulta a `authorized_numbers` siguen ANTES. `logDeliveryIntakeFailure()` sigue siendo el único embudo: una excepción inesperada del trabajo diferido llega ahí, con `await`, con el motivo nuevo `intake_inesperado`. `maxDuration = 300` declarado. → `docs/features/delivery-webhook.md` § «Zernio contesta antes de la IA» |
+| ESCALA-4 | ✅ cerrado en código, **sin migración** | `getFullAnalytics()` pagina de a 1.000 con `leerTodo()` (movido a `src/lib/leer-todo.ts`), cada consulta con orden total que termina en la PK, `campaign_messages` solo de las campañas de reactivación de la ventana, y las siete lecturas exigen su `error` (`[Analytics][FALLO]`; 500 en vez de ceros). → `docs/features/dashboard.md` § «La analítica pagina de a 1.000» |
+
+**Lo que NO se cerró, dicho con todas las letras.**
+
+- **ESCALA-3, el hueco residual:** si la plataforma mata la función durante el trabajo diferido (se agota `maxDuration`, se
+  cae el proceso), ningún `catch` lo ve y el pedido no deja fila en `delivery_intake_failures`; solo queda el log de Vercel.
+  Es el mismo hueco que ya tenía el camino síncrono. Cerrarlo de verdad sería una cola con reintento: otra decisión, no se hizo.
+- **ESCALA-3, el cuerpo de la respuesta cambió:** `{"received":true,"deferred":true}` en vez de `delivery: true|false`. Zernio no lo lee.
+- **ESCALA-4, el costo:** paginar es una ida a la base por cada 1.000 filas. Una marca con decenas de miles de visitas en 6
+  meses empezará a sentirlo; la salida de fondo es agregar en SQL (lo que esta auditoría proponía), que requiere migración y no se hizo.
+- **Verificado solo con dobles.** Los dos tests usan un doble de PostgREST y un doble de `after()`: **NO verificado contra
+  producción** (ni la respuesta real de Zernio en menos de 5 s, ni la analítica de Sushi Service con su base real).

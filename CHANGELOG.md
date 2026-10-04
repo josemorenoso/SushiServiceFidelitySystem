@@ -8,6 +8,21 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [fix] — 2026-10-04 — ESCALA-3 y ESCALA-4: Zernio contesta antes de la IA; la analítica deja de cortarse en 1.000 filas
+
+**Pedido:** `docs/prompts/2026-10-03-escala-3-4.md` (auditoría 2026-09-28 §1.3).
+
+- **ESCALA-3:** `POST /api/webhook/zernio` contesta 200 y hace el parseo con IA y el registro DESPUÉS (`after()`), en el
+  entrante y en el auto-chat. Firma, dedup y `authorized_numbers` siguen antes. El embudo sigue siendo único: un fallo
+  inesperado diferido llega a `logDeliveryIntakeFailure()` (`intake_inesperado`). `maxDuration = 300`; el cuerpo ahora
+  dice `deferred: true`. → `delivery-webhook.md`.
+- **ESCALA-4:** `getFullAnalytics()` pagina de a 1.000 (`leerTodo()` pasa a `src/lib/`) con orden total, lee de
+  `campaign_messages` solo las campañas de reactivación de la ventana y exige el `error` de sus 7 lecturas (500, no
+  ceros). Sin migración. → `dashboard.md`.
+
+**Verificado:** tsc, lint (14 errores = los de antes), **61 archivos / 881 tests**; los tests nuevos fallan contra el código
+viejo. **NO verificado:** nada contra producción (Zernio real, base real). **Migración:** ninguna.
+
 ## [fix] — 2026-10-03 — Ola 0 de seguridad: premios solo de la oferta, nada de `public` abierto a anon (00069)
 
 **Pedido:** `docs/prompts/2026-09-29-ola-0-seguridad.md` (auditoría 2026-09-28 §1 y §6).

@@ -56,7 +56,9 @@
    0.AUTOCHAT) que en los logs de Vercel `webhook/zernio` conteste enseguida y que detrás salgan las líneas `[Delivery]`. **Queda abierto:** (a) el hueco
    residual de ESCALA-3: si la plataforma mata la función durante el trabajo diferido no queda fila en
    `delivery_intake_failures` (cerrarlo es una cola con reintento: otra decisión); (b) si una marca llega a decenas de
-   miles de visitas en 6 meses, la analítica pasa a agregar en SQL (requiere migración). Detalle: auditoría §8.
+   miles de visitas en 6 meses, la analítica pasa a agregar en SQL (requiere migración); (c) ninguna pantalla del panel
+   lee el `error` de `useDashboardAnalytics()`: con un 500 de la analítica el panel queda vacío, sin aviso (lo visible es el
+   500 y `[Analytics][FALLO]` en el log). Detalle: auditoría §8.
 
 0.CUMPLE **El saludo de cumpleaños sale dos días antes: el código está en `feat/multisede-aios` y NO SE DESPLEGÓ**
    (decisión del dueño, 2026-09-25, al pushear el auto-chat). Sigue esperando los dos gestos de abajo; para

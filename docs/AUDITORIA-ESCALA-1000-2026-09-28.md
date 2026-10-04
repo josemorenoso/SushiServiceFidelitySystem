@@ -377,5 +377,7 @@ el código viejo:
 - **ESCALA-3, el cuerpo de la respuesta cambió:** `{"received":true,"deferred":true}` en vez de `delivery: true|false`. Zernio no lo lee.
 - **ESCALA-4, el costo:** paginar es una ida a la base por cada 1.000 filas. Una marca con decenas de miles de visitas en 6
   meses empezará a sentirlo; la salida de fondo es agregar en SQL (lo que esta auditoría proponía), que requiere migración y no se hizo.
+- **ESCALA-4, el aviso en pantalla:** «un fallo de base da un error, no ceros» vale en la API (500 y `[Analytics][FALLO]`), no en la
+  pantalla: ninguna página lee el `error` de `useDashboardAnalytics()`, así que el panel queda vacío y sin aviso. Pendiente.
 - **Verificado solo con dobles.** Los dos tests usan un doble de PostgREST y un doble de `after()`: **NO verificado contra
   producción** (ni la respuesta real de Zernio en menos de 5 s, ni la analítica de Sushi Service con su base real). Lo único comprobado en vivo: un `POST` con firma inválida a `hooks.constelarys.com` contesta 401, o sea que la ruta nueva responde y la puerta de la firma sigue cerrada.

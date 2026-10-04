@@ -367,7 +367,7 @@ el código viejo:
 | ID | Estado | Cómo |
 |---|---|---|
 | ESCALA-3 | ✅ cerrado en código | `POST /api/webhook/zernio` contesta 200 y deja el parseo con IA y el registro para DESPUÉS de la respuesta (`after()`; `procesarDomicilioDespuesDeResponder()`), en el camino entrante y en el del auto-chat. La firma, el dedup y la consulta a `authorized_numbers` siguen ANTES. `logDeliveryIntakeFailure()` sigue siendo el único embudo: una excepción inesperada del trabajo diferido llega ahí, con `await`, con el motivo nuevo `intake_inesperado`. `maxDuration = 300` declarado. → `docs/features/delivery-webhook.md` § «Zernio contesta antes de la IA» |
-| ESCALA-4 | ✅ cerrado en código, **sin migración** | `getFullAnalytics()` pagina de a 1.000 con `leerTodo()` (movido a `src/lib/leer-todo.ts`), cada consulta con orden total que termina en la PK, `campaign_messages` solo de las campañas de reactivación de la ventana, y las siete lecturas exigen su `error` (`[Analytics][FALLO]`; 500 en vez de ceros). → `docs/features/dashboard.md` § «La analítica pagina de a 1.000» |
+| ESCALA-4 | ✅ cerrado en código, **sin migración** | `getFullAnalytics()` pagina de a 1.000 con `leerTodo()` (movido a `src/lib/leer-todo.ts`), cada consulta con orden total que termina en la PK, `campaign_messages` solo de las campañas de reactivación de la ventana, y las lecturas exigen su `error` (`[Analytics][FALLO]`; la API da 500 en vez de ceros, la pantalla NO: ver abajo). → `docs/features/dashboard.md` § «La analítica pagina de a 1.000» |
 
 **Lo que NO se cerró, dicho con todas las letras.**
 
@@ -378,6 +378,13 @@ el código viejo:
 - **ESCALA-4, el costo:** paginar es una ida a la base por cada 1.000 filas. Una marca con decenas de miles de visitas en 6
   meses empezará a sentirlo; la salida de fondo es agregar en SQL (lo que esta auditoría proponía), que requiere migración y no se hizo.
 - **ESCALA-4, el aviso en pantalla:** «un fallo de base da un error, no ceros» vale en la API (500 y `[Analytics][FALLO]`), no en la
-  pantalla: ninguna página lee el `error` de `useDashboardAnalytics()`, así que el panel queda vacío y sin aviso. Pendiente.
+  pantalla: ninguna página lee el `error` de `useDashboardAnalytics()` y `MetricsCards` pinta `?? 0`, así que las tarjetas muestran 0 y las
+  gráficas quedan vacías, sin aviso (es lo que se vio el 2026-10-04). Pendiente.
 - **Verificado solo con dobles.** Los dos tests usan un doble de PostgREST y un doble de `after()`: **NO verificado contra
   producción** (ni la respuesta real de Zernio en menos de 5 s, ni la analítica de Sushi Service con su base real). Lo único comprobado en vivo: un `POST` con firma inválida a `hooks.constelarys.com` contesta 401, o sea que la ruta nueva responde y la puerta de la firma sigue cerrada.
+- **⚠️ Incidente del 2026-10-04, causado por ESCALA-4.** Una de las lecturas —los cumpleaños— hacía `.like('birthday', …)` sobre una
+  columna `date` (Postgres 42883) y **ya fallaba antes, en silencio**: por eso «Cumpleaños hoy» siempre fue 0. Al exigir los errores, la
+  analítica entera dio 500 en producción (despliegue 11:52 UTC; vista por el dueño a las 12:08) y las tarjetas mostraron 0; se revirtió
+  el despliegue en Vercel (12:10). Arreglo: los cumpleaños se cuentan en memoria sobre `customers` (`ff9fd90` en `main`). **Por qué no lo
+  vio la prueba:** el doble de PostgREST trataba `birthday` como texto y nadie ejecutó las consultas contra un Postgres real. Lección: una
+  lectura que se vuelve fatal hay que ejecutarla contra el esquema real, y una lectura auxiliar no debería poder tumbar el panel entero.

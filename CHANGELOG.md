@@ -32,8 +32,8 @@ consolas de Vercel, Meta, Zernio o Twilio (lista en §11 del consolidado). **Mig
   inesperado diferido llega a `logDeliveryIntakeFailure()` (`intake_inesperado`). `maxDuration = 300`; el cuerpo ahora
   dice `deferred: true`. → `delivery-webhook.md`.
 - **ESCALA-4:** `getFullAnalytics()` pagina de a 1.000 (`leerTodo()` pasa a `src/lib/`) con orden total, lee de
-  `campaign_messages` solo las campañas de reactivación de la ventana y exige el `error` de sus 7 lecturas (500, no
-  ceros). Sin migración. → `dashboard.md`.
+  `campaign_messages` solo las campañas de reactivación de la ventana y exige el `error` de sus lecturas (la API da 500;
+  la pantalla sigue mostrando 0). Sin migración. → `dashboard.md`.
 
 **Verificado:** tsc, lint (sin errores nuevos), **61 archivos / 881 tests** (en `main`: 59 / 864); los tests nuevos fallan antes.
 **Desplegado** 2026-10-04 (`main` = `9a06670`, Vercel READY). **NO verificado:** Zernio real ni la base real. **Migración:** ninguna.

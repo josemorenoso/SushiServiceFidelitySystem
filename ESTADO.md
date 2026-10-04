@@ -57,8 +57,8 @@
    residual de ESCALA-3: si la plataforma mata la función durante el trabajo diferido no queda fila en
    `delivery_intake_failures` (cerrarlo es una cola con reintento: otra decisión); (b) si una marca llega a decenas de
    miles de visitas en 6 meses, la analítica pasa a agregar en SQL (requiere migración); (c) ninguna pantalla del panel
-   lee el `error` de `useDashboardAnalytics()`: con un 500 de la analítica el panel queda vacío, sin aviso (lo visible es el
-   500 y `[Analytics][FALLO]` en el log). Detalle: auditoría §8.
+   lee el `error` de `useDashboardAnalytics()`: con un 500 las tarjetas muestran **0** y las gráficas quedan vacías, sin aviso (es lo que se vio el 04-10:
+   un fallo de la analítica se ve como «0 clientes»; lo visible de verdad es el 500 y `[Analytics][FALLO]` en el log). Detalle: auditoría §8.
 
 0.CUMPLE **El saludo de cumpleaños sale dos días antes: el código está en `feat/multisede-aios` y NO SE DESPLEGÓ**
    (decisión del dueño, 2026-09-25, al pushear el auto-chat). Sigue esperando los dos gestos de abajo; para

@@ -206,13 +206,14 @@ tasa de reactivación, y un fallo de base se veía como «cero», que es lo mism
   (sigue dando 0); no se tocó.
 - **Un `error` de base es un error.** Las seis lecturas se exigen: dejan `[Analytics][FALLO]
   reason=analitica_…` (`clientes`, `visitas_30d`, `visitas_6m`, `campanas`, `mensajes`, `ajustes`) y
-  `getFullAnalytics()` lanza; `/api/dashboard/analytics` contesta 500 en vez de pintar un panel
-  en ceros. Un fallo en la SEGUNDA página también lanza: lo leído hasta ahí no es «toda la base».
-  ⚠️ **Ninguna pantalla lee el `error` de `useDashboardAnalytics()`** (`dashboard`, `customers` y `campaigns`
-  solo toman `data` y `loading`): con un 500 el panel queda **vacío** —o con los datos del último sondeo
-  bueno, que se reintenta cada 60 s— y **no muestra ningún aviso**. Mejor que cifras truncadas presentadas
-  como reales, pero lo visible hoy es el 500 y la línea `[Analytics][FALLO]` del log de Vercel. Un aviso en
-  pantalla queda pendiente.
+  `getFullAnalytics()` lanza; `/api/dashboard/analytics` contesta 500 en vez de devolver
+  ceros. Un fallo en la SEGUNDA página también lanza: lo leído hasta ahí no es «toda la base».
+  ⚠️ **Eso vale en la API, NO en la pantalla.** Ninguna página lee el `error` de `useDashboardAnalytics()`
+  (`dashboard`, `customers` y `campaigns` solo toman `data` y `loading`) y `MetricsCards` pinta
+  `summary?.[clave] ?? 0`: con un 500 las tarjetas muestran **0** y las gráficas quedan vacías —o con los
+  datos del último sondeo bueno, que se reintenta cada 60 s—, **sin ningún aviso**. Es exactamente lo que
+  se vio el 2026-10-04: un fallo de la analítica se ve como «0 clientes». Lo visible de verdad es el 500 y la
+  línea `[Analytics][FALLO]` del log de Vercel. Un aviso en pantalla queda pendiente.
 - **Las reglas de sede no se tocaron.** El mapa de calor y las visitas por día son DE LA SEDE
   (`locationMatches()`; `location_id` NULL se sigue mostrando a quien ve «sin sede»). El reloj de reactivación,
   el ROI y los totales son de la MARCA.

@@ -1,6 +1,6 @@
 # ESTADO — RestaurantQR / Cada1
 
-> **Última actualización:** 2026-10-04 (DISEÑO del ciclo de recuperación —campañas + calendario en una pantalla, pipeline de 90 días, fatiga a las 6, invitaciones que vencen—: spec, prototipo y prompt, sin código → §3 0.CICLO); antes 2026-10-04 (cumpleaños resuelto y DESPLEGADO: plantilla nueva «Cumpleaños — dos días antes», cambio solo por marca al aprobarse; `main` y la rama vuelven a ser lo mismo → §3 0.CUMPLE); antes 2026-10-04 (consolidado de los requerimientos de agosto y la auditoría de 1000 clientes, solo docs, verificado contra el código: `docs/ESTADO-CONSOLIDADO-2026-10-04.md`; antes, el mismo día: ESCALA-3 y ESCALA-4 DESPLEGADAS: `main` = `9a06670`, Vercel READY, sin migración — el webhook de Zernio contesta antes de la IA y la analítica pagina → §3 0.ESCALA; la ola 0 también está en `main`, falta aplicar la 00069); antes 2026-10-03 (ola 0 de seguridad construida: `0485098` + migración **00069**, sin aplicar y sin desplegar; el SQL a mano del 29 corrió en el Supabase del AIOS, NO en el del producto → AISLA-2 sigue vivo: §3 0.SEGURIDAD); antes 2026-09-29 (el dueño confirma TODAS las migraciones aplicadas → AISLA-2 está VIVO y la 00015 queda por confirmar: §3 0.SEGURIDAD; docs que mentían corregidos; prompt de la ola 0 en `docs/prompts/2026-09-29-ola-0-seguridad.md`); antes 2026-09-28 (auditoría «qué falta para 1000 clientes», solo lectura: dos agujeros entre marcas → §3 0.SEGURIDAD, la 00067 y la 00057 NO se aplican tal cual; `docs/AUDITORIA-ESCALA-1000-2026-09-28.md`); antes 2026-09-25 (los domicilios del AUTO-CHAT de la propia línea: `message.sent` + `tenant_connections.self_conversation_id`, **00068 APLICADA y PUSHEADO a main** por orden del dueño — `8be572e`; **cumpleaños NO se desplegó, queda en la rama**; antes 2026-09-24: el saludo de cumpleaños sale dos días antes: `BIRTHDAY_LEAD_DAYS`, dedup a 360; sin migración, sin desplegar; antes 2026-09-12: interruptor «Domicilios por WhatsApp» en la ficha de la sede del AIOS, 00066 APLICADA, AIOS v1.12.0 pusheado; antes: Golden Bullet por tandas desde el panel: la base entera se guarda, pestaña «Bases», `POST /continue`, sin migración; antes: Autorizados Domicilio dentro de Domicilios, pusheado `1de033e`; Planeta Wings: timeout de Auth, estado por plantilla y registro en Cloud API en el AIOS; prompt de plantillas una por una; Opus 5)
+> **Última actualización:** 2026-10-04 (DISEÑO del ciclo de recuperación —campañas + calendario en una pantalla, pipeline por ritmo del negocio, fatiga a las 6, «regalos que vencen»—: spec, prototipo y prompt, sin código; **segunda pasada con la revisión del dueño aplicada** → §3 0.CICLO); antes 2026-10-04 (cumpleaños resuelto y DESPLEGADO: plantilla nueva «Cumpleaños — dos días antes», cambio solo por marca al aprobarse; `main` y la rama vuelven a ser lo mismo → §3 0.CUMPLE); antes 2026-10-04 (consolidado de los requerimientos de agosto y la auditoría de 1000 clientes, solo docs, verificado contra el código: `docs/ESTADO-CONSOLIDADO-2026-10-04.md`; antes, el mismo día: ESCALA-3 y ESCALA-4 DESPLEGADAS: `main` = `9a06670`, Vercel READY, sin migración — el webhook de Zernio contesta antes de la IA y la analítica pagina → §3 0.ESCALA; la ola 0 también está en `main`, falta aplicar la 00069); antes 2026-10-03 (ola 0 de seguridad construida: `0485098` + migración **00069**, sin aplicar y sin desplegar; el SQL a mano del 29 corrió en el Supabase del AIOS, NO en el del producto → AISLA-2 sigue vivo: §3 0.SEGURIDAD); antes 2026-09-29 (el dueño confirma TODAS las migraciones aplicadas → AISLA-2 está VIVO y la 00015 queda por confirmar: §3 0.SEGURIDAD; docs que mentían corregidos; prompt de la ola 0 en `docs/prompts/2026-09-29-ola-0-seguridad.md`); antes 2026-09-28 (auditoría «qué falta para 1000 clientes», solo lectura: dos agujeros entre marcas → §3 0.SEGURIDAD, la 00067 y la 00057 NO se aplican tal cual; `docs/AUDITORIA-ESCALA-1000-2026-09-28.md`); antes 2026-09-25 (los domicilios del AUTO-CHAT de la propia línea: `message.sent` + `tenant_connections.self_conversation_id`, **00068 APLICADA y PUSHEADO a main** por orden del dueño — `8be572e`; **cumpleaños NO se desplegó, queda en la rama**; antes 2026-09-24: el saludo de cumpleaños sale dos días antes: `BIRTHDAY_LEAD_DAYS`, dedup a 360; sin migración, sin desplegar; antes 2026-09-12: interruptor «Domicilios por WhatsApp» en la ficha de la sede del AIOS, 00066 APLICADA, AIOS v1.12.0 pusheado; antes: Golden Bullet por tandas desde el panel: la base entera se guarda, pestaña «Bases», `POST /continue`, sin migración; antes: Autorizados Domicilio dentro de Domicilios, pusheado `1de033e`; Planeta Wings: timeout de Auth, estado por plantilla y registro en Cloud API en el AIOS; prompt de plantillas una por una; Opus 5)
 > Toda sesión lo lee PRIMERO. Toda sesión que cierra un bloque lo ACTUALIZA al final. Límite: 150 líneas.
 > Lo obsoleto se **saca**, no se tacha: un ítem tachado sigue costando tokens cada vez que alguien lee esto.
 >
@@ -32,7 +32,6 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
-| Ciclo de recuperación, segunda pasada: aplicar la revisión del dueño al spec, al prototipo y al prompt (aprobar en vez de crear, vocabulario de dueño, cajas por etapa en vez de histograma, ritmo del negocio, primer uso, adaptador por defecto, pausa del ciclo en blackout, latido vs cooldown, cruce de canal con bandera, hora y domingo, grupo de control, «Regalo que vence») · Fable · 2026-10-04 | Fable 5.1 | `docs/superpowers/specs/2026-10-04-ciclo-de-recuperacion-design.md` · `docs/superpowers/specs/2026-10-04-ciclo-de-recuperacion-mockup.html` · `docs/prompts/2026-10-04-ciclo-fase-0-y-1.md` · una línea en `docs/features/campaigns.md` · `ESTADO.md` · `CHANGELOG.md` | ninguna | en vuelo |
 
 ## 3. Siguiente, en orden
 
@@ -61,19 +60,24 @@
    lee el `error` de `useDashboardAnalytics()`: con un 500 las tarjetas muestran **0** y las gráficas quedan vacías, sin aviso (es lo que se vio el 04-10:
    un fallo de la analítica se ve como «0 clientes»; lo visible de verdad es el 500 y `[Analytics][FALLO]` en el log). Detalle: auditoría §8.
 
-0.CICLO **El ciclo de recuperación: DISEÑADO el 2026-10-04, sin código. Es el Bloque 7 (§16 de agosto, ola P5) y
-   absorbe N3/N4/N15.** Lo que el dueño pidió: *«dos comunicaciones en un mes y ya se acabó… una línea de tiempo de 90
-   días… calendario y campañas en el mismo lugar… más fácil y dopamínico»*. Diagnóstico contra el código (no contra
-   `message_logs`): el «insistente» NO se apaga, se repite cada ~30 días sin tope y un fallo de envío calla 30 días.
-   · **Spec:** `docs/superpowers/specs/2026-10-04-ciclo-de-recuperacion-design.md` (estados activo/dormido/archivado,
-     cinco toques 12·24·38·56·80, fatiga a las 6, latido trimestral, UNA plantilla nueva `invite_expiring`, triggers,
-     endpoints, fases, métricas). · **Prototipo:** `…-mockup.html` al lado, y
+0.CICLO **El ciclo de recuperación: DISEÑADO el 2026-10-04 (dos pasadas; la segunda aplica la revisión del dueño),
+   sin código. Es el Bloque 7 (§16 de agosto, ola P5) y absorbe N3/N4/N15.** Lo que el dueño pidió: *«dos
+   comunicaciones en un mes y ya se acabó… una línea de tiempo de 90 días… calendario y campañas en el mismo lugar… más
+   fácil y dopamínico»*. Diagnóstico contra el código (no contra `message_logs`): el «insistente» NO se apaga, se repite
+   cada ~30 días sin tope y un fallo de envío calla 30 días.
+   · **Spec:** `docs/superpowers/specs/2026-10-04-ciclo-de-recuperacion-design.md`: estados activo/dormido/archivado,
+     cinco toques escalados por **una pregunta** (¿cada cuánto vuelve un cliente?: 4 ritmos), fatiga a las 6, toque
+     trimestral (pequeño, luego fuerte: esquiva el cooldown), UNA plantilla nueva `gift_expiring` («Regalo que vence»)
+     con el adaptador a la insistente como ruta por defecto, el toque espera al evento en su blackout, hora por marca
+     (almuerzo/cena) vía `send_queue`, «vence este domingo», grupo de control `holdout` desde la fase 1, pantalla que
+     abre con sugerencias para **aprobar** y seis cajas por etapa (nuevos / ya volvieron). El §12 lista qué cambió y las
+     dos premisas de la revisión que el código contradice. · **Prototipo:** `…-mockup.html` al lado, y
      <https://claude.ai/artifact/EKRPox4mCdvsSwiGbETDB5>. · **Prompt fases 0 y 1:** `docs/prompts/2026-10-04-ciclo-fase-0-y-1.md`.
-   **Del dueño, en orden:** (1) abrir el prototipo y decir qué sobra; (2) las 10 decisiones del spec §9 (si no dice
-   nada, se construye con el default de cada fila; la 16.a–e quedan contestadas ahí); (3) ordenar la fase 0 (1 sesión
+   **Del dueño, en orden:** (1) abrir el prototipo y decir qué sobra; (2) las 14 decisiones del spec §9 (si no dice
+   nada, se construye con el default de cada fila; 16.a–e quedan contestadas ahí); (3) ordenar la fase 0 (1 sesión
    Sonnet, sin migración: para la sangría y mide con una consulta) y la fase 1 (motor + migración, que se aplica ANTES
-   del deploy; y `invite_expiring` por marca, 1 aprobación de Meta); (4) la fase 2 (la pantalla) lleva prompt aparte
-   cuando él vea el prototipo.
+   del deploy; contestar el ritmo por marca; `gift_expiring` por marca, 1 aprobación de Meta, mientras tanto sale con la
+   insistente); (4) la fase 2 (la pantalla) lleva prompt aparte cuando él vea el prototipo.
 0.CUMPLE **Cumpleaños: el código está DESPLEGADO (2026-10-04). Falta solo crear la plantilla nueva en cada marca.**
    Mientras una marca no tenga APROBADA «Cumpleaños — dos días antes» (`birthday_upcoming_template_sid`,
    `cumpleanos_se_acerca`), sigue con «¡Feliz cumpleaños!» el día mismo, como siempre. El día que Meta la
@@ -359,7 +363,10 @@ automatizaciones dentro del restaurante y **Google** para reseñas.
   fallo calla 30 días), la máquina de estados (activo → dormido → archivado, reinicio por visita, atribución a 14 días),
   cinco toques con huecos crecientes, fatiga a las 6, latido, escalera de premios con freno al «efecto Temu» (cooldown
   180 d), una sola plantilla nueva, la pantalla única con línea de 90 días + vista por fecha + crear en 3 campos,
-  datos/triggers/endpoints, fases y métricas. Prototipo HTML navegable y prompt para las fases 0 y 1. → §3 0.CICLO.
+  datos/triggers/endpoints, fases y métricas. Prototipo HTML navegable y prompt para las fases 0 y 1. **Segunda pasada el
+  mismo día con la revisión del dueño:** aprobar en vez de crear, vocabulario de dueño, cajas por etapa en vez de
+  histograma, ritmo del negocio en una pregunta, primer uso, adaptador por defecto, pausa en blackout, orden del toque
+  trimestral, cruce de canal con `has_delivery_webhook`, hora y domingo, grupo de control, «Regalo que vence». → §3 0.CICLO.
 - **ESCALA-3 y ESCALA-4** (2026-10-04, `bb177cd` → `main` `9a06670`, sin migración, **DESPLEGADO**): `POST /api/webhook/zernio` contesta 200 y deja
   el parseo con IA y el registro para después de la respuesta (`after()`), así que un mal día de OpenAI ya no le apaga el
   webhook a las marcas Zernio (Zernio pide 2xx en 5 s y lo apaga tras 10 fallos; la IA tardaba hasta ~16 s). El embudo sigue

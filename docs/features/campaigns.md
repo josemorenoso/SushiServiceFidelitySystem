@@ -4,7 +4,7 @@
 
 > ⚠️ **Rediseño en diseño (2026-10-04, sin código todavía):** el recorrido de reactivación, las burbujas de riesgo y el
 > calendario se reemplazan por **el ciclo de recuperación** (pipeline de 90 días con cinco toques, fatiga a las 6
-> comunicaciones, dormido con latido, invitaciones que vencen, y campañas + calendario en una sola pantalla). El diseño,
+> comunicaciones, dormido con un toque trimestral, «regalos que vencen», y campañas + calendario en una sola pantalla). El diseño,
 > el diagnóstico de lo que este cron hace hoy de verdad (el «insistente» se repite cada ~30 días sin tope) y las fases
 > están en `docs/superpowers/specs/2026-10-04-ciclo-de-recuperacion-design.md`. **Lo que sigue abajo describe lo que el
 > código hace HOY** y sigue siendo cierto hasta que se construya la fase 1.

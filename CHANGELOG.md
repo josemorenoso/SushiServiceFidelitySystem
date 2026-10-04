@@ -8,6 +8,24 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [docs] — 2026-10-04 — Ciclo de recuperación, segunda pasada: la revisión del dueño aplicada al spec, al prototipo y al prompt
+
+**Pedido:** la revisión del dueño («lo que está bien y no tocaría» / «lo que cambiaría, por prioridad»). Solo docs.
+
+- **Aplicado (spec §12 lo lista):** la pantalla abre con sugerencias para **aprobar** («31 dormidos reciben su toque mañana,
+  ¿OK?», «Halloween en 27 días», «el evento no tiene foto»); vocabulario de dueño (Le recordamos · Le regalamos algo · Le
+  mostramos lo otro · Rescate · Despedida; «archivado» no aparece; el cupo sale de la portada); **seis cajas por etapa
+  partidas en nuevos / ya volvieron** en vez del histograma; **una pregunta** (¿cada cuánto vuelve un cliente?) con cuatro
+  ritmos en vez de cinco días editables; primer uso con tres pasos y barra de progreso; el adaptador a la insistente como
+  ruta por defecto y dicho en pantalla; sin modal (abre en «Mandar un regalo»; el evento con texto sugerido); el toque del
+  ciclo espera al evento en su blackout; toque trimestral pequeño → fuerte (esquiva el cooldown: 114 < 180); «Le mostramos
+  lo otro» solo con `has_delivery_webhook`; hora por marca (almuerzo/cena) vía `send_queue` y «vence este domingo»; grupo de
+  control `holdout` desde la fase 1; `invite_expiring` → **`gift_expiring` «Regalo que vence»** (chocaba con la 00063).
+- **Corregido de la revisión:** la invitación a un evento ya está exenta del cap de 7 días; el riesgo real es el doble
+  mensaje en una semana y el cap mensual, y la pausa se adopta igual.
+
+**Verificado:** tsc limpio · lint 14 errores = los preexistentes (no se tocó código). **Migración:** ninguna.
+
 ## [docs] — 2026-10-04 — Diseño del ciclo de recuperación (campañas + calendario en una pantalla, pipeline de 90 días)
 
 **Pedido:** «hacer que vuelvan los clientes… dos comunicaciones en un mes y ya se acabó… una línea de tiempo de 90 días…

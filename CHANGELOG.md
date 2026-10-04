@@ -14,9 +14,10 @@
 los huecos nombrados y los resueltos, y juntar todo para escoger prioridades».
 
 - **`docs/ESTADO-CONSOLIDADO-2026-10-04.md`** (nuevo): los 224 pedidos de agosto (§0–§25) verificados contra el código por 5
-  auditores Sonnet (90 hechos · 42 parciales · 35 sin empezar · 12 diferidos · 20 obsoletos · **25 preguntas abiertas al dueño**);
-  los 68 hallazgos de la auditoría del 28-09 re-verificados hoy (45 abiertos, 13 críticos); 17 hallazgos nuevos; la cola de
-  `ESTADO.md` §3 clasificada (29 de 31 piden algo del dueño); 16 contradicciones entre docs; y la propuesta de olas P0–P8.
+  auditores Sonnet (88 hechos · 44 parciales · 35 sin empezar · 12 diferidos · 20 obsoletos · **25 preguntas abiertas al dueño**);
+  los 68 hallazgos de la auditoría del 28-09 re-verificados hoy (45 abiertos, 13 críticos); 18 hallazgos nuevos (el N18: ESCALA-4
+  llegó a producción rota —500 en la analítica— y se revirtió; los tests usaban un doble); la cola de
+  `ESTADO.md` §3 clasificada (29 de 31 piden algo del dueño); 17 contradicciones entre docs; y la propuesta de olas P0–P8.
 - `docs/ESTADO-REQUERIMIENTOS.md` (06-09) queda **reemplazado** (aviso en su cabecera). Punteros de `ESTADO.md` ajustados.
 
 **Verificado:** lectura de código y git, no se corrió tsc/lint/vitest (solo docs). **NO verificado:** nada contra producción ni las

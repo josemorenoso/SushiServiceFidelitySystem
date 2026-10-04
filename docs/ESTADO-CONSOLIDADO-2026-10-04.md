@@ -16,7 +16,9 @@
 > consola de Vercel, Meta, Zernio o Twilio dice `NO VERIFICADO`. Fuera de alcance: `REQUERIMIENTOS_JULIO_2026.md` y
 > `REQUERIMIENTOS_SISTEMA.md` (trabajo más viejo; se pueden sumar si hace falta).
 >
-> **Estado de despliegue al escribir esto:** `origin/main = 9a06670` (ola 0 + ESCALA-3/4). **En la rama y SIN desplegar:**
+> **Estado de despliegue al escribir esto:** ⚠️ **producción corre `c055e8e` (la ola 0), NO `origin/main`.**
+> ESCALA-3/4 se desplegaron como `9a06670`, la analítica dio 500 en todas las marcas y Vercel volvió atrás; el hotfix ya está
+> commiteado en la rama (`4907512`, sin desplegar; `ESTADO.md` §2). **En la rama y SIN desplegar:**
 > el saludo de cumpleaños dos días antes (3 commits), y los arreglos de plantillas `9514c2b` y `0b4ec8e`. **La migración
 > 00069 está escrita y SIN aplicar.** Las demás migraciones están aplicadas (dueño, 2026-09-29).
 >
@@ -29,11 +31,11 @@
 
 | Qué se midió | El número |
 |---|---|
-| **Pedidos de agosto** (§0–§25, extraídos uno por uno) | **224** → ✅ 90 hechos (40 %) · 🟡 42 parciales · ⬜ 35 sin empezar · ⏸️ 12 diferidos a propósito · 🔁 20 reemplazados u obsoletos · ❓ **25 preguntas abiertas al dueño** |
-| **Auditoría del 28-09** (los 68 hallazgos, hoy) | 13 cerrados (7 en código desplegado · 3 por docs · 3 en código a la espera de una acción del dueño) · 8 parciales · 1 refutado · 1 no verificable · **45 abiertos, 13 de ellos críticos** |
+| **Pedidos de agosto** (§0–§25, extraídos uno por uno) | **224** → ✅ 88 hechos (39 %) · 🟡 44 parciales · ⬜ 35 sin empezar · ⏸️ 12 diferidos a propósito · 🔁 20 reemplazados u obsoletos · ❓ **25 preguntas abiertas al dueño** |
+| **Auditoría del 28-09** (los 68 hallazgos, hoy) | 11 cerrados (5 en código desplegado · 3 por docs · 3 en código a la espera de una acción del dueño) · 10 parciales (dos son ESCALA-3/4, **revertidas** por el rollback del 10-04) · 1 refutado · 1 no verificable · **45 abiertos, 13 de ellos críticos** |
 | **Cola de `ESTADO.md` §3** | 31 ítems: **29 piden algo del dueño** (26 solo suyo, 3 mixtos) · 2 son código puro |
-| **Hallazgos nuevos** (ni agosto ni la auditoría los vieron) | 17 → 2 críticos · 7 altos (§5) |
-| **Documentos que se contradicen o mienten** | 16 puntos (§8) |
+| **Hallazgos nuevos** (ni agosto ni la auditoría los vieron) | 18 → 2 críticos · 8 altos (§5) |
+| **Documentos que se contradicen o mienten** | 17 puntos (§8) |
 
 **Lo que hay que saber, en ocho líneas**
 
@@ -45,14 +47,15 @@
    del AIOS están abiertos (N2) y si la 00030 corrió.
 3. **25 preguntas abiertas frenan trabajo que ninguna sesión puede empezar sola** (§7): referidos, push, fatiga, Black, tier máximo,
    franquicias y —la que más desbloquea— **a dónde llega el aviso diario**.
-4. **De la auditoría se cerró lo urgente** (ola 0, ESCALA-3/4, la 00064, el texto de 24-72 h). **Todo lo de rastrear, implementar y escalar
+4. **De la auditoría se cerró lo urgente** (ola 0, la 00064, el texto de 24-72 h; ESCALA-3/4 se desplegaron y **se revirtieron**: la analítica daba 500
+   en todas las marcas; el hotfix está en la rama, sin desplegar). **Todo lo de rastrear, implementar y escalar
    sigue abierto**: dar de alta una marca son 14 acciones manuales, y si algo falla no avisa a nadie.
 5. **El mismo hueco aparece dos veces** (§4): plantillas, «nadie se entera», fatiga y duplicado, el alta. Conviene atacarlos
    **una vez, como ola**, no como ítems sueltos.
 6. **Lo que ni agosto ni la auditoría vieron** (§5): el consentimiento (Ley 1581: el CSV del dashboard y los domicilios crean clientes
    «consentidos»), un envío fallido que bloquea el reintento 30 o 360 días, rutas de plantillas sin guardia de rol de marca, y la rama de
    botones del webhook de Zernio que aún espera antes de contestar.
-7. **Los docs mienten en 16 puntos** (§8) y `ESTADO.md` mide 587 líneas (límite 150). Este archivo reemplaza a `ESTADO-REQUERIMIENTOS.md`.
+7. **Los docs mienten en 17 puntos** (§8) y `ESTADO.md` mide 587 líneas (límite 150). Este archivo reemplaza a `ESTADO-REQUERIMIENTOS.md`.
 8. **Propuesta (§9):** P0 gestos del dueño (hoy) → P1 cierres micro + CI → P2 plantillas ∥ P3 ver y avisar → P4 el alta sin cuello humano →
    P5 consentimiento y fatiga → P6 escala técnica → P7 proceso → P8 catálogo. **El orden lo decide el dueño.**
 
@@ -72,7 +75,7 @@
 | §0.5 | ¿Los profiles de Cada1 van al Team compartido de Zernio o a uno dedicado? | ❓ | Sin decisión registrada; la factura de Zernio se mezcla con el otro proyecto (`ESTADO.md:243`) | D |
 | §0.1, §0.4 | Repo y Vercel nuevos · ignorar `Upgrading.md` | 🔁 | Un solo deploy sirve a los dos proveedores; `Upgrading.md` terminó siendo el AIOS (§11) | |
 | §1.1 · 1.2 · 1.5 · 1.9 · 1.11 | Convivencia Twilio/Zernio por tenant · `templateParams` · resolver tenant por `accountId` · `assertEventTemplateUsable` · `validate-env` | ✅ | | |
-| §1.4 | Webhook entrante con firma, 2xx en < 5 s | ✅ | Responde antes de la IA desde ESCALA-3 (`9a06670`). **NO VERIFICADO:** el nombre real del header de firma (`x-zernio-signature` o `x-late-signature`) — falta un entrante real | D |
+| §1.4 | Webhook entrante con firma, 2xx en < 5 s | 🟡 | Contestar antes de la IA es ESCALA-3 (`9a06670`), **revertida con el rollback del 10-04**: hoy el webhook en producción vuelve a esperar a OpenAI. **NO VERIFICADO:** el nombre real del header de firma (`x-zernio-signature` o `x-late-signature`) — falta un entrante real | D |
 | §1.7 | Gestión de plantillas del dashboard sobre Zernio | ✅ | «Activar» las aprobadas (`0b4ec8e`) y el timeout de 10 s al crear con foto (`9514c2b`) **sin desplegar** | D (push) |
 | §1.3 | Mapear cada `ContentSid` a plantilla Zernio | 🟡 | Faltan `tier_unlocked` y `reward_reminder` en el catálogo: **en Zernio, subir de nivel y el recordatorio de premio no mandan nada** (`check-in/route.ts:995`, `reward-reminder/route.ts:71`) → §12 / OPER-5 | C+T · micro |
 | §1.8 | `twilio-balance`/`twilio-metrics` con equivalente Zernio | 🟡 | El panel de entregabilidad sigue siendo solo Twilio (`dashboard/page.tsx:99`) | C · feature |
@@ -206,7 +209,7 @@
 | §24-A2 | Latido real de cada cron | 🟡 | La señal es el último mensaje enviado; un día sin cumpleañeros se ve igual que un cron caído → RASTREO-5 | M+C · feature |
 | §24-P2 · P4 · P5 | ¿Quién recibe la alarma? · ¿apartado solo lectura o configurable? · ¿se oculta si la marca no usa domicilios? | ❓ 🟡 | | D · micro |
 | §25-Fase1 · line-health · R4 | Los crons vuelven a `vercel.json` (6) · cadencia `*/15` | ✅ | `vercel.json:2-8`. «Corriendo»: NO VERIFICADO en logs. `reward-reminder` sigue en 16:00 UTC (11:00 Bogotá): decisión del dueño | D |
-| §25-Fase2 · ESCALA-3 | Domicilios dentro del producto (OpenAI directo) · Zernio contesta antes de la IA | ✅ | `delivery.service.ts:614`; `9a06670`. **NO VERIFICADO:** `OPENAI_API_KEY` en Vercel y `delivery_default_city` de Sushi Service | D |
+| §25-Fase2 | Domicilios dentro del producto (OpenAI directo) | ✅ | `delivery.service.ts:614`. **NO VERIFICADO:** `OPENAI_API_KEY` en Vercel y `delivery_default_city` de Sushi Service | D |
 | §25-Fase1-off · R3 | Apagar los 5 Schedule Trigger de n8n · apagar el VPS | ❓ 🟡 | `ESTADO.md:23` dice «Apagado», `CLAUDE.md` dice «ACTIVO». **Falta que el dueño lo mire en la UI de n8n.** Lo único que el VPS sirve de verdad es Google Contactos (W3) | D (gesto) |
 | §25-Fase3 | Google Contactos del cliente (OAuth) | ⏸️ | El diseño nuevo no existe; hoy es un no-op sin `N8N_GOOGLE_CONTACTS_WEBHOOK_URL` | D+T · ola |
 | §25-horas | Copiar las expresiones UTC verbatim | 🔁 | Corregido: `0 18` y `0 20` UTC (= 13:00 y 15:00 Bogotá), `3b31b13` | |
@@ -230,7 +233,7 @@
 | **Calendario** | Hora de Bogotá, goteo por cola, enlace del evento, dominio cruzado simétrico | 09-06 · 00050, 00051 | ✅ |
 | **Infraestructura y método** | Sushi Fun absorbido (1.421 filas) · 6 crons en `vercel.json` · Método Maestro v3 · fallo de base ≠ vacío (`db-failure.ts`, 23 sitios) | 09-04 → 09-07 | ✅ |
 | **Seguridad** | **Ola 0:** `mystery-box/resolve` solo otorga lo que se ofrece · `PUT settings` con alcance de marca · `timingSafeEqual` · `logs-*.csv` ignorado · cierra toda `SECURITY DEFINER` a anon y borra las políticas de la 00015 | 10-03 · **00069** | ✅ código · **00069 sin aplicar** |
-| **Escala** | **ESCALA-3** (Zernio contesta antes de la IA) y **ESCALA-4** (la analítica pagina de a 1.000) | 10-04 | ✅ `9a06670` |
+| **Escala** | **ESCALA-3** (Zernio contesta antes de la IA) y **ESCALA-4** (la analítica pagina de a 1.000) | 10-04 | ⚠️ `9a06670` se desplegó y **se revirtió**: la analítica daba 500 en todas las marcas (`LIKE` sobre una columna `date`); producción volvió a `c055e8e`; hotfix en la rama (`4907512`), sin desplegar |
 | **Cumpleaños** | El saludo sale dos días antes (`BIRTHDAY_LEAD_DAYS`) | 09-24 | ⚠️ **sin desplegar** — la plantilla aprobada dice «¡Feliz cumpleaños!» y llegaría 2 días antes |
 | **Plantillas** | Nombre editable en Meta · **«Activar» las aprobadas y lista real de la WABA** · timeout de 10 s al crear con foto | 09-12 · 10-02 | nombre ✅ · **`0b4ec8e` y `9514c2b` sin desplegar** |
 
@@ -261,8 +264,8 @@
 
 | ID | Sev. | Hallazgo | Hoy | Qué falta | Quién |
 |---|---|---|---|---|---|
-| ESCALA-3 | 🔴 | Zernio espera a OpenAI antes de responder; 10 fallos apagan el webhook de TODAS las marcas | ✅ | `9a06670` (`after()`). **Residual:** la rama de botones sí/no **sigue esperando a Zernio** antes del 200 (`webhook/zernio/route.ts:260`); y si la función muere en el trabajo diferido no queda fila | C · micro |
-| ESCALA-4 | 🔴 | `getFullAnalytics()` truncado a 1.000 filas en silencio | ✅ | `9a06670` (pagina de a 1.000). **Residual:** con un 500 el panel queda vacío sin aviso (el hook guarda el error, ninguna pantalla lo lee) | C · micro |
+| ESCALA-3 | 🔴 | Zernio espera a OpenAI antes de responder; 10 fallos apagan el webhook de TODAS las marcas | 🟡 | Construida (`after()`, `bb177cd`) y desplegada como `9a06670`, pero **revertida por el rollback de Vercel del 10-04** (venía en el mismo deploy que ESCALA-4): hoy en producción el webhook vuelve a esperar a OpenAI. **Residual:** la rama de botones sí/no **sigue esperando a Zernio** antes del 200 (`webhook/zernio/route.ts:260`); y si la función muere en el trabajo diferido no queda fila | C · micro |
+| ESCALA-4 | 🔴 | `getFullAnalytics()` truncado a 1.000 filas en silencio | 🟡 | Pagina de a 1.000 (`bb177cd`), pero **dio 500 en la analítica de TODAS las marcas** al desplegarse (`LIKE` sobre una columna `date`, error 42883) y se revirtió; hotfix commiteado en la rama (`4907512`), sin desplegar ni verificado en producción. **Residual:** con un 500 el panel queda vacío sin aviso (el hook guarda el error, ninguna pantalla lo lee) | C · micro (hotfix) |
 | ESCALA-1 | 🔴 | Crons diarios: todas las marcas a la vez, sin `maxDuration`, presupuesto ni cursor | 🔓 | **4 de 6** crons sin los tres (`birthday`, `reactivation`, `reward-reminder`, `calendar-dispatch`); `getActiveTenants()` no pagina y ante un error devuelve `[]` con `ok:true`. `line-health` recorre en serie sin presupuesto (nuevo) | C · ola |
 | ESCALA-7 | 🔴 | Sin anti-duplicado atómico en `campaign_messages` | 🔓 | Ningún UNIQUE en las 69 migraciones; cinco caminos «leer → enviar → escribir». Dos corridas solapadas = el mismo WhatsApp dos veces | M+C · feature |
 | ESCALA-6 | 🟠 | `queue-drain` chequea el opt-out uno por uno | 🔓 | Un `.in()` por tanda (`queue-drain/route.ts:403`) | C · micro |
@@ -350,7 +353,7 @@
 | **El alta** | §11, §1.15-1.16, §21 | ALTA-*, OPER-3, OPER-9 | 0.AIOS, ítems 5 y 10 | 14 acciones manuales; faltan ~20 marcas |
 | **Cobro** | §11.3, Handoff D-2 | OPER-1, RASTREO-10 | — | 100 % manual; nada suspende por mora |
 | **Seguridad del AIOS** | §11.10 | ALTA-3, AISLA-3 | — | Un solo usuario, sin MFA, sin bitácora |
-| **Domicilios por Zernio** | §18.c | ESCALA-3, RASTREO-12 | 0.AUTOCHAT, ítem 7 | Contesta antes de la IA ✅; el operador no recibe confirmación ni aviso de fallo |
+| **Domicilios por Zernio** | §18.c | ESCALA-3, RASTREO-12 | 0.AUTOCHAT, ítem 7 | Contesta antes de la IA en código (**revertida** por el rollback del 10-04); el operador no recibe confirmación ni aviso de fallo |
 | **Black y puntos** | §17, §8 | — | deuda 17.b | Tarjeta y panel definen Black distinto; `?? 150` intacto |
 
 ---
@@ -377,6 +380,7 @@
 | N14 | 🟡 | `line-health` sondea marca por marca en serie sin presupuesto de tiempo | `cron/line-health/route.ts:74` | C · feature |
 | N15 | 🟡 | La Copy de Campañas miente: «cumplen años hoy» (ya es 2 días antes), «8:00 AM» (es 13:00 Bogotá), «toque al día 21 y 25» (el dedupe real es de 30 días) | `campaigns/page.tsx:75, 76, 363` | C · micro |
 | N16 | 🟡 | `getTemplateCatalogState` llama a la WABA de Zernio en cada carga de Mensajes, sin caché (de `0b4ec8e`, sin desplegar) | `template.service.ts:166` | C · micro |
+| N18 | 🟠 | **ESCALA-4 llegó a producción rota:** la analítica dio 500 en todas las marcas (`LIKE` sobre una columna `date`, 42883) y hubo que revertir con el rollback de Vercel. Los tests de ESCALA-3/4 usaban un doble de PostgREST (la propia auditoría §8 lo advirtió: «NO verificado contra producción»), que no ejecuta el SQL real. **La lección es de proceso:** CI (PROC-1) no alcanza si la analítica se prueba contra un doble; hace falta un test contra el Postgres embebido y, más adelante, staging (PROC-3) | `ESTADO.md` §2 (fila del hotfix); auditoría §8 | C · feature |
 | N17 | ⚪ | El README del AIOS promete un «olvidé mi contraseña» que no existe | AIOS `README.md:277` | C (docs) |
 
 ---
@@ -390,7 +394,7 @@
 | Ítem | Tipo | Qué hace falta | Cruza con |
 |---|---|---|---|
 | 0.SEGURIDAD | **G** | Pegar la 00069 + las consultas de la 00015 y la 00030. Aparte, código: SEG-2 (carrera de `resolve`) y SEG-3 (`PUT tenant-config`): prompt en `docs/prompts/2026-10-04-seg2-resolve-y-tenant-config.md` | AISLA-1/2, OPUS-4 |
-| 0.ESCALA | G | Desplegado el 10-04. Mirar en los logs de Vercel que `webhook/zernio` conteste enseguida y salgan las líneas `[Delivery]` | ESCALA-3/4 |
+| 0.ESCALA | G | **Revertido el 10-04:** la analítica daba 500 en todas las marcas y Vercel volvió a `c055e8e`. Hotfix en la rama (`4907512`): verificarlo, redesplegar, y entonces mirar en los logs de Vercel que `webhook/zernio` conteste enseguida y salgan las líneas `[Delivery]` | ESCALA-3/4, N18 |
 | 0.CUMPLE | **D** | La plantilla aprobada dice «¡Feliz cumpleaños!» y llegaría 2 días antes: crear una nueva (24-48 h de Meta) ANTES de desplegar; quien cumpla en los 2 días siguientes no recibe saludo ese año | N3 |
 | 0.DOMI | G | Encender «Domicilios por WhatsApp» en Planeta Wings; reiniciar o subir de Nano a Micro el Supabase del AIOS (Gateway Timeout) | ESCALA-2 |
 | 0.AUTOCHAT | G | La prueba real: José escribe un pedido en el auto-chat. Verificar que la `ZERNIO_API_KEY` de Vercel sigue viva | §18 |
@@ -460,6 +464,7 @@
 | `lib/delivery-silence.ts:46` | «mensajes y correos viven en el AIOS» | El AIOS no tiene ninguno |
 | `send-governance.md:442` | Bloque 5, «congelamiento», hecho | No verificable en el código (N12) |
 | `ESTADO.md` · `CLAUDE.md` | 587 y 125 líneas | Límites del método: 150 y 100 |
+| `ESTADO.md` §1/§5, `CHANGELOG.md` y la auditoría §8 (commit `41f9fc3`) | ESCALA-3/4 «desplegadas, `main = 9a06670`, Vercel READY» | **Revertidas** el mismo día: la analítica dio 500 y producción volvió a `c055e8e`. Lo corrige la sesión del hotfix |
 
 *(Una de las verificaciones de esta pasada dijo que `0b4ec8e` y `9514c2b` ya estaban en `main`; se comprobó con `git merge-base --is-ancestor`
 y es falso: siguen sin desplegar.)*
@@ -475,7 +480,7 @@ y es falso: siguen sin desplegar.)*
 | Ola | Qué entra | Por qué en este lugar | Tamaño | Necesita del dueño | Migración |
 |---|---|---|---|---|---|
 | **P0 · Destrabar** (hoy, ~1 h suya, cero código) | Pegar la **00069** + consultas (00015, 00030, funciones abiertas) · **revisar en Auth del Supabase del AIOS que los sign-ups estén apagados** (N2) · borrar el CSV de la raíz · mirar en la UI de n8n que está apagado (permite apagar el VPS) · `ZERNIO_API_KEY` y `ZERNIO_WEBHOOK_SECRET` vigentes · correr las consultas de duplicados de `campaign_messages` y de conteo D-8.b (insumos de P2 y P5) | Es lo único que está VIVO hoy y cuesta minutos | gestos | todo | — |
-| **P1 · Cierres micro + red de seguridad** (1-3 sesiones Sonnet) | SEG-2 (carrera de `resolve`) · SEG-3 (`PUT tenant-config`) · lista cerrada de claves del `PUT settings` · AISLA-5 test · AISLA-8 · `.mcp.json` `read_only` · `.gitignore` AIOS · **N1** (el CSV deja de consentir; `res.ok` de 0.ETA) · **N3** (un fallo no bloquea el reintento) · N4 (tope a la agresiva) · N6 (sí/no después del 200) · N7/N8 (paginar y no tragar errores) · aviso en pantalla del 500 de analítica · §8.2 (`?? 150`) · §17.1b · copy de Campañas · desplegar `9514c2b` y `0b4ec8e` · **PROC-1 (CI)** | Cada uno es chico y protege lo que viene: **todas las olas siguientes son largas y un push a `main` despliega**; CI primero paga de inmediato | micro ×~14 + 1 feature | solo el texto de 18.c | ninguna |
+| **P1 · Cierres micro + red de seguridad** (1-3 sesiones Sonnet) | SEG-2 (carrera de `resolve`) · SEG-3 (`PUT tenant-config`) · lista cerrada de claves del `PUT settings` · AISLA-5 test · AISLA-8 · `.mcp.json` `read_only` · `.gitignore` AIOS · **N1** (el CSV deja de consentir; `res.ok` de 0.ETA) · **N3** (un fallo no bloquea el reintento) · N4 (tope a la agresiva) · N6 (sí/no después del 200) · N7/N8 (paginar y no tragar errores) · aviso en pantalla del 500 de analítica · §8.2 (`?? 150`) · §17.1b · copy de Campañas · **esperar el hotfix de la analítica y redesplegar ESCALA-3/4** (otra sesión lo lleva) · desplegar `9514c2b` y `0b4ec8e` · **PROC-1 (CI) + un test de la analítica contra el Postgres embebido** (N18: CI con dobles no habría cazado el 500) | Cada uno es chico y protege lo que viene: **todas las olas siguientes son largas y un push a `main` despliega**; CI primero paga de inmediato | micro ×~14 + 1 feature | solo el texto de 18.c | ninguna |
 | **P2 · Plantillas** | `0.PLANTILLAS` completo: un solo catálogo (el AIOS llama al producto) · `tier_unlocked`/`reward_reminder` (OPER-5) · rechazos y pausas con salida y rastro (RASTREO-3, N9, N5) · una sola pantalla · 13 → 8 y UTILITY · test de paridad (OPER-6) · `no_template_configured` visible (ALTA-2) | Cada marca nueva paga esta fricción; en Zernio el cruce de nivel es silencio total; el dueño lo declaró urgente el 09-12 | **ola** | decisión 4 | ninguna o 1 |
 | **P3 · Ver y avisar** | Resumen diario al dueño sobre `aios_health()` · tabla de corridas de cron por marca · status callback de Twilio · tracking de errores · bitácora de auditoría · aviso de saldo bajo · log en firma inválida · contador de gasto por marca (OpenAI y Zernio) · `/salud` filtrado | Antes de pasar de 25 marcas; hoy **nada** avisa | **ola** | **decisiones 1, 2, 3** | 2-3 (corridas, bitácora, gasto) |
 | **P4 · El alta sin cuello humano** | Tablero de altas con aviso a las 72 h (ALTA-4) · activación que pasa a `zernio` sola (N10) · `owner_email` obligatorio (OPER-3) · «olvidé mi contraseña» · roles y MFA en el AIOS (ALTA-3, AISLA-3) · reescribir `DELEGACION_GUIDE` y `PROCESO_VENTAS` · cobro con pasarela y corte por mora (OPER-1) | De 14 acciones manuales a las menos posibles; la meta es que otra persona dé altas | **ola** | decisiones 10, 11 | 1-2 (AIOS) |
@@ -506,5 +511,5 @@ solo en `template.service.ts` (RASTREO-3), y ese ítem queda en P2.
 ## 11. Lo que NO se pudo verificar (y quién lo resuelve)
 
 - **Producción / base real:** que la 00069 siga sin aplicar · si la 00015 y la 00030 corrieron (consultas 2 y 3 del prompt de la ola 0) · `owner_email` de hoy · tamaño de `campaign_messages` y duplicados existentes · el tier del Supabase del producto · el valor real de `whatsapp_auto_reply_enabled` en Sushi Fun · qué marcas tienen un nivel `is_black` · si los sign-ups del Supabase del AIOS están apagados · la 00009 del AIOS · el límite de filas de PostgREST.
-- **Consolas de terceros:** el build de Vercel de `9a06670` (el mensaje del commit dice READY y que un POST con firma inválida dio 401; no se vio la consola) · `OPENAI_API_KEY` y `delivery_default_city` en Vercel · si los crons corren (logs) · si n8n está apagado · el plan de Vercel (Pro) · la suscripción al evento `whatsapp.template.status_updated` en Zernio · el nombre real del header de firma de Zernio · el proveedor real de cada marca · las plantillas aprobadas por marca en Meta · `ZERNIO_API_KEY` vigente en el Vercel del producto y del AIOS.
+- **Consolas de terceros:** el estado real de producción tras el rollback del 10-04 (`ESTADO.md` dice `c055e8e`; no se vio la consola de Vercel) y el resultado del hotfix de la analítica · `OPENAI_API_KEY` y `delivery_default_city` en Vercel · si los crons corren (logs) · si n8n está apagado · el plan de Vercel (Pro) · la suscripción al evento `whatsapp.template.status_updated` en Zernio · el nombre real del header de firma de Zernio · el proveedor real de cada marca · las plantillas aprobadas por marca en Meta · `ZERNIO_API_KEY` vigente en el Vercel del producto y del AIOS.
 - **De este documento:** el costo de los 10 auditores no se midió; los conteos (224 pedidos, 68 hallazgos) dependen de cómo cada auditor partió los ítems; la severidad de §5 es juicio mío; `REQUERIMIENTOS_JULIO_2026.md` y `REQUERIMIENTOS_SISTEMA.md` no se revisaron.

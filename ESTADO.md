@@ -33,6 +33,7 @@
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
 | Despliegue de ESCALA-3 y ESCALA-4 a `main` (orden del dueño), Claude Code, 2026-10-04 | Sonnet 5.5 | **Worktree `.worktrees/deploy-escala34`** sobre `origin/main` con `npm ci` propio: `cherry-pick bb177cd`, tsc + vitest ahí, push a `main`. Se borra al terminar. En la rama solo `ESTADO.md`, la auditoría §8 (estado de despliegue) y el prompt de la siguiente sesión. **Corre vitest** (puerto 55432) | — (sin migración) | en curso |
+| Consolidado de requerimientos de agosto + auditoría de 1000 clientes + prioridades (solo docs; lee el código, no lo toca), Claude Code, 2026-10-04 | Sonnet 5.5 | **Archivo NUEVO `docs/ESTADO-CONSOLIDADO-2026-10-04.md`** y, al cerrar, el aviso de «reemplazado» en la cabecera de `docs/ESTADO-REQUERIMIENTOS.md`. Subagentes de solo lectura. **No corre vitest ni tsc** (el puerto 55432 es de la fila de arriba) | — | en curso |
 
 ## 3. Siguiente, en orden
 

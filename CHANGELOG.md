@@ -8,6 +8,26 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [feat] — 2026-10-04 — Cumpleaños de una vez: plantilla «dos días antes» y cambio solo por marca
+
+**Pedido:** «resuelve ese error de cumpleaños y ayúdame a terminar de resolver los cumpleaños de una vez, pushea».
+
+- Plantilla nueva `birthday_upcoming` (`cumpleanos_se_acerca`, «¡Hola {{1}}! Tu cumpleaños ya está aquí»), mismo
+  contrato que la vieja. La vieja queda `replacedBy`: no se le ofrece a quien no la tiene.
+- El cron elige por marca (`elegirPlantillaDeCumpleanos()`): con la nueva APROBADA saluda en la ventana [hoy, hoy+2];
+  si no, la vieja el día mismo. En Twilio pregunta la aprobación. Ventana = sin hueco el día del cambio. Paginado.
+- `getDashboardMetrics()` contaba cumpleaños con `LIKE` sobre `date` (0 en silencio): ahora en memoria.
+- Ajustes: selector de la nueva. AIOS v1.14.0: el alta la crea en lugar de la vieja.
+- `main` y la rama unidas: entran también el cumpleaños de septiembre y las plantillas del 02-10.
+
+**Verificado:** tsc, lint de lo tocado, 61 archivos / 889 tests. **NO verificado:** un envío real con la nueva (falta
+que Meta la apruebe en alguna marca). **Migración:** ninguna.
+
+## [fix] — 2026-10-04 — La analítica daba 500 en las 5 marcas (cumpleaños con `LIKE` sobre `date`)
+
+Con ESCALA-4 desplegada, «cumpleaños hoy» (`.like` sobre `date`, 42883, que siempre falló en silencio) tumbó la
+analítica entera. Rollback de Vercel a `c055e8e`, arreglo en `ff9fd90` (cuenta en memoria) y promoción a mano.
+
 ## [docs] — 2026-10-04 — Consolidado: requerimientos de agosto × auditoría de 1000 clientes × cola, con prioridades
 
 **Pedido:** «un archivo con todos los requerimientos que hice y los que completamos, cruzado con la auditoría; saber el estado,

@@ -198,9 +198,15 @@ tasa de reactivación, y un fallo de base se veía como «cero», que es lo mism
 - **`campaign_messages` ya no se lee entera.** Solo los mensajes de las campañas de reactivación cuyo mes
   cae en los 6 de la gráfica, en lotes de 100 ids por `.in()` (la URL de PostgREST no es infinita). Sin esas
   campañas no se pregunta nada.
-- **Un `error` de base es un error.** Las siete lecturas se exigen: dejan `[Analytics][FALLO]
-  reason=analitica_…` (`clientes`, `visitas_30d`, `cumpleanos`, `visitas_6m`, `campanas`, `mensajes`,
-  `ajustes`) y `getFullAnalytics()` lanza; `/api/dashboard/analytics` contesta 500 en vez de pintar un panel
+- **Los cumpleaños de hoy salen de `customers` en memoria, no de una lectura propia** (hotfix 2026-10-04).
+  Había una con `.like('birthday', '%-MM-DD')`, y `birthday` es `date`: Postgres contesta **42883**
+  («operator does not exist: date ~~ unknown»). Mientras el error se ignoraba, «Cumpleaños hoy» daba 0 en
+  silencio desde siempre. Al desplegarse la regla de abajo tumbó la analítica entera de las 5 marcas: panel en
+  ceros hasta que se volvió atrás en Vercel. `getDashboardMetrics()` todavía tiene el mismo `.like` y lo ignora
+  (sigue dando 0); no se tocó.
+- **Un `error` de base es un error.** Las seis lecturas se exigen: dejan `[Analytics][FALLO]
+  reason=analitica_…` (`clientes`, `visitas_30d`, `visitas_6m`, `campanas`, `mensajes`, `ajustes`) y
+  `getFullAnalytics()` lanza; `/api/dashboard/analytics` contesta 500 en vez de pintar un panel
   en ceros. Un fallo en la SEGUNDA página también lanza: lo leído hasta ahí no es «toda la base».
   ⚠️ **Ninguna pantalla lee el `error` de `useDashboardAnalytics()`** (`dashboard`, `customers` y `campaigns`
   solo toman `data` y `loading`): con un 500 el panel queda **vacío** —o con los datos del último sondeo

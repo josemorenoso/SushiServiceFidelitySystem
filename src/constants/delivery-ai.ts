@@ -30,11 +30,15 @@ export const DELIVERY_AI_MAX_TOKENS = 400
 /**
  * Cuánto esperamos a OpenAI antes de rendirnos, y cuántas veces reintentamos.
  *
- * Twilio corta su webhook a los ~15 s y Zernio pide 2xx en menos de 5 s. n8n no tenía
- * este problema porque respondía a Twilio desde otro proceso; ahora el reloj corre
- * dentro de nuestra función. Con 8 s + 1 reintento el peor caso son ~16 s: Twilio
- * registra el timeout en su consola pero **el pedido ya quedó guardado** — el orden de
- * las operaciones es primero la base, después la respuesta.
+ * Twilio corta su webhook a los ~15 s. n8n no tenía este problema porque respondía a
+ * Twilio desde otro proceso; ahora el reloj corre dentro de nuestra función. Con 8 s +
+ * 1 reintento el peor caso son ~16 s: Twilio registra el timeout en su consola pero **el
+ * pedido ya quedó guardado** — el orden de las operaciones es primero la base, después la
+ * respuesta.
+ *
+ * Zernio ya NO corre contra este reloj (ESCALA-3, 2026-10-04): pide un 2xx en menos de 5 s
+ * y apaga el webhook de TODAS las marcas tras 10 fallos, así que `webhook/zernio` contesta
+ * ANTES de llamar a la IA (`after()`). Estos 8 s solo compiten con el plazo de Twilio.
  */
 export const DELIVERY_AI_TIMEOUT_MS = 8_000
 export const DELIVERY_AI_MAX_RETRIES = 1

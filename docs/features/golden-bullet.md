@@ -259,7 +259,8 @@ donde ya está) de `ya_contactado`, y excluye los dos.
 
 **PostgREST corta en 1.000 filas y lo hace en silencio.** Ninguna lectura del módulo paginaba:
 una base de 7.438 se leía como 1.000 y el tablero contaba mal. Todo lo que lee «todas las filas
-de la base» pasa por `leerTodo()` (`.range()` de a 1.000 sobre una consulta ordenada).
+de la base» pasa por `leerTodo()` (`.range()` de a 1.000 sobre una consulta ordenada; vive en
+`src/lib/leer-todo.ts` y lo comparte la analítica del panel desde el 2026-10-04).
 
 **«Entregados»** sale del cruce `imported_contacts.twilio_sid` ↔ `message_logs` con
 `status in (delivered, read)`. Solo Zernio reporta entregas (Twilio no tiene status callback):
@@ -500,7 +501,8 @@ como colombiano. El test que lo fija: `tests/unit/golden-bullet-telefonos.test.t
 ## Archivos
 
 - `supabase/migrations/00023_imported_contacts.sql`, `00060_golden_bullet_bloques.sql`
-- `src/services/imported-contacts.service.ts` (`planBlocks()`, `confirmImport()`, `programarSiguienteTanda()`, `getBases()`/`resumirBase()`, `heredarDeCampana()`, `leerTodo()`, `markImportedContactsResult()`)
+- `src/services/imported-contacts.service.ts` (`planBlocks()`, `confirmImport()`, `programarSiguienteTanda()`, `getBases()`/`resumirBase()`, `heredarDeCampana()`, `markImportedContactsResult()`)
+- `src/lib/leer-todo.ts` — `leerTodo()`, la lectura paginada de a 1.000 (compartida con la analítica del panel)
 - `src/services/club-optin.service.ts` — los dos botones
 - `src/services/golden-bullet-template.service.ts` — crea la plantilla y la somete a Meta
 - `src/components/dashboard/ImportedContactsProgress.tsx` — las bases: tablero, parar, y «Programar otra tanda»

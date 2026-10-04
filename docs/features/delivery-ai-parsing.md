@@ -125,6 +125,7 @@ propaga al log y (en Twilio) al operador:
 | `celular_invalido_registro` | Pasó la IA pero no `validatePhone()` | Ídem |
 | `registro_fallido` | Falló la escritura en la base | «Leí el pedido pero no lo pude guardar…» |
 | `remitente_no_verificable` | **La consulta a `authorized_numbers` se cayó**, así que no se sabe si el remitente era un operador | «Estamos con un problema técnico… si era un pedido, reenvíalo» |
+| `intake_inesperado` | Una **excepción** que `processDeliveryMessage()` no preveía (su contrato es no lanzar). La reporta la ruta de Zernio desde el trabajo que corre DESPUÉS de contestar (`after()`, ESCALA-3) | Nada: Zernio no tiene canal de texto libre de vuelta. En el panel: «Falló algo que no esperábamos» |
 
 > ⚠️ **`remitente_no_verificable` es el motivo más traicionero, y por eso tiene nombre
 > propio.** `supabase-js` **no lanza**: un fallo vuelve como `{ data: null, error }`. Quien

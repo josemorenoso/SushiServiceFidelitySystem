@@ -17,9 +17,13 @@
  *     whatsapp.service.ts). Por eso el detector de intención (pedido/horario/
  *     ubicación) solo se usa para LOGGING aquí, no para enviar un auto-reply:
  *     queda documentado como pendiente en docs/features/zernio-messaging.md.
+ *   - El pedido de domicilio (parseo con IA + registro) corre DESPUÉS de contestar, con
+ *     `after()`: Zernio pide el 2xx en menos de 5 s y apaga el webhook de TODAS las marcas
+ *     tras 10 fallos seguidos. Ver `procesarDomicilioDespuesDeResponder()` (ESCALA-3,
+ *     2026-10-04) y docs/features/delivery-webhook.md.
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { after, NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { verifyZernioSignature, isZernioNumberEvent } from '@/lib/zernio/webhooks'
 import type {
@@ -49,6 +53,12 @@ import {
 import { getMultipleSettings } from '@/services/settings.service'
 import { sendZernioConversationMessage } from '@/lib/zernio/messaging'
 import { readButtonPayload } from '@/lib/zernio/webhooks'
+
+// `after()` (ver `procesarDomicilioDespuesDeResponder()`) corre DURANTE la duración máxima de la
+// ruta. Sin declararla hereda el default del plan, que no se ve desde el código y puede ser menor
+// que el peor caso del parseo con IA (8 s de timeout × 2 intentos) más el registro: un pedido
+// cortado a la mitad no deja ni una fila en `delivery_intake_failures`.
+export const maxDuration = 300
 
 const OPT_OUT_KEYWORDS = ['STOP', 'STOPALL', 'UNSUBSCRIBE', 'CANCEL', 'CANCELAR', 'END', 'QUIT', 'BAJA', 'SALIR', 'SAL', 'SALI', 'FUERA', 'OPTOUT', 'NO']
 const OPT_IN_KEYWORDS = ['START', 'UNSTOP', 'YES', 'SI', 'ALTA', 'ACEPTO']
@@ -144,6 +154,56 @@ async function contestarEnConversacion(
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) }
   }
+}
+
+/**
+ * ESCALA-3 (2026-10-04) — el parseo con IA y el registro del domicilio corren DESPUÉS de contestar.
+ *
+ * Zernio pide un 2xx en menos de 5 s y desactiva el webhook entero —el de TODAS las marcas Zernio—
+ * tras 10 fallos seguidos. `processDeliveryMessage()` llama a OpenAI (8 s de timeout y un
+ * reintento: ~16 s en el peor caso) y luego registra cliente, visita, puntos y la plantilla de
+ * WhatsApp; esperarlo dentro del request convertía un mal día de OpenAI en un webhook apagado para
+ * todas las marcas. Ahora la ruta contesta 200 y esto corre con `after()`, que Next ejecuta cuando
+ * la respuesta ya salió y mantiene vivo el proceso mientras dure (hasta `maxDuration`).
+ *
+ * Lo que se queda ANTES de contestar, a propósito: la firma, el dedup por evento
+ * (`isDuplicateZernioEvent()`: un reintento de Zernio sale por el atajo de duplicado y no programa
+ * un segundo registro) y la consulta a `authorized_numbers`, que es una lectura rápida y decide si
+ * hay algo que programar. Solo se difiere lo lento.
+ *
+ * ⚠️ EL EMBUDO MANDA. `processDeliveryMessage()` no lanza y deja su fallo en
+ * `logDeliveryIntakeFailure()` por dentro, así que un `{ ok: false }` NO se vuelve a escribir acá:
+ * un segundo escritor de `delivery_intake_failures` es un embudo que dejó de ser uno. Lo único que
+ * atrapa este `catch` es lo que ese contrato no preveía —una excepción de verdad—, y sin él Next la
+ * deja como una línea genérica del log: el domicilio se pierde sin rastro en la tabla que alimenta
+ * el semáforo del AIOS. Va con `await` porque una promesa flotante en una función serverless se
+ * puede cortar cuando la respuesta ya salió, que es justo el pedido que se intenta no perder.
+ *
+ * Residual conocido: si la plataforma mata la función (se acaba `maxDuration`, se cae el
+ * proceso), ningún `catch` lo ve. Es el mismo hueco que tenía el camino síncrono —la función
+ * cortada en pleno request—, no uno nuevo; queda el log de Vercel.
+ */
+function procesarDomicilioDespuesDeResponder(args: {
+  tenant: Tenant
+  rawMessage: string
+  operatorPhone: string
+  operatorLocationId: string | null
+  origen: 'entrante' | 'auto-chat'
+}): void {
+  const { tenant, rawMessage, operatorPhone, operatorLocationId, origen } = args
+  after(async () => {
+    try {
+      await processDeliveryMessage({ tenant, rawMessage, operatorPhone, operatorLocationId })
+    } catch (err) {
+      await logDeliveryIntakeFailure({
+        tenant,
+        operatorPhone,
+        reason: 'intake_inesperado',
+        detail: `excepción en el trabajo diferido (${origen}): ${err instanceof Error ? err.message : String(err)}`,
+        rawMessage,
+      })
+    }
+  })
 }
 
 async function handleMessageReceived(payload: ZernioWebhookPayloadMessage): Promise<NextResponse> {
@@ -290,10 +350,12 @@ async function handleMessageReceived(payload: ZernioWebhookPayloadMessage): Prom
   // webhook entero tras 10 fallos consecutivos, así que un 5xx aquí costaría los pedidos
   // de TODOS los tenants Zernio, no solo este. El registro va al log, no al status HTTP.
   //
-  // ⏱️ Zernio pide 2xx en menos de 5 s y este camino ahora hace una llamada a OpenAI más
-  // el registro: es normal excederlo y que Zernio reintente. No duplica nada —
-  // `isDuplicateZernioEvent()` corrió ARRIBA, antes de cualquier efecto de negocio, así
-  // que el reintento sale por el atajo de duplicado.
+  // ⏱️ ESCALA-3 (2026-10-04): este camino YA NO espera a OpenAI. Zernio pide el 2xx en menos de
+  // 5 s y la IA sola puede tardar ~16 s (8 s de timeout × 2 intentos), así que el parseo y el
+  // registro corren con `after()` DESPUÉS de contestar (`procesarDomicilioDespuesDeResponder()`).
+  // Lo rápido se queda antes: la firma, `isDuplicateZernioEvent()` (corrió ARRIBA, antes de
+  // cualquier efecto de negocio: un reintento de Zernio sale por el atajo de duplicado y no
+  // programa un segundo registro) y la consulta a `authorized_numbers` de abajo.
   if (phone.length === 10) {
     try {
       const db = getServiceClient()
@@ -326,13 +388,16 @@ async function handleMessageReceived(payload: ZernioWebhookPayloadMessage): Prom
       }
 
       if (authorized) {
-        console.log(`[webhook/zernio] mesero autorizado ${phone} → procesando domicilio (tenant=${tenant.slug})`)
+        console.log(
+          `[webhook/zernio] mesero autorizado ${phone} → el domicilio se procesa después de responder (tenant=${tenant.slug})`
+        )
 
-        const outcome = await processDeliveryMessage({
+        procesarDomicilioDespuesDeResponder({
           tenant,
           rawMessage: text,
           operatorPhone: phone,
           operatorLocationId: (authorized.location_id as string | null) ?? null,
+          origen: 'entrante',
         })
 
         // A diferencia de twilio-incoming no hay TwiML que devolverle al operador: Zernio
@@ -340,13 +405,16 @@ async function handleMessageReceived(payload: ZernioWebhookPayloadMessage): Prom
         // PLANTILLAS aprobadas, nunca texto libre (ver whatsapp.service.ts). Confirmarle
         // el pedido al mesero por este canal exigiría una plantilla propia — queda
         // pendiente en docs/features/zernio-messaging.md. Mientras tanto el registro del
-        // fallo es el log, que ya no está vacío.
-        return NextResponse.json({ received: true, delivery: outcome.ok }, { status: 200 })
+        // fallo es el log y `delivery_intake_failures`, que ya no están vacíos.
+        //
+        // El cuerpo ya no trae `delivery: true|false`: contestando ANTES de parsear no hay
+        // resultado que reportar, y decir `true` sería mentir.
+        return NextResponse.json({ received: true, deferred: true }, { status: 200 })
       }
     } catch (err) {
-      // Camino estrecho: ni `processDeliveryMessage()` lanza (devuelve un resultado
-      // discriminado) ni la consulta de arriba lanza (su `error` ya se lee). Lo único que
-      // llega aquí es `getServiceClient()` reventándose por falta de variables de entorno.
+      // Camino estrecho: la consulta de arriba no lanza (su `error` ya se lee) y el trabajo
+      // pesado ya no corre acá, va en `after()`. Lo único que llega aquí es
+      // `getServiceClient()` reventándose por falta de variables de entorno.
       console.error(
         `[Delivery][FALLO] reason=cliente_supabase tenant=${tenant.slug} operador=${phone} detalle="${err instanceof Error ? err.message : String(err)}"`
       )
@@ -385,7 +453,8 @@ async function handleMessageReceived(payload: ZernioWebhookPayloadMessage): Prom
  *
  * Al reconocerlo llama al MISMO `processDeliveryMessage()` que el camino entrante: el
  * registro, la plantilla que sale hacia el CLIENTE y el renglon de `message_logs` quedan
- * exactamente como estaban.
+ * exactamente como estaban. Y, como el entrante, lo hace DESPUES de contestar (ESCALA-3,
+ * `procesarDomicilioDespuesDeResponder()`): el webhook ya no espera a OpenAI.
  */
 async function handleMessageSent(payload: ZernioWebhookPayloadMessage): Promise<NextResponse> {
   const accountId = extractAccountId(payload.account)
@@ -496,16 +565,19 @@ async function handleMessageSent(payload: ZernioWebhookPayloadMessage): Promise<
     return new NextResponse(null, { status: 200 })
   }
 
-  console.log(`[webhook/zernio] pedido en el auto-chat de ${tenant.slug} → procesando domicilio`)
+  console.log(`[webhook/zernio] pedido en el auto-chat de ${tenant.slug} → se procesa despues de responder`)
 
-  const outcome = await processDeliveryMessage({
+  // ESCALA-3: igual que el camino entrante, el parseo con IA y el registro corren con `after()`
+  // DESPUES de contestar. Ver `procesarDomicilioDespuesDeResponder()`.
+  procesarDomicilioDespuesDeResponder({
     tenant,
     rawMessage: text,
     operatorPhone: ownPhone,
     operatorLocationId: (authorized.location_id as string | null) ?? null,
+    origen: 'auto-chat',
   })
 
-  return NextResponse.json({ received: true, delivery: outcome.ok }, { status: 200 })
+  return NextResponse.json({ received: true, deferred: true }, { status: 200 })
 }
 
 async function handleDeliveryStatus(payload: ZernioWebhookPayloadDeliveryStatus): Promise<NextResponse> {

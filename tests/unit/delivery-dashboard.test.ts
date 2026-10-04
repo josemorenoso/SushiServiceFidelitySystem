@@ -31,10 +31,11 @@ import {
 describe('explainDeliveryFailure() — el motivo, traducido', () => {
   /**
    * La unión `DeliveryIntakeReason` de `src/services/delivery.service.ts`, que es
-   * `DeliveryExtractionReason` más los tres que aportan el registro y la puerta de
-   * entrada. Escrita a mano acá a propósito: si alguien agrega un motivo nuevo al intake
-   * y no lo traduce, esta prueba lo dice en vez de dejar que salga en pantalla como
-   * «motivo nuevo, sin traducir» para siempre.
+   * `DeliveryExtractionReason` más los cuatro que aportan el registro, la puerta de
+   * entrada y el trabajo que la ruta de Zernio corre después de contestar. Escrita a mano
+   * acá a propósito: si alguien agrega un motivo nuevo al intake y no lo traduce, esta
+   * prueba lo dice en vez de dejar que salga en pantalla como «motivo nuevo, sin
+   * traducir» para siempre.
    */
   const MOTIVOS_DEL_INTAKE = [
     'mensaje_vacio',
@@ -46,9 +47,10 @@ describe('explainDeliveryFailure() — el motivo, traducido', () => {
     'celular_invalido_registro',
     'registro_fallido',
     'remitente_no_verificable',
+    'intake_inesperado',
   ]
 
-  it('traduce los nueve motivos que el intake sabe producir hoy', () => {
+  it('traduce los diez motivos que el intake sabe producir hoy', () => {
     for (const reason of MOTIVOS_DEL_INTAKE) {
       const e = explainDeliveryFailure(reason)
       expect(e.conocido, `«${reason}» no está traducido`).toBe(true)
@@ -71,6 +73,8 @@ describe('explainDeliveryFailure() — el motivo, traducido', () => {
     expect(explainDeliveryFailure('registro_fallido').blame).toBe('nosotros')
     // El más traicionero: NO es culpa de quien escribió el pedido.
     expect(explainDeliveryFailure('remitente_no_verificable').blame).toBe('nosotros')
+    // Una excepción que el intake no preveía es un bug nuestro, nunca un pedido mal escrito.
+    expect(explainDeliveryFailure('intake_inesperado').blame).toBe('nosotros')
   })
 
   it('un motivo desconocido NO se pierde ni rompe: se muestra crudo y marcado', () => {

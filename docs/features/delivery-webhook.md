@@ -73,11 +73,11 @@ sede correcta que ponerle y se queda en `NULL`. La salida buena es un celular po
 2. El operador reenvía el cuadro del pedido al número del sistema
 3. El proveedor entrega el mensaje a **nuestra** ruta: `/api/webhook/twilio-incoming` (Twilio) o `/api/webhook/zernio` (Zernio)
 4. La ruta valida la firma y busca al remitente en `authorized_numbers` — **el mismo `SELECT` trae `location_id`, así que la sede sale gratis** (D9, multi-sede F3)
-5. `processDeliveryMessage()` → **OpenAI (gpt-4o-mini) extrae los datos del texto libre** (nombre, celular, dirección, pago, monto, ciudad) — ver `docs/features/delivery-ai-parsing.md`
+5. `processDeliveryMessage()` → **OpenAI (gpt-4o-mini) extrae los datos del texto libre** (nombre, celular, dirección, pago, monto, ciudad) — ver `docs/features/delivery-ai-parsing.md`. **En Zernio, del 5 al 8 corre DESPUÉS de contestar el 200** (ver «Zernio contesta antes de la IA»)
 6. `registerDeliveryOrder()` crea/actualiza cliente + visita + otorga puntos + evalúa tiers desbloqueados
 7. Se envía la plantilla de WhatsApp al cliente (welcome / tier / near / far)
 8. Google Contacts se sincroniza vía n8n (W3, fire-and-forget con `await`)
-9. **Twilio:** TwiML de confirmación al operador. **Zernio:** 200 — no hay canal de texto libre de vuelta
+9. **Twilio:** TwiML de confirmación al operador (después de procesar). **Zernio:** el 200 ya salió antes del paso 5 — no hay canal de texto libre de vuelta
 
 > **El remitente ya no viaja por la red.** Hasta F3 había que pedirle a n8n que reenviara el
 > campo `remitente` para poder resolver la sede desde `authorized_numbers.location_id`. Al
@@ -151,7 +151,7 @@ Trigger de n8n y **ya no hacen falta**. Las utilidades equivalentes siguen en
 | Archivo | Responsabilidad |
 |---------|----------------|
 | `src/app/api/webhook/twilio-incoming/route.ts` | **Entrada real (Twilio).** Firma → `authorized_numbers` → `processDeliveryMessage()` → TwiML |
-| `src/app/api/webhook/zernio/route.ts` | **Entrada real (Zernio).** Ídem, sin respuesta de texto |
+| `src/app/api/webhook/zernio/route.ts` | **Entrada real (Zernio).** Ídem, sin respuesta de texto, y **contesta el 200 ANTES de la IA** (`after()`, ESCALA-3) |
 | `src/services/delivery.service.ts` | `processDeliveryMessage()` (intake), `registerDeliveryOrder()` (lógica DB), `resolveDeliveryLocation()`, el embudo de fallos |
 | `src/services/delivery-ai.service.ts` | Extracción con OpenAI + `parseDeliveryAiJson()` (puro) |
 | `src/constants/delivery-ai.ts` | Prompt, modelo, temperatura, timeouts |
@@ -171,7 +171,7 @@ Trigger de n8n y **ya no hacen falta**. Las utilidades equivalentes siguen en
 | Método | Ruta | Descripción |
 |--------|------|-------------|
 | POST | `/api/webhook/twilio-incoming` | **Entrada real** de los pedidos en tenants Twilio. Responde TwiML |
-| POST | `/api/webhook/zernio` | **Entrada real** de los pedidos en tenants Zernio. Responde 200 |
+| POST | `/api/webhook/zernio` | **Entrada real** de los pedidos en tenants Zernio. Responde 200 **antes** de leer el pedido |
 | POST | `/api/webhook/delivery` | Registro de un pedido YA parseado. Contrato intacto — lo usa n8n mientras el VPS siga vivo |
 
 ### POST /api/webhook/twilio-incoming (camino de domicilio)
@@ -211,12 +211,62 @@ el mensaje se trata como un pedido. Si no, sigue el camino de auto-respuesta de 
 
 Firma HMAC-SHA256 obligatoria en `X-Zernio-Signature`. El pedido se procesa igual, pero
 **no hay respuesta de texto para el operador**: Zernio solo permite enviar plantillas
-aprobadas, nunca texto libre. Devuelve `{"received":true,"delivery":true|false}` con 200.
+aprobadas, nunca texto libre. Devuelve `{"received":true,"deferred":true}` con 200, **antes** de
+leer el pedido (ver «Zernio contesta antes de la IA», abajo). Hasta el 2026-10-03 el cuerpo era
+`{"received":true,"delivery":true|false}`, el resultado del parseo.
 
 > ⚠️ Siempre 200, también cuando el pedido falla: Zernio desactiva el webhook entero tras 10
 > fallos consecutivos, y un 5xx aquí costaría los pedidos de **todos** los tenants Zernio. El
 > registro del fallo va al log (`[Delivery][FALLO]`), no al status HTTP. **Esto es justo lo
 > que arregla la Fase 2**: antes devolvía 200 vacío y no registraba nada.
+
+### Zernio contesta antes de la IA (ESCALA-3, 2026-10-04)
+
+**El problema.** Zernio pide un 2xx en menos de 5 s y **apaga el webhook entero tras 10 fallos
+seguidos: el de TODAS las marcas Zernio, no el de una**. La ruta esperaba `processDeliveryMessage()`
+antes de contestar, y eso es OpenAI con 8 s de timeout y un reintento (`DELIVERY_AI_TIMEOUT_MS`,
+~16 s en el peor caso) más el registro y la plantilla. Un mal día de OpenAI era un webhook apagado
+para todas las marcas nuevas, que van todas por Zernio.
+
+**Lo que cambió.** La ruta contesta 200 y deja el parseo y el registro para DESPUÉS de la respuesta,
+con `after()` de `next/server` (`procesarDomicilioDespuesDeResponder()`). Es el mismo
+`processDeliveryMessage()` de siempre, en los dos caminos: el entrante y el auto-chat.
+
+| Antes de contestar (rápido; decide si hay algo que hacer) | Después de contestar (lento) |
+|---|---|
+| tamaño del cuerpo y firma HMAC | `processDeliveryMessage()`: OpenAI → cliente, visita y puntos |
+| dedup por evento (`isDuplicateZernioEvent()`) | la plantilla de WhatsApp hacia el cliente |
+| marca por `accountId`, botones del Golden Bullet, opt-out / opt-in | el renglón de `message_logs` |
+| consulta a `authorized_numbers` (de ahí sale la sede, D9) | Google Contacts (n8n; no-op si falta su variable) |
+
+- **El 200 sigue siendo SIEMPRE.** Cambió el cuerpo: ya no trae `delivery: true|false` (el resultado
+  del parseo, que todavía no existe) sino `{"received":true,"deferred":true}`. Decir `true` sería
+  mentir y decir `false`, culpar a un pedido sano. El resultado real queda donde siempre: el log
+  (`[Delivery]` / `[Delivery][FALLO]`) y `delivery_intake_failures`.
+- **El dedup se queda ANTES.** Un reintento de Zernio sale por el atajo de duplicado y no programa
+  un segundo registro. Con la respuesta rápida, además, los reintentos casi no ocurren.
+- **`logDeliveryIntakeFailure()` sigue siendo el ÚNICO embudo.** `processDeliveryMessage()` no lanza y
+  escribe su fallo por dentro, así que la ruta NO lo escribe otra vez. Lo único que atrapa el `catch`
+  del trabajo diferido es una excepción que ese contrato no preveía: va al embudo, con `await`, con el
+  motivo **`intake_inesperado`** («Falló algo que no esperábamos», culpa: nosotros). Sin ese `catch`,
+  Next deja el error como una línea genérica del log y el pedido se pierde sin una fila en la tabla
+  que alimenta el semáforo de domicilios del AIOS.
+- **`export const maxDuration = 300`** en la ruta: `after()` corre durante la duración máxima de la
+  ruta, y el default del plan no se ve desde el código (puede ser menor que el peor caso del parseo).
+- **Residual conocido.** Si la plataforma mata la función (se agota `maxDuration`, se cae el proceso)
+  ningún `catch` lo ve y el pedido no deja fila: solo queda el log de Vercel. Es el mismo hueco que ya
+  tenía el camino síncrono (la función cortada en pleno request), no uno nuevo.
+- **Twilio queda fuera.** `twilio-incoming` sigue procesando ANTES de contestar, porque le devuelve el
+  resultado al operador en el TwiML, y Twilio no apaga el webhook por fallos.
+
+**Cómo se ve en los logs de Vercel.** Primero `[webhook/zernio] mesero autorizado … → el domicilio se
+procesa después de responder` (o `pedido en el auto-chat de … → se procesa despues de responder`) y,
+detrás, con la respuesta ya enviada, las líneas `[Delivery] …` del registro.
+
+**Prueba:** `tests/unit/zernio-despues-domicilios.test.ts`. Con un `processDeliveryMessage` que no
+termina nunca, `POST` igual contesta 200; lo diferido sí llama al servicio; el fallo inesperado llega
+al embudo y se espera. `after()` fuera de un request de Next **lanza** («`after` was called outside a
+request scope», Next 16.2.2), así que el test la captura y la corre a mano, después de la respuesta.
 
 ### El auto-chat de la propia línea (`message.sent`, desde la 00068)
 
@@ -242,7 +292,7 @@ Por eso el discriminador es el `conversationId`, que sí está tipado y es estab
 | **Quién decide** | `tenant_connections.self_conversation_id` — el id de la conversación de la línea consigo misma, **por marca** |
 | **Si está en NULL** | el webhook no tiene ningún efecto de negocio: solo deja `[webhook/zernio] message.sent sin auto-chat conocido … conversationId=…`, que es de donde sale el valor a configurar (sin el texto del mensaje: una conversación con un cliente es privada) |
 | **Segunda llave** | aunque el id coincida, el registro exige que el **número propio de la marca** esté en Domicilios → Autorizados. Es el opt-in del dueño, y de ahí sale la sede (D9) |
-| **Qué pasa después** | el MISMO `processDeliveryMessage()` del camino entrante. El registro, la plantilla que sale hacia el **cliente** y el renglón de `message_logs` quedan idénticos |
+| **Qué pasa después** | el MISMO `processDeliveryMessage()` del camino entrante —y, como él, DESPUÉS de contestar el 200 (ESCALA-3)—. El registro, la plantilla que sale hacia el **cliente** y el renglón de `message_logs` quedan idénticos |
 
 No hay confirmación de vuelta al auto-chat, y no hace falta: la plantilla de bienvenida sale
 hacia el cliente por la misma línea, así que el mesero la ve aparecer en el chat de esa

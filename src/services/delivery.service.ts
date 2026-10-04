@@ -516,6 +516,13 @@ export type DeliveryIntakeReason =
    * el pedido se cae por el camino del cliente normal y desaparece sin una línea de log.
    */
   | 'remitente_no_verificable'
+  /**
+   * Una EXCEPCIÓN que `processDeliveryMessage()` no preveía (su contrato es no lanzar). La reporta
+   * la ruta de Zernio desde el trabajo que corre DESPUÉS de contestar (`after()`, ESCALA-3): sin
+   * este motivo, ese error sería una línea genérica del log de Next y el pedido se perdería sin una
+   * fila en `delivery_intake_failures`. Si aparece, es un bug nuestro, no un pedido mal escrito.
+   */
+  | 'intake_inesperado'
 
 export type DeliveryIntakeResult =
   | { ok: true; order: ParsedDeliveryOrder; registration: RegisterDeliveryOrderResult }

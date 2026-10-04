@@ -17,8 +17,9 @@
  */
 
 import { randomUUID } from 'crypto'
-import { createClient, type PostgrestError } from '@supabase/supabase-js'
+import { createClient } from '@supabase/supabase-js'
 import { logDbFailure } from '@/lib/db-failure'
+import { leerTodo, PAGINA } from '@/lib/leer-todo'
 import { enqueueSendBatch, type EnqueueItem } from '@/services/send-queue.service'
 import { getLineBudget, type LineBudget } from '@/services/line-budget.service'
 import { getSettingValue } from '@/services/settings.service'
@@ -32,28 +33,9 @@ function getServiceClient() {
   return createClient(url, key)
 }
 
-/**
- * PostgREST corta TODA respuesta en 1.000 filas (`max-rows` de Supabase) y lo
- * hace en silencio: una base de 7.438 contactos leída de un tirón devuelve
- * 1.000 y el tablero cuenta mal sin que ningún error lo diga. Todo lo que lea
- * "todas las filas de la base" pasa por acá. La consulta tiene que venir
- * ORDENADA por algo estable, o las páginas se pisan.
- */
-const PAGINA = 1000
-
-async function leerTodo<T>(
-  pagina: (desde: number, hasta: number) => PromiseLike<{ data: T[] | null; error: PostgrestError | null }>
-): Promise<{ data: T[]; error: PostgrestError | null }> {
-  const todo: T[] = []
-  for (let desde = 0; ; desde += PAGINA) {
-    const { data, error } = await pagina(desde, desde + PAGINA - 1)
-    if (error) return { data: todo, error }
-    const filas = data ?? []
-    todo.push(...filas)
-    if (filas.length < PAGINA) break
-  }
-  return { data: todo, error: null }
-}
+// PostgREST corta TODA respuesta en 1.000 filas, en silencio: todo lo que lea "todas las filas
+// de la base" pasa por `leerTodo()` (`src/lib/leer-todo.ts`, compartido con la analítica del
+// panel desde el 2026-10-04). La consulta tiene que venir ORDENADA por algo estable.
 
 // Tarifa por defecto (Meta + Twilio). Configurable en admin_settings.
 const DEFAULT_COST_PER_MESSAGE_USD = 0.0175

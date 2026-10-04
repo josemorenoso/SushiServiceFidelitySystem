@@ -53,7 +53,7 @@ export interface DeliveryFailureExplanation {
 type Entry = Omit<DeliveryFailureExplanation, 'reason' | 'conocido'>
 
 /**
- * El mapa. Las nueve claves son la unión `DeliveryIntakeReason` de
+ * El mapa. Las diez claves son la unión `DeliveryIntakeReason` de
  * `src/services/delivery.service.ts` (que a su vez extiende `DeliveryExtractionReason`
  * de `delivery-ai.service.ts`).
  */
@@ -119,6 +119,14 @@ const MOTIVOS: Record<string, Entry> = {
       'La consulta a la lista de autorizados se cayó, así que no se pudo saber si quien escribió era un operador tuyo.',
     queHacer:
       'Es el fallo más traicionero de todos y por eso tiene nombre propio: el pedido NO se descartó por estar mal escrito, se descartó porque la base no contestó. Reenvialo; si se repite, avisale a Cada1.',
+    blame: 'nosotros',
+  },
+  intake_inesperado: {
+    label: 'Falló algo que no esperábamos',
+    quePaso:
+      'El pedido llegó, pero al procesarlo el producto falló de una forma que no tenía prevista, y no quedó registrado.',
+    queHacer:
+      'No es culpa de quien lo mandó. Reenvialo; si se repite, avisale a Cada1: el error quedó en el log con el mensaje original.',
     blame: 'nosotros',
   },
 }

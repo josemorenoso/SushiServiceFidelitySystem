@@ -32,6 +32,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Despliegue de la ola 0 a `main` (orden del dueño), Claude Code, 2026-10-04 | Opus 5.5 | **Worktree `.worktrees/deploy-ola0`** sobre `origin/main` con `npm ci` propio: `cherry-pick 0485098 ddfdf72`, tsc + vitest ahí, push a `main`. Se borra al terminar. En la rama solo `ESTADO.md`. **Corre vitest** (puerto 55432) | — (la 00069 la aplica el dueño) | en curso |
 
 ## 3. Siguiente, en orden
 

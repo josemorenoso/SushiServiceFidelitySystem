@@ -8,6 +8,20 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [docs] — 2026-10-04 — Consolidado: requerimientos de agosto × auditoría de 1000 clientes × cola, con prioridades
+
+**Pedido:** «un archivo con todos los requerimientos que hice y los que completamos, cruzado con la auditoría; saber el estado,
+los huecos nombrados y los resueltos, y juntar todo para escoger prioridades».
+
+- **`docs/ESTADO-CONSOLIDADO-2026-10-04.md`** (nuevo): los 224 pedidos de agosto (§0–§25) verificados contra el código por 5
+  auditores Sonnet (90 hechos · 42 parciales · 35 sin empezar · 12 diferidos · 20 obsoletos · **25 preguntas abiertas al dueño**);
+  los 68 hallazgos de la auditoría del 28-09 re-verificados hoy (45 abiertos, 13 críticos); 17 hallazgos nuevos; la cola de
+  `ESTADO.md` §3 clasificada (29 de 31 piden algo del dueño); 16 contradicciones entre docs; y la propuesta de olas P0–P8.
+- `docs/ESTADO-REQUERIMIENTOS.md` (06-09) queda **reemplazado** (aviso en su cabecera). Punteros de `ESTADO.md` ajustados.
+
+**Verificado:** lectura de código y git, no se corrió tsc/lint/vitest (solo docs). **NO verificado:** nada contra producción ni las
+consolas de Vercel, Meta, Zernio o Twilio (lista en §11 del consolidado). **Migración:** ninguna. **Sin código ni push.**
+
 ## [fix] — 2026-10-04 — ESCALA-3 y ESCALA-4: Zernio contesta antes de la IA; la analítica deja de cortarse en 1.000 filas
 
 **Pedido:** `docs/prompts/2026-10-03-escala-3-4.md` (auditoría 2026-09-28 §1.3).

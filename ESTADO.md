@@ -1,12 +1,12 @@
 # ESTADO — RestaurantQR / Cada1
 
-> **Última actualización:** 2026-10-04 (ESCALA-3 y ESCALA-4 DESPLEGADAS: `main` = `9a06670`, Vercel READY, sin migración — el webhook de Zernio contesta antes de la IA y la analítica pagina → §3 0.ESCALA; la ola 0 también está en `main`, falta aplicar la 00069); antes 2026-10-03 (ola 0 de seguridad construida: `0485098` + migración **00069**, sin aplicar y sin desplegar; el SQL a mano del 29 corrió en el Supabase del AIOS, NO en el del producto → AISLA-2 sigue vivo: §3 0.SEGURIDAD); antes 2026-09-29 (el dueño confirma TODAS las migraciones aplicadas → AISLA-2 está VIVO y la 00015 queda por confirmar: §3 0.SEGURIDAD; docs que mentían corregidos; prompt de la ola 0 en `docs/prompts/2026-09-29-ola-0-seguridad.md`); antes 2026-09-28 (auditoría «qué falta para 1000 clientes», solo lectura: dos agujeros entre marcas → §3 0.SEGURIDAD, la 00067 y la 00057 NO se aplican tal cual; `docs/AUDITORIA-ESCALA-1000-2026-09-28.md`); antes 2026-09-25 (los domicilios del AUTO-CHAT de la propia línea: `message.sent` + `tenant_connections.self_conversation_id`, **00068 APLICADA y PUSHEADO a main** por orden del dueño — `8be572e`; **cumpleaños NO se desplegó, queda en la rama**; antes 2026-09-24: el saludo de cumpleaños sale dos días antes: `BIRTHDAY_LEAD_DAYS`, dedup a 360; sin migración, sin desplegar; antes 2026-09-12: interruptor «Domicilios por WhatsApp» en la ficha de la sede del AIOS, 00066 APLICADA, AIOS v1.12.0 pusheado; antes: Golden Bullet por tandas desde el panel: la base entera se guarda, pestaña «Bases», `POST /continue`, sin migración; antes: Autorizados Domicilio dentro de Domicilios, pusheado `1de033e`; Planeta Wings: timeout de Auth, estado por plantilla y registro en Cloud API en el AIOS; prompt de plantillas una por una; Opus 5)
+> **Última actualización:** 2026-10-04 (consolidado de los requerimientos de agosto y la auditoría de 1000 clientes, solo docs, verificado contra el código: `docs/ESTADO-CONSOLIDADO-2026-10-04.md`; antes, el mismo día: ESCALA-3 y ESCALA-4 DESPLEGADAS: `main` = `9a06670`, Vercel READY, sin migración — el webhook de Zernio contesta antes de la IA y la analítica pagina → §3 0.ESCALA; la ola 0 también está en `main`, falta aplicar la 00069); antes 2026-10-03 (ola 0 de seguridad construida: `0485098` + migración **00069**, sin aplicar y sin desplegar; el SQL a mano del 29 corrió en el Supabase del AIOS, NO en el del producto → AISLA-2 sigue vivo: §3 0.SEGURIDAD); antes 2026-09-29 (el dueño confirma TODAS las migraciones aplicadas → AISLA-2 está VIVO y la 00015 queda por confirmar: §3 0.SEGURIDAD; docs que mentían corregidos; prompt de la ola 0 en `docs/prompts/2026-09-29-ola-0-seguridad.md`); antes 2026-09-28 (auditoría «qué falta para 1000 clientes», solo lectura: dos agujeros entre marcas → §3 0.SEGURIDAD, la 00067 y la 00057 NO se aplican tal cual; `docs/AUDITORIA-ESCALA-1000-2026-09-28.md`); antes 2026-09-25 (los domicilios del AUTO-CHAT de la propia línea: `message.sent` + `tenant_connections.self_conversation_id`, **00068 APLICADA y PUSHEADO a main** por orden del dueño — `8be572e`; **cumpleaños NO se desplegó, queda en la rama**; antes 2026-09-24: el saludo de cumpleaños sale dos días antes: `BIRTHDAY_LEAD_DAYS`, dedup a 360; sin migración, sin desplegar; antes 2026-09-12: interruptor «Domicilios por WhatsApp» en la ficha de la sede del AIOS, 00066 APLICADA, AIOS v1.12.0 pusheado; antes: Golden Bullet por tandas desde el panel: la base entera se guarda, pestaña «Bases», `POST /continue`, sin migración; antes: Autorizados Domicilio dentro de Domicilios, pusheado `1de033e`; Planeta Wings: timeout de Auth, estado por plantilla y registro en Cloud API en el AIOS; prompt de plantillas una por una; Opus 5)
 > Toda sesión lo lee PRIMERO. Toda sesión que cierra un bloque lo ACTUALIZA al final. Límite: 150 líneas.
 > Lo obsoleto se **saca**, no se tacha: un ítem tachado sigue costando tokens cada vez que alguien lee esto.
 >
 > **Sus dos hermanos:**
 > - [docs/RUNBOOK-DEPLOY.md](docs/RUNBOOK-DEPLOY.md) — los pasos exactos del despliegue, en orden, verificados contra el código.
-> - [docs/ESTADO-REQUERIMIENTOS.md](docs/ESTADO-REQUERIMIENTOS.md) — §1–§25 del encargo, auditados contra el código. Ahí vive **qué falta desarrollar**.
+> - [docs/ESTADO-CONSOLIDADO-2026-10-04.md](docs/ESTADO-CONSOLIDADO-2026-10-04.md) — los 224 pedidos de agosto (§0–§25) y los 68 hallazgos de la auditoría, verificados contra el código el 04-10, con la propuesta de prioridades. Ahí vive **qué falta desarrollar**. (Reemplaza a `docs/ESTADO-REQUERIMIENTOS.md`, del 06-09.)
 
 ---
 
@@ -33,7 +33,6 @@
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
 | **URGENTE: la analítica del panel da 500 en todas las marcas** (ESCALA-4 desplegada: «cumpleaños hoy» hace `LIKE` sobre `date`, 42883). Producción devuelta a `c055e8e` por rollback de Vercel. Claude Code, 2026-10-04 | Opus 5.5 | `src/services/dashboard.service.ts` · su test de analítica · worktree `.worktrees/hotfix-analitica` sobre `origin/main` (npm ci propio). **Corre vitest** (puerto 55432) | — | en curso |
-| Consolidado de requerimientos de agosto + auditoría de 1000 clientes + prioridades (solo docs; lee el código, no lo toca), Claude Code, 2026-10-04 | Sonnet 5.5 | **Archivo NUEVO `docs/ESTADO-CONSOLIDADO-2026-10-04.md`** y, al cerrar, el aviso de «reemplazado» en la cabecera de `docs/ESTADO-REQUERIMIENTOS.md`. Subagentes de solo lectura. **No corre vitest ni tsc** (el puerto 55432 es de la fila de arriba) | — | en curso |
 
 ## 3. Siguiente, en orden
 
@@ -305,8 +304,8 @@
 7. **De §18 quedan DOS** (`docs/DECISION-18-DOMICILIOS-COEXISTENCIA.md`): **18.e** (a los clientes de Sushi Fun
    se les contesta que ese número «es exclusivo para mensajes automáticos») y **18.c** (plantilla de fallo de Zernio).
 8. **De `docs/AUDITORIA-POST-DEPLOY-2026-09-06.md`** queda vivo el AMARILLO de `reward-reminder` (Crons). El
-   ROJO 3 está entero en `main` y vive solo hasta que corra la 00053. Siguen stale: `docs/ESTADO-REQUERIMIENTOS.md`
-   (además da por abierta la **18.e**, que ya está hecha en Conexiones C1) y `docs/04-deployment.md`.
+   ROJO 3 está entero en `main` y vive solo hasta que corra la 00053. Sigue stale `docs/04-deployment.md`.
+   (`docs/ESTADO-REQUERIMIENTOS.md` quedó reemplazado el 04-10; la **18.e** ya está hecha: el punto 7 se puede cerrar.)
 9. **Aplicar la 00030** en ventana tranquila (cierra el riesgo del DEFAULT puente). **¿Ya corrió con «todas» (29)?**
    Se confirma con la consulta (2) del prompt de la ola 0; si corrió, `CLAUDE.md` y el §6 cambian.
 10. **Onboarding de los 25**: wildcard DNS ya resuelto y probado con Sushi Fun.
@@ -331,7 +330,7 @@ automatizaciones dentro del restaurante y **Google** para reseñas.
   `preview/capa-visual`) y el **stash** olvidado de `fix/opt-out-visible` (`git stash show -p stash@{0}` para mirarlo).
 - **Borrar el Supabase de Sushi Fun.** Esperar a un fin de semana de operación normal. El respaldo son los
   `SQL-PARA-CORRER/sushi-fun/*.sql` (1.421 filas), que **NO cubren** Auth, RLS ni storage. El Vercel viejo queda **pausado**.
-- **Las preguntas abiertas de producto** (§18.a–d, §16.a–e, §17.a–d, §15.b, §12, §9): `docs/ESTADO-REQUERIMIENTOS.md`.
+- **Las 25 preguntas abiertas de producto** (§16.a–e, §17.a–d, §15.a–b, §9, §4, §8, §22, D-8…D-10, el aviso §24-P2…): `docs/ESTADO-CONSOLIDADO-2026-10-04.md` §7.
 - **Separación de una sede** (venta, franquicia, socio distinto) — aplazada por el dueño, 2026-09-02.
 - Decisiones ya CERRADAS que no se reabren: **D6** (N líneas por marca, la sede no obliga a ninguna; `multi-sede.md` §5) ·
   **D21** (un subdominio por sede, todas pares; con 2+ sedes el dominio RAÍZ deja de registrar, 409; `multi-sede.md` §3.5).
@@ -565,7 +564,7 @@ sin UNIQUE por tenant · **D4** diagrama ER de DB_SCHEMA obsoleto · **D5** cont
 - **Huecos de migración**: `00048` y `00049` los citó el diseño (F9 se escribió, pero como `00058`; F10 no);
   `00052` y `00055` los fabricó el script viejo al leer una cita como reserva. Ninguno se rellena.
 - **Choques de migración en ramas muertas**: `sushi-sync` (00015) y `port/sushi-fun-2.8` (00028).
-- **Catálogo de producto sin empezar** (referidos, push, fatiga, §7, §8, §18): `docs/ESTADO-REQUERIMIENTOS.md`.
+- **Catálogo de producto sin empezar** (referidos, push, fatiga, tier máximo, multi-sede F5/F6): `docs/ESTADO-CONSOLIDADO-2026-10-04.md` §1 y §9 (P8).
 - **Plantillas (2026-09-11)**: cinco escritores de `admin_settings.*_template_sid` (el invariante de
   `promoteVersion()` vale en un archivo, no en el sistema) · `tier_unlocked` y `reward_reminder` fuera del
   catálogo · una plantilla PAUSED por Meta sigue apuntada y falla en silencio · `no_template_configured` no

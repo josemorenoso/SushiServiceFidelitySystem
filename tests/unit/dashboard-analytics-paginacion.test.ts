@@ -100,6 +100,11 @@ function coincide(fila: Fila, f: Filtro): boolean {
 
 function ejecutar(c: Consulta): { data: Fila[] | null; error: { message: string; code?: string } | null } {
   if (fallo?.(c)) return { data: null, error: { message: 'boom-db', code: '57014' } }
+  // Lo que contesta Postgres de verdad: `birthday` es `date` y LIKE no existe para `date`. El doble
+  // anterior lo trataba como texto, y por eso la analítica se desplegó rota (2026-10-04).
+  if (c.filtros.some((f) => f.op === 'like' && f.col === 'birthday')) {
+    return { data: null, error: { message: 'operator does not exist: date ~~ unknown', code: '42883' } }
+  }
 
   let filas = (tablas[c.tabla] ?? []).filter((fila) => c.filtros.every((f) => coincide(fila, f)))
   if (c.orden.length > 0) {
@@ -454,10 +459,11 @@ describe('cómo lee la base', () => {
     expect(a.brand.summary.totalCustomers).toBe(2)
     expect(totalDelMapa(a)).toBe(1)
     expect(a.brand.roiEstimate.avgTicket).toBe(35000) // sin ajuste guardado, el de siempre
-    // clientes, cumpleaños, visitas ×2, campañas y ajustes. Sin campañas de reactivación no se
-    // pregunta por mensajes: una lectura menos, no una que vuelve vacía.
+    // clientes, visitas ×2, campañas y ajustes (los cumpleaños salen de los clientes, no de otra
+    // lectura). Sin campañas de reactivación no se pregunta por mensajes: una lectura menos, no una
+    // que vuelve vacía.
     expect(consultas.map((c) => c.tabla).sort()).toEqual(
-      ['admin_settings', 'campaigns', 'customers', 'customers', 'visits', 'visits']
+      ['admin_settings', 'campaigns', 'customers', 'visits', 'visits']
     )
   })
 })
@@ -466,14 +472,12 @@ describe('cómo lee la base', () => {
 // Un fallo de base es un error, no «cero»
 // ═══════════════════════════════════════════════════════════════
 
-describe('un fallo de base en cualquiera de las 7 lecturas da un error visible, no ceros', () => {
+describe('un fallo de base en cualquiera de las 6 lecturas da un error visible, no ceros', () => {
   const gte = (c: Consulta) => String(c.filtros.find((f) => f.op === 'gte')?.valor ?? '')
-  const esCumples = (c: Consulta) => c.filtros.some((f) => f.op === 'like')
 
   const LECTURAS: Array<{ nombre: string; razon: string; falla: (c: Consulta) => boolean }> = [
-    { nombre: 'los clientes', razon: 'analitica_clientes', falla: (c) => c.tabla === 'customers' && !esCumples(c) },
+    { nombre: 'los clientes', razon: 'analitica_clientes', falla: (c) => c.tabla === 'customers' },
     { nombre: 'las visitas de 30 días', razon: 'analitica_visitas_30d', falla: (c) => c.tabla === 'visits' && gte(c) === '2026-09-04' },
-    { nombre: 'los cumpleaños', razon: 'analitica_cumpleanos', falla: (c) => c.tabla === 'customers' && esCumples(c) },
     { nombre: 'las visitas de 6 meses', razon: 'analitica_visitas_6m', falla: (c) => c.tabla === 'visits' && gte(c) === '2026-04-04' },
     { nombre: 'las campañas de reactivación', razon: 'analitica_campanas', falla: (c) => c.tabla === 'campaigns' },
     { nombre: 'los mensajes de campaña', razon: 'analitica_mensajes', falla: (c) => c.tabla === 'campaign_messages' },

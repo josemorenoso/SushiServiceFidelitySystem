@@ -312,7 +312,12 @@ export async function getFullAnalytics(scope: LocationScope): Promise<DashboardA
   // `customers` NO se ordena por `total_visits` en la base: esa columna cambia con cada check-in,
   // y uno a mitad de la lectura movería a un cliente de página (saldría dos veces o ninguna). Se
   // pagina por `created_at, id`, que no cambian, y se ordena por visitas enseguida, en memoria.
-  const [lecturaClientes, lecturaVisitas30d, lecturaCumples, lecturaVisitas6m, lecturaCampanas, lecturaAjustes] =
+  //
+  // Los cumpleaños de hoy NO son una lectura aparte: salen de `customers`, que ya se trae entera.
+  // Hubo una (`.like('birthday', '%-MM-DD')`) y `birthday` es `date`: Postgres contesta 42883
+  // («operator does not exist: date ~~ unknown»). Mientras el `error` se ignoraba daba 0 en
+  // silencio; cuando se empezó a exigir, tumbó la analítica entera de todas las marcas (2026-10-04).
+  const [lecturaClientes, lecturaVisitas30d, lecturaVisitas6m, lecturaCampanas, lecturaAjustes] =
     await Promise.all([
       leerTodo<Customer>((desde, hasta) =>
         supabase
@@ -324,16 +329,6 @@ export async function getFullAnalytics(scope: LocationScope): Promise<DashboardA
           .range(desde, hasta)
       ),
       leerVisitas(supabase, tenantId, thirtyDaysAgoStr),
-      leerTodo<{ id: string }>((desde, hasta) =>
-        supabase
-          .from('customers')
-          .select('id')
-          .eq('tenant_id', tenantId)
-          .not('birthday', 'is', null)
-          .like('birthday', `%-${month}-${day}`)
-          .order('id', { ascending: true })
-          .range(desde, hasta)
-      ),
       leerVisitas(supabase, tenantId, sixMonthsAgoStr),
       leerTodo<CampanaLeida>((desde, hasta) =>
         supabase
@@ -353,7 +348,10 @@ export async function getFullAnalytics(scope: LocationScope): Promise<DashboardA
     (a, b) => (b.total_visits ?? 0) - (a.total_visits ?? 0)
   )
   const recentVisits = exigirLectura(lecturaVisitas30d, 'analitica_visitas_30d', tenantId)
-  const birthdayData = exigirLectura(lecturaCumples, 'analitica_cumpleanos', tenantId)
+  // `birthday` llega como 'AAAA-MM-DD' (columna `date`): hoy es quien coincide en mes y día.
+  const birthdaysToday = customers.filter(
+    (c) => typeof c.birthday === 'string' && c.birthday.slice(5, 10) === `${month}-${day}`
+  ).length
   const allVisits6m = exigirLectura(lecturaVisitas6m, 'analitica_visitas_6m', tenantId)
   const reactivationCampaigns = exigirLectura(lecturaCampanas, 'analitica_campanas', tenantId)
   const settingsData = exigirLectura(
@@ -612,7 +610,7 @@ export async function getFullAnalytics(scope: LocationScope): Promise<DashboardA
         newCustomersToday: newToday,
         newCustomersWeek: newWeek,
         frequentCustomers: customers.filter((c) => c.total_visits >= 3).length,
-        birthdaysToday: birthdayData.length,
+        birthdaysToday,
       },
       newCustomersPerDay,
       customerTiers,

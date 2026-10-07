@@ -32,6 +32,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Escáner del mesero lento / no lee el QR del cliente (2026-10-07) | Opus 5.5 | `src/app/(public)/mesero/scan/page.tsx`, `docs/features/staff-qr-scan.md`, `CHANGELOG.md` | — | en curso |
 
 ## 3. Siguiente, en orden
 

@@ -323,6 +323,12 @@ https://[dominio]/mesero/scan?token=eyJhbGciOiJIUzI1Ni...
 
 - Requiere sesión de mesero válida (JWT). Si no hay sesión, redirige a `/mesero`.
 - Pantalla completa con visor de cámara (`html5-qrcode`).
+- **Configuración del lector (2026-10-07, «tarda o no lee»):** el QR de la tarjeta es denso —URL + JWT
+  entero (~450 caracteres) en nivel H por el logo = **versión 23, 109×109 módulos**, ~2 px por módulo a
+  210 px—. Por eso: solo `QR_CODE` (no los 17 formatos), lector nativo (`useBarCodeDetectorIfSupported`)
+  donde exista, cuadro de lectura al 85 % del visor (antes 250 px fijos) y video pedido en 1920×1080.
+  La otra mitad —achicar el QR en la tarjeta (token más corto, nivel/logo, tamaño)— **no se tocó**: cambia
+  el contrato del token o el diseño, y es decisión del dueño.
 - Overlay con marco de escaneo (diseño tipo "cámara de pago").
 - Botón para encender/apagar linterna (si el navegador lo permite).
 - Mensaje guía: "Apunta al código QR del cliente".

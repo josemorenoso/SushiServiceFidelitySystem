@@ -8,6 +8,14 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [fix] — 2026-10-07 — El escáner del mesero tarda o no lee el QR del cliente
+
+- Causa: el QR de la tarjeta es versión 23 (109×109 módulos: URL + JWT entero, nivel H por el logo) y el
+  lector lo buscaba con ZXing en JS, probando los 17 formatos, en un cuadro fijo de 250 px y video en baja.
+- `mesero/scan/page.tsx`: solo `QR_CODE`, lector nativo (`BarcodeDetector`) donde exista, cuadro al 85 % del
+  visor, 15 fps y video pedido en 1920×1080. Sin migración, sin cambio de contrato.
+- Pendiente (decisión del dueño): achicar el QR en la tarjeta. → `staff-qr-scan.md` § Pantalla del Mesero.
+
 ## [docs] — 2026-10-04 — Ciclo de recuperación, segunda pasada: la revisión del dueño aplicada al spec, al prototipo y al prompt
 
 **Pedido:** la revisión del dueño («lo que está bien y no tocaría» / «lo que cambiaría, por prioridad»). Solo docs.

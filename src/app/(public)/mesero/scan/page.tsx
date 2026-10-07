@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useStaffAuth } from '@/hooks/useStaffAuth'
-import { Html5Qrcode, Html5QrcodeScannerState } from 'html5-qrcode'
+import { Html5Qrcode, Html5QrcodeScannerState, Html5QrcodeSupportedFormats } from 'html5-qrcode'
 import { Loader2, ArrowLeft, Flashlight, FlashlightOff, Keyboard } from 'lucide-react'
 import { decodeCustomerQRTokenUnsafe } from '@/lib/utils/qrcode'
 
@@ -67,7 +67,17 @@ export default function MeseroScanPage() {
   useEffect(() => {
     if (authLoading || !session || showManual) return
 
-    const scanner = new Html5Qrcode('reader')
+    // El QR de la tarjeta es DENSO (versión ~23, 109×109 módulos: lleva el JWT entero
+    // y nivel H por el logo). Por eso tres cosas que no son cosméticas:
+    // · solo QR_CODE: sin esto ZXing prueba los 17 formatos en cada cuadro;
+    // · el lector nativo del sistema (BarcodeDetector) donde exista, mucho más rápido;
+    // · cuadro de lectura al 85 % del visor y video en alta: con 250 px fijos y la
+    //   resolución por defecto, cada módulo quedaba en ~1-2 px y la lectura fallaba.
+    const scanner = new Html5Qrcode('reader', {
+      verbose: false,
+      formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+      useBarCodeDetectorIfSupported: true,
+    })
     scannerRef.current = scanner
 
     const start = async () => {
@@ -75,7 +85,18 @@ export default function MeseroScanPage() {
         setScanning(true)
         await scanner.start(
           { facingMode: 'environment' },
-          { fps: 10, qrbox: { width: 250, height: 250 } },
+          {
+            fps: 15,
+            qrbox: (w, h) => {
+              const side = Math.floor(Math.min(w, h) * 0.85)
+              return { width: side, height: side }
+            },
+            videoConstraints: {
+              facingMode: 'environment',
+              width: { ideal: 1920 },
+              height: { ideal: 1080 },
+            },
+          },
           (decodedText) => {
             handleScan(decodedText)
           },

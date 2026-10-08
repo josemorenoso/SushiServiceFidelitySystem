@@ -33,6 +33,7 @@
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
 | Consolidar TODO lo pendiente en un solo documento (ciclo + revisión + lista de septiembre + auditoría + preguntas al dueño), solo docs — 2026-10-08 | Opus 5.5 | `docs/PENDIENTES.md` (nuevo), `ESTADO.md`, `CHANGELOG.md`, `docs/ESTADO-CONSOLIDADO-2026-10-04.md`, `docs/superpowers/specs/2026-10-04-ciclo-de-recuperacion-design.md`, `docs/prompts/2026-10-04-ciclo-fase-0-y-1.md` | — | en vuelo |
+| AIOS: alta de WhatsApp de Tepuy por Zernio — link único `/conectar` (v1.15.0) y alinear con la respuesta de Zernio del 08-10, código + docs — 2026-10-08 | Opus 5.5 | SOLO el repo `Level 2.0/aios-constelarys/` (su `CHANGELOG.md`, `docs/`, `src/lib/zernio/*`, `src/lib/actions/provisioning.ts`, `src/app/conectar/*`, `src/components/clients/WhatsappWizard.tsx`). No toca nada de Cada1 salvo esta fila | — (ninguna) | en vuelo |
 
 ## 3. Siguiente, en orden
 

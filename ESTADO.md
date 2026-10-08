@@ -32,6 +32,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Consolidar TODO lo pendiente en un solo documento (ciclo + revisión + lista de septiembre + auditoría + preguntas al dueño), solo docs — 2026-10-08 | Opus 5.5 | `docs/PENDIENTES.md` (nuevo), `ESTADO.md`, `CHANGELOG.md`, `docs/ESTADO-CONSOLIDADO-2026-10-04.md`, `docs/superpowers/specs/2026-10-04-ciclo-de-recuperacion-design.md`, `docs/prompts/2026-10-04-ciclo-fase-0-y-1.md` | — | en vuelo |
 
 ## 3. Siguiente, en orden
 

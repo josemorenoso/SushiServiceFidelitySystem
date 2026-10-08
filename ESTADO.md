@@ -33,6 +33,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Ciclo fase 0: parar la sangría (N3, N4, N15, una escala), sin migración — 2026-10-08 | Opus 5.5 | `src/services/campaign.service.ts` · `src/app/api/cron/reactivation/route.ts` · `src/app/(dashboard)/dashboard/campaigns/page.tsx` · `src/constants/rankings.ts` · consumidores de `RISK_LEVELS`: `src/components/dashboard/AtRiskBubbles.tsx`, `src/services/dashboard.service.ts`, `src/lib/demo-analytics.ts` · `tests/**` nuevos · `SQL-PARA-CORRER/ciclo-fase-0/` · `docs/features/campaigns.md` · `docs/PENDIENTES.md` · `ESTADO.md` · `CHANGELOG.md` | — | en curso |
 
 ## 3. Siguiente, en orden
 

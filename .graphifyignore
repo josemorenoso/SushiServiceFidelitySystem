@@ -6,8 +6,9 @@ graphify-out/
 package-lock.json
 .pgdata-test/
 
-# AIOS Constelarys vive acá solo como carpeta de trabajo (repo aparte). Hoy NO tiene
-# grafo propio (auditoría 2026-09-28, PROC-5): si se quiere, `graphify extract` desde su carpeta.
+# AIOS Constelarys vive acá solo como carpeta de trabajo (repo aparte) y tiene SU PROPIO
+# grafo desde el 2026-10-08 (solo código, con hook post-commit): `Level 2.0/aios-constelarys/graphify-out/`,
+# y en el global como `aios-constelarys`. Se consulta desde su carpeta.
 Level 2.0/
 
 # binarios

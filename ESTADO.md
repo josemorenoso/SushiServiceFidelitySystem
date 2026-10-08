@@ -22,7 +22,7 @@
 | Migraciones: dónde están | El directorio muestra **solo la rama puesta**; el inventario real y el número de la próxima los da `node scripts/proxima-migracion.mjs`. **Desde el 07 la única reserva es la fila del tablero (§2)**: un número citado en cualquier otro doc no reserva nada. `00048`, `00049`, `00052` y `00055` son huecos: no se rellenan |
 | Crons | Los 6 en `vercel.json` (los 5 de campañas + `line-health` cada hora), corriendo. `birthday` 18:00 y `reactivation` 20:00 UTC (= 13:00/15:00 Bogotá), verificado. **`birthday` saluda a quien cumple DENTRO DE DOS DÍAS** (`BIRTHDAY_LEAD_DAYS`, dueño 2026-09-24), no a quien cumple hoy. ⚠️ **`reward-reminder` sigue en 16:00 UTC (11:00 Bogotá)**; la auditoría estimó ≈21:00 UTC. **Decisión del dueño** |
 | n8n | Apagado. `domicilios_whatsapp_v4.json` sigue en el VPS pero ya no dispara |
-| AIOS (`Level 2.0/aios-constelarys`) | **`origin/main` = `f489ad9` (v1.14.0, 2026-10-04: el alta crea «Cumpleaños — dos días antes» en vez de «¡Feliz cumpleaños!»; antes `b1b2465` v1.13.2, 24-72 h)**. Antes **`origin/main` = `c7e6dd5` (v1.13.1: el wizard del propietario aparece con la sede en Twilio, sin cambiar el selector; v1.13.0, pusheado el 2026-09-12 por orden del dueño; Vercel `cada1_aios` lo despliega solo)**: «4-bis. Zernio en paralelo (solo la difusión)» en la sede en Twilio — `aios_attach_zernio_account`, **necesita la 00067 del producto** (sin ella dice «esa función todavía no existe»). Antes, `6323ced` (v1.12.0): interruptor «Domicilios por WhatsApp» de la marca en la tarjeta Sistema de la sede (`getDeliveryWebhook`/`setDeliveryWebhook`, `actions/delivery.ts`), sobre la **00066 del producto, ya aplicada**. Encima de `5108550` (v1.11.3: `getTemplateStatus` lee `template.status`, el 500 de `/clientes/[id]` por `toLowerCase`) y `c70f348` (docs contrato §8). Antes, **`origin/main` = `62e8c13` (v1.11.2, pusheado el 2026-09-12 por orden del dueño; Vercel `cada1_aios` lo despliega solo)**: paso 3 con botón «Registrar número en Cloud API» (coexistencia deja el número «sin registrar»; nunca se llamaba `POST …/whatsapp/register`); el paso 4 guarda y muestra el estado de CADA plantilla (aprobada/pendiente/rechazada + motivo) — antes un rechazo era invisible para siempre; y la lista resuelve `_v2`. Planeta Wings: 13 creadas a las 00:17 UTC, 0/13 aprobadas 4 h después, estado real desconocido hasta desplegar esto o mirar el WhatsApp Manager. Antes, **`origin/main` = `1a9f558` (v1.11.1, pusheado el 2026-09-11 23:55)**: un `Gateway Timeout` de Supabase Auth ya no te saca al login en medio de una acción (pasó en el alta de Planeta Wings al apretar «Crear plantillas»: el paso 4 nunca corrió; es reintentar, no un bug del paso). Antes, `c8a1917` (v1.11.0): borrar propietario entero, lista Twilio \| Zernio con recarga, reinicio de WhatsApp, Embedded Signup que se anota solo (00010 del AIOS, sin aplicar), `ZERNIO_SIMULATE` solo con `true`. Necesita la **00064 del producto** aplicada y `ZERNIO_API_KEY` vigente en su Vercel. Antes: **`origin/main` = `b6fd308` (v1.10.0), pusheado el 2026-09-10**: las 13 plantillas copiadas del producto (sin 🍣, emoji por rubro), media de muestra desde `ZERNIO_TEMPLATE_SAMPLE_{IMAGE,VIDEO}_URL` **del Vercel del AIOS** (las dos son obligatorias o el paso 4 no arranca), y nombres `_v2` cuando el base ya existe en la WABA |
+| AIOS (`Level 2.0/aios-constelarys`) | **Local `b3b4a1b` (v1.15.1, 2026-10-08), SIN pushear: link único `/conectar/[token]` para que el cliente conecte WhatsApp (necesita `AIOS_CONNECT_LINK_SECRET` en su Vercel), y la compra de números de Colombia arreglada (mandaba `mobile`; CO solo ofrece `local`). Tiene grafo propio desde hoy (solo código, hook post-commit).** Antes **`origin/main` = `f489ad9` (v1.14.0, 2026-10-04: el alta crea «Cumpleaños — dos días antes» en vez de «¡Feliz cumpleaños!»; antes `b1b2465` v1.13.2, 24-72 h)**. Antes **`origin/main` = `c7e6dd5` (v1.13.1: el wizard del propietario aparece con la sede en Twilio, sin cambiar el selector; v1.13.0, pusheado el 2026-09-12 por orden del dueño; Vercel `cada1_aios` lo despliega solo)**: «4-bis. Zernio en paralelo (solo la difusión)» en la sede en Twilio — `aios_attach_zernio_account`, **necesita la 00067 del producto** (sin ella dice «esa función todavía no existe»). Antes, `6323ced` (v1.12.0): interruptor «Domicilios por WhatsApp» de la marca en la tarjeta Sistema de la sede (`getDeliveryWebhook`/`setDeliveryWebhook`, `actions/delivery.ts`), sobre la **00066 del producto, ya aplicada**. Encima de `5108550` (v1.11.3: `getTemplateStatus` lee `template.status`, el 500 de `/clientes/[id]` por `toLowerCase`) y `c70f348` (docs contrato §8). Antes, **`origin/main` = `62e8c13` (v1.11.2, pusheado el 2026-09-12 por orden del dueño; Vercel `cada1_aios` lo despliega solo)**: paso 3 con botón «Registrar número en Cloud API» (coexistencia deja el número «sin registrar»; nunca se llamaba `POST …/whatsapp/register`); el paso 4 guarda y muestra el estado de CADA plantilla (aprobada/pendiente/rechazada + motivo) — antes un rechazo era invisible para siempre; y la lista resuelve `_v2`. Planeta Wings: 13 creadas a las 00:17 UTC, 0/13 aprobadas 4 h después, estado real desconocido hasta desplegar esto o mirar el WhatsApp Manager. Antes, **`origin/main` = `1a9f558` (v1.11.1, pusheado el 2026-09-11 23:55)**: un `Gateway Timeout` de Supabase Auth ya no te saca al login en medio de una acción (pasó en el alta de Planeta Wings al apretar «Crear plantillas»: el paso 4 nunca corrió; es reintentar, no un bug del paso). Antes, `c8a1917` (v1.11.0): borrar propietario entero, lista Twilio \| Zernio con recarga, reinicio de WhatsApp, Embedded Signup que se anota solo (00010 del AIOS, sin aplicar), `ZERNIO_SIMULATE` solo con `true`. Necesita la **00064 del producto** aplicada y `ZERNIO_API_KEY` vigente en su Vercel. Antes: **`origin/main` = `b6fd308` (v1.10.0), pusheado el 2026-09-10**: las 13 plantillas copiadas del producto (sin 🍣, emoji por rubro), media de muestra desde `ZERNIO_TEMPLATE_SAMPLE_{IMAGE,VIDEO}_URL` **del Vercel del AIOS** (las dos son obligatorias o el paso 4 no arranca), y nombres `_v2` cuando el base ya existe en la WABA |
 | Grafo | Docs re-extraídos el 2026-09-29 (Haiku por `claude-cli`, incremental, ~2 M tokens de la suscripción) + `cluster-only` + `label`: **5.860 nodos, 10.780 aristas, 543 comunidades**. El hook post-commit reconstruye el código solo en cada commit. ⚠️ **`graphify.exe` lo bloquea el Control de aplicaciones de Windows**: se usa el módulo, `/c/Users/luisr/AppData/Roaming/uv/tools/graphifyy/Scripts/python.exe -m graphify query "…"` (y `update .`, `extract`, `label`). 8 docs viejos no dieron nodos nuevos (`scalability-analysis.md`, `DELEGACION_GUIDE.md` y otros 6: conservan los del 08) |
 | Deadline | ~2026-09-10 — onboarding de los 25 clientes de Zernio |
 
@@ -33,7 +33,6 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
-| AIOS: alta de WhatsApp de Tepuy por Zernio — link único `/conectar` (v1.15.0) y alinear con la respuesta de Zernio del 08-10, código + docs — 2026-10-08 | Opus 5.5 | SOLO el repo `Level 2.0/aios-constelarys/` (su `CHANGELOG.md`, `docs/`, `src/lib/zernio/*`, `src/lib/actions/provisioning.ts`, `src/app/conectar/*`, `src/components/clients/WhatsappWizard.tsx`). No toca nada de Cada1 salvo esta fila | — (ninguna) | en vuelo |
 
 ## 3. Siguiente, en orden
 
@@ -144,15 +143,16 @@
    24-48 h de Meta, prueba a su celular, tanda de ≤250/día hasta que Meta suba el cupo. Pendiente
    de código: `tier_unlocked_template_sid` y `reward_reminder_template_sid` fuera del catálogo
    del AIOS (§5 del runbook) — solo pesa en la migración completa.
-0.AIOS **Antes de que el dueño registre el número real de Tepuy (mañana, 2026-09-12).** En orden:
-   1. La `00064` ya corrió (dueño, 29): borrar y reiniciar un alta rota funciona desde el AIOS. Falta
-      confirmar la **`00010`** en el Supabase del AIOS (el retorno del Embedded Signup se anota solo).
-   2. **Vercel del AIOS:** `ZERNIO_API_KEY` vigente (la de `.env.local` da 401), **`ZERNIO_SIMULATE`
-      fuera** (desde v1.11.0 solo simula con `true`), y `AIOS_ADMIN_PROVISION_SECRET` igual al del producto.
-   3. Desplegar producto (`tenant-delete`) y AIOS (v1.11.0). En el AIOS: Tepuy → «Reiniciar el alta de
-      WhatsApp» (deja el producto en `twilio` sin el `+573000000000`) → borrar los dos propietarios de
-      prueba → rehacer el alta de Tepuy de verdad: el link ya no dice `client_id=sim` y el paso 3 se
-      cierra solo cuando la clienta termina.
+0.AIOS **Tepuy: WhatsApp por Zernio, a la espera del número (2026-10-08).** El +57 604 201 1009 se compró desde el
+   panel de Zernio (standalone, perfil «Default») y NUNCA se verificó en Meta: las llamadas del código no llegaron
+   (tenía desvío y buzón, `domesticOnly`); el cliente lo escribió en el popup y Meta lo bloqueó hasta el 09-10 02:14 UTC.
+   Ya está en el perfil de Tepuy. En orden:
+   1. Responder a Zernio que SÍ al cambio por un +57 601 en el perfil de Tepuy (el 604 se libera). Sin desvío ni buzón
+      hasta que esté verificado.
+   2. Vercel del AIOS: `AIOS_CONNECT_LINK_SECRET` (nueva) y `ZERNIO_API_KEY` vigente; pushear el AIOS (v1.15.1).
+   3. Cuando el número diga `verified`: AIOS → Tepuy → paso 3 «Generar link para el cliente» (alinea solo el paso 2)
+      → mandárselo al cliente. Si no está verificado, el panel no da el link.
+   Detalle: `Level 2.0/aios-constelarys/docs/features/whatsapp-connect-link.md` y su contrato §3.a.
    ⚠️ `clubtepuy.constelarys.com` (raíz) con DOS sedes activas **no debe llevar a Envigado**: por D21
    responde 409 con la lista de sedes. Si lleva a Envigado, o Laureles está inactiva en el producto, o
    Envigado tiene el dominio raíz como propio. Se mira en `/dashboard/sedes` de Tepuy.
@@ -364,6 +364,11 @@ automatizaciones dentro del restaurante y **Google** para reseñas.
 
 ## 5. Hecho reciente
 
+- **AIOS v1.15.0 + v1.15.1** (2026-10-08, sin pushear, sin migración): un solo link de 30 días para que el cliente
+  conecte su WhatsApp (página de Zernio en español al tocar «Empezar»), que no se da ni se abre si el número no está en
+  el perfil del cliente y verificado en Meta; la compra de números de Colombia desde el AIOS, que fallaba siempre;
+  contrato de Zernio al spec 1.241.0. Verificado: tsc · lint · build · script de pruebas · servidor local con la API
+  real (el 604 sin verificar no abre Meta). **NO verificado:** una conexión completa (Tepuy espera su número).
 - **Diseño del ciclo de recuperación** (2026-10-04, solo docs, sin migración): el pedido del dueño de rehacer campañas
   + calendario. Spec con el diagnóstico de lo que el cron hace de verdad (el insistente cada ~30 días sin tope; un
   fallo calla 30 días), la máquina de estados (activo → dormido → archivado, reinicio por visita, atribución a 14 días),

@@ -109,18 +109,18 @@ export function computeDemoAnalytics(customers: DemoCustomer[]): DashboardAnalyt
 
   const riskBuckets: Record<string, { name: string; phone: string; daysInactive: number; total_visits: number }[]> = {}
   for (const level of RISK_LEVELS) riskBuckets[level.name] = []
+  // El demo no tiene marca: usa las bandas con los días por defecto (`RISK_LEVELS`), las
+  // mismas que `getFullAnalytics()` deriva para una marca que no tocó sus días.
   for (const c of customers) {
     const inactive = daysBetween(new Date(c.last_visit_at), now)
-    if (inactive >= 7) {
-      const level = RISK_LEVELS.find((r) => inactive >= r.minDays && inactive <= r.maxDays)
-      if (level) {
-        riskBuckets[level.name].push({
-          name: c.name,
-          phone: c.phone,
-          daysInactive: inactive,
-          total_visits: c.total_visits,
-        })
-      }
+    const level = RISK_LEVELS.find((r) => inactive >= r.minDays && inactive <= r.maxDays)
+    if (level) {
+      riskBuckets[level.name].push({
+        name: c.name,
+        phone: c.phone,
+        daysInactive: inactive,
+        total_visits: c.total_visits,
+      })
     }
   }
   const atRiskGroups: RiskGroup[] = RISK_LEVELS.map((r) => ({

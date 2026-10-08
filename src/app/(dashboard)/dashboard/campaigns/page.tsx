@@ -33,7 +33,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { useDemo } from '@/contexts/DemoContext'
 import { useLocationScope } from '@/contexts/LocationScopeContext'
 import { useDashboardAnalytics } from '@/hooks/useDashboardAnalytics'
-import { FREQUENCY_CAP_DAYS, normalizeReactivationDays, deriveRecoveryZone } from '@/constants/rewards'
+import { FREQUENCY_CAP_DAYS, normalizeReactivationDays } from '@/constants/rewards'
+import { deriveCycleBands, type CycleBand } from '@/constants/rankings'
 
 interface Campaign {
   id: string
@@ -74,7 +75,8 @@ const autoCampaigns: AutoCampaignDef[] = [
     border: 'border-pink-200',
     description: () =>
       'Saluda solo a los clientes que cumplen años: hasta dos días antes con «Cumpleaños — dos días antes», o el día mismo mientras esa plantilla no esté aprobada. Prioridad absoluta: ignora el cap de frecuencia.',
-    cron: 'Todos los días a la 1:00 PM',
+    // vercel.json: `0 18 * * *` (UTC) = 13:00 en Bogotá.
+    cron: 'Todos los días a las 13:00 (Bogotá)',
     templateSettingKeys: ['birthday_upcoming_template_sid', 'birthday_template_sid'],
   },
   {
@@ -85,8 +87,9 @@ const autoCampaigns: AutoCampaignDef[] = [
     bg: 'bg-orange-50',
     border: 'border-orange-200',
     description: (softDays, aggressiveDays) =>
-      `Recupera clientes inactivos en dos toques: suave a los ${softDays} días y agresivo a los ${aggressiveDays} días. Los días se ajustan en Ajustes.`,
-    cron: 'Todos los días a las 10:00 AM',
+      `Recupera clientes inactivos en dos toques: suave al día ${softDays}; insistente al día ${aggressiveDays}, una sola vez (y nunca a menos de ${FREQUENCY_CAP_DAYS} días del suave). Si el cliente vuelve, empieza de cero. Los días se ajustan en Ajustes.`,
+    // vercel.json: `0 20 * * *` (UTC) = 15:00 en Bogotá.
+    cron: 'Todos los días a las 15:00 (Bogotá)',
     templateSettingKeys: ['reactivation_no_reward_template_sid', 'reactivation_with_reward_template_sid', 'reactivation_template_sid'],
   },
 ]
@@ -155,16 +158,21 @@ export default function CampaignsPage() {
       .finally(() => setLoading(false))
   }, [campaignsUrl])
 
-  // Los días efectivos y la ventana reservada al cron se derivan con las MISMAS
-  // funciones que usa el servidor (`getReactivationDaysConfig` /
-  // `getRecoveryZoneConfig`). Antes las bandas del ciclo salían de constantes
-  // fijas 18-25: cambiar las fechas en Ajustes movía el texto del toque pero no
-  // los rótulos, y la tarjeta terminaba contradiciéndose sola.
+  // Los días efectivos y las bandas del ciclo se derivan con las MISMAS funciones que
+  // usa el servidor (`getReactivationDaysConfig` / `getRecoveryZoneConfig`) y que arman
+  // las burbujas (`deriveCycleBands()`): una sola escala de días en toda la pantalla.
+  // Antes las bandas salían de constantes fijas: cambiar las fechas en Ajustes movía el
+  // texto del toque pero no los rótulos, y la tarjeta terminaba contradiciéndose sola.
   const { softDays: softDaysNum, aggressiveDays: aggressiveDaysNum } = normalizeReactivationDays(
     settings.reactivation_soft_days,
     settings.reactivation_aggressive_days
   )
-  const recoveryZone = deriveRecoveryZone(softDaysNum, aggressiveDaysNum)
+  const cycleBands = deriveCycleBands(softDaysNum, aggressiveDaysNum)
+  const band = (name: CycleBand['name']) => cycleBands.find((b) => b.name === name)
+  const reciente = band('Reciente')
+  const ventana = band('Ventana')
+  const recuperacion = band('Recuperación')
+  const perdido = band('Perdido')
   const softDays = String(softDaysNum)
   const aggressiveDays = String(aggressiveDaysNum)
 
@@ -344,28 +352,30 @@ export default function CampaignsPage() {
               </p>
             </div>
             <div className="rounded-lg border bg-muted/40 p-3">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Días 1–{FREQUENCY_CAP_DAYS}</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Días 1–{reciente?.maxDays}</p>
               <p className="text-sm font-semibold mt-0.5">Protegido</p>
               <p className="text-xs text-muted-foreground mt-1">
                 Cap de frecuencia: no recibe marketing. La experiencia manda.
               </p>
             </div>
-            <div className="rounded-lg border border-blue-200 bg-blue-50/60 p-3">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-700">Días {FREQUENCY_CAP_DAYS}–{recoveryZone.startDays - 1}</p>
-              <p className="text-sm font-semibold text-blue-900 mt-0.5">Ventana manual</p>
-              <p className="text-xs text-blue-800/80 mt-1">
-                Burbujas de riesgo y campañas manuales con filtro por días sin venir.
-              </p>
-            </div>
+            {ventana && (
+              <div className="rounded-lg border border-blue-200 bg-blue-50/60 p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-700">Días {ventana.minDays}–{ventana.maxDays}</p>
+                <p className="text-sm font-semibold text-blue-900 mt-0.5">Ventana manual</p>
+                <p className="text-xs text-blue-800/80 mt-1">
+                  Burbujas de riesgo y campañas manuales con filtro por días sin venir.
+                </p>
+              </div>
+            )}
             <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700">Días {recoveryZone.startDays}–{recoveryZone.endDays}</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700">Días {recuperacion?.minDays}–{recuperacion?.maxDays}</p>
               <p className="text-sm font-semibold text-amber-900 mt-0.5">Recuperación automática</p>
               <p className="text-xs text-amber-800/80 mt-1">
-                Zona reservada: toque suave al día {softDays} y agresivo al día {aggressiveDays}, sin intervención tuya.
+                Zona reservada: suave al día {softDays}; insistente al día {aggressiveDays}, una sola vez. Sin intervención tuya.
               </p>
             </div>
             <div className="rounded-lg border border-red-200 bg-red-50/60 p-3">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-red-700">Día {recoveryZone.endDays + 1}+</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-red-700">Día {perdido?.minDays}+</p>
               <p className="text-sm font-semibold text-red-900 mt-0.5">Rescate</p>
               <p className="text-xs text-red-800/80 mt-1">
                 Campaña manual &quot;Rescatar Perdidos&quot; con oferta fuerte: última oportunidad.
@@ -466,6 +476,8 @@ export default function CampaignsPage() {
             groups={analytics?.brand.atRiskGroups ?? []}
             loading={analyticsLoading}
             isDemo={isDemo}
+            softDays={softDaysNum}
+            aggressiveDays={aggressiveDaysNum}
           />
           <ManualCampaigns />
         </TabsContent>
@@ -542,8 +554,8 @@ export default function CampaignsPage() {
             </DialogTitle>
             <DialogDescription>
               {manualDialog === 'birthday'
-                ? 'Se enviará un mensaje de WhatsApp a todos los clientes que cumplen años hoy.'
-                : `Se enviará un mensaje de WhatsApp a todos los clientes inactivos (${softDays}+ días).`}
+                ? 'Se enviará el saludo a quien cumple años entre hoy y dentro de dos días (o solo hoy, mientras «Cumpleaños — dos días antes» no esté aprobada) y todavía no lo recibió.'
+                : `Se enviará el toque que le corresponda hoy a cada cliente inactivo (${softDays}+ días): el suave, o el insistente una sola vez, con los mismos topes que el envío diario.`}
             </DialogDescription>
           </DialogHeader>
           {manualDialog && (() => {

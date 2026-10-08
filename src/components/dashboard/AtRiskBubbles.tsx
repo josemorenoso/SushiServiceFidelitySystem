@@ -10,7 +10,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog'
 import { Send, AlertTriangle, FileText, RefreshCw } from 'lucide-react'
-import { RISK_LEVELS } from '@/constants/rankings'
+import { deriveRiskLevels, type CycleBand } from '@/constants/rankings'
 import type { RiskGroup } from '@/types/analytics.types'
 
 const FLOAT_DURATIONS = ['3.1s', '3.8s', '4.5s', '4.1s']
@@ -33,9 +33,14 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`
 }
 
-/** Rango de días del nivel según RISK_LEVELS (fuente de verdad compartida con analytics). */
-function daysRangeForLevel(level: string): { minDays: number; maxDays: number | null } {
-  const def = RISK_LEVELS.find((r) => r.name === level)
+/**
+ * Rango de días del nivel, de las MISMAS bandas con las que el servidor armó los grupos
+ * (`deriveRiskLevels()` con los días de reactivación de la marca). Es lo que filtra el
+ * estimador y el envío: si saliera de otra tabla, la burbuja contaría a unos y le
+ * escribiría a otros.
+ */
+function daysRangeForLevel(level: string, levels: readonly CycleBand[]): { minDays: number; maxDays: number | null } {
+  const def = levels.find((r) => r.name === level)
   if (!def) return { minDays: 7, maxDays: null }
   return { minDays: def.minDays, maxDays: def.maxDays === Infinity ? null : def.maxDays }
 }
@@ -44,9 +49,13 @@ interface AtRiskBubblesProps {
   groups: RiskGroup[]
   loading: boolean
   isDemo: boolean
+  /** Crudos de `admin_settings`, como los lee Campañas. Sin ellos, los defaults (el demo). */
+  softDays?: string | number | null
+  aggressiveDays?: string | number | null
 }
 
-export function AtRiskBubbles({ groups, loading, isDemo }: AtRiskBubblesProps) {
+export function AtRiskBubbles({ groups, loading, isDemo, softDays, aggressiveDays }: AtRiskBubblesProps) {
+  const riskLevels = useMemo(() => deriveRiskLevels(softDays, aggressiveDays), [softDays, aggressiveDays])
   const [selected, setSelected] = useState<RiskGroup | null>(null)
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
@@ -103,7 +112,7 @@ export function AtRiskBubbles({ groups, loading, isDemo }: AtRiskBubblesProps) {
     if (!selected || isDemo) return
     if (!templatesLoaded) fetchTemplates()
 
-    const { minDays, maxDays } = daysRangeForLevel(selected.level)
+    const { minDays, maxDays } = daysRangeForLevel(selected.level, riskLevels)
     const params = new URLSearchParams({ minDays: String(minDays) })
     if (maxDays !== null) params.set('maxDays', String(maxDays))
 
@@ -114,7 +123,7 @@ export function AtRiskBubbles({ groups, loading, isDemo }: AtRiskBubblesProps) {
       .then((data) => { if (active) setEligibleCount(data.count ?? 0) })
       .catch(() => { if (active) setEligibleCount(null) })
     return () => { active = false }
-  }, [selected, isDemo, templatesLoaded, fetchTemplates])
+  }, [selected, isDemo, templatesLoaded, fetchTemplates, riskLevels])
 
   const handleBubbleClick = (group: typeof groupStats[0]) => {
     if (group.count === 0) return
@@ -140,7 +149,7 @@ export function AtRiskBubbles({ groups, loading, isDemo }: AtRiskBubblesProps) {
       return
     }
     try {
-      const { minDays, maxDays } = daysRangeForLevel(selected.level)
+      const { minDays, maxDays } = daysRangeForLevel(selected.level, riskLevels)
       const res = await fetch('/api/dashboard/campaigns/manual', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

@@ -35,7 +35,7 @@
 | # | Qué | Necesita de ti antes | Migración |
 |---|---|---|---|
 | 1 | **Gestos de hoy** (§6.1): pegar la 00069, mirar los registros del Supabase del AIOS | Nada: solo hacerlo | — |
-| 2 | **Campañas, fase 0: parar la sangría.** Un envío fallido deja de bloquear 30 o 360 días · la insistente deja de repetirse cada mes · el texto de Campañas deja de mentir · una sola escala de días · una consulta de solo lectura que mide el daño real | Nada | no |
+| 2 | ✅ **Campañas, fase 0: HECHA el 2026-10-08** (sin migración; **sin desplegar**: entra a producción con el próximo push). Un envío fallido ya no bloquea 30 o 360 días · la insistente sale una vez mientras el cliente no vuelva · el texto de Campañas dice la verdad · una sola escala de días | **Correr la consulta** de `SQL-PARA-CORRER/ciclo-fase-0/` (solo lectura, mejor antes del push) | no |
 | 3 | **Plantillas, pasos 1 a 3** (§3): un solo libro de plantillas, cerrar el hueco catálogo ↔ código, una sola pantalla. **Y en la misma sesión, las cuatro plantillas nuevas juntas** (§3.2) para que cada marca pase por Meta una sola vez | B1–B7 (§8) | 0 o 1 |
 | 4 | **Campañas, fase 1: el motor del ciclo** (dos sesiones: base y cron) | A1–A6 (§8) | 1 |
 | 5 | **Recompensas en un solo lugar** (S-1) | C1–C3 | 0 o 1 |
@@ -53,8 +53,8 @@ encuentra hecha. **5 y 6 se cruzan** en `campaigns/page.tsx` (la pestaña «Prem
 
 ## 2. Campañas: el ciclo de recuperación
 
-**Estado:** diseñado y revisado dos veces, verificado contra el código el 08-10. **Cero código.** Lo que hoy corre en
-producción es el sistema viejo, con sus fallas (N3, N4, N15).
+**Estado:** diseñado y revisado dos veces, verificado contra el código el 08-10. **La fase 0 está construida** (08-10,
+sin desplegar: N3, N4 y N15 siguen vivos en producción hasta el próximo push); de la fase 1 en adelante, cero código.
 
 ### 2.1 Qué hace el diseño, en cinco líneas
 
@@ -116,7 +116,6 @@ Y dos cosas que el spec dejó abiertas:
 
 | Fase | Qué | Estado |
 |---|---|---|
-| **0 · Parar la sangría** | N3 (un fallo de envío ya no calla 30 días la reactivación ni 360 el cumpleaños) · N4 (la insistente máximo una vez por ciclo) · N15 (el texto de Campañas dice la verdad: cumpleaños «dos días antes», «13:00 Bogotá») · una sola escala de días para burbujas, tira y cron · consulta de solo lectura en `SQL-PARA-CORRER/ciclo-fase-0/` | ⬜ Prompt listo. **Se puede empezar ya** |
 | **1 · El motor** | Migración (hoy el script dice **00070**; el número se saca al construir) · los dos triggers · el backfill sin ráfaga · `cycle-engine.ts` con los cuatro ritmos · el cron que decide y encola · el drenador que otorga al enviar · las correcciones H1–H7 · tests | ⬜ Espera A1–A6 |
 | **2 · La pantalla** | Primer uso · «Para hoy» · seis cajas · vista por fecha con proyección y fechas especiales · mandar un regalo en tres campos · evento con texto sugerido · el calendario redirige · mini-ciclo en el panel · se retiran las burbujas y las cuatro tarjetas | ⬜ Espera A7–A8 y el prompt (se escribe cuando mires el prototipo) |
 | **3 · Afinar** | El calibrador que sugiere el ritmo · regalos pequeños que rotan · reporte «con mensaje contra sin mensaje» por toque · texto del evento con el LLM | ⬜ Un mes después de la fase 1 |
@@ -226,7 +225,8 @@ Cada uno es menos de una hora. Juntos protegen todo lo que viene.
 | ID | Qué | Por qué importa |
 |---|---|---|
 | N1 | El «Importar CSV» crea clientes que aceptan marketing; los domicilios también nacen «consentidos» | Ley 1581 · decisión D4 |
-| N3 · N4 · N15 | Un fallo de envío calla 30/360 días · la insistente sin tope · el texto de Campañas miente | **Son la fase 0 del ciclo** (§2.4) |
+| N3-bis | Tres relojes de días siguen fijos: el preset «Rescatar Perdidos» (`ManualCampaigns.tsx`, 26), el filtro Activo/Inactivo/Perdido de Clientes (`getCustomers()`, 18/25) y el contador de inactivos del panel (`getDashboardMetrics()`, 21). Con los días por defecto coinciden con la escala única de la fase 0; con días propios, no | La pantalla vuelve a mostrar dos relojes en cuanto una marca cambia sus días |
+| N3-ter | `GET /api/dashboard/campaigns/estimate` contesta `{ count: 0 }` ante un error de base; `docs/features/dashboard.md` todavía dice que la burbuja filtra con `RISK_LEVELS` (ahora son las bandas de la marca) | Un fallo se ve como «nadie a quién escribirle» |
 | N6 | Los botones sí/no del webhook de Zernio esperan 10 s antes de contestar | El mismo riesgo de apagón que se cerró en ESCALA-3 |
 | N7 | Tres búsquedas sin paginar; el tope mensual, ante un error, **no se aplica** y no deja log | Fatiga y cupo |
 | N8 | Errores tragados en `getActiveTenants()` y `getTenantByDomain()`; escrituras posteriores al envío sin leer `error` | Un fallo de base se ve como «nada que hacer» |
@@ -253,6 +253,9 @@ Cada uno es menos de una hora. Juntos protegen todo lo que viene.
 3. **Confirmar `ZERNIO_API_KEY` y `ZERNIO_WEBHOOK_SECRET`** vigentes en los dos Vercel.
 4. **Mirar en n8n que esté apagado** (permite apagar el VPS).
 5. **Correr las dos consultas de solo lectura** que alimentan las campañas: duplicados de `campaign_messages` y el conteo D-8.b.
+6. **Correr la consulta de la fase 0 del ciclo** (`SQL-PARA-CORRER/ciclo-fase-0/LEEME.md`, solo lectura, cuatro bloques),
+   mejor **antes** del push que la despliega: dice cuántos clientes recibieron el insistente repetido y cuántos quedaron
+   callados por un envío fallido. Es lo único que le queda a la fase 0.
 
 ### 6.2 Por marca, cuando puedas (detalle en `ESTADO.md` §3)
 

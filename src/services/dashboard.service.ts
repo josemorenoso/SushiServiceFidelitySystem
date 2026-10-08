@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { Customer, Reward } from '@/types/database.types'
-import { POWER_RANKS, RISK_LEVELS, TOP_CUSTOMERS_LIMIT, getCustomerRank } from '@/constants/rankings'
+import { POWER_RANKS, TOP_CUSTOMERS_LIMIT, deriveRiskLevels, getCustomerRank } from '@/constants/rankings'
 import { logDbFailure, type DbErrorLike } from '@/lib/db-failure'
 import { leerTodo } from '@/lib/leer-todo'
 import { getUnscopedServiceClient } from '@/lib/supabase/unscoped'
@@ -366,8 +366,13 @@ export async function getFullAnalytics(scope: LocationScope): Promise<DashboardA
           .order('id', { ascending: true })
           .range(desde, hasta)
       ),
-      // Una fila (la clave es única por marca): no se pagina, pero su `error` también se exige.
-      supabase.from('admin_settings').select('key, value').eq('tenant_id', tenantId).eq('key', 'avg_ticket'),
+      // Tres claves, una fila cada una (la clave es única por marca): no se pagina, pero su
+      // `error` también se exige. Los días de reactivación arman las bandas de riesgo.
+      supabase
+        .from('admin_settings')
+        .select('key, value')
+        .eq('tenant_id', tenantId)
+        .in('key', ['avg_ticket', 'reactivation_soft_days', 'reactivation_aggressive_days']),
     ])
 
   const customers: Customer[] = exigirLectura(lecturaClientes, 'analitica_clientes', tenantId).sort(
@@ -442,25 +447,28 @@ export async function getFullAnalytics(scope: LocationScope): Promise<DashboardA
     percentage: customers.length > 0 ? Math.round((tierCounts[r.name] / customers.length) * 100) : 0,
   }))
 
+  // Las burbujas usan la MISMA escala que la tira de Campañas y el cron: la derivan los días
+  // de reactivación de esta marca (`deriveRiskLevels()`), no una tabla fija.
+  const ajuste = (key: string) => settingsData.find((s) => s.key === key)?.value
+  const riskLevels = deriveRiskLevels(ajuste('reactivation_soft_days'), ajuste('reactivation_aggressive_days'))
   const riskBuckets: Record<string, { id: string; name: string; phone: string; daysInactive: number; total_visits: number }[]> = {}
-  for (const level of RISK_LEVELS) riskBuckets[level.name] = []
+  for (const level of riskLevels) riskBuckets[level.name] = []
   for (const c of customers) {
     if (!c.last_visit_at) continue
     const inactive = daysBetween(new Date(c.last_visit_at), now)
-    if (inactive >= 7) {
-      const level = RISK_LEVELS.find((r) => inactive >= r.minDays && inactive <= r.maxDays)
-      if (level) {
-        riskBuckets[level.name].push({
-          id: c.id,
-          name: c.name,
-          phone: c.phone,
-          daysInactive: inactive,
-          total_visits: c.total_visits,
-        })
-      }
+    // «Reciente» no es una banda de riesgo: quien la cumple no cae en ninguna.
+    const level = riskLevels.find((r) => inactive >= r.minDays && inactive <= r.maxDays)
+    if (level) {
+      riskBuckets[level.name].push({
+        id: c.id,
+        name: c.name,
+        phone: c.phone,
+        daysInactive: inactive,
+        total_visits: c.total_visits,
+      })
     }
   }
-  const atRiskGroups: RiskGroup[] = RISK_LEVELS.map((r) => ({
+  const atRiskGroups: RiskGroup[] = riskLevels.map((r) => ({
     level: r.name,
     count: riskBuckets[r.name].length,
     color: r.color,
@@ -621,7 +629,7 @@ export async function getFullAnalytics(scope: LocationScope): Promise<DashboardA
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   const currentMonthReactivation = reactivationMap[currentMonth]
   const reactivatedThisMonth = currentMonthReactivation ? currentMonthReactivation.returned.size : 0
-  const avgTicketStr = settingsData?.[0]?.value ?? '35000'
+  const avgTicketStr = ajuste('avg_ticket') ?? '35000'
   const avgTicket = parseFloat(avgTicketStr) || 35000
   const roiEstimate: ROIEstimate = {
     reactivatedThisMonth,

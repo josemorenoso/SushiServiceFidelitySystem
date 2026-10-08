@@ -4,6 +4,7 @@ import {
   findInactiveCustomers,
   getOrCreateTodayCampaign,
   hasRecentCampaignMessage,
+  yaRecibioElInsistente,
   recordCampaignMessage,
   finalizeCampaign,
   updateCustomerLastCampaignAt,
@@ -238,9 +239,15 @@ async function processTenant(tenant: Tenant): Promise<TenantCronResult> {
     const { eligible: aggressiveEligible, excluded: aggressiveExcludedCap } = await filterByMonthlyCap(aggressiveCustomers)
 
     // ─── PASS 2: Clientes agresivos (aggressiveDays+) ───
+    // El insistente sale UNA vez mientras el cliente no vuelva (N4). La dedup de 30 días
+    // del suave NO va acá: contaba el suave y corría el insistente al día ~51, y después
+    // lo dejaba repetirse cada ~30 días para siempre. La señal está explicada en
+    // `yaRecibioElInsistente()`. El cap de 7 días (`findInactiveCustomers`) sigue
+    // separando el insistente del suave.
     if (aggressiveSid && aggressiveEligible.length > 0) {
       for (const customer of aggressiveEligible) {
-        const alreadySent = await hasRecentCampaignMessage(customer.id, 'reactivation', 30)
+        // `last_visit_at` no es NULL: `aggressiveCustomers` solo toma a quien lo tiene.
+        const alreadySent = await yaRecibioElInsistente(customer.id, customer.last_visit_at!, aggressiveDays)
         if (alreadySent) continue
 
         try {

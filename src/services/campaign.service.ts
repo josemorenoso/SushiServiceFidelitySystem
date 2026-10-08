@@ -159,8 +159,23 @@ export async function updateCustomerLastCampaignAt(customerIds: string[]): Promi
 }
 
 /**
- * Checks if a customer already received a campaign message of a given type
- * within the specified number of days.
+ * Los `campaign_messages.status` que significan «el mensaje SALIÓ». El CHECK de la 00004
+ * admite `pending | sent | delivered | failed`; hoy el código solo escribe `sent` y
+ * `failed` (las confirmaciones de entrega van a `message_logs`), pero `delivered` también
+ * salió, así que cuenta.
+ */
+export const ESTADOS_QUE_SALIERON = ['sent', 'delivered'] as const
+
+/**
+ * ¿Le SALIÓ a este cliente un mensaje de campaña de este tipo en los últimos `withinDays` días?
+ *
+ * Solo cuentan los que salieron (`ESTADOS_QUE_SALIERON`). Hasta el 2026-10-08 contaba
+ * cualquier fila, y los crons graban los fallidos con `sent_at` (N3): un envío FALLIDO
+ * callaba 30 días la reactivación y 360 el cumpleaños sin que nadie lo supiera. Ahora un
+ * fallo se reintenta en la corrida siguiente.
+ *
+ * Un fallo de base LANZA: devolver `false` era mandarle el mensaje otra vez a quien ya lo
+ * recibió (es el dedupe del cumpleaños y del toque suave).
  */
 export async function hasRecentCampaignMessage(
   customerId: string,
@@ -175,12 +190,71 @@ export async function hasRecentCampaignMessage(
     .select('id, campaigns!inner(type)')
     .eq('customer_id', customerId)
     .eq('campaigns.type', campaignType)
+    .in('status', [...ESTADOS_QUE_SALIERON])
     .gte('sent_at', since)
     .limit(1)
 
   if (error) {
-    console.error(`Error verificando campaña reciente: ${error.message}`)
-    return false
+    logDbFailure({
+      scope: 'Campaign',
+      reason: 'dedupe_reciente_error',
+      error,
+      context: { customer_id: customerId, tipo: campaignType },
+    })
+    throw new Error(`No se pudo comprobar si el cliente ya recibió "${campaignType}": ${error.message}`)
+  }
+
+  return (data?.length ?? 0) > 0
+}
+
+/**
+ * ¿Ya le salió a este cliente el toque INSISTENTE desde su última visita? (N4, 2026-10-08)
+ *
+ * El insistente sale como máximo UNA vez mientras el cliente no vuelva. Antes se repetía
+ * cada ~30 días para siempre (con premio y recordatorio: dos mensajes al mes a un cliente
+ * perdido).
+ *
+ * CÓMO SE DISTINGUE DEL SUAVE: los dos son `campaigns.type = 'reactivation'` y
+ * `message_type = 'reactivation'`, así que el tipo no alcanza. Lo que los separa es CUÁNDO
+ * salieron: el cron solo le manda el insistente a quien lleva MÁS de `aggressiveDays` sin
+ * venir, y el suave a quien lleva menos. Así que un mensaje de reactivación que salió
+ * después de `last_visit_at + aggressiveDays` es un insistente. Preguntar solo
+ * «¿hay alguno después de la última visita?» contaría también el suave, y el insistente no
+ * saldría nunca.
+ *
+ * `campaigns.source = 'reactivation'` deja fuera el recordatorio de premio, que también es
+ * `type = 'reactivation'` (con `source = 'reward_reminder'`).
+ *
+ * Si la marca sube `aggressiveDays` después de un envío, un insistente viejo puede quedar
+ * por debajo del umbral nuevo y salir UNO más: es el borde aceptado (sin columna nueva no
+ * hay otra marca del toque; el ciclo de la fase 1 la trae).
+ */
+export async function yaRecibioElInsistente(
+  customerId: string,
+  lastVisitAt: string,
+  aggressiveDays: number
+): Promise<boolean> {
+  const supabase = getServiceClient()
+  const umbral = new Date(new Date(lastVisitAt).getTime() + aggressiveDays * 24 * 60 * 60 * 1000).toISOString()
+
+  const { data, error } = await supabase
+    .from('campaign_messages')
+    .select('id, campaigns!inner(type, source)')
+    .eq('customer_id', customerId)
+    .eq('campaigns.type', 'reactivation')
+    .eq('campaigns.source', 'reactivation')
+    .in('status', [...ESTADOS_QUE_SALIERON])
+    .gt('sent_at', umbral)
+    .limit(1)
+
+  if (error) {
+    logDbFailure({
+      scope: 'Campaign',
+      reason: 'insistente_previo_error',
+      error,
+      context: { customer_id: customerId },
+    })
+    throw new Error(`No se pudo comprobar si el cliente ya recibió el insistente: ${error.message}`)
   }
 
   return (data?.length ?? 0) > 0

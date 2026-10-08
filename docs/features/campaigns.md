@@ -1,13 +1,15 @@
 # Feature: Campañas — Control de Tráfico Centralizado
 
-**Última actualización:** 2026-09-08 (v2.9.0 — pestaña Premios)
+**Última actualización:** 2026-10-08 (ciclo, fase 0: un fallo no calla, el insistente sale una vez, una sola escala de días)
 
 > ⚠️ **Rediseño en diseño (2026-10-04, sin código todavía):** el recorrido de reactivación, las burbujas de riesgo y el
 > calendario se reemplazan por **el ciclo de recuperación** (pipeline de 90 días con cinco toques, fatiga a las 6
 > comunicaciones, dormido con un toque trimestral, «regalos que vencen», y campañas + calendario en una sola pantalla). El diseño,
-> el diagnóstico de lo que este cron hace hoy de verdad (el «insistente» se repite cada ~30 días sin tope) y las fases
-> están en `docs/superpowers/specs/2026-10-04-ciclo-de-recuperacion-design.md`. **Lo que sigue abajo describe lo que el
-> código hace HOY** y sigue siendo cierto hasta que se construya la fase 1.
+> el diagnóstico y las fases están en `docs/superpowers/specs/2026-10-04-ciclo-de-recuperacion-design.md`. **La fase 0 ya
+> está (2026-10-08, sin migración):** un envío fallido ya no calla al cliente, el «insistente» sale UNA vez mientras el
+> cliente no vuelva (antes se repetía cada ~30 días sin tope) y la pantalla usa una sola escala de días. La medición está en
+> `SQL-PARA-CORRER/ciclo-fase-0/`. **Lo que sigue abajo describe lo que el código hace HOY** y sigue siendo cierto hasta
+> que se construya la fase 1.
 
 ---
 
@@ -32,8 +34,9 @@
   días, justo después de la Recovery Zone).
 - **Burbujas de riesgo con envío real** (`AtRiskBubbles.tsx`): antes el botón apuntaba a
   `/api/dashboard/campaigns/quick` (endpoint inexistente → 404 silencioso). Ahora el diálogo pide una
-  plantilla aprobada, muestra los elegibles reales del día (estimador con el rango de días del nivel:
-  Alerta 7-10, En riesgo 11-15, Crítico 16-21, Perdido 22+) y envía por
+  plantilla aprobada, muestra los elegibles reales del día (estimador con el rango de días del nivel;
+  hasta el 2026-10-08 Alerta 7-10, En riesgo 11-15, Crítico 16-21, Perdido 22+; desde entonces las
+  bandas del ciclo, ver § «Una sola escala de días») y envía por
   `/api/dashboard/campaigns/manual`, respetando frequency cap, recovery zone, cap mensual y saldo.
 - **`POST /api/dashboard/campaigns/run-auto`**: puente autenticado para "Ejecutar Ahora" (los crons
   exigen `CRON_SECRET`, que el navegador no conoce; antes el botón recibía 401 y la UI fingía éxito).
@@ -41,9 +44,10 @@
 - **Paridad estimador ↔ envío**: el estimador ahora aplica también el filtro de canal
   (`source_channels`) y el envío manual excluye opt-outs en la query (antes se contaban como fallidos).
 - **Ciclo de recuperación del cliente**: strip visual de 5 etapas en Campañas → Automáticas
-  (Visita → Protegido 1-7d → Ventana manual 7-17d → Recuperación automática 18-25d → Rescate 26+d).
+  (Visita → Protegido 1-6d → Ventana manual 7-17d → Recuperación automática 18-25d → Rescate 26+d).
   Desde el 2026-09-06 las bandas se derivan de los días configurados por el tenant: los números de
-  arriba son los que salen con los defaults (21 / 25).
+  arriba son los que salen con los defaults (21 / 25). Hasta el 2026-10-08 decía «Protegido 1-7d» y
+  el día 7 caía en dos cajas.
 
 ---
 
@@ -130,30 +134,62 @@ Con los defaults (21 / 25) da exactamente **18-25**, los mismos valores fijos de
 
 **Principio:** Si un cliente hace check-in o pide domicilio, `last_visit_at` se actualiza y lo excluye automáticamente del cron de reactivación.
 
-**Implementación:** Ya funciona. `findInactiveCustomers()` filtra `last_visit_at < now - 21d`, por lo que cualquier visita reciente los saca del pool automáticamente.
+**Implementación:** Ya funciona. `findInactiveCustomers()` filtra `last_visit_at < now - suave` (los días del suave de la marca; 21 por defecto), por lo que cualquier visita reciente los saca del pool automáticamente. Y como el tope del insistente se cuenta **desde la última visita**, quien vuelve empieza un recorrido nuevo con su suave y su insistente.
 
 ---
 
 ## Flujo de Toma de Decisiones (por tipo de campaña)
 
 ### Cron Reactivación (`/api/cron/reactivation`)
-```
-findInactiveCustomers()
-  → last_visit_at < 21 días atrás           ✅ filtro existente
-  → accepts_marketing = true                 ✅ filtro existente
-  → last_campaign_at IS NULL                 ✅ NUEVO
-    OR last_campaign_at < 7 días atrás       ✅ NUEVO
-  
-Por cada cliente:
-  → hasRecentCampaignMessage(type=reactivation, 30d)  [dedup de tipo]
-  → sendTemplateMessage()
-  → recordCampaignMessage()
 
-Al final del loop:
-  → updateCustomerLastCampaignAt(sentCustomerIds)     ✅ NUEVO
+Corre todos los días a las **20:00 UTC = 15:00 Bogotá** (`vercel.json`). «Ejecutar ahora» llama a esta
+misma ruta (`/api/dashboard/campaigns/run-auto`), así que obedece las mismas reglas.
+
 ```
+getReactivationDaysConfig()            → { suave, insistente }   (21 / 25 por defecto)
+findInactiveCustomers(suave)
+  → last_visit_at < suave días atrás, accepts_marketing, sin opt-out
+  → last_campaign_at IS NULL OR < 7 días atrás          [cap de frecuencia]
+Se parten en dos por last_visit_at:
+  menos de `insistente` días → PASS 1 (suave)
+  más de `insistente` días   → PASS 2 (insistente)
+filterByMonthlyCap()                                    [3 al mes, en cada pass]
+
+PASS 1 — suave, por cliente:
+  → hasRecentCampaignMessage(type=reactivation, 30d)    [dedup: solo lo que SALIÓ]
+  → sendTemplateMessage() → recordCampaignMessage()
+
+PASS 2 — insistente, por cliente (solo si hay plantilla insistente):
+  → yaRecibioElInsistente(last_visit_at, insistente)    [UNA vez mientras no vuelva]
+  → sendTemplateMessage() → recordCampaignMessage() → grantReward() si hay premio
+
+Al final: updateCustomerLastCampaignAt(enviados) · finalizeCampaign()
+```
+
+**El insistente sale una sola vez mientras el cliente no vuelva** (N4, 2026-10-08). Antes el PASS 2 usaba
+la misma dedup de 30 días que el suave: contaba el suave (el insistente salía al día ~51 en vez del 25) y
+después lo dejaba repetirse cada ~30 días **para siempre**, con su premio y su recordatorio. Como suave e
+insistente comparten `campaigns.type` y `message_type` (`'reactivation'`), `yaRecibioElInsistente()` los
+distingue por **cuándo** salieron: un mensaje de reactivación que salió después de
+`last_visit_at + insistente` días solo puede ser el insistente, porque el suave solo sale antes. Filtra
+`campaigns.source = 'reactivation'` para no contar el recordatorio de premio (que es `type =
+'reactivation'` con `source = 'reward_reminder'`). Si la marca sube sus días de insistente después de un
+envío, un insistente viejo puede quedar por debajo del umbral nuevo y salir **uno** más: es el borde
+aceptado hasta la fase 1, que guarda cada toque con su etapa.
+
+**El día real del insistente.** El cap de 7 días separa los dos toques: quien recibió el suave al día 21
+recibe el insistente al día 28 o 29, no al 25. Por eso la pantalla dice «insistente al día 25, una sola
+vez (y nunca a menos de 7 días del suave)».
+
+**Un fallo no calla** (N3, 2026-10-08). Las dos dedups cuentan solo `status IN ('sent','delivered')`
+(`ESTADOS_QUE_SALIERON`). Los crons graban el envío fallido con `sent_at`, y antes eso bastaba para
+callar al cliente 30 días (reactivación) o 360 (cumpleaños). Un fallo de base en cualquiera de las dos
+**lanza** (log `[Campaign][FALLO]`): la marca sale con `ok: false` en la respuesta del cron, en vez de
+volver a escribirle a quien ya recibió el mensaje.
 
 ### Cron Cumpleaños (`/api/cron/birthday`)
+
+Corre todos los días a las **18:00 UTC = 13:00 Bogotá** (`vercel.json`).
 
 **El saludo sale hasta DOS DÍAS ANTES del cumpleaños** (dueño, 2026-09-24) — **pero solo con la
 plantilla que lo dice bien** (2026-10-04). El texto aprobado de siempre dice «¡Feliz cumpleaños!», y
@@ -183,7 +219,7 @@ findBirthdayCustomers(diasDeAnticipacion)
   (NO aplica frequency cap — cumpleaños tiene prioridad absoluta)
 
 Por cada cliente:
-  → hasRecentCampaignMessage(type=birthday, BIRTHDAY_DEDUPE_DAYS = 360d)   [dedup anual]
+  → hasRecentCampaignMessage(type=birthday, BIRTHDAY_DEDUPE_DAYS = 360d)   [dedup anual, solo lo que SALIÓ]
   → sendTemplateMessage()
   → recordCampaignMessage()
 
@@ -255,6 +291,32 @@ Reglas de validación:
 Campañas → Automáticas se calculan con esa derivación. Cambiar los días en Ajustes ahora mueve
 las tres cosas a la vez: el mensaje del cron, la ventana protegida y lo que muestra el panel.
 
+### Una sola escala de días (2026-10-08)
+
+Hasta hoy el dueño veía tres relojes en la misma pantalla: las burbujas (`RISK_LEVELS`, fijas: 7-10 /
+11-15 / 16-21 / 22+), la tira «Ciclo de recuperación» (derivada de sus días) y el cron (21 y 25). Ahora
+las bandas salen de **una** función, `deriveCycleBands()` (`src/constants/rankings.ts`), que usa las
+mismas que el cron (`normalizeReactivationDays()` → `deriveRecoveryZone()`):
+
+| Banda | Días (fórmula) | Con los defaults 21 / 25 | Con 15 / 20 |
+|---|---|---|---|
+| Reciente | 0 … `FREQUENCY_CAP_DAYS`−1 | 0-6 | 0-6 |
+| Ventana | `FREQUENCY_CAP_DAYS` … inicio de la zona − 1 | 7-17 | 7-11 |
+| Recuperación | la zona del cron | 18-25 | 12-20 |
+| Perdido | fin de la zona + 1 … | 26+ | 21+ |
+
+La leen la tira de Campañas, el panel (`getFullAnalytics()` arma `atRiskGroups` con los días de la
+marca, que lee de `admin_settings` en la misma consulta que `avg_ticket`), el demo (`RISK_LEVELS` = las
+bandas con los defaults) y la burbuja (su estimador y su envío filtran por el rango de la banda, que la
+página le pasa con los días de la marca). Las burbujas son las bandas **sin «Reciente»**. Si el suave
+es muy temprano (≤ 10) la Ventana queda vacía y no se muestra. Test:
+`tests/unit/ciclo-fase-0-una-escala.test.ts`.
+
+**Lo que todavía NO lee esta escala** (fuera del alcance de la fase 0): el preset «Rescatar Perdidos»
+de `ManualCampaigns.tsx` (`minDays: '26'` fijo), el filtro Activo / Inactivo / Perdido de Clientes
+(`getCustomers()`, 18 y 25 fijos) y el contador de inactivos de `getDashboardMetrics()` (21 fijo). Con
+los defaults dicen lo mismo; con días propios, no.
+
 ### Rediseño UI del Módulo de Campañas (v1.4.0 — Req 5)
 
 `src/app/(dashboard)/dashboard/campaigns/page.tsx`:
@@ -276,7 +338,8 @@ las tres cosas a la vez: el mensaje del cron, la ventana protegida y lo que mues
 | Archivo | Responsabilidad |
 |---------|----------------|
 | `src/constants/rewards.ts` | Constantes de timing |
-| `src/services/campaign.service.ts` | `findInactiveCustomers()`, `updateCustomerLastCampaignAt()` |
+| `src/services/campaign.service.ts` | `findInactiveCustomers()`, `updateCustomerLastCampaignAt()`, las dedups (`hasRecentCampaignMessage()`, `yaRecibioElInsistente()`) |
+| `src/constants/rankings.ts` | `deriveCycleBands()` / `deriveRiskLevels()` — la escala única de días |
 | `src/services/settings.service.ts` | `getReactivationDaysConfig()` — días configurables |
 | `src/app/api/cron/reactivation/route.ts` | Cron reactivación (días configurables) |
 | `src/app/(dashboard)/dashboard/settings/page.tsx` | UI de configuración de días |
@@ -297,6 +360,8 @@ las tres cosas a la vez: el mensaje del cron, la ventana protegida y lo que mues
 | Dentro de la zona (18-25 con los defaults) | ✅ elegible* | según cumpleaños | ❌ excluido |
 | Pasada la zona (> 25 días con los defaults) | ✅ elegible* | según cumpleaños | ✅ elegible |
 | Recibió mensaje hace < 7 días | ❌ excluido | ❌ excluido** | ❌ excluido |
+| Ya recibió el insistente desde su última visita | ❌ excluido (solo el insistente) | según cumpleaños | ✅ elegible |
+| Un envío anterior FALLÓ | ✅ se reintenta | ✅ se reintenta | según filtros |
 | `accepts_marketing = false` | ❌ excluido | ❌ excluido | ❌ excluido |
 
 *Sujeto al frequency cap de 7 días

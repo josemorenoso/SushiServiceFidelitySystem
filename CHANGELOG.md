@@ -8,6 +8,22 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [fix] — 2026-10-08 — Ciclo, fase 0: parar la sangría de las campañas automáticas (N3, N4, N15, una escala)
+
+**Pedido:** la fase 0 de `docs/prompts/2026-10-04-ciclo-fase-0-y-1.md`. Sin migración, sin desplegar.
+
+- **N3:** `hasRecentCampaignMessage()` cuenta solo `status IN ('sent','delivered')` (los del CHECK de la 00004) y un fallo
+  de base lanza en vez de decir «no le hemos escrito». Un envío fallido ya no calla 30 días la reactivación ni 360 el cumpleaños.
+- **N4:** el insistente sale UNA vez mientras el cliente no vuelva (`yaRecibioElInsistente()`): lo distingue del suave por
+  CUÁNDO salió (después de `last_visit_at + insistente`) y deja fuera el recordatorio de premio (`source`). Ya no usa la
+  dedup de 30 días del suave, que lo corría al día ~51 y lo repetía cada ~30 días.
+- **N15:** Campañas dice 13:00 y 15:00 (Bogotá), «insistente al día M, una sola vez» y el saludo de cumpleaños real.
+- **Una escala:** `deriveCycleBands()` (`rankings.ts`) con las funciones del cron; `RISK_LEVELS` = sus defaults (7-17 ·
+  18-25 · 26+). La leen la tira, el panel (`getFullAnalytics()`, con los días de la marca), el demo y la burbuja.
+- **Medición:** `SQL-PARA-CORRER/ciclo-fase-0/LEEME.md`, cuatro `SELECT` (validados contra el Postgres de los tests).
+- Tests: `ciclo-fase-0-sangria` y `ciclo-fase-0-una-escala`, **18 de 22 fallan contra el código viejo** (`src/` de `HEAD`
+  por `git show`; los 4 restantes son guardas). Suite: 63 archivos / 911 tests. tsc limpio; eslint 14 = preexistentes.
+
 ## [docs] — 2026-10-08 — `docs/PENDIENTES.md`: todo lo pendiente en un solo documento, y tercera pasada del ciclo
 
 **Pedido:** «consolidar todo en un solo documento con todo lo pendiente… que no se pierda ni una sugerencia», con prioridad 1

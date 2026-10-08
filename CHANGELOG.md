@@ -8,6 +8,21 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [docs] — 2026-10-08 — `docs/PENDIENTES.md`: todo lo pendiente en un solo documento, y tercera pasada del ciclo
+
+**Pedido:** «consolidar todo en un solo documento con todo lo pendiente… que no se pierda ni una sugerencia», con prioridad 1
+en campañas, plantillas y optimizar. Solo docs.
+
+- **Nuevo `docs/PENDIENTES.md`:** mapa de documentos, orden de trabajo, el ciclo (los 14 cambios de la revisión del dueño
+  verificados uno por uno en el spec), plantillas, recompensas, arreglos chicos, gestos del dueño, olas siguientes y
+  **todas las preguntas abiertas con su default** (bloques A–D; reemplazan a consolidado §7 y §10.5).
+- **Tercera pasada del ciclo contra el código (spec §13, prompt de la fase 1):** semanal y quincenal pasaban de 3 mensajes
+  al mes (simulación de 365 fechas contra el tope real) → días nuevos; el recordatorio de premio sale también para el regalo
+  pequeño (`findGrantsDueForReminder` no filtra origen) → solo el fuerte; el cron corre a las 15:00 Bogotá, no a las 10:00
+  → el almuerzo sale al día siguiente; grupo de control permanente y sin medir → sorteo por ciclo y `due_at`; la cola dejaba
+  toques colgados → todo desenlace escribe el toque; el deploy encendía las 25 marcas → `cycle_enabled` por marca.
+- Nueva propuesta: las cuatro plantillas nuevas en una sola ronda de Meta por marca. `ESTADO.md` y el consolidado apuntan aquí.
+
 ## [fix] — 2026-10-07 — El escáner del mesero tarda o no lee el QR del cliente
 
 - Causa: el QR de la tarjeta es versión 23 (109×109 módulos: URL + JWT entero, nivel H por el logo) y el

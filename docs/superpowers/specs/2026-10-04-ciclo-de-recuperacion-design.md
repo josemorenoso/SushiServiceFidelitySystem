@@ -143,8 +143,9 @@ nunca menos de 7 días entre dos toques; el recordatorio está exento del cap de
 sigue contando en el mensual. Si la marca no configura ningún regalo, los toques salen igual con las plantillas que ya tiene:
 **el ciclo funciona desde el día uno para las 25 marcas.**
 
-**Validación:** cada toque ≥ 7 días del anterior; ninguna ventana de 30 días con más de 3 toques (contando el recordatorio
-del rescate como uno). Vale para los presets y para quien edite los días a mano (opción avanzada, escondida).
+**Validación:** cada toque ≥ 7 días del anterior; ningún mes calendario ni ventana de 30 días con más de 3 mensajes
+(contando el recordatorio del rescate, que con «vence el domingo» cae entre 3 y 9 días después del toque). **Se comprueba
+simulando 365 fechas de visita, no a mano** (§13, H1). El regalo pequeño **no lleva recordatorio** (§13, H2). Vale para los presets y para quien edite los días a mano (opción avanzada, escondida).
 
 ### 3.2.bis El ritmo del negocio: una pregunta, no cinco números
 
@@ -152,12 +153,14 @@ Al activar el ciclo (y en Ajustes después), **una sola pregunta**: *«¿Cada cu
 
 | Respuesta | Toques (días sin venir) | El ciclo dura | Para quién |
 |---|---|---|---|
-| **Cada semana** | 7 · 14 · 24 · 38 · 52 | ~52 días | almuerzo ejecutivo, cafetería de paso, comida rápida de barrio |
-| **Cada quince días** | 10 · 20 · 32 · 46 · 64 | ~64 días | casual de fin de semana |
+| **Cada semana** | 7 · 14 · 26 · 42 · 58 | ~58 días | almuerzo ejecutivo, cafetería de paso, comida rápida de barrio |
+| **Cada quince días** | 10 · 17 · 29 · 45 · 61 | ~61 días | casual de fin de semana |
 | **Cada mes** (default) | 12 · 24 · 38 · 56 · 80 | ~80 días | la mayoría: sushi, parrilla, pizzería de salida |
 | **De vez en cuando** | 21 · 38 · 56 · 80 · 110 | ~110 días | celebraciones, alta cocina, ocasiones |
 
-Los cuatro cumplen la validación de §3.2 (incluido el recordatorio del rescate). El calibrador automático (fase 3) no
+Los cuatro cumplen la validación de §3.2 contando el recordatorio del rescate, **comprobado por simulación** sobre 365
+fechas de visita con «vence el domingo» y el tope mensual real (por mes calendario). Los días de semanal y quincenal se
+corrigieron el 08-10: los de la segunda pasada (7·14·24·38·52 y 10·20·32·46·64) pasaban de 3 al mes (§13, H1). El calibrador automático (fase 3) no
 inventa días: **sugiere el preset** mirando la mediana de días entre visitas de los que vuelven, y el dueño confirma.
 Las marcas con `reactivation_soft_days`/`aggressive_days` propios entran con el preset más cercano y un aviso.
 
@@ -185,7 +188,8 @@ Al escribir `last_visit_at` (hoy en `customer.service.ts:98` y en el alta con `c
 (no código TS, para que QR, mesero, domicilio y cualquier escritor futuro lo disparen igual):
 
 - `cycle_no += 1`, `cycle_started_at = last_visit_at`, `cycle_touches = 0`, `cycle_state = 'activo'`, `dormant_since = NULL`.
-- **Atribución:** el último toque del ciclo que se cierra con `sent_at` dentro de los **14 días** anteriores recibe
+- **Atribución:** el último toque del ciclo que se cierra con `due_at` (cuándo le tocaba; se llena enviado o no: §13, H5)
+  dentro de los **14 días** anteriores recibe
   `returned_at = now()`; **también los toques `holdout`** (los que no se enviaron a propósito), que es lo que permite
   comparar. «El rescate trajo 31 clientes este mes; sin mensaje habrían vuelto 12» sale de ahí. Es atribución de último
   toque, honesta y barata; compara toques entre sí con la misma vara.
@@ -288,8 +292,9 @@ Hoy «premio con fecha límite» existe solo dentro del cron agresivo. Se **gene
   (si el domingo está a menos de 5, el siguiente). El dueño puede elegir 3 / 7 / 14 días si quiere. «Vence el domingo»
   da un plan; «vence en 7 días» da una cuenta.
 - **La hora es de la marca, no del cron.** Preset `cycle_send_slot`: **almuerzo** (10:30 Bogotá) o **cena** (16:30,
-  default). Cómo, sin tocar `vercel.json`: el cron del ciclo (`/api/cron/reactivation`, 15:00 UTC = 10:00 Bogotá) **decide
-  y encola** con `not_before` a la hora de la marca, y `queue-drain` (cada 15 min) **envía**. El mismo camino sirve para
+  default). Cómo, sin tocar `vercel.json`: el cron del ciclo (`/api/cron/reactivation`, `0 20 * * *` UTC = **15:00 Bogotá**; la
+  segunda pasada decía 10:00, y era falso) **decide y encola** con `not_before` = la **próxima** hora de la marca: la cena
+  (16:30) sale el mismo día; el almuerzo (10:30), que a las 15:00 ya pasó, sale **al día siguiente** (§13, H3), y `queue-drain` (cada 15 min) **envía**. El mismo camino sirve para
   lo que no cabe en el cupo. Nada sale «ahora» desde el cron.
 - **Otorgar al enviar, no al encolar.** El drenador **otorga el regalo y calcula la fecha límite en el momento del envío
   real**; el item de la cola guarda `rewardId` y la regla de vencimiento, no la fecha. Responde la pregunta abierta de
@@ -382,7 +387,8 @@ el 90 % de los envíos manuales. Si en un mes nadie usa Mensaje libre, se quita.
 ### 6.7 Rutas y lo que se retira
 
 - `/dashboard/campaigns` **se queda** (hay enlaces por todos lados) con el menú «Ciclo y campañas». Pestañas: **Ciclo**
-  (default) · **Premios** · **Historial**. Mensaje libre vive como enlace dentro del creador, no como pestaña.
+  (default) · **Historial**. **«Premios» se va a Recompensas** si el dueño confirma su Tarea 1 (decisión 18; antes decía
+  que se quedaba aquí y chocaba con su pedido). Mensaje libre vive como enlace dentro del creador, no como pestaña.
 - `/dashboard/calendar` **redirige** a `/dashboard/campaigns?vista=fecha` (patrón `redirect()` + lectura de `?` con
   `useSyncExternalStore`, nunca `useSearchParams()`). `MediaUploader` y `EventDetailDrawer` se reusan; `EventCreateDialog`
   se reemplaza por el creador.
@@ -420,6 +426,7 @@ CREATE TABLE customer_cycle_touches (
   status              text NOT NULL DEFAULT 'pending'
                       CHECK (status IN ('pending','queued','sent','failed','holdout','deferred')),
   holdout             boolean NOT NULL DEFAULT false,                 -- grupo de control: NO se envía, SÍ se atribuye
+  due_at              timestamptz NOT NULL DEFAULT now(),             -- cuándo le tocaba: la atribución usa esto (H5)
   sent_at             timestamptz,
   campaign_message_id uuid REFERENCES campaign_messages(id) ON DELETE SET NULL,
   grant_id            uuid REFERENCES reward_grants(id) ON DELETE SET NULL,
@@ -434,7 +441,8 @@ CREATE TABLE customer_cycle_touches (
 
 - `deferred` = pospuesto por el blackout de un evento (§3.3 regla 5): se reintenta después del evento.
 - `holdout`: el cron elige, por toque, un `cycle_holdout_pct` (default **10 %**, 0 para marcas chicas; decisión 11) por
-  hash estable de `customer_id` + `stage`; a esos **no les manda nada** pero registra la fila. La atribución (§3.4) los
+  hash estable de `customer_id` + `stage` **+ `cycle_no`** (sin el ciclo, el mismo 10 % se quedaría sin ese toque en todos
+  sus ciclos: §13, H4); a esos **no les manda nada** pero registra la fila con `due_at`. La atribución (§3.4) los
   marca igual. Es lo que vuelve comparable «con mensaje» contra «sin mensaje» desde el día uno.
 
 Dos triggers, en SQL, probados con el Postgres embebido (`tests/db/`):
@@ -452,7 +460,7 @@ sin venir nace `dormido` con `dormant_since = now()` (§3.8). Sin ráfaga.
 
 `src/lib/cycle-engine.ts` (sin I/O, como `points-engine.ts`): `daysForRhythm(preset)`, `resolveStage(diasSinVenir, config)`,
 `validateStageConfig(config)`, `bandsFromConfig(config)`, `shouldSkipT1(visits)`, `strongOfferAllowed(lastAt, now)`,
-`heartbeatPrize(seq)`, `expiresOnSunday(sendDate, minDays)`, `isHoldout(customerId, stage, pct)`. Lo consumen el cron, los
+`heartbeatPrize(seq)`, `expiresOnSunday(sendDate, minDays)`, `isHoldout(customerId, stage, cycleNo, pct)`. Lo consumen el cron, los
 endpoints y el navegador: **si la pantalla y el cron calcularan la etapa por separado, anunciarían días distintos**.
 
 ### 7.3 El cron (`/api/cron/reactivation`, mismo path): decide y encola
@@ -474,7 +482,7 @@ toque **se puede repetir mañana** (N3 muere por construcción). Dormidos: el tr
 | GET | `/api/dashboard/cycle/projection?from&to` | por fecha, cuántos entran a cada etapa (aritmética sobre `last_visit_at`: sin tabla nueva) + eventos + fechas especiales |
 | GET | `/api/dashboard/cycle/customers?stage=t4` o `?day=42` o `?state=dormido` | la lista, paginada, con `cycle_no`, visitas, puntos, último toque, `returned_at` |
 | POST | `/api/dashboard/cycle/gift` | manda un regalo (§6.5): es la ruta `campaigns/manual` con `preset='gift_expiring'` + `rewardId` + regla de vencimiento + `audience` + `not_before` |
-| PUT | `/api/dashboard/settings` | claves nuevas: `cycle_rhythm` (`weekly|biweekly|monthly|occasional`), `cycle_stage_days` (json, solo avanzado), `cycle_small_reward_ids`, `cycle_strong_reward_id`, `cycle_fatigue_touches`, `cycle_heartbeat_enabled`, `cycle_strong_cooldown_days`, `cycle_send_slot`, `cycle_holdout_pct`. Entran a la **lista cerrada** del PUT (ítem de P1) |
+| PUT | `/api/dashboard/settings` | claves nuevas: `cycle_enabled` (default `false`: se enciende por marca, decisión 17), `cycle_rhythm` (`weekly|biweekly|monthly|occasional`), `cycle_stage_days` (json, solo avanzado), `cycle_small_reward_ids`, `cycle_strong_reward_id`, `cycle_fatigue_touches`, `cycle_heartbeat_enabled`, `cycle_strong_cooldown_days`, `cycle_send_slot`, `cycle_holdout_pct`. Entran a la **lista cerrada** del PUT (ítem de P1) |
 
 Todo con `requireTenantId()` para leer y `exigirAlcanceDeMarca()` para escribir (como `reward-tiers`).
 
@@ -482,7 +490,8 @@ Todo con `requireTenantId()` para leer y `exigirAlcanceDeMarca()` para escribir 
 
 - `tests/unit/cycle-engine.test.ts`: los cuatro presets pasan la validación (7 entre toques, ≤ 3 por 30 contando el
   recordatorio); etapa por día; bandas derivadas; cooldown; salto de t1 con ≥ 5 visitas; `heartbeatPrize(1)` = pequeño,
-  `(2)` = fuerte; `expiresOnSunday` con el mínimo de 5; `isHoldout` estable para el mismo cliente y etapa.
+  `(2)` = fuerte; `expiresOnSunday` con el mínimo de 5; `isHoldout` estable para el mismo cliente, etapa y ciclo, y distinto entre ciclos; los
+  cuatro presets simulados sobre 365 fechas de visita sin pasar de 3 al mes.
 - `tests/db/cycle-triggers.test.ts` (Postgres real): visita → `cycle_no+1`, reset, atribución a 14 días y no a 15 (también
   a un `holdout`); sexto mensaje → dormido; cumpleaños y recordatorio no cuentan; el UNIQUE rechaza el segundo toque de la
   misma etapa (8 inserciones concurrentes, gana una, como `calendar-claim.test.ts`).
@@ -532,6 +541,11 @@ columnas que no existen y PostgREST devuelve 42703 en silencio.
 | 12 | Hora de envío por marca | **Cena (16:30 Bogotá)**; almuerzo (10:30) como alternativa | Un restaurante se decide antes de la comida, no a las 15:00 |
 | 13 | «Le mostramos lo otro» | Solo con `has_delivery_webhook`; si no, cuatro toques | Una marca sin domicilio no puede decir «pide a tu puerta» |
 | 14 | Mensaje libre | Se queda un mes como salida de emergencia; si nadie lo usa, se quita | El objetivo es que «mandar un regalo» cubra el 90 % |
+| 15 | Recordatorio de vencimiento | **Solo para el regalo fuerte** (rescate y segundo trimestral) | Con el del pequeño, ningún ritmo de huecos crecientes cabe en 3 al mes (§13, H2) |
+| 16 | Ritmos semanal y quincenal | 7·14·26·42·58 y 10·17·29·45·61 | Los de la segunda pasada rompían el tope (§13, H1) |
+| 17 | Encendido | **Por marca**, con una piloto dos semanas (Sushi Service) | Sube el volumen de mensajes y el costo de golpe en 25 marcas (§13, H7) |
+| 18 | «Premios» | Sale de Campañas y va a Recompensas | Es la Tarea 1 del dueño |
+| 19 | Lo automático en «Para hoy» | Sale solo; «Hoy no» lo pospone | Un dueño que no entra al panel no puede ser el que destraba el envío |
 
 ---
 
@@ -604,3 +618,25 @@ Dos cosas de la revisión que el código contradice, y cómo quedaron:
 - **«El latido choca con el cooldown.»** Confirmado con la cuenta (día 56 → día 170 = 114 < 180). Resuelto con el orden
   pequeño → fuerte; con el ritmo semanal (rescate día 38, dormido día 52, trimestral día 142: 104 días) pasa lo mismo y la
   misma regla lo cubre.
+
+---
+
+## 13. Tercera pasada (2026-10-08): el diseño contra el código
+
+Verificación de la segunda pasada contra el código y los crons de hoy (Opus 5.5, solo docs). Los 14 cambios de la revisión
+del dueño están todos (§12). Lo que sigue son siete cosas que la construcción habría roto; ya están corregidas arriba y en
+el prompt de la fase 1. Resumen para el dueño en `docs/PENDIENTES.md` §2.3.
+
+| # | Qué estaba mal | Evidencia | Corrección |
+|---|---|---|---|
+| H1 | Semanal y quincenal pasaban de 3 mensajes al mes: «vence el domingo» mueve el recordatorio del rescate 3 a 9 días después del toque, y a veces es el cuarto del mes. El tope lo frena y **ese mensaje no sale, sin aviso** | Simulación de 365 fechas de visita × con y sin domicilio contra `getCustomersAtMonthlyCap()` (mes calendario): semanal 43/730, quincenal 4/730 | Semanal 7·14·26·42·58, quincenal 10·17·29·45·61 (0/730, huecos crecientes). El validador de `cycle-engine.ts` es esa simulación |
+| H2 | El recordatorio sale para **todo** premio activo con vencimiento, no solo el del rescate: el regalo pequeño también lo dispara. Con los dos, hasta el mensual rompe (65/730) y ningún preset de huecos crecientes cabe | `findGrantsDueForReminder()` sin filtro de origen (`reward-grant.service.ts:285`) | El otorgamiento del pequeño marca «sin recordatorio» y el cron lo respeta (decisión 15) |
+| H3 | El spec decía que el cron corre a las 10:00 Bogotá; corre a las 15:00. «Hoy a las 10:30» ya pasó y el almuerzo saldría a las 15:00 | `vercel.json` `0 20 * * *` | `not_before` = la próxima ocurrencia de la hora de la marca |
+| H4 | El grupo de control sorteaba por cliente y etapa: el mismo 10 % quedaba sin rescate en todos sus ciclos | §7.1 | El sorteo incluye `cycle_no` |
+| H5 | La atribución buscaba `sent_at`, que en el grupo de control es NULL: la comparación con y sin mensaje nunca habría tenido datos | §3.4 | Columna `due_at` en `customer_cycle_touches` |
+| H6 | El drenador cancela envíos (cap de 7 días, tope mensual) y el diseño solo definía «enviado» y «falló»: el toque quedaba `queued` para siempre y el UNIQUE impedía reintentarlo | `queue-drain/route.ts:463, 497` | El drenador escribe el resultado del toque en todo desenlace: cap de 7 → `deferred` 7 días · tope del mes → `deferred` al mes siguiente si sigue en el ciclo · vencido en la cola → `failed` reintentable |
+| H7 | Desplegar la fase 1 encendía cinco toques en las 25 marcas a la vez: más volumen y costo de Twilio decidido por un deploy | Regla de la casa (servicios externos) | `cycle_enabled` por marca, default apagado; se enciende una piloto (decisión 17) |
+
+Además quedaban abiertas, y pasan a §9: qué hace lo automático de «Para hoy» si el dueño no toca nada (decisión 19) y la
+pestaña «Premios» (decisión 18).
+

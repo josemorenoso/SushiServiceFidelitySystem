@@ -1,5 +1,11 @@
 # Estado consolidado — requerimientos de agosto × auditoría de 1000 clientes × cola del dueño — 2026-10-04
 
+> ⚠️ **Desde el 2026-10-08 la lista única de lo pendiente es [`docs/PENDIENTES.md`](PENDIENTES.md)**: el orden de trabajo, la
+> tercera pasada del ciclo y **todas las preguntas al dueño** (bloques A–D, que reemplazan a §7 y §10.5 de aquí). Este
+> archivo queda como **inventario de detalle**: cada pedido de agosto, cada hallazgo de la auditoría y N1–N23 con su evidencia.
+> Lo que §10 dice del spec del ciclo es de su primera pasada: hoy son **19 decisiones** (no 10), la plantilla nueva se llama
+> **`gift_expiring` «Regalo que vence»** (no `invite_expiring`) y la pestaña «Premios» va a Recompensas si el dueño lo confirma.
+
 > **Para qué sirve:** un solo lugar donde ver (1) cada cosa que el dueño pidió en agosto y si está hecha, (2) los 68 huecos
 > que nombró la auditoría del 28-09 y cuáles ya se cerraron, (3) lo construido después que no estaba en ningún
 > documento de requerimientos, (4) **la lista de requerimientos de septiembre del dueño, organizada (§10)**, y (5) con todo junto, **qué desarrollar primero**. Reemplaza a `docs/ESTADO-REQUERIMIENTOS.md`
@@ -670,7 +676,7 @@ Cruce: §9 de agosto (push, NO EMPEZADO, con sus 4 preguntas) y S-A16 (Instagram
 
 | # | Pregunta | Sobre | Lo que propone el diseño o el código |
 |---|---|---|---|
-| Q1 | ¿Apruebas los 10 valores por defecto del spec del ciclo? (toques a los días 12 · 24 · 38 · 56 · 80; qué cuenta para las «6»; el contador no se reinicia por tiempo; el domicilio reinicia; backfill hacia adelante; latido a dormidos; cooldown de 180 días de la oferta fuerte; eventos no van a dormidos; `invite_expiring` probada también como UTILITY; **sin** bono por volver) | S-A1…A13 | Sí, todos (spec §9) |
+| Q1 | *(Hoy: `PENDIENTES.md` A1–A7, 19 decisiones.)* ¿Apruebas los 10 valores por defecto del spec del ciclo? (toques a los días 12 · 24 · 38 · 56 · 80; qué cuenta para las «6»; el contador no se reinicia por tiempo; el domicilio reinicia; backfill hacia adelante; latido a dormidos; cooldown de 180 días de la oferta fuerte; eventos no van a dormidos; `invite_expiring` probada también como UTILITY; **sin** bono por volver) | S-A1…A13 | Sí, todos (spec §9) |
 | Q2 | ¿Se mantienen «máx. 3 comunicaciones al mes y 7 días entre cada una»? Tú dijiste «tú verás si es así o de otra forma» | S-A2 | Se mantienen (spec §3.3) |
 | Q3 | ¿Recompensas absorbe **también lo que hoy vive en Ajustes** (premio de la agresiva y de la reseña, puntos, pity timer, Black) o solo se mueve la pestaña «Premios»? Define el tamaño de la Tarea 1 | S-1.1 | — |
 | Q4 | ¿«Temporal» es un concepto **nuevo** (un premio con fechas propias) o la ventana de reclamo que ya se fija en cada otorgamiento? ¿«Fijo» es el premio seguro del nivel o el del catálogo? | S-1.2 | Hoy solo existe la ventana por otorgamiento |

@@ -34,6 +34,7 @@ import {
   History,
 } from 'lucide-react'
 import { CampaignCostEstimate } from './TwilioWallet'
+import { deriveCycleBands } from '@/constants/rankings'
 
 interface CampaignFilters {
   city: string
@@ -127,6 +128,8 @@ const PRESETS: PresetCampaign[] = [
   {
     id: 'rescue_lost',
     name: 'Rescatar Perdidos',
+    // Los días reales salen de la banda «Perdido» de la marca: `conLosDiasDeLaMarca()`.
+    // Estos son los de una marca con los días por defecto (21 / 25).
     description: 'Clientes con 26+ días sin venir (ya fuera del radar automático de reactivación). Última oportunidad con una oferta fuerte.',
     icon: UserX,
     color: 'text-red-600',
@@ -135,6 +138,27 @@ const PRESETS: PresetCampaign[] = [
     filters: { minDays: '26' },
   },
 ]
+
+/**
+ * «Rescatar Perdidos» con los días de ESTA marca (N3-bis, fase 0.bis).
+ *
+ * Arranca donde empieza la banda «Perdido» de la escala única (`deriveCycleBands()`, la
+ * misma de la tira de Campañas, las burbujas y el cron). Con un 26 fijo, una marca que
+ * movió sus días veía «perdidos» a clientes que el cron todavía atendía, o al revés. Con
+ * los días por defecto da 26, lo de siempre.
+ */
+function conLosDiasDeLaMarca(preset: PresetCampaign, settings: Record<string, string>): PresetCampaign {
+  if (preset.id !== 'rescue_lost') return preset
+  const perdido = deriveCycleBands(settings.reactivation_soft_days, settings.reactivation_aggressive_days).find(
+    (b) => b.name === 'Perdido'
+  )
+  if (!perdido) return preset
+  return {
+    ...preset,
+    description: `Clientes con ${perdido.minDays}+ días sin venir (ya fuera del radar automático de reactivación). Última oportunidad con una oferta fuerte.`,
+    filters: { ...preset.filters, minDays: String(perdido.minDays) },
+  }
+}
 
 const emptyFilters: CampaignFilters = {
   city: '',
@@ -235,7 +259,10 @@ export function ManualCampaigns() {
 
   /** Presets que hoy pueden enviar de verdad. El resto ni se dibuja (§15.2). */
   const visiblePresets = useMemo(
-    () => (settings === null ? [] : PRESETS.filter((p) => isPresetSendable(p, settings, approvedSids))),
+    () =>
+      settings === null
+        ? []
+        : PRESETS.map((p) => conLosDiasDeLaMarca(p, settings)).filter((p) => isPresetSendable(p, settings, approvedSids)),
     [settings, approvedSids]
   )
 
@@ -267,7 +294,8 @@ export function ManualCampaigns() {
 
       const res = await fetch(`/api/dashboard/campaigns/estimate?${params}`)
       const data = await res.json()
-      setMatchCount(data.count ?? 0)
+      // Un 500 del estimador no es «0 destinatarios»: se muestra «—» (N3-ter).
+      setMatchCount(res.ok && typeof data.count === 'number' ? data.count : null)
     } catch {
       setMatchCount(null)
     } finally {

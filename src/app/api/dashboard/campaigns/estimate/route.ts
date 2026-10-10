@@ -4,6 +4,7 @@ import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { requireTenantId } from '@/lib/tenant'
 import { FREQUENCY_CAP_DAYS } from '@/constants/rewards'
 import { getRecoveryZoneConfig } from '@/services/settings.service'
+import { logDbFailure } from '@/lib/db-failure'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -92,9 +93,16 @@ export async function GET(request: NextRequest) {
 
     const { count, error } = await query
 
+    // N3-ter (fase 0.bis): antes un error de base contestaba `{ count: 0 }` y la burbuja o el
+    // preset decían «nadie a quién escribirle». Un fallo no es un cero: 500 y el log.
     if (error) {
-      console.error('[CampaignEstimate]', error)
-      return NextResponse.json({ count: 0 })
+      logDbFailure({
+        scope: 'CampaignEstimate',
+        reason: 'estimado_error',
+        error,
+        context: { tenant_id: tenantId },
+      })
+      return NextResponse.json({ error: 'No se pudo calcular a cuántos clientes les llegaría' }, { status: 500 })
     }
 
     return NextResponse.json({ count: count ?? 0 })

@@ -5,6 +5,9 @@ import {
   findBirthdayCustomers,
   getOrCreateTodayCampaign,
   hasRecentCampaignMessage,
+  agotoLosIntentosDelCumpleanos,
+  causaDelFallo,
+  proveedorDelEnvio,
   recordCampaignMessage,
   finalizeCampaign,
   updateCustomerLastCampaignAt,
@@ -26,6 +29,8 @@ interface TenantCronResult {
   total_birthday_customers: number
   /** Con cuál salió: `se_acerca` (hasta dos días antes) o `el_dia` (la vieja, el día mismo). */
   plantilla?: 'se_acerca' | 'el_dia'
+  /** Cumpleañeros que no se intentaron porque su saludo ya falló MAX_INTENTOS_FALLIDOS_POR_TOQUE veces. */
+  skipped_retry_cap?: number
   error?: string
 }
 
@@ -82,53 +87,78 @@ async function processTenant(tenant: Tenant): Promise<TenantCronResult> {
   const campaign = await getOrCreateTodayCampaign('birthday', `template:${templateSid}`, tenant.id)
   let sent = 0
   let failed = 0
+  let skippedRetryCap = 0
   const sentCustomerIds: string[] = []
+  const proveedor = proveedorDelEnvio(tenant)
 
-  for (const customer of customers) {
-    // BIRTHDAY_DEDUPE_DAYS < 365 a propósito: el año en que el envío se adelantó
-    // dos días, el hueco contra el saludo anterior es de 363 y una ventana de 365
-    // se habría comido la campaña entera sin registrar un solo error.
-    const alreadySent = await hasRecentCampaignMessage(customer.id, 'birthday', BIRTHDAY_DEDUPE_DAYS)
-    if (alreadySent) continue
-
-    try {
-      // ⚠️ SIN SEDE, A PROPÓSITO (00058). Un cron de cumpleaños es un envío
-      // programado: no hay visita, ni QR, ni operador, ni host — no existe una
-      // «sede del acto». La única sede posible sería INFERIDA del cliente
-      // (`last_visit_location_id`), y esa cascada está diseñada y explícitamente
-      // aplazada a F6 (`whatsapp.service.ts` §6.1). Los niveles son los de la
-      // MARCA, que es el default de `buildTiersRoadmap` sin sede.
-      const tiersRoadmap = await buildTiersRoadmap(customer.total_points ?? 0, tenant.id)
-      const result = await sendTemplateMessage(customer.phone, templateSid, { '1': customer.name, '2': tiersRoadmap }, tenant, { customerId: customer.id, messageType: 'birthday' })
-
-      await recordCampaignMessage({
-        campaignId: campaign.id,
-        customerId: customer.id,
-        status: result ? 'sent' : 'failed',
-        tenantId: tenant.id,
-        twilioSid: result?.sid ?? null,
-        errorMessage: result ? null : 'Twilio no configurado o error de envío',
-      })
-
-      if (result) {
-        sent++
-        sentCustomerIds.push(customer.id)
-      } else {
-        failed++
+  // R2 (fase 0.bis): si la corrida aborta a mitad (las dedups LANZAN ante un fallo de base),
+  // el `finally` igual les marca `last_campaign_at` a los que ya recibieron el saludo.
+  try {
+    for (const customer of customers) {
+      // BIRTHDAY_DEDUPE_DAYS < 365 a propósito: el año en que el envío se adelantó
+      // dos días, el hueco contra el saludo anterior es de 363 y una ventana de 365
+      // se habría comido la campaña entera sin registrar un solo error.
+      const alreadySent = await hasRecentCampaignMessage(customer.id, 'birthday', BIRTHDAY_DEDUPE_DAYS)
+      if (alreadySent) continue
+      // Tope de reintentos (fase 0.bis, R1): un fallido ya no calla el cumpleaños, pero
+      // tampoco se intenta sin fin.
+      if (await agotoLosIntentosDelCumpleanos(customer.id)) {
+        skippedRetryCap++
+        continue
       }
-    } catch (error) {
-      failed++
-      await recordCampaignMessage({
-        campaignId: campaign.id,
-        customerId: customer.id,
-        status: 'failed',
-        tenantId: tenant.id,
-        errorMessage: error instanceof Error ? error.message : 'Error desconocido',
-      })
+
+      // `salio` separa «no salió» de «salió y no se pudo grabar»: lo segundo NO se graba
+      // como fallido (mañana se repetiría el saludo).
+      let salio = false
+      try {
+        // ⚠️ SIN SEDE, A PROPÓSITO (00058). Un cron de cumpleaños es un envío
+        // programado: no hay visita, ni QR, ni operador, ni host — no existe una
+        // «sede del acto». La única sede posible sería INFERIDA del cliente
+        // (`last_visit_location_id`), y esa cascada está diseñada y explícitamente
+        // aplazada a F6 (`whatsapp.service.ts` §6.1). Los niveles son los de la
+        // MARCA, que es el default de `buildTiersRoadmap` sin sede.
+        const tiersRoadmap = await buildTiersRoadmap(customer.total_points ?? 0, tenant.id)
+        const antesDelEnvio = new Date().toISOString()
+        const result = await sendTemplateMessage(customer.phone, templateSid, { '1': customer.name, '2': tiersRoadmap }, tenant, { customerId: customer.id, messageType: 'birthday' })
+        if (result) {
+          // Se anota ANTES de grabarlo: si la grabación falla, el `finally` lo marca igual.
+          salio = true
+          sentCustomerIds.push(customer.id)
+        }
+
+        await recordCampaignMessage({
+          campaignId: campaign.id,
+          customerId: customer.id,
+          status: result ? 'sent' : 'failed',
+          tenantId: tenant.id,
+          twilioSid: result?.sid ?? null,
+          // R5: la causa real (proveedor, código y mensaje), no un texto fijo de Twilio.
+          errorMessage: result
+            ? null
+            : await causaDelFallo({ tenantId: tenant.id, customerId: customer.id, plantilla: templateSid, proveedor, desde: antesDelEnvio }),
+        })
+
+        if (result) {
+          sent++
+        } else {
+          failed++
+        }
+      } catch (error) {
+        if (salio) throw error
+        failed++
+        await recordCampaignMessage({
+          campaignId: campaign.id,
+          customerId: customer.id,
+          status: 'failed',
+          tenantId: tenant.id,
+          errorMessage: error instanceof Error ? error.message : 'Error desconocido',
+        })
+      }
     }
+  } finally {
+    await updateCustomerLastCampaignAt(sentCustomerIds)
   }
 
-  await updateCustomerLastCampaignAt(sentCustomerIds)
   await finalizeCampaign(campaign.id, sent)
 
   return {
@@ -139,6 +169,7 @@ async function processTenant(tenant: Tenant): Promise<TenantCronResult> {
     failed,
     total_birthday_customers: customers.length,
     plantilla: plantilla.cual,
+    skipped_retry_cap: skippedRetryCap,
   }
 }
 

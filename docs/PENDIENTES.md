@@ -1,6 +1,6 @@
 # PENDIENTES — todo lo que falta, en un solo lugar
 
-> **Última actualización:** 2026-10-08 (Opus 5.5, solo docs). **Es la puerta de entrada a lo que falta.** Si algo
+> **Última actualización:** 2026-10-10 (ciclo fase 0.bis: sale N3-bis y N3-ter de §5, entran N3-quater y N3-quinquies; la consulta de la fase 0 ya corrió y su gesto pasa al de Planeta Wings). Antes 2026-10-08 (Opus 5.5, solo docs). **Es la puerta de entrada a lo que falta.** Si algo
 > pendiente no está aquí, no está pendiente: o se hizo, o hay que agregarlo aquí.
 > **Regla:** lo que se termina se **saca** de este archivo (no se tacha) y pasa al `CHANGELOG.md`. El detalle de cada
 > cosa vive en su documento de origen; aquí va una línea, el estado y dónde leer más.
@@ -35,7 +35,7 @@
 | # | Qué | Necesita de ti antes | Migración |
 |---|---|---|---|
 | 1 | **Gestos de hoy** (§6.1): pegar la 00069, mirar los registros del Supabase del AIOS | Nada: solo hacerlo | — |
-| 2 | ✅ **Campañas, fase 0: HECHA el 2026-10-08** (sin migración; **sin desplegar**: entra a producción con el próximo push). Un envío fallido ya no bloquea 30 o 360 días · la insistente sale una vez mientras el cliente no vuelva · el texto de Campañas dice la verdad · una sola escala de días | **Correr la consulta** de `SQL-PARA-CORRER/ciclo-fase-0/` (solo lectura, mejor antes del push) | no |
+| 2 | ✅ **Campañas, fases 0 y 0.bis: HECHAS el 2026-10-08 y el 2026-10-10** (sin migración; **sin desplegar**: entran juntas a producción con el próximo push, y la 0 NO va sin la 0.bis). Un envío fallido ya no bloquea 30 o 360 días, pero cada toque admite 3 fallidos y no más · la insistente sale una vez mientras el cliente no vuelva · `error_message` dice la causa real · el texto de Campañas dice la verdad · una sola escala de días, también en Clientes y en «Rescatar Perdidos» | Nada (la consulta ya corrió el 10-10: línea base en `ESTADO.md` 0.CICLO). Solo ordenar el push | no |
 | 3 | **Plantillas, pasos 1 a 3** (§3): un solo libro de plantillas, cerrar el hueco catálogo ↔ código, una sola pantalla. **Y en la misma sesión, las cuatro plantillas nuevas juntas** (§3.2) para que cada marca pase por Meta una sola vez | B1–B7 (§8) | 0 o 1 |
 | 4 | **Campañas, fase 1: el motor del ciclo** (dos sesiones: base y cron) | A1–A6 (§8) | 1 |
 | 5 | **Recompensas en un solo lugar** (S-1) | C1–C3 | 0 o 1 |
@@ -53,8 +53,9 @@ encuentra hecha. **5 y 6 se cruzan** en `campaigns/page.tsx` (la pestaña «Prem
 
 ## 2. Campañas: el ciclo de recuperación
 
-**Estado:** diseñado y revisado dos veces, verificado contra el código el 08-10. **La fase 0 está construida** (08-10,
-sin desplegar: N3, N4 y N15 siguen vivos en producción hasta el próximo push); de la fase 1 en adelante, cero código.
+**Estado:** diseñado y revisado dos veces, verificado contra el código el 08-10. **Las fases 0 y 0.bis están construidas**
+(08-10 y 10-10, sin desplegar: N3, N4 y N15 siguen vivos en producción hasta el próximo push, que lleva las dos juntas;
+la 0 sola reintentaría cada día sin techo); de la fase 1 en adelante, cero código.
 
 ### 2.1 Qué hace el diseño, en cinco líneas
 
@@ -225,8 +226,8 @@ Cada uno es menos de una hora. Juntos protegen todo lo que viene.
 | ID | Qué | Por qué importa |
 |---|---|---|
 | N1 | El «Importar CSV» crea clientes que aceptan marketing; los domicilios también nacen «consentidos» | Ley 1581 · decisión D4 |
-| N3-bis | Tres relojes de días siguen fijos: el preset «Rescatar Perdidos» (`ManualCampaigns.tsx`, 26), el filtro Activo/Inactivo/Perdido de Clientes (`getCustomers()`, 18/25) y el contador de inactivos del panel (`getDashboardMetrics()`, 21). Con los días por defecto coinciden con la escala única de la fase 0; con días propios, no | La pantalla vuelve a mostrar dos relojes en cuanto una marca cambia sus días |
-| N3-ter | `GET /api/dashboard/campaigns/estimate` contesta `{ count: 0 }` ante un error de base; `docs/features/dashboard.md` todavía dice que la burbuja filtra con `RISK_LEVELS` (ahora son las bandas de la marca) | Un fallo se ve como «nadie a quién escribirle» |
+| N3-quater | El diálogo de las burbujas (`AtRiskBubbles.tsx:123`, `data.count ?? 0`) lee el **500** del estimador como «0 elegibles». La fase 0.bis arregló el estimador y `ManualCampaigns`, pero ese archivo no era de su territorio. Arreglo: `res.ok && typeof data.count === 'number' ? data.count : null` | Un fallo se ve como «nadie a quién escribirle» |
+| N3-quinquies | La causa real del fallo (fase 0.bis) se lee de `message_logs`, cuyo INSERT es *best-effort* (`recordMessageLog()` traga su error). Si esa fila no se escribió, `error_message` dice solo el proveedor. Y `campaign_messages` no guarda el premio: el tope de reintentos del recordatorio suma los fallos de dos premios del mismo cliente que venzan a la vez | Diagnóstico incompleto en un caso raro |
 | N6 | Los botones sí/no del webhook de Zernio esperan 10 s antes de contestar | El mismo riesgo de apagón que se cerró en ESCALA-3 |
 | N7 | Tres búsquedas sin paginar; el tope mensual, ante un error, **no se aplica** y no deja log | Fatiga y cupo |
 | N8 | Errores tragados en `getActiveTenants()` y `getTenantByDomain()`; escrituras posteriores al envío sin leer `error` | Un fallo de base se ve como «nada que hacer» |
@@ -253,9 +254,12 @@ Cada uno es menos de una hora. Juntos protegen todo lo que viene.
 3. **Confirmar `ZERNIO_API_KEY` y `ZERNIO_WEBHOOK_SECRET`** vigentes en los dos Vercel.
 4. **Mirar en n8n que esté apagado** (permite apagar el VPS).
 5. **Correr las dos consultas de solo lectura** que alimentan las campañas: duplicados de `campaign_messages` y el conteo D-8.b.
-6. **Correr la consulta de la fase 0 del ciclo** (`SQL-PARA-CORRER/ciclo-fase-0/LEEME.md`, solo lectura, cuatro bloques),
-   mejor **antes** del push que la despliega: dice cuántos clientes recibieron el insistente repetido y cuántos quedaron
-   callados por un envío fallido. Es lo único que le queda a la fase 0.
+6. **Mirar en los logs de Vercel del producto (`cada1`) del 5 y el 6 de octubre por qué fallaron los envíos de
+   Planeta Wings** (`clubplanetawingsenvigado`: 10 reactivaciones y 1 cumpleaños, ~15:00 y ~13:00 Bogotá). Buscar
+   `[WhatsApp] FALLO envío Zernio template=… status=… msg="…"`. En la base solo quedó «Twilio no configurado o error
+   de envío», que es el texto fijo de antes de la fase 0.bis y no dice nada (es una marca Zernio). Si la causa sigue
+   viva (p. ej. una plantilla sin aprobar), con la fase 0 desplegada esos 11 clientes reciben hasta 3 intentos más y
+   se callan; conviene arreglarla antes.
 
 ### 6.2 Por marca, cuando puedas (detalle en `ESTADO.md` §3)
 

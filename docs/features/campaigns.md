@@ -1,6 +1,6 @@
 # Feature: Campañas — Control de Tráfico Centralizado
 
-**Última actualización:** 2026-10-08 (ciclo, fase 0: un fallo no calla, el insistente sale una vez, una sola escala de días)
+**Última actualización:** 2026-10-10 (ciclo, fase 0.bis: tope de 3 intentos fallidos por toque, la causa real del fallo, lo que salió queda marcado aunque la corrida aborte); antes 2026-10-08 (fase 0: un fallo no calla, el insistente sale una vez, una sola escala de días)
 
 > ⚠️ **Rediseño en diseño (2026-10-04, sin código todavía):** el recorrido de reactivación, las burbujas de riesgo y el
 > calendario se reemplazan por **el ciclo de recuperación** (pipeline de 90 días con cinco toques, fatiga a las 6
@@ -8,7 +8,8 @@
 > el diagnóstico y las fases están en `docs/superpowers/specs/2026-10-04-ciclo-de-recuperacion-design.md`. **La fase 0 ya
 > está (2026-10-08, sin migración):** un envío fallido ya no calla al cliente, el «insistente» sale UNA vez mientras el
 > cliente no vuelva (antes se repetía cada ~30 días sin tope) y la pantalla usa una sola escala de días. La medición está en
-> `SQL-PARA-CORRER/ciclo-fase-0/`. **Lo que sigue abajo describe lo que el código hace HOY** y sigue siendo cierto hasta
+> `SQL-PARA-CORRER/ciclo-fase-0/`. **La fase 0.bis (2026-10-10, sin migración)** le pone techo al reintento: un toque que
+> falla 3 veces no se intenta más (§ «Tope de reintentos»). **Lo que sigue abajo describe lo que el código hace HOY** y sigue siendo cierto hasta
 > que se construya la fase 1.
 
 ---
@@ -157,13 +158,16 @@ filterByMonthlyCap()                                    [3 al mes, en cada pass]
 
 PASS 1 — suave, por cliente:
   → hasRecentCampaignMessage(type=reactivation, 30d)    [dedup: solo lo que SALIÓ]
-  → sendTemplateMessage() → recordCampaignMessage()
+  → agotoLosIntentosDelSuave()                          [3 fallidos en este ciclo → no más]
+  → sendTemplateMessage() → recordCampaignMessage()     [si falló: causaDelFallo()]
 
 PASS 2 — insistente, por cliente (solo si hay plantilla insistente):
   → yaRecibioElInsistente(last_visit_at, insistente)    [UNA vez mientras no vuelva]
+  → agotoLosIntentosDelInsistente()                     [3 fallidos → no más hasta que vuelva]
   → sendTemplateMessage() → recordCampaignMessage() → grantReward() si hay premio
 
-Al final: updateCustomerLastCampaignAt(enviados) · finalizeCampaign()
+En un finally (aunque la corrida aborte): updateCustomerLastCampaignAt(enviados)
+Si terminó bien: finalizeCampaign()
 ```
 
 **El insistente sale una sola vez mientras el cliente no vuelva** (N4, 2026-10-08). Antes el PASS 2 usaba
@@ -220,13 +224,52 @@ findBirthdayCustomers(diasDeAnticipacion)
 
 Por cada cliente:
   → hasRecentCampaignMessage(type=birthday, BIRTHDAY_DEDUPE_DAYS = 360d)   [dedup anual, solo lo que SALIÓ]
+  → agotoLosIntentosDelCumpleanos()                                       [3 fallidos de este cumpleaños → no más]
   → sendTemplateMessage()
-  → recordCampaignMessage()
+  → recordCampaignMessage()                                               [si falló: causaDelFallo()]
 
-Al final del loop:
+En un finally (aunque la corrida aborte):
   → updateCustomerLastCampaignAt(sentCustomerIds)
-  → respuesta por marca con `plantilla: 'se_acerca' | 'el_dia'`
+  → respuesta por marca con `plantilla: 'se_acerca' | 'el_dia'` y `skipped_retry_cap`
 ```
+
+### Tope de reintentos y la causa real del fallo (fase 0.bis, 2026-10-10)
+
+La fase 0 hizo que un fallido dejara de contar como enviado, así que se reintenta en la corrida siguiente.
+Sin techo, un número que falla siempre, o una línea muerta (la de Twilio de Sushi Service hacia el 12-10),
+recibía un intento **todos los días**: el fallo no toca `last_campaign_at` y el tope mensual solo cuenta
+los `sent`. Ahora cada toque admite **`MAX_INTENTOS_FALLIDOS_POR_TOQUE` = 3** fallidos
+(`src/constants/rewards.ts`; tres, como el drenador de `send_queue`). Se cuenta cualquier fallo, sin
+importar la causa, y los fallidos viejos (los de antes de este arreglo) cuentan:
+
+| Toque | Función | Cuenta los `failed` de… |
+|---|---|---|
+| Suave | `agotoLosIntentosDelSuave()` | reactivación (`source='reactivation'`) desde `last_visit_at + suave` |
+| Insistente | `agotoLosIntentosDelInsistente()` | reactivación desde `last_visit_at + insistente`; no se intenta más hasta que el cliente vuelva |
+| Cumpleaños | `agotoLosIntentosDelCumpleanos()` | cumpleaños en los últimos `BIRTHDAY_DEDUPE_DAYS` (este cumpleaños, no el del año pasado) |
+| Recordatorio de premio | `agotoLosIntentosDelRecordatorio()` | `source='reward_reminder'` desde que el premio entró en su ventana de aviso (`expires_at − reward_reminder_days_before`) |
+
+Si el cliente vuelve, `last_visit_at` se mueve y la cuenta empieza de cero. Un fallo de base al contar
+**lanza** (`[Campaign][FALLO] reason=tope_de_reintentos_error`). Cada cron devuelve `skipped_retry_cap`
+por marca. Con `BIRTHDAY_LEAD_DAYS = 2` el cron ve a un cumpleañero tres días, así que el techo del
+cumpleaños casi nunca se toca: es la guarda para el día que la anticipación crezca. `campaign_messages`
+no guarda el premio: con dos premios del mismo cliente venciendo a la vez, sus fallos se suman.
+
+**La causa real** (`campaign_messages.error_message`). Los tres crons grababan «Twilio no configurado o
+error de envío» para todo fallo, también en las marcas de Zernio (Planeta Wings, 5 y 6 de octubre).
+`sendTemplateMessage()` devuelve `null` para todo modo de fallo pero deja la causa en `message_logs`;
+`causaDelFallo()` la lee de ahí (la fila `failed` más reciente de ese cliente y esa plantilla) y graba
+`proveedor · código · mensaje`, por ejemplo `twilio · 63016 · …`, `zernio · 400 · …`,
+`twilio · opted_out_local · …` o el código del cupo de la línea. Si no hay fila, al menos el proveedor
+real. No se tocó el contrato de `sendTemplateMessage()`.
+
+**Lo que salió queda marcado aunque la corrida aborte.** Las dedups lanzan ante un fallo de base y
+abortan la marca. Antes eso se llevaba por delante `updateCustomerLastCampaignAt()` (reactivación y
+cumpleaños) y `markReminderSent()` (recordatorio): a los que ya habían recibido no se les marcaba, y una
+campaña manual podía escribirles dentro de los 7 días, o el recordatorio se repetía al día siguiente.
+Ahora van en un `finally`, el cliente se anota en cuanto el envío sale (antes de grabarlo) y el error
+sigue su camino. Un envío que **salió** pero no se pudo grabar ya no se graba como `failed`: aborta la
+marca en vez de seguir mandando sin dejar rastro.
 
 ### Campaña Manual (`/api/dashboard/campaigns/manual`)
 ```

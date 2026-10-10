@@ -5,6 +5,10 @@ import {
   getOrCreateTodayCampaign,
   hasRecentCampaignMessage,
   yaRecibioElInsistente,
+  agotoLosIntentosDelSuave,
+  agotoLosIntentosDelInsistente,
+  causaDelFallo,
+  proveedorDelEnvio,
   recordCampaignMessage,
   finalizeCampaign,
   updateCustomerLastCampaignAt,
@@ -30,6 +34,8 @@ interface TenantCronResult {
   aggressive_sent: number
   /** Premios de campaña otorgados en esta corrida (con su fecha límite). */
   rewards_granted: number
+  /** Clientes que no se intentaron porque su toque ya falló MAX_INTENTOS_FALLIDOS_POR_TOQUE veces. */
+  skipped_retry_cap?: number
   total_inactive_customers: number
   reactivation_soft_days?: number
   reactivation_aggressive_days?: number
@@ -170,107 +176,68 @@ async function processTenant(tenant: Tenant): Promise<TenantCronResult> {
     let failed = 0
     let aggressiveSent = 0
     let rewardsGranted = 0
+    let skippedRetryCap = 0
     const sentCustomerIds: string[] = []
+    const proveedor = proveedorDelEnvio(tenant)
 
-    // Aplicar cap mensual a clientes suaves
-    const { eligible: softEligible, excluded: softExcludedCap } = await filterByMonthlyCap(softCustomers)
+    // R2 (fase 0.bis): el envío entero va dentro de un try/finally. Un fallo de base a mitad
+    // de corrida aborta la marca (las dedups LANZAN a propósito), y antes eso se llevaba por
+    // delante `updateCustomerLastCampaignAt()`: a los que ya habían recibido mensaje no se
+    // les marcaba, y una campaña manual podía escribirles dentro de los 7 días. El `finally`
+    // los marca igual y deja que el error siga su camino.
+    try {
+      // Aplicar cap mensual a clientes suaves
+      const { eligible: softEligible, excluded: softExcludedCap } = await filterByMonthlyCap(softCustomers)
 
-    // ─── PASS 1: Clientes suaves (softDays) ───
-    for (const customer of softEligible) {
-      const alreadySent = await hasRecentCampaignMessage(customer.id, 'reactivation', 30)
-      if (alreadySent) continue
-
-      try {
-        // Variables según el modo:
-        //   with_reward: {{1}}=name, {{2}}=fixedRewardTitle, {{3}}=roadmap
-        //   no_reward:   {{1}}=name, {{2}}=puntos actuales, {{3}}=premio próximo
-        //   legacy:      {{1}}=name, {{2}}=visits, {{3}}=rewardTitle (compat)
-        const tiersRoadmap = await buildTiersRoadmap(customer.total_points ?? 0, tenant.id)
-        const nextTier = await getNextTier(customer.total_points ?? 0, tenant.id)
-        let variables: Record<string, string>
-        if (mode === 'with_reward') {
-          variables = { '1': customer.name, '2': fixedRewardTitle ?? 'más beneficios', '3': tiersRoadmap }
-        } else if (mode === 'no_reward') {
-          variables = {
-            '1': customer.name,
-            '2': String(customer.total_points ?? 0),
-            '3': nextTier ? nextTier.tier.safe_reward_title : 'más beneficios',
-          }
-        } else {
-          // legacy: replica el comportamiento previo con título del próximo premio del cliente
-          const next = await getNextReward(customer.total_visits, tenant.id)
-          variables = {
-            '1': customer.name,
-            '2': String(customer.total_visits),
-            '3': getRewardTitle(next),
-          }
-        }
-
-        const result = await sendTemplateMessage(customer.phone, templateSid, variables, tenant, { customerId: customer.id, messageType: 'reactivation' })
-
-        await recordCampaignMessage({
-          campaignId: campaign.id,
-          customerId: customer.id,
-          status: result ? 'sent' : 'failed',
-          tenantId: tenant.id,
-          twilioSid: result?.sid ?? null,
-          errorMessage: result ? null : 'Twilio no configurado o error de envío',
-        })
-
-        if (result) {
-          sent++
-          sentCustomerIds.push(customer.id)
-        } else {
-          failed++
-        }
-      } catch (error) {
-        failed++
-        await recordCampaignMessage({
-          campaignId: campaign.id,
-          customerId: customer.id,
-          status: 'failed',
-          tenantId: tenant.id,
-          errorMessage: error instanceof Error ? error.message : 'Error desconocido',
-        })
-      }
-    }
-
-    // Aplicar cap mensual a clientes agresivos
-    const { eligible: aggressiveEligible, excluded: aggressiveExcludedCap } = await filterByMonthlyCap(aggressiveCustomers)
-
-    // ─── PASS 2: Clientes agresivos (aggressiveDays+) ───
-    // El insistente sale UNA vez mientras el cliente no vuelva (N4). La dedup de 30 días
-    // del suave NO va acá: contaba el suave y corría el insistente al día ~51, y después
-    // lo dejaba repetirse cada ~30 días para siempre. La señal está explicada en
-    // `yaRecibioElInsistente()`. El cap de 7 días (`findInactiveCustomers`) sigue
-    // separando el insistente del suave.
-    if (aggressiveSid && aggressiveEligible.length > 0) {
-      for (const customer of aggressiveEligible) {
-        // `last_visit_at` no es NULL: `aggressiveCustomers` solo toma a quien lo tiene.
-        const alreadySent = await yaRecibioElInsistente(customer.id, customer.last_visit_at!, aggressiveDays)
+      // ─── PASS 1: Clientes suaves (softDays) ───
+      for (const customer of softEligible) {
+        const alreadySent = await hasRecentCampaignMessage(customer.id, 'reactivation', 30)
         if (alreadySent) continue
+        // Tope de reintentos (fase 0.bis, R1): un fallido ya no cuenta como enviado, así que
+        // sin techo un número que falla siempre recibiría un intento cada día.
+        // `last_visit_at` no es NULL: `findInactiveCustomers` exige que lo tenga.
+        if (await agotoLosIntentosDelSuave(customer.id, customer.last_visit_at!, softDays)) {
+          skippedRetryCap++
+          continue
+        }
 
+        // `salio` separa «no salió» de «salió y no se pudo grabar»: lo segundo NO se graba
+        // como fallido (sería un fallido de un mensaje entregado, y mañana se repetiría).
+        let salio = false
         try {
+          // Variables según el modo:
+          //   with_reward: {{1}}=name, {{2}}=fixedRewardTitle, {{3}}=roadmap
+          //   no_reward:   {{1}}=name, {{2}}=puntos actuales, {{3}}=premio próximo
+          //   legacy:      {{1}}=name, {{2}}=visits, {{3}}=rewardTitle (compat)
           const tiersRoadmap = await buildTiersRoadmap(customer.total_points ?? 0, tenant.id)
           const nextTier = await getNextTier(customer.total_points ?? 0, tenant.id)
-          const nextTierName = nextTier ? nextTier.tier.safe_reward_title : 'premios exclusivos'
-
-          const deadline = new Date(Date.now() + rewardWindowDays * 24 * 60 * 60 * 1000)
-
-          const aggressiveVars: Record<string, string> = {
-            '1': customer.name,
-            '2': String(customer.total_points ?? 0),
-            '3': nextTierName,
+          let variables: Record<string, string>
+          if (mode === 'with_reward') {
+            variables = { '1': customer.name, '2': fixedRewardTitle ?? 'más beneficios', '3': tiersRoadmap }
+          } else if (mode === 'no_reward') {
+            variables = {
+              '1': customer.name,
+              '2': String(customer.total_points ?? 0),
+              '3': nextTier ? nextTier.tier.safe_reward_title : 'más beneficios',
+            }
+          } else {
+            // legacy: replica el comportamiento previo con título del próximo premio del cliente
+            const next = await getNextReward(customer.total_visits, tenant.id)
+            variables = {
+              '1': customer.name,
+              '2': String(customer.total_visits),
+              '3': getRewardTitle(next),
+            }
           }
-          // Si hay premio configurado, va como {{4}} y su fecha límite como {{5}}.
-          // sendTemplateMessage reintenta con una variable menos ante el error 21665 de
-          // Twilio, así que una plantilla de 4 variables sigue funcionando sin tocar nada.
-          if (aggressiveRewardTitle) {
-            aggressiveVars['4'] = aggressiveRewardTitle
-            aggressiveVars['5'] = formatDeadline(deadline)
-          }
 
-          const result = await sendTemplateMessage(customer.phone, aggressiveSid, aggressiveVars, tenant, { customerId: customer.id, messageType: 'reactivation' })
+          const antesDelEnvio = new Date().toISOString()
+          const result = await sendTemplateMessage(customer.phone, templateSid, variables, tenant, { customerId: customer.id, messageType: 'reactivation' })
+          if (result) {
+            // Se anota ANTES de grabarlo: si la grabación falla y la corrida aborta, el
+            // `finally` igual le marca `last_campaign_at` (R2).
+            salio = true
+            sentCustomerIds.push(customer.id)
+          }
 
           await recordCampaignMessage({
             campaignId: campaign.id,
@@ -278,46 +245,19 @@ async function processTenant(tenant: Tenant): Promise<TenantCronResult> {
             status: result ? 'sent' : 'failed',
             tenantId: tenant.id,
             twilioSid: result?.sid ?? null,
-            errorMessage: result ? null : 'Twilio no configurado o error de envío',
+            // R5: la causa real (proveedor, código y mensaje), no un texto fijo de Twilio.
+            errorMessage: result
+              ? null
+              : await causaDelFallo({ tenantId: tenant.id, customerId: customer.id, plantilla: templateSid, proveedor, desde: antesDelEnvio }),
           })
 
           if (result) {
-            aggressiveSent++
             sent++
-            sentCustomerIds.push(customer.id)
-
-            // ─── Otorgar el premio con su fecha límite (R1) ───
-            // Solo tras un envío exitoso: un premio que el cliente nunca supo que tenía no
-            // sirve de nada, y ensuciaría la tasa de redención.
-            //
-            // `duplicate_active` no es un error: significa que el cliente ya tenía un premio
-            // de reactivación vivo. El índice único parcial de la DB lo garantiza.
-            if (grantsEnabled && aggressiveCampaignRewardId && aggressiveRewardTitle) {
-              const granted = await grantReward(
-                {
-                  customerId: customer.id,
-                  grantType: 'campaign_prize',
-                  source: 'reactivation',
-                  prizeTitle: aggressiveRewardTitle,
-                  campaignRewardId: aggressiveCampaignRewardId,
-                  campaignId: campaign.id,
-                  windowDays: rewardWindowDays,
-                },
-                tenant.id
-              )
-              if (granted.ok) {
-                rewardsGranted++
-              } else if (granted.code !== 'duplicate_active') {
-                console.error(
-                  `[Cron Reactivation] (${tenant.slug}) No se pudo otorgar el premio a ${customer.id}:`,
-                  granted.error
-                )
-              }
-            }
           } else {
             failed++
           }
         } catch (error) {
+          if (salio) throw error
           failed++
           await recordCampaignMessage({
             campaignId: campaign.id,
@@ -328,9 +268,119 @@ async function processTenant(tenant: Tenant): Promise<TenantCronResult> {
           })
         }
       }
+
+      // Aplicar cap mensual a clientes agresivos
+      const { eligible: aggressiveEligible, excluded: aggressiveExcludedCap } = await filterByMonthlyCap(aggressiveCustomers)
+
+      // ─── PASS 2: Clientes agresivos (aggressiveDays+) ───
+      // El insistente sale UNA vez mientras el cliente no vuelva (N4). La dedup de 30 días
+      // del suave NO va acá: contaba el suave y corría el insistente al día ~51, y después
+      // lo dejaba repetirse cada ~30 días para siempre. La señal está explicada en
+      // `yaRecibioElInsistente()`. El cap de 7 días (`findInactiveCustomers`) sigue
+      // separando el insistente del suave.
+      if (aggressiveSid && aggressiveEligible.length > 0) {
+        for (const customer of aggressiveEligible) {
+          // `last_visit_at` no es NULL: `aggressiveCustomers` solo toma a quien lo tiene.
+          const alreadySent = await yaRecibioElInsistente(customer.id, customer.last_visit_at!, aggressiveDays)
+          if (alreadySent) continue
+          // Tope de reintentos (R1): tres fallos del insistente en este ciclo y no se intenta
+          // más hasta que el cliente vuelva.
+          if (await agotoLosIntentosDelInsistente(customer.id, customer.last_visit_at!, aggressiveDays)) {
+            skippedRetryCap++
+            continue
+          }
+
+          let salio = false
+          try {
+            const tiersRoadmap = await buildTiersRoadmap(customer.total_points ?? 0, tenant.id)
+            const nextTier = await getNextTier(customer.total_points ?? 0, tenant.id)
+            const nextTierName = nextTier ? nextTier.tier.safe_reward_title : 'premios exclusivos'
+
+            const deadline = new Date(Date.now() + rewardWindowDays * 24 * 60 * 60 * 1000)
+
+            const aggressiveVars: Record<string, string> = {
+              '1': customer.name,
+              '2': String(customer.total_points ?? 0),
+              '3': nextTierName,
+            }
+            // Si hay premio configurado, va como {{4}} y su fecha límite como {{5}}.
+            // sendTemplateMessage reintenta con una variable menos ante el error 21665 de
+            // Twilio, así que una plantilla de 4 variables sigue funcionando sin tocar nada.
+            if (aggressiveRewardTitle) {
+              aggressiveVars['4'] = aggressiveRewardTitle
+              aggressiveVars['5'] = formatDeadline(deadline)
+            }
+
+            const antesDelEnvio = new Date().toISOString()
+            const result = await sendTemplateMessage(customer.phone, aggressiveSid, aggressiveVars, tenant, { customerId: customer.id, messageType: 'reactivation' })
+            if (result) {
+              salio = true
+              sentCustomerIds.push(customer.id)
+            }
+
+            await recordCampaignMessage({
+              campaignId: campaign.id,
+              customerId: customer.id,
+              status: result ? 'sent' : 'failed',
+              tenantId: tenant.id,
+              twilioSid: result?.sid ?? null,
+              errorMessage: result
+                ? null
+                : await causaDelFallo({ tenantId: tenant.id, customerId: customer.id, plantilla: aggressiveSid, proveedor, desde: antesDelEnvio }),
+            })
+
+            if (result) {
+              aggressiveSent++
+              sent++
+
+              // ─── Otorgar el premio con su fecha límite (R1) ───
+              // Solo tras un envío exitoso: un premio que el cliente nunca supo que tenía no
+              // sirve de nada, y ensuciaría la tasa de redención.
+              //
+              // `duplicate_active` no es un error: significa que el cliente ya tenía un premio
+              // de reactivación vivo. El índice único parcial de la DB lo garantiza.
+              if (grantsEnabled && aggressiveCampaignRewardId && aggressiveRewardTitle) {
+                const granted = await grantReward(
+                  {
+                    customerId: customer.id,
+                    grantType: 'campaign_prize',
+                    source: 'reactivation',
+                    prizeTitle: aggressiveRewardTitle,
+                    campaignRewardId: aggressiveCampaignRewardId,
+                    campaignId: campaign.id,
+                    windowDays: rewardWindowDays,
+                  },
+                  tenant.id
+                )
+                if (granted.ok) {
+                  rewardsGranted++
+                } else if (granted.code !== 'duplicate_active') {
+                  console.error(
+                    `[Cron Reactivation] (${tenant.slug}) No se pudo otorgar el premio a ${customer.id}:`,
+                    granted.error
+                  )
+                }
+              }
+            } else {
+              failed++
+            }
+          } catch (error) {
+            if (salio) throw error
+            failed++
+            await recordCampaignMessage({
+              campaignId: campaign.id,
+              customerId: customer.id,
+              status: 'failed',
+              tenantId: tenant.id,
+              errorMessage: error instanceof Error ? error.message : 'Error desconocido',
+            })
+          }
+        }
+      }
+    } finally {
+      await updateCustomerLastCampaignAt(sentCustomerIds)
     }
 
-    await updateCustomerLastCampaignAt(sentCustomerIds)
     await finalizeCampaign(campaign.id, sent)
 
     return {
@@ -341,6 +391,7 @@ async function processTenant(tenant: Tenant): Promise<TenantCronResult> {
       failed,
       aggressive_sent: aggressiveSent,
       rewards_granted: rewardsGranted,
+      skipped_retry_cap: skippedRetryCap,
       total_inactive_customers: customers.length,
       reactivation_soft_days: softDays,
       reactivation_aggressive_days: aggressiveDays,

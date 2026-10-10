@@ -1,6 +1,8 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { Customer, Reward } from '@/types/database.types'
-import { POWER_RANKS, TOP_CUSTOMERS_LIMIT, deriveRiskLevels, getCustomerRank } from '@/constants/rankings'
+import { POWER_RANKS, TOP_CUSTOMERS_LIMIT, deriveCycleBands, deriveRiskLevels, getCustomerRank } from '@/constants/rankings'
+import { normalizeReactivationDays } from '@/constants/rewards'
+import { getMultipleSettings } from '@/services/settings.service'
 import { logDbFailure, type DbErrorLike } from '@/lib/db-failure'
 import { leerTodo } from '@/lib/leer-todo'
 import { getUnscopedServiceClient } from '@/lib/supabase/unscoped'
@@ -55,7 +57,13 @@ export async function getDashboardMetrics(scope: LocationScope): Promise<Dashboa
   const now = new Date()
   const todayStr = now.toISOString().split('T')[0]
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
-  const inactiveCutoff = new Date(now.getTime() - 21 * 24 * 60 * 60 * 1000).toISOString()
+  // N3-bis (fase 0.bis): «inactivo» = ya le toca el toque suave de ESTA marca, el mismo corte
+  // que usa el cron (`findInactiveCustomers()`), con el mismo normalizador que la escala
+  // única. Antes era 21 fijo; con los días por defecto sigue siendo 21. (No es un borde de
+  // banda de `deriveCycleBands()`: el suave cae DENTRO de Recuperación.)
+  const ajustes = await getMultipleSettings(['reactivation_soft_days', 'reactivation_aggressive_days'], tenantId)
+  const { softDays } = normalizeReactivationDays(ajustes.reactivation_soft_days, ajustes.reactivation_aggressive_days)
+  const inactiveCutoff = new Date(now.getTime() - softDays * 24 * 60 * 60 * 1000).toISOString()
   const month = String(now.getMonth() + 1).padStart(2, '0')
   const day = String(now.getDate()).padStart(2, '0')
 
@@ -163,8 +171,16 @@ export async function getCustomers(params: {
   }
 
   if (params.status && params.status !== 'all') {
-    const activeCutoff = new Date(now.getTime() - 18 * 24 * 60 * 60 * 1000).toISOString()
-    const lostCutoff   = new Date(now.getTime() - 25 * 24 * 60 * 60 * 1000).toISOString()
+    // N3-bis (fase 0.bis): los cortes salen de la escala única de la marca
+    // (`deriveCycleBands()`): «Activos» = antes de la banda Recuperación, «Recuperación» = la
+    // banda que atiende el cron, «Perdidos» = después. Antes eran 18/25 fijos y una marca con
+    // días propios veía otro reloj que el de Campañas. Con los días por defecto: 18 y 25.
+    const ajustes = await getMultipleSettings(['reactivation_soft_days', 'reactivation_aggressive_days'], tenantId)
+    const recuperacion = deriveCycleBands(ajustes.reactivation_soft_days, ajustes.reactivation_aggressive_days).find(
+      (b) => b.name === 'Recuperación'
+    )!
+    const activeCutoff = new Date(now.getTime() - recuperacion.minDays * 24 * 60 * 60 * 1000).toISOString()
+    const lostCutoff   = new Date(now.getTime() - recuperacion.maxDays * 24 * 60 * 60 * 1000).toISOString()
     if (params.status === 'active') {
       query = query.gte('last_visit_at', activeCutoff)
     } else if (params.status === 'inactive') {

@@ -8,6 +8,21 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [fix] — 2026-10-10 — Ciclo, fase 0.bis: tope de reintentos, causa real del fallo y cierres chicos (N3-bis, N3-ter)
+
+**Pedido:** cerrar los riesgos de `4043421` antes del deploy. Sin migración, sin desplegar; la 0 y la 0.bis van juntas.
+- **R1:** `MAX_INTENTOS_FALLIDOS_POR_TOQUE = 3` (`rewards.ts`). `agotoLosIntentosDel{Suave,Insistente,Cumpleanos,Recordatorio}()`
+  cuentan los `failed` del toque (los viejos también) y lanzan ante un fallo de base. Cada cron devuelve `skipped_retry_cap`.
+- **R2:** `updateCustomerLastCampaignAt()` (reactivación, cumpleaños) y `markReminderSent()` en un `finally`; el cliente se
+  anota al salir el envío, antes de grabarlo. Uno que salió y no se pudo grabar ya no queda `failed`: aborta la marca.
+- **R3 (N3-ter):** el estimador responde 500 (`logDbFailure`) en vez de `{ count: 0 }`; `ManualCampaigns` muestra «—».
+- **R4 (N3-bis):** «Rescatar Perdidos» y el filtro de Clientes salen de `deriveCycleBands()`; los inactivos del panel, del
+  día del suave de la marca. Con 21/25 nada cambia.
+- **R5:** `causaDelFallo()` lee la causa de `message_logs` (`proveedor · código · mensaje`) en vez del texto fijo de Twilio;
+  sin tocar `sendTemplateMessage()`.
+- Tests: `ciclo-fase-0-bis` y `ciclo-fase-0-bis-estimador`, **16 de 18 fallan contra `4043421`** (`src/` de ese commit por
+  `git show` y restaurado, sin stash; los 2 restantes son guardas). Suite: 65 / 929. tsc limpio; eslint 14 = preexistentes.
+
 ## [fix] — 2026-10-08 — Ciclo, fase 0: parar la sangría de las campañas automáticas (N3, N4, N15, una escala)
 
 **Pedido:** la fase 0 de `docs/prompts/2026-10-04-ciclo-fase-0-y-1.md`. Sin migración, sin desplegar.

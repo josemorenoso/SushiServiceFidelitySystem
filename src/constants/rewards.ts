@@ -33,6 +33,24 @@ export const BIRTHDAY_LEAD_DAYS = 2
  *  duplicado real, que solo puede ocurrir con dos corridas del mismo día. */
 export const BIRTHDAY_DEDUPE_DAYS = 360
 
+/** Máximo de intentos FALLIDOS por toque automático (ciclo fase 0.bis, 2026-10-10).
+ *
+ *  Desde la fase 0 un envío fallido ya no cuenta como enviado, así que se reintenta en la
+ *  corrida siguiente. Sin un techo, un número que falla siempre —o una línea muerta, como
+ *  la de Twilio de Sushi Service hacia el 12-10— recibiría un intento TODOS LOS DÍAS sin
+ *  fin: el fallo no toca `last_campaign_at` y el tope mensual solo cuenta lo que salió.
+ *
+ *  Tres porque es lo que ya hace el drenador de la cola (`send_queue`, se rinde al tercer
+ *  intento): dos reintentos alcanzan para un fallo pasajero del proveedor, y un fallo que
+ *  se repite tres días seguidos ya no es pasajero.
+ *
+ *  Se cuenta POR TOQUE: el suave desde `last_visit_at + días del suave`, el insistente
+ *  desde `last_visit_at + días del insistente`, el cumpleaños dentro de la ventana de ese
+ *  cumpleaños y el recordatorio desde que su premio entró en la ventana del aviso. Los
+ *  fallidos viejos cuentan. Si el cliente vuelve, el ciclo y la cuenta empiezan de cero.
+ *  Ver `agotoLosIntentosDelSuave()` y sus hermanas en `campaign.service.ts`. */
+export const MAX_INTENTOS_FALLIDOS_POR_TOQUE = 3
+
 /** Días que la Recovery Zone abre ANTES del toque suave.
  *
  *  El margen existe porque el cron corre una vez al día: sin él, un cliente que

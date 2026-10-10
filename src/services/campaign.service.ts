@@ -6,6 +6,8 @@ import {
   REACTIVATION_DAYS,
   FREQUENCY_CAP_DAYS,
   BIRTHDAY_LEAD_DAYS,
+  BIRTHDAY_DEDUPE_DAYS,
+  MAX_INTENTOS_FALLIDOS_POR_TOQUE,
   MONTHLY_CAP_SOURCES,
   MONTHLY_MARKETING_CAP,
   DEFAULT_RECOVERY_ZONE,
@@ -145,6 +147,11 @@ export async function findInactiveCustomers(tenantId: string, reactivationDays: 
 /**
  * Updates last_campaign_at for a list of customers after a successful send.
  * Call this after any cron or campaign that sends messages.
+ *
+ * Los crons la llaman en un `finally` (fase 0.bis, R2): si la corrida aborta a mitad, a
+ * los que YA recibieron mensaje igual se les marca, y una campaña manual no les escribe
+ * dentro de los 7 días. Por eso no lanza (un `throw` dentro del `finally` taparía el error
+ * que abortó la corrida); su propio fallo queda en el log con `logDbFailure`.
  */
 export async function updateCustomerLastCampaignAt(customerIds: string[]): Promise<void> {
   if (customerIds.length === 0) return
@@ -154,7 +161,12 @@ export async function updateCustomerLastCampaignAt(customerIds: string[]): Promi
     .update({ last_campaign_at: new Date().toISOString() })
     .in('id', customerIds)
   if (error) {
-    console.error(`Error actualizando last_campaign_at: ${error.message}`)
+    logDbFailure({
+      scope: 'Campaign',
+      reason: 'last_campaign_at_error',
+      error,
+      context: { clientes: customerIds.length },
+    })
   }
 }
 
@@ -258,6 +270,200 @@ export async function yaRecibioElInsistente(
   }
 
   return (data?.length ?? 0) > 0
+}
+
+// ═══════════════════════════════════════════════════════════
+// TOPE DE REINTENTOS (ciclo fase 0.bis, 2026-10-10)
+// ═══════════════════════════════════════════════════════════
+// Desde la fase 0 un fallido ya no cuenta como enviado y se reintenta en la corrida
+// siguiente. Estas cuatro funciones le ponen el techo: MAX_INTENTOS_FALLIDOS_POR_TOQUE por
+// toque. Cuentan CUALQUIER fallo (no dependen de la causa) y también los viejos, de antes
+// de este arreglo. Mismo patrón que `yaRecibioElInsistente()`: un fallo de base LANZA,
+// porque devolver `false` sería volver a intentar a ciegas.
+
+/** ¿Llegó este cliente al techo de fallidos de un toque desde `desde`? */
+async function agotoLosIntentos(params: {
+  customerId: string
+  tipo: 'reactivation' | 'birthday'
+  /** `campaigns.source`. Sin él cuenta todo el tipo (cumpleaños: su source es el tipo). */
+  source?: string
+  desde: string
+  toque: string
+}): Promise<boolean> {
+  const supabase = getServiceClient()
+
+  let query = supabase
+    .from('campaign_messages')
+    .select('id, campaigns!inner(type, source)')
+    .eq('customer_id', params.customerId)
+    .eq('campaigns.type', params.tipo)
+  if (params.source) query = query.eq('campaigns.source', params.source)
+
+  // Basta con leer hasta el techo: más filas no cambian la respuesta.
+  const { data, error } = await query
+    .eq('status', 'failed')
+    .gte('sent_at', params.desde)
+    .limit(MAX_INTENTOS_FALLIDOS_POR_TOQUE)
+
+  if (error) {
+    logDbFailure({
+      scope: 'Campaign',
+      reason: 'tope_de_reintentos_error',
+      error,
+      context: { customer_id: params.customerId, toque: params.toque },
+    })
+    throw new Error(`No se pudo contar los intentos fallidos del ${params.toque}: ${error.message}`)
+  }
+
+  return (data?.length ?? 0) >= MAX_INTENTOS_FALLIDOS_POR_TOQUE
+}
+
+const DIA_MS = 24 * 60 * 60 * 1000
+
+/**
+ * ¿Ya falló el toque SUAVE `MAX_INTENTOS_FALLIDOS_POR_TOQUE` veces en este ciclo?
+ *
+ * El suave sale a quien lleva más de `softDays` sin venir, así que sus intentos caen
+ * después de `last_visit_at + softDays`. Mientras el cliente está en la zona del suave
+ * todavía no pasó el umbral del insistente: todo fallido de reactivación desde ahí es del
+ * suave. Si el cliente vuelve, `last_visit_at` se mueve y la cuenta empieza de cero.
+ */
+export async function agotoLosIntentosDelSuave(
+  customerId: string,
+  lastVisitAt: string,
+  softDays: number
+): Promise<boolean> {
+  return agotoLosIntentos({
+    customerId,
+    tipo: 'reactivation',
+    source: 'reactivation',
+    desde: new Date(new Date(lastVisitAt).getTime() + softDays * DIA_MS).toISOString(),
+    toque: 'suave',
+  })
+}
+
+/**
+ * ¿Ya falló el INSISTENTE `MAX_INTENTOS_FALLIDOS_POR_TOQUE` veces en este ciclo?
+ *
+ * Mismo umbral que `yaRecibioElInsistente()`: un mensaje de reactivación posterior a
+ * `last_visit_at + aggressiveDays` es un insistente. `source = 'reactivation'` deja fuera
+ * el recordatorio de premio. No se intenta más hasta que el cliente vuelva.
+ */
+export async function agotoLosIntentosDelInsistente(
+  customerId: string,
+  lastVisitAt: string,
+  aggressiveDays: number
+): Promise<boolean> {
+  return agotoLosIntentos({
+    customerId,
+    tipo: 'reactivation',
+    source: 'reactivation',
+    desde: new Date(new Date(lastVisitAt).getTime() + aggressiveDays * DIA_MS).toISOString(),
+    toque: 'insistente',
+  })
+}
+
+/**
+ * ¿Ya falló el saludo de ESTE cumpleaños `MAX_INTENTOS_FALLIDOS_POR_TOQUE` veces?
+ *
+ * La ventana de este cumpleaños es la misma de la dedup (`BIRTHDAY_DEDUPE_DAYS`): mira
+ * hacia atrás lo bastante para ver los intentos de este año y no alcanza los del año
+ * pasado. Con `BIRTHDAY_LEAD_DAYS = 2` el cron solo ve al cliente tres días, así que hoy el
+ * techo casi nunca se toca: es la guarda para el día que la anticipación crezca.
+ */
+export async function agotoLosIntentosDelCumpleanos(customerId: string): Promise<boolean> {
+  return agotoLosIntentos({
+    customerId,
+    tipo: 'birthday',
+    desde: new Date(Date.now() - BIRTHDAY_DEDUPE_DAYS * DIA_MS).toISOString(),
+    toque: 'cumpleaños',
+  })
+}
+
+/**
+ * ¿Ya falló el RECORDATORIO de este premio `MAX_INTENTOS_FALLIDOS_POR_TOQUE` veces?
+ *
+ * El recordatorio se reintenta cada día mientras el premio esté dentro de su ventana de
+ * aviso (`reward_reminder_days_before`), así que con una ventana larga podía fallar una
+ * vez por día. `desde` es el comienzo de esa ventana (`expires_at - daysBefore`).
+ * `campaign_messages` no guarda el premio, así que la cuenta es por cliente dentro de esa
+ * ventana: con dos premios venciendo a la vez, sus fallos se suman.
+ */
+export async function agotoLosIntentosDelRecordatorio(customerId: string, desde: string): Promise<boolean> {
+  return agotoLosIntentos({
+    customerId,
+    tipo: 'reactivation',
+    source: 'reward_reminder',
+    desde,
+    toque: 'recordatorio de premio',
+  })
+}
+
+// ═══════════════════════════════════════════════════════════
+// LA CAUSA REAL DEL FALLO (ciclo fase 0.bis, R5)
+// ═══════════════════════════════════════════════════════════
+
+/** Por qué proveedor sale un envío de cron (los crons no fuerzan `options.provider`). */
+export function proveedorDelEnvio(tenant: { messaging_provider?: string | null }): 'twilio' | 'zernio' {
+  return tenant.messaging_provider === 'zernio' ? 'zernio' : 'twilio'
+}
+
+/** Lo que cabe en `campaign_messages.error_message` sin volverlo un volcado. */
+const LARGO_MAXIMO_DE_LA_CAUSA = 500
+
+/**
+ * La causa REAL de un envío que no salió, para `campaign_messages.error_message`.
+ *
+ * `sendTemplateMessage()` devuelve `null` para TODO modo de fallo (sin credenciales, opt-out,
+ * cupo de la línea, error del proveedor con su código…) y los crons grababan siempre
+ * «Twilio no configurado o error de envío», también en las marcas de Zernio. La causa sí
+ * queda en `message_logs` (`error_code`, `error_message`) cuando el envío lleva
+ * `logContext`, y los crons lo pasan siempre: se lee de ahí la fila fallida más reciente de
+ * ese cliente y esa plantilla. Así no se toca el contrato de `sendTemplateMessage()`.
+ *
+ * `desde` es un instante tomado ANTES del envío; se resta un minuto porque `created_at`
+ * lo pone el reloj de la base, no el de la función.
+ *
+ * NO lanza: la causa es diagnóstico, y abortar la corrida por no poder leerla perdería la
+ * fila del fallo, que es lo que alimenta el tope de reintentos. Un error de base queda en
+ * el log (`logDbFailure`) y en el propio texto.
+ */
+export async function causaDelFallo(params: {
+  tenantId: string
+  customerId: string
+  plantilla: string
+  proveedor: 'twilio' | 'zernio'
+  desde: string
+}): Promise<string> {
+  const supabase = getServiceClient()
+  const desde = new Date(new Date(params.desde).getTime() - 60 * 1000).toISOString()
+
+  const { data, error } = await supabase
+    .from('message_logs')
+    .select('error_code, error_message, created_at')
+    .eq('tenant_id', params.tenantId)
+    .eq('customer_id', params.customerId)
+    .eq('template_sid', params.plantilla)
+    .eq('status', 'failed')
+    .gte('created_at', desde)
+    .order('created_at', { ascending: false })
+    .limit(1)
+
+  if (error) {
+    logDbFailure({
+      scope: 'Campaign',
+      reason: 'causa_del_fallo_error',
+      error,
+      context: { tenant_id: params.tenantId, customer_id: params.customerId },
+    })
+    return `${params.proveedor} · no se pudo leer la causa (${error.message})`.slice(0, LARGO_MAXIMO_DE_LA_CAUSA)
+  }
+
+  const fila = (data ?? [])[0] as { error_code: string | null; error_message: string | null } | undefined
+  if (!fila) return `${params.proveedor} · el envío falló sin dejar causa en message_logs`
+
+  const partes = [params.proveedor, fila.error_code, fila.error_message].filter((p): p is string => !!p)
+  return partes.join(' · ').slice(0, LARGO_MAXIMO_DE_LA_CAUSA)
 }
 
 /**

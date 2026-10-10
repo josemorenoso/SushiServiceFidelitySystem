@@ -10,6 +10,9 @@ import {
   recordCampaignMessage,
   finalizeCampaign,
   filterByMonthlyCap,
+  agotoLosIntentosDelRecordatorio,
+  causaDelFallo,
+  proveedorDelEnvio,
 } from '@/services/campaign.service'
 import { sendTemplateMessage } from '@/services/whatsapp.service'
 import { getMultipleSettings } from '@/services/settings.service'
@@ -40,6 +43,10 @@ import type { Tenant } from '@/types/tenant.types'
  *     Es la misma excepción que ya tiene cumpleaños.
  *   - SUJETO al cap mensual de 3 mensajes de marketing (`source='reward_reminder'` está en
  *     MONTHLY_CAP_SOURCES). Un cliente nunca recibe más de 3 al mes, pase lo que pase.
+ *   - TOPE DE REINTENTOS (fase 0.bis, 2026-10-10): un recordatorio que falla se reintenta
+ *     cada día mientras el premio siga en su ventana de aviso, y con una ventana larga eso
+ *     eran muchos intentos. Ahora, MAX_INTENTOS_FALLIDOS_POR_TOQUE por premio
+ *     (`agotoLosIntentosDelRecordatorio()`).
  *
  * Ref: docs/features/reward-grants.md
  */
@@ -52,6 +59,8 @@ interface TenantCronResult {
   sent: number
   failed: number
   skipped_monthly_cap: number
+  /** Premios cuyo recordatorio ya falló MAX_INTENTOS_FALLIDOS_POR_TOQUE veces: no se intentan más. */
+  skipped_retry_cap?: number
   reminder_enabled: boolean
   error?: string
 }
@@ -118,65 +127,106 @@ async function processTenant(tenant: Tenant): Promise<TenantCronResult> {
   let sent = 0
   let failed = 0
   const remindedGrantIds: string[] = []
+  const proveedor = proveedorDelEnvio(tenant)
 
-  // Envío en paralelo por lotes (mismo patrón que campaigns/manual): antes era un loop
-  // secuencial con un `await` de red por candidato, así que 20-50 premios convertían un
-  // job de sub-segundo en 10-25 s de latencia en serie. Los lotes acotan la concurrencia
-  // para no saturar Twilio.
-  const BATCH_SIZE = 10
-  for (let i = 0; i < eligible.length; i += BATCH_SIZE) {
-    const batch = eligible.slice(i, i + BATCH_SIZE)
-    const results = await Promise.all(
-      batch.map(async (candidate) => {
-        try {
-          const result = await sendTemplateMessage(
-            candidate.customer_phone,
-            templateSid,
-            {
-              '1': candidate.customer_name,
-              '2': candidate.prize_title,
-              '3': String(candidate.days_left),
-            },
-            tenant,
-            { customerId: candidate.customer_id, messageType: 'reward_reminder' }
-          )
-
-          await recordCampaignMessage({
-            campaignId: campaign.id,
-            customerId: candidate.customer_id,
-            status: result ? 'sent' : 'failed',
-            tenantId: tenant.id,
-            twilioSid: result?.sid ?? null,
-            errorMessage: result ? null : 'Twilio no configurado o error de envío',
-          })
-
-          // Se sella solo si el mensaje SALIÓ. Si Twilio falló, el premio sigue siendo
-          // candidato en la próxima corrida — todavía le queda ventana.
-          return { grantId: candidate.grant_id, ok: !!result }
-        } catch (error) {
-          await recordCampaignMessage({
-            campaignId: campaign.id,
-            customerId: candidate.customer_id,
-            status: 'failed',
-            tenantId: tenant.id,
-            errorMessage: error instanceof Error ? error.message : 'Error desconocido',
-          })
-          return { grantId: candidate.grant_id, ok: false }
-        }
-      })
-    )
-
-    for (const r of results) {
-      if (r.ok) {
-        sent++
-        remindedGrantIds.push(r.grantId)
-      } else {
-        failed++
-      }
+  // ─── 4. Tope de reintentos (fase 0.bis, R1) ───
+  // La ventana del aviso de cada premio empieza `daysBefore` días antes de que venza: los
+  // fallidos de ese recordatorio caen desde ahí.
+  let skippedRetryCap = 0
+  const intentables: typeof eligible = []
+  for (const candidate of eligible) {
+    const desde = new Date(new Date(candidate.expires_at).getTime() - daysBefore * 24 * 60 * 60 * 1000).toISOString()
+    if (await agotoLosIntentosDelRecordatorio(candidate.customer_id, desde)) {
+      skippedRetryCap++
+      continue
     }
+    intentables.push(candidate)
   }
 
-  await markReminderSent(remindedGrantIds)
+  // R2 (fase 0.bis): `markReminderSent()` va en un `finally`. Si la corrida aborta a mitad,
+  // los recordatorios que YA salieron quedan sellados igual; si no, mañana se repetían.
+  try {
+    // Envío en paralelo por lotes (mismo patrón que campaigns/manual): antes era un loop
+    // secuencial con un `await` de red por candidato, así que 20-50 premios convertían un
+    // job de sub-segundo en 10-25 s de latencia en serie. Los lotes acotan la concurrencia
+    // para no saturar Twilio.
+    const BATCH_SIZE = 10
+    for (let i = 0; i < intentables.length; i += BATCH_SIZE) {
+      const batch = intentables.slice(i, i + BATCH_SIZE)
+      // `allSettled` y no `all`: si un envío del lote aborta, los demás terminan antes de
+      // relanzar el error, así el `finally` sella a todos los que salieron.
+      const results = await Promise.allSettled(
+        batch.map(async (candidate) => {
+          // `salio` separa «no salió» de «salió y no se pudo grabar»: lo segundo NO se graba
+          // como fallido (sería un fallido de un aviso entregado).
+          let salio = false
+          try {
+            const antesDelEnvio = new Date().toISOString()
+            const result = await sendTemplateMessage(
+              candidate.customer_phone,
+              templateSid,
+              {
+                '1': candidate.customer_name,
+                '2': candidate.prize_title,
+                '3': String(candidate.days_left),
+              },
+              tenant,
+              { customerId: candidate.customer_id, messageType: 'reward_reminder' }
+            )
+            // Se sella solo si el mensaje SALIÓ. Si falló, el premio sigue siendo candidato en
+            // la próxima corrida (todavía le queda ventana), hasta el tope de reintentos. Se
+            // anota ANTES de grabarlo: si la grabación falla, el `finally` lo sella igual.
+            if (result) {
+              salio = true
+              remindedGrantIds.push(candidate.grant_id)
+            }
+
+            await recordCampaignMessage({
+              campaignId: campaign.id,
+              customerId: candidate.customer_id,
+              status: result ? 'sent' : 'failed',
+              tenantId: tenant.id,
+              twilioSid: result?.sid ?? null,
+              // R5: la causa real (proveedor, código y mensaje), no un texto fijo de Twilio.
+              errorMessage: result
+                ? null
+                : await causaDelFallo({
+                    tenantId: tenant.id,
+                    customerId: candidate.customer_id,
+                    plantilla: templateSid,
+                    proveedor,
+                    desde: antesDelEnvio,
+                  }),
+            })
+
+            return { grantId: candidate.grant_id, ok: !!result }
+          } catch (error) {
+            if (salio) throw error
+            await recordCampaignMessage({
+              campaignId: campaign.id,
+              customerId: candidate.customer_id,
+              status: 'failed',
+              tenantId: tenant.id,
+              errorMessage: error instanceof Error ? error.message : 'Error desconocido',
+            })
+            return { grantId: candidate.grant_id, ok: false }
+          }
+        })
+      )
+
+      for (const r of results) {
+        if (r.status === 'rejected') throw r.reason
+        if (r.value.ok) {
+          sent++
+        } else {
+          failed++
+        }
+      }
+    }
+  } finally {
+    await markReminderSent(remindedGrantIds)
+  }
+
   await finalizeCampaign(campaign.id, sent)
 
   // NOTA: deliberadamente NO llamamos a updateCustomerLastCampaignAt(). Eso movería el cap
@@ -191,6 +241,7 @@ async function processTenant(tenant: Tenant): Promise<TenantCronResult> {
     sent,
     failed,
     skipped_monthly_cap: excluded.length,
+    skipped_retry_cap: skippedRetryCap,
     reminder_enabled: true,
   }
 }

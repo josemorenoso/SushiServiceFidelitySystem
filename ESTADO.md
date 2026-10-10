@@ -33,6 +33,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Ciclo fase 0.bis: tope de reintentos, causa real del fallo y cierres chicos, sin migración (2026-10-10) | Opus 5.5 | `src/app/api/cron/{reactivation,birthday,reward-reminder}/route.ts` · `src/services/campaign.service.ts` · `src/services/whatsapp.service.ts` (solo si R5 lo exige) · `src/constants/{rewards,rankings}.ts` · `src/app/api/dashboard/campaigns/estimate/route.ts` · `src/components/dashboard/ManualCampaigns.tsx` · `src/services/dashboard.service.ts` (`getCustomers` y `getDashboardMetrics`: el filtro de Clientes y los inactivos del panel) · `tests/**` nuevos · `docs/features/{campaigns,dashboard}.md` · `docs/PENDIENTES.md` · `ESTADO.md` · `CHANGELOG.md` | — | En curso |
 
 ## 3. Siguiente, en orden
 

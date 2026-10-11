@@ -153,6 +153,27 @@ export interface TemplateCatalogEntry {
    * vez de dejar que el dueño lo apriete y se coma un error.
    */
   blockedReason: string | null
+  /**
+   * Lo que dice el PROVEEDOR de la plantilla que este mensaje está usando (la vigente o
+   * el puntero): su estado real y la categoría con que Meta la dejó. `null` = no hay
+   * nada vivo, o el proveedor no respondió.
+   *
+   * Existe porque Meta RECATEGORIZA (la «bienvenida» de Planeta Wings se pidió UTILITY y
+   * quedó MARKETING) y PAUSA plantillas vigentes: ninguna de las dos cosas se veía.
+   */
+  enWhatsApp: TemplateProviderView | null
+}
+
+/** Una plantilla vista desde el proveedor (WABA en Zernio, Content API en Twilio). */
+export interface TemplateProviderView {
+  /** `name` en Zernio, ContentSid en Twilio. */
+  ref: string
+  /** En minúsculas: `approved`, `pending`, `rejected`, `paused`, `draft`… */
+  status: string
+  category: string
+  /** El texto real, cuando el proveedor lo devuelve. */
+  body: string | null
+  rejectionReason: string | null
 }
 
 /** Respuesta de `GET /api/dashboard/templates/catalog`. */
@@ -160,6 +181,12 @@ export interface TemplateCatalogResponse {
   provider: 'twilio' | 'zernio'
   brandName: string
   entries: TemplateCatalogEntry[]
+  /**
+   * Lo que la pantalla le hizo a la base al abrirse, en palabras del dueño: plantillas
+   * que ya estaban en WhatsApp y el panel no conocía (`reconciliarConLaWaba()`). Vacía
+   * casi siempre. Solo Zernio.
+   */
+  reconocidas?: string[]
   /**
    * TODAS las plantillas que hay de verdad en la WABA, con el estado de Meta:
    * las 13 del catálogo, las del Golden Bullet, las de prueba. `null` si Zernio

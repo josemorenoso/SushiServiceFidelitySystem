@@ -171,14 +171,40 @@ function emojiOf(tenant: Tenant): string {
  * se está enviando hoy, qué hay en revisión y qué texto propone el banco.
  */
 export async function getTemplateCatalogState(tenant: Tenant): Promise<TemplateCatalogResponse> {
-  const [versions, pointers, waba] = await Promise.all([
+  const [versionesLeidas, punterosLeidos, waba] = await Promise.all([
     fetchVersions(tenant.id),
     fetchPointers(tenant.id),
     tenant.zernio_account_id
       ? fetchWabaTemplatesCacheada(tenant.id, tenant.zernio_account_id)
       : Promise.resolve(null),
   ])
+  let versions = versionesLeidas
+  let pointers = punterosLeidos
   const wabaNames = (waba ?? []).map((t) => t.name)
+
+  // Un solo libro (2026-10-11): lo que está en la WABA y el panel no sabía se registra
+  // ANTES de dibujar, para que la pantalla diga lo mismo que WhatsApp. Ver
+  // `reconciliarConLaWaba()`. Sin WABA (Zernio no respondió) no se toca nada.
+  let reconocidas: string[] = []
+  if (waba && tenant.zernio_account_id) {
+    const acciones = TEMPLATE_CATALOG.map((definition) =>
+      reconciliarConLaWaba(
+        definition,
+        waba,
+        versions.filter((v) => v.template_key === definition.key),
+        pointers[definition.settingsKey] ?? null
+      )
+    ).filter((a): a is AccionDeReconciliacion => a !== null)
+    if (acciones.length > 0) {
+      reconocidas = await aplicarReconciliacion(
+        tenant as Tenant & { zernio_account_id: string },
+        acciones,
+        versions
+      )
+      // Un veredicto aplicado pudo mover un puntero (`promoteVersion()`): se relee todo.
+      ;[versions, pointers] = await Promise.all([fetchVersions(tenant.id), fetchPointers(tenant.id)])
+    }
+  }
 
   const brandName = brandNameOf(tenant)
   const emoji = emojiOf(tenant)
@@ -200,6 +226,8 @@ export async function getTemplateCatalogState(tenant: Tenant): Promise<TemplateC
 
     const pointer = pointers[definition.settingsKey] ?? null
     const slotEmpty = !current && !pending && !pointer
+    const liveRef = current?.provider_ref ?? pointer
+    const live = liveRef && waba ? waba.find((t) => t.name === liveRef) : undefined
 
     return {
       definition,
@@ -214,12 +242,22 @@ export async function getTemplateCatalogState(tenant: Tenant): Promise<TemplateC
       // en vez de inventarse un cuerpo que quizá no es el que se está enviando.
       adoptedRef: current ? null : (pointers[definition.settingsKey] ?? null),
       blockedReason: headerSampleMissingReason(definition),
+      enWhatsApp: live
+        ? {
+            ref: live.name,
+            status: String(live.status).toLowerCase(),
+            category: live.category,
+            body: cuerpoDe(live),
+            rejectionReason: null,
+          }
+        : null,
     }
   })
 
   return {
     provider: 'zernio',
     brandName,
+    reconocidas,
     // Una entrada reemplazada (`replacedBy`, hoy el cumpleaños del día mismo) solo aparece si
     // la marca ya tiene algo de ella —vigente, en revisión, un puntero o una aprobada que
     // activar—. A quien no la tiene no se le ofrece mandar un texto retirado.
@@ -302,32 +340,282 @@ export function findAdoptable(
   mine: TemplateVersion[]
 ): { name: string; language: string; body: string; id: string; category: ZernioTemplateSummary['category'] } | null {
   const retired = new Set(mine.filter((v) => v.status === 'retired').map((v) => v.provider_ref))
-  const expectedHeader = definition.header ? definition.header.format.toUpperCase() : null
-  const nameRe = new RegExp(`^${definition.baseName}(?:_v(\\d+))?$`)
-
-  let best: { version: number; t: ZernioTemplateSummary; body: string } | null = null
-  for (const t of waba) {
-    if (t.status !== 'APPROVED' || t.language !== TEMPLATE_LANGUAGE || retired.has(t.name)) continue
-    const match = t.name.match(nameRe)
-    if (!match) continue
-
-    const components = t.components ?? []
-    const bodyText = components.find((c) => String(c.type).toUpperCase() === 'BODY')?.text
-    if (typeof bodyText !== 'string' || !bodyText.trim()) continue
-    const headerFormat = components.find((c) => String(c.type).toUpperCase() === 'HEADER')?.format
-    if ((headerFormat ? String(headerFormat).toUpperCase() : null) !== expectedHeader) continue
-
-    const vars = new Set([...bodyText.matchAll(/\{\{\s*(\d+)\s*\}\}/g)].map((m) => Number(m[1])))
-    const expected = definition.variables.length
-    if (vars.size !== expected || [...vars].some((n) => n < 1 || n > expected)) continue
-
-    const version = match[1] ? Number(match[1]) : 1
-    if (!best || version > best.version) best = { version, t, body: bodyText }
-  }
-
+  const best = buscarEnLaWaba(definition, waba, new Set(['APPROVED']), retired)
   return best
     ? { name: best.t.name, language: best.t.language, body: best.body, id: best.t.id, category: best.t.category }
     : null
+}
+
+/** Texto del cuerpo de una plantilla listada, o `null` si no lo trae. */
+function cuerpoDe(t: ZernioTemplateSummary): string | null {
+  const bodyText = (t.components ?? []).find((c) => String(c.type).toUpperCase() === 'BODY')?.text
+  return typeof bodyText === 'string' && bodyText.trim() ? bodyText : null
+}
+
+/**
+ * El cuerpo de una plantilla de la WABA si SIRVE para este mensaje del catálogo: idioma
+ * del catálogo, la misma portada (ninguna, imagen o video) y EXACTAMENTE las variables
+ * `{{1}}..{{N}}` que manda el sistema. `null` = no sirve: conectarla haría fallar cada
+ * envío en Meta.
+ */
+function cuerpoCompatible(definition: CatalogTemplate, t: ZernioTemplateSummary): string | null {
+  if (t.language !== TEMPLATE_LANGUAGE) return null
+  const bodyText = cuerpoDe(t)
+  if (!bodyText) return null
+
+  const expectedHeader = definition.header ? definition.header.format.toUpperCase() : null
+  const headerFormat = (t.components ?? []).find((c) => String(c.type).toUpperCase() === 'HEADER')?.format
+  if ((headerFormat ? String(headerFormat).toUpperCase() : null) !== expectedHeader) return null
+
+  const vars = new Set([...bodyText.matchAll(/\{\{\s*(\d+)\s*\}\}/g)].map((m) => Number(m[1])))
+  const expected = definition.variables.length
+  if (vars.size !== expected || [...vars].some((n) => n < 1 || n > expected)) return null
+  return bodyText
+}
+
+/**
+ * La plantilla de la WABA que es de ESTE mensaje por nombre (`baseName` o `baseName_vN`;
+ * gana el N más alto), con un estado de `estados`, que sirve (`cuerpoCompatible`) y cuyo
+ * nombre no está en `excluir`.
+ */
+function buscarEnLaWaba(
+  definition: CatalogTemplate,
+  waba: ZernioTemplateSummary[],
+  estados: ReadonlySet<string>,
+  excluir: ReadonlySet<string>
+): { t: ZernioTemplateSummary; body: string; version: number } | null {
+  const nameRe = new RegExp(`^${definition.baseName}(?:_v(\\d+))?$`)
+  let best: { t: ZernioTemplateSummary; body: string; version: number } | null = null
+  for (const t of waba) {
+    if (!estados.has(t.status) || excluir.has(t.name)) continue
+    const match = t.name.match(nameRe)
+    if (!match) continue
+    const body = cuerpoCompatible(definition, t)
+    if (!body) continue
+    const version = match[1] ? Number(match[1]) : 1
+    if (!best || version > best.version) best = { t, body, version }
+  }
+  return best
+}
+
+// ─────────────────────────────────────────────────────────────
+// Un solo libro: lo que hay en la WABA y el panel no sabía
+// ─────────────────────────────────────────────────────────────
+
+/** Estados de Meta que el panel registra como «en revisión». */
+const EN_REVISION: ReadonlySet<string> = new Set(['PENDING', 'IN_APPEAL'])
+
+/**
+ * Qué hacer con UN mensaje del catálogo para que el panel diga lo mismo que la WABA.
+ *
+ *   · `vigente`   — el puntero apunta a una plantilla aprobada que no tiene fila (el alta
+ *                   por el AIOS, SQL a mano): se registra con su texto REAL como vigente.
+ *                   Era el «Activo, pero se configuró fuera de este panel y no tenemos su
+ *                   texto». No toca el puntero: ya apunta ahí.
+ *   · `pendiente` — mensaje vacío y en la WABA hay una en revisión que sirve: se registra
+ *                   como pendiente. Así el webhook de Meta la encuentra al aprobarse (antes
+ *                   la descartaba: «sin versión registrada») y la pantalla deja de ofrecer
+ *                   «Enviar a Meta», que chocaba con el nombre.
+ *   · `rechazada` — mensaje que el panel nunca tocó y en la WABA hay una rechazada que
+ *                   sirve: se registra con el motivo de Meta, para que el dueño lo vea.
+ *   · `aprobar` / `rechazar` — una pendiente del panel que Meta ya resolvió y cuyo webhook
+ *                   no llegó: se aplica el veredicto por la puerta de siempre
+ *                   (`applyProviderTemplateStatus()`), como si hubiera llegado.
+ *
+ * Una APROBADA en la WABA para un mensaje vacío NO se registra sola: activarla hace que el
+ * mensaje empiece a llegar a los clientes, y eso lo decide el dueño con «Activar»
+ * (`adoptApprovedTemplate()`, 2026-10-02). Solo se registra lo que sirve (`cuerpoCompatible`),
+ * salvo la vigente, que ya se está enviando y solo se anota.
+ *
+ * PURA. Exportada para los tests.
+ */
+export type AccionDeReconciliacion =
+  | { tipo: 'vigente' | 'pendiente' | 'rechazada'; definition: CatalogTemplate; plantilla: ZernioTemplateSummary; body: string }
+  | { tipo: 'aprobar' | 'rechazar'; definition: CatalogTemplate; version: TemplateVersion }
+
+export function reconciliarConLaWaba(
+  definition: CatalogTemplate,
+  waba: ZernioTemplateSummary[],
+  mine: TemplateVersion[],
+  pointer: string | null
+): AccionDeReconciliacion | null {
+  const pending = mine.find((v) => v.status === 'pending')
+  if (pending) {
+    const t = waba.find((w) => w.name === pending.provider_ref && w.language === pending.language)
+    if (t?.status === 'APPROVED') return { tipo: 'aprobar', definition, version: pending }
+    if (t?.status === 'REJECTED') return { tipo: 'rechazar', definition, version: pending }
+    return null
+  }
+
+  if (mine.some((v) => v.is_current)) return null
+
+  if (pointer) {
+    const t = waba.find((w) => w.name === pointer && w.language === TEMPLATE_LANGUAGE)
+    const body = t ? cuerpoDe(t) : null
+    if (t?.status === 'APPROVED' && body) return { tipo: 'vigente', definition, plantilla: t, body }
+    return null
+  }
+
+  // Mensaje vacío. Una aprobada que sirve la activa el dueño («Activar»), no esto.
+  if (findAdoptable(definition, waba, mine)) return null
+
+  // Un intento `failed` no cuenta como conocido: suele ser el «Enviar a Meta» que chocó
+  // justamente con esta plantilla, y su fila se reutiliza al registrarla.
+  const conocidas = new Set(mine.filter((v) => v.status !== 'failed').map((v) => v.provider_ref))
+  const enRevision = buscarEnLaWaba(definition, waba, EN_REVISION, conocidas)
+  if (enRevision) return { tipo: 'pendiente', definition, plantilla: enRevision.t, body: enRevision.body }
+
+  if (conocidas.size === 0) {
+    const rechazada = buscarEnLaWaba(definition, waba, new Set(['REJECTED']), conocidas)
+    if (rechazada) return { tipo: 'rechazada', definition, plantilla: rechazada.t, body: rechazada.body }
+  }
+  return null
+}
+
+/** El motivo de rechazo de Meta. El listado no lo trae: se pregunta por la plantilla. */
+async function motivoDelRechazo(accountId: string, name: string, language: string): Promise<string | null> {
+  try {
+    const detail = await getZernioTemplateStatus(accountId, name, language)
+    return detail.template.rejected_reason?.trim() || null
+  } catch (err) {
+    console.error(`[Templates] No se pudo leer el motivo del rechazo de ${name}:`, err instanceof Error ? err.message : err)
+    return null
+  }
+}
+
+/**
+ * Registra en `template_versions` una plantilla que ya está en la WABA. Si el negocio ya
+ * tiene una fila con ese nombre (el `failed` de un «Enviar a Meta» que chocó), la reutiliza:
+ * `(tenant_id, provider_ref, language)` es único. Lanza si la base falla.
+ *
+ * NO escribe el puntero, nunca: una `vigente` se anota porque el puntero YA apunta ahí, y
+ * una `pendiente` lo moverá `promoteVersion()` cuando Meta la apruebe.
+ */
+async function registrarDeLaWaba(args: {
+  tenant: Tenant
+  definition: CatalogTemplate
+  plantilla: ZernioTemplateSummary
+  body: string
+  status: Extract<TemplateVersionStatus, 'pending' | 'approved' | 'rejected'>
+  rejectionReason: string | null
+  existing: TemplateVersion[]
+  editor: TemplateEditor | null
+  disclaimerAcceptedAt: string | null
+}): Promise<void> {
+  const { tenant, definition, plantilla, body, status } = args
+  const supabase = getServiceClient()
+  const now = new Date().toISOString()
+  const fields = {
+    provider_template_id: plantilla.id,
+    // La categoría REAL: Meta recategoriza (la «bienvenida» de Planeta Wings se pidió
+    // UTILITY y quedó MARKETING), y la del catálogo ya no es la verdad de esta plantilla.
+    category: plantilla.category,
+    style: detectTemplateStyle(definition.key, body, brandNameOf(tenant), emojiOf(tenant)),
+    body,
+    status,
+    is_current: status === 'approved',
+    rejection_reason: args.rejectionReason,
+    edited_by: args.editor?.userId ?? null,
+    edited_by_email: args.editor?.email ?? null,
+    disclaimer_accepted_at: args.disclaimerAcceptedAt,
+    // La sometió otro (el alta, una prueba): no sabemos cuándo.
+    submitted_at: null,
+    resolved_at: status === 'pending' ? null : now,
+  }
+
+  const previa = args.existing.find((v) => v.provider_ref === plantilla.name && v.language === plantilla.language)
+  const { error } = previa
+    ? await supabase.from('template_versions').update(fields).eq('id', previa.id)
+    : await supabase.from('template_versions').insert({
+        tenant_id: tenant.id,
+        template_key: definition.key,
+        settings_key: definition.settingsKey,
+        provider: 'zernio',
+        provider_ref: plantilla.name,
+        language: plantilla.language,
+        ...fields,
+      })
+  if (error) {
+    logDbFailure({
+      scope: 'Templates',
+      reason: 'registrar_de_la_waba_error',
+      error,
+      context: { tenant_id: tenant.id, provider_ref: plantilla.name, status },
+    })
+    throw new TemplateError('No se pudo registrar la plantilla que ya estaba en WhatsApp.', 500)
+  }
+}
+
+/** Lo que se le cuenta al dueño de cada reconocimiento. */
+function avisoDeReconciliacion(accion: AccionDeReconciliacion): string {
+  const label = `«${accion.definition.label}»`
+  switch (accion.tipo) {
+    case 'vigente':
+      return `${label}: ya estaba activo en tu WhatsApp; ahora ves su texto real.`
+    case 'pendiente':
+      return `${label}: ya estaba en tu WhatsApp, en revisión de Meta. Se activa solo cuando lo aprueben.`
+    case 'rechazada':
+      return `${label}: ya estaba en tu WhatsApp y Meta lo rechazó. Abajo ves el motivo.`
+    case 'aprobar':
+      return `${label}: Meta ya lo aprobó y quedó activo.`
+    case 'rechazar':
+      return `${label}: Meta rechazó el cambio. Abajo ves el motivo.`
+  }
+}
+
+/**
+ * Aplica las acciones de `reconciliarConLaWaba()`. Una que falla se anota en el log y no
+ * frena a las demás ni a la pantalla: la próxima carga lo vuelve a intentar.
+ */
+async function aplicarReconciliacion(
+  tenant: Tenant & { zernio_account_id: string },
+  acciones: AccionDeReconciliacion[],
+  versions: TemplateVersion[]
+): Promise<string[]> {
+  const avisos: string[] = []
+  for (const accion of acciones) {
+    try {
+      if ('version' in accion) {
+        const { version } = accion
+        const reason =
+          accion.tipo === 'rechazar'
+            ? await motivoDelRechazo(tenant.zernio_account_id, version.provider_ref, version.language)
+            : null
+        const outcome = await applyProviderTemplateStatus({
+          provider: 'zernio',
+          tenantId: tenant.id,
+          providerRef: version.provider_ref,
+          language: version.language,
+          status: accion.tipo === 'aprobar' ? 'APPROVED' : 'REJECTED',
+          reason,
+        })
+        if (!outcome.handled) continue
+      } else {
+        const rejectionReason =
+          accion.tipo === 'rechazada'
+            ? await motivoDelRechazo(tenant.zernio_account_id, accion.plantilla.name, accion.plantilla.language)
+            : null
+        await registrarDeLaWaba({
+          tenant,
+          definition: accion.definition,
+          plantilla: accion.plantilla,
+          body: accion.body,
+          status: accion.tipo === 'vigente' ? 'approved' : accion.tipo === 'pendiente' ? 'pending' : 'rejected',
+          rejectionReason,
+          existing: versions,
+          editor: null,
+          disclaimerAcceptedAt: null,
+        })
+      }
+      avisos.push(avisoDeReconciliacion(accion))
+    } catch (err) {
+      console.error(
+        `[Templates] No se pudo reconciliar ${accion.definition.key} (${accion.tipo}) con la WABA:`,
+        err instanceof Error ? err.message : err
+      )
+    }
+  }
+  return avisos
 }
 
 /**
@@ -627,6 +915,7 @@ export async function submitSuggestedTemplate(input: {
     disclaimerAcceptedAt: null,
     unchangedError:
       'Este mensaje ya se está enviando con este mismo texto. Si quieres cambiarlo, usa Editar.',
+    textoDelCatalogo: true,
   })
 }
 
@@ -649,6 +938,8 @@ async function submitTemplateBody(args: {
   unchangedError: string
   /** Nombre elegido por el dueño para Meta; `undefined` = lo elige `nextProviderRef`. */
   requestedName?: string
+  /** El texto es el del catálogo, tal cual («Enviar a Meta»), no uno que escribió el dueño. */
+  textoDelCatalogo?: boolean
 }): Promise<SaveTemplateResult> {
   const { tenant, definition, body, editor } = args
   assertZernioTenant(tenant)
@@ -720,6 +1011,7 @@ async function submitTemplateBody(args: {
     hasCurrent: Boolean(current) || Boolean(pointers[definition.settingsKey]),
     disclaimerAcceptedAt: args.disclaimerAcceptedAt,
     requestedName,
+    textoDelCatalogo: args.textoDelCatalogo === true,
   })
 }
 
@@ -744,6 +1036,129 @@ interface CreateAndSubmitInput {
   disclaimerAcceptedAt: string | null
   /** Ya validado y libre en este negocio. `undefined` = `nextProviderRef`. */
   requestedName?: string
+  /** El texto es el del catálogo tal cual (`submitSuggestedTemplate`). */
+  textoDelCatalogo: boolean
+}
+
+/**
+ * Zernio contestó 400 y la plantilla con ese nombre YA EXISTE en la WABA: el «nombre o
+ * categoría repetidos» de Meta (Planeta Wings, 2026-09-12 05:13 UTC: «La categoría
+ * UTILITY no coincide con la que ya está asociada a esta plantilla: MARKETING»). Antes la
+ * pantalla decía «vuelve a intentarlo más tarde», que era falso: no es transitorio.
+ *
+ * Ahora se lee la WABA EN VIVO y, si la plantilla es de este mensaje y sirve, se ADOPTA
+ * con su estado y su categoría reales: aprobada → activa (el dueño apretó el botón de
+ * este mensaje, que estaba vacío); en revisión → pendiente, se activa sola al aprobarse;
+ * rechazada → queda anotada con el motivo. Solo con el mensaje VACÍO: si ya hay uno vivo,
+ * adoptar sería reemplazarlo por un texto que el dueño no escribió. Y solo si el texto es
+ * el mismo, o si lo que se mandaba era el del catálogo tal cual.
+ *
+ * Devuelve el resultado si adoptó; `{ rechazo }` con el error para el dueño si existe
+ * pero no se puede usar (el caller deja el `failed` y lo lanza); `null` si la WABA no la
+ * tiene (el 400 fue por otra cosa y sigue el camino de siempre).
+ */
+async function adoptarLaQueYaExiste(
+  input: CreateAndSubmitInput,
+  providerRef: string
+): Promise<SaveTemplateResult | { rechazo: TemplateError; registrada?: true } | null> {
+  const { tenant, definition } = input
+  const waba = await fetchWabaTemplates(tenant.zernio_account_id)
+  const existente = waba?.find((t) => t.name === providerRef && t.language === TEMPLATE_LANGUAGE)
+  if (!existente) return null
+
+  const yaExiste = `Ya existe en tu cuenta de WhatsApp una plantilla llamada "${providerRef}"`
+  if (input.hasCurrent) {
+    return {
+      rechazo: new TemplateError(
+        `${yaExiste}. Tu mensaje actual sigue funcionando igual. Vuelve a guardar el cambio: esta vez se usará otro nombre.`,
+        409
+      ),
+    }
+  }
+
+  const body = cuerpoCompatible(definition, existente)
+  if (!body) {
+    return {
+      rechazo: new TemplateError(
+        `${yaExiste}, pero no lleva los datos que este mensaje necesita y no se puede usar. Ábrelo con Editar y ponle otro nombre.`,
+        409
+      ),
+    }
+  }
+  if (!input.textoDelCatalogo && body.trim() !== input.body.trim()) {
+    return {
+      rechazo: new TemplateError(`${yaExiste} con otro texto. Ponle otro nombre a la tuya.`, 409),
+    }
+  }
+
+  const registrar = (
+    status: 'pending' | 'rejected',
+    rejectionReason: string | null
+  ) =>
+    registrarDeLaWaba({
+      tenant,
+      definition,
+      plantilla: existente,
+      body,
+      status,
+      rejectionReason,
+      existing: input.existing,
+      editor: input.editor,
+      disclaimerAcceptedAt: input.disclaimerAcceptedAt,
+    })
+  const laVersion = async () => {
+    const after = await fetchVersions(tenant.id)
+    const version = after.find((v) => v.provider_ref === existente.name && v.language === existente.language)
+    if (!version) throw new TemplateError('No se pudo registrar la plantilla. Avísale al equipo de Cada1.', 500)
+    return version
+  }
+
+  if (existente.status === 'APPROVED') {
+    // Pendiente + APPROVED por la puerta de siempre: `promoteVersion()` mueve el puntero.
+    await registrar('pending', null)
+    const outcome = await applyProviderTemplateStatus({
+      provider: 'zernio',
+      tenantId: tenant.id,
+      providerRef: existente.name,
+      language: existente.language,
+      status: 'APPROVED',
+    })
+    if (!outcome.handled || outcome.action !== 'promoted') {
+      console.error(`[Templates] ⚠️ ${existente.name} adoptada pero no promovida:`, outcome)
+      throw new TemplateError('No se pudo activar la plantilla. Avísale al equipo de Cada1.', 500)
+    }
+    return {
+      version: await laVersion(),
+      message: `${yaExiste} y Meta ya la había aprobado: quedó activa y tus clientes empiezan a recibirla.`,
+    }
+  }
+
+  if (EN_REVISION.has(existente.status)) {
+    await registrar('pending', null)
+    return {
+      version: await laVersion(),
+      message: `${yaExiste} y Meta la está revisando: desde ahora la seguimos acá y se activa sola cuando la aprueben (suele tardar entre 1 y 3 días).`,
+    }
+  }
+
+  if (existente.status === 'REJECTED') {
+    const motivo = await motivoDelRechazo(tenant.zernio_account_id, existente.name, existente.language)
+    await registrar('rejected', motivo)
+    return {
+      rechazo: new TemplateError(
+        `${yaExiste} y Meta la rechazó${motivo ? ` (motivo: ${motivo})` : ''}. Ábrelo con Editar y mándalo con otro nombre.`,
+        409
+      ),
+      registrada: true,
+    }
+  }
+
+  return {
+    rechazo: new TemplateError(
+      `${yaExiste} (estado en Meta: ${String(existente.status).toLowerCase()}). Ábrelo con Editar y ponle otro nombre.`,
+      409
+    ),
+  }
 }
 
 /**
@@ -792,6 +1207,15 @@ async function createAndSubmit(input: CreateAndSubmitInput): Promise<SaveTemplat
     const detail = err instanceof Error ? err.message : String(err)
     console.error(`[Templates] Zernio rechazó la creación de ${providerRef}:`, detail)
 
+    // Un 400 puede ser «ya existe en tu cuenta»: se mira la WABA y, si sirve, se adopta
+    // en vez de dejar un `failed` (2026-10-11, ver `adoptarLaQueYaExiste()`).
+    let yaExiste: Awaited<ReturnType<typeof adoptarLaQueYaExiste>> = null
+    if (err instanceof ZernioApiError && err.status === 400) {
+      yaExiste = await adoptarLaQueYaExiste(input, providerRef)
+      if (yaExiste && 'version' in yaExiste) return yaExiste
+      if (yaExiste?.registrada) throw yaExiste.rechazo
+    }
+
     // Se registra el intento fallido: sin esto, el dueño ve "no pasó nada" y no
     // hay rastro de por qué. `failed` no compite por el índice de pendientes.
     await supabase.from('template_versions').insert({
@@ -813,10 +1237,12 @@ async function createAndSubmit(input: CreateAndSubmitInput): Promise<SaveTemplat
       resolved_at: now,
     })
 
-    // Un 400 NO es transitorio: es Meta diciendo que ese nombre ya existe en la
-    // cuenta (con otra categoría, con otro texto) o que algo del contenido no
-    // pasa. Invitar a «reintentar más tarde» era mentira (Planeta Wings,
-    // 2026-09-12 05:13 UTC): se le dice el motivo y qué hacer.
+    if (yaExiste) throw yaExiste.rechazo
+
+    // Un 400 NO es transitorio: es Meta diciendo que algo del contenido no pasa (si
+    // fuera el nombre repetido, la WABA lo habría mostrado arriba). Invitar a
+    // «reintentar más tarde» era mentira (Planeta Wings, 2026-09-12 05:13 UTC): se le
+    // dice el motivo y qué hacer.
     if (err instanceof ZernioApiError && err.status === 400) {
       throw new TemplateError(
         `WhatsApp no aceptó la plantilla "${providerRef}": ${zernioErrorDetail(err.body)}. Si dice que ya existe una con ese nombre, ábrela con Editar y ponle otro nombre.`,

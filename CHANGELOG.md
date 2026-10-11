@@ -8,6 +8,20 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [docs] — 2026-10-11 — Decisiones del dueño (bloques A y B), feature «se adapta a tu clientela» y prompt de la fase 1A
+
+**Pedido:** «registra todo… añade esto en los features del sistema, un software que se adapta a tu clientela es un ángulo
+de comunicación completo». Solo docs.
+
+- **Datos de producción (`visits`, 11-10):** Sushi Service mediana 27 días entre visitas, Don Alirio 6; ~78 % nunca vuelve
+  por segunda vez; Sushi Fun 2,4 % (sospecha de visitas no migradas).
+- **Decidido (`PENDIENTES.md` §8, spec §9 y §14):** ritmo personal por cliente + ritmo de la marca calculado; cuatro ritmos
+  simulados contra el tope (restaurante pasa a 14·28·42·60·80); motor de piezas para sumar comunicaciones; canal por
+  mensaje; sin Wallet; piloto en Don Alirio; la segunda visita como métrica; bloque B de plantillas con sus defaults.
+- **Nuevo:** `docs/features/ritmo-adaptativo.md` (feature, datos y ángulo de venta), §3.1.bis en
+  `PRESENTACION_CLIENTE_SushiService.md` (más dos datos viejos corregidos), fila en `CLAUDE.md`, y
+  `docs/prompts/2026-10-11-ciclo-fase-1a-motor-base.md`.
+
 ## [fix] — 2026-10-11 — P1-a: arreglos chicos de campañas y plantillas (sin migración, sin desplegar)
 
 - **N3-quater:** las burbujas leen el 500 del estimador como «—» y no dejan enviar (`AtRiskBubbles.tsx`). Sin test (UI).

@@ -1,6 +1,6 @@
 # PENDIENTES — todo lo que falta, en un solo lugar
 
-> **Última actualización:** 2026-10-11 (P1-a: salen N3-quater, N7, N8 de §5 y N5, N16, N23, OPER-4, OPER-6 de §3.3; entran N5-bis, N23-bis y OPER-4-bis; OPER-6 encontró **cuatro** punteros fuera del catálogo, no dos). Antes 2026-10-10 (ciclo fase 0.bis: sale N3-bis y N3-ter de §5, entran N3-quater y N3-quinquies; la consulta de la fase 0 ya corrió y su gesto pasa al de Planeta Wings). Antes 2026-10-08 (Opus 5.5, solo docs). **Es la puerta de entrada a lo que falta.** Si algo
+> **Última actualización:** 2026-10-11 (**el dueño DECIDIÓ los bloques A y B y parte del C** con datos de producción: §8 queda como tabla de decisiones; feature nueva «se adapta a tu clientela», `docs/features/ritmo-adaptativo.md`; prompt de la fase 1A listo). Antes, el mismo día (P1-a: salen N3-quater, N7, N8 de §5 y N5, N16, N23, OPER-4, OPER-6 de §3.3; entran N5-bis, N23-bis y OPER-4-bis; OPER-6 encontró **cuatro** punteros fuera del catálogo, no dos). Antes 2026-10-10 (ciclo fase 0.bis: sale N3-bis y N3-ter de §5, entran N3-quater y N3-quinquies; la consulta de la fase 0 ya corrió y su gesto pasa al de Planeta Wings). Antes 2026-10-08 (Opus 5.5, solo docs). **Es la puerta de entrada a lo que falta.** Si algo
 > pendiente no está aquí, no está pendiente: o se hizo, o hay que agregarlo aquí.
 > **Regla:** lo que se termina se **saca** de este archivo (no se tacha) y pasa al `CHANGELOG.md`. El detalle de cada
 > cosa vive en su documento de origen; aquí va una línea, el estado y dónde leer más.
@@ -36,16 +36,16 @@
 |---|---|---|---|
 | 1 | **Gestos de hoy** (§6.1): pegar la 00069, mirar los registros del Supabase del AIOS | Nada: solo hacerlo | — |
 | 2 | ✅ **Campañas, fases 0 y 0.bis: HECHAS el 2026-10-08 y el 2026-10-10** (sin migración; **pusheadas juntas a `main` el 2026-10-11, `2746d49`**). Un envío fallido ya no bloquea 30 o 360 días, pero cada toque admite 3 fallidos y no más · la insistente sale una vez mientras el cliente no vuelva · `error_message` dice la causa real · el texto de Campañas dice la verdad · una sola escala de días, también en Clientes y en «Rescatar Perdidos» | Nada. Línea base del SQL en `ESTADO.md` 0.CICLO; repetir la consulta hacia el 2026-11-11 | no |
-| 3 | **Plantillas, pasos 1 a 3** (§3): un solo libro de plantillas, cerrar el hueco catálogo ↔ código, una sola pantalla. **Y en la misma sesión, las cuatro plantillas nuevas juntas** (§3.2) para que cada marca pase por Meta una sola vez | B1–B7 (§8) | 0 o 1 |
-| 4 | **Campañas, fase 1: el motor del ciclo** (dos sesiones: base y cron) | A1–A6 (§8) | 1 |
-| 5 | **Recompensas en un solo lugar** (S-1) | C1–C3 | 0 o 1 |
-| 6 | **Campañas, fase 2: la pantalla** (dos o tres sesiones) | A7–A8, y mirar el prototipo | no |
+| 3 | **Plantillas, pasos 1 a 3** (§3): un solo libro de plantillas, cerrar el hueco catálogo ↔ código, una sola pantalla. **Y en la misma sesión, las cuatro plantillas nuevas juntas** (§3.2) para que cada marca pase por Meta una sola vez | Nada: B1–B7 ✅ decididas (§8). Prompt: lo escribe el comandante | 0 o 1 |
+| 4 | **Campañas, fase 1: el motor del ciclo.** **1A, la base** (migración, triggers, ritmo personal y de la marca, motor de piezas, canal; nada se envía): prompt listo en `docs/prompts/2026-10-11-ciclo-fase-1a-motor-base.md`. **1B, los envíos** (cron, drenador, regalos, piloto en Don Alirio): después de 1A | Nada: A1–A7 ✅ decididas (§8). Al desplegar 1A: aplicar su migración ANTES del push | 1 (en 1A) |
+| 5 | **Recompensas en un solo lugar** (S-1) | Nada: C1–C3 ✅ decididas | 0 o 1 |
+| 6 | **Campañas, fase 2: la pantalla** (dos o tres sesiones) | A8: mirar el prototipo (no frena la fase 1) | no |
 | 7 | **Optimizar: los arreglos chicos** (§5), repartidos en una o dos sesiones | Solo el texto de 18.c | no |
 | 8 | **La tarjeta, las reseñas y los referidos** (§4.2) | C4–C8 | 1–2 |
 | 9 | Campañas, fase 3: afinar con datos (un mes después de la fase 1) | Leer el reporte | no |
 | 10 | Lo demás, por olas (§7) | §8, bloque D | varias |
 
-**2 y 3 pueden ir en paralelo** (no comparten archivos). **3 y 4 se cruzan** en `template-catalog.ts` y `template-texts.ts`:
+**La 1A (fila 4) y las plantillas (fila 3) pueden ir en paralelo:** la 1A no toca el catálogo de plantillas. **2 y 3 pueden ir en paralelo** (no comparten archivos). **3 y 4 se cruzan** en `template-catalog.ts` y `template-texts.ts`:
 por eso la plantilla nueva del ciclo («Regalo que vence») entra en la sesión 3, junto con las otras tres, y la 4 ya la
 encuentra hecha. **5 y 6 se cruzan** en `campaigns/page.tsx` (la pestaña «Premios»): 5 va primero.
 
@@ -117,13 +117,14 @@ Y dos cosas que el spec dejó abiertas:
 
 | Fase | Qué | Estado |
 |---|---|---|
-| **1 · El motor** | Migración (hoy el script dice **00070**; el número se saca al construir) · los dos triggers · el backfill sin ráfaga · `cycle-engine.ts` con los cuatro ritmos · el cron que decide y encola · el drenador que otorga al enviar · las correcciones H1–H7 · tests | ⬜ Espera A1–A6 |
+| **1A · La base** | Migración (el número lo da el script al construir) · los dos triggers · el backfill sin ráfaga · `cycle-engine.ts` con los cuatro ritmos, el ritmo personal y el de la marca · el **motor de piezas** (`src/lib/communications/registry.ts`) · el canal · `cycle_enabled` apagado en todas · la verificación de Sushi Fun · tests. **Nada se envía** | ⬜ **Prompt listo** (`docs/prompts/2026-10-11-ciclo-fase-1a-motor-base.md`) |
+| **1B · Los envíos** | El cron que decide y encola · el drenador que otorga al enviar · «vence el domingo» · el adaptador a la insistente · las correcciones H2, H3, H6 · encender el piloto en Don Alirio | ⬜ Después de 1A (prompt aparte) |
 | **2 · La pantalla** | Primer uso · «Para hoy» · seis cajas · vista por fecha con proyección y fechas especiales · mandar un regalo en tres campos · evento con texto sugerido · el calendario redirige · mini-ciclo en el panel · se retiran las burbujas y las cuatro tarjetas | ⬜ Espera A7–A8 y el prompt (se escribe cuando mires el prototipo) |
 | **3 · Afinar** | El calibrador que sugiere el ritmo · regalos pequeños que rotan · reporte «con mensaje contra sin mensaje» por toque · texto del evento con el LLM | ⬜ Un mes después de la fase 1 |
-| **4 · Futuro** | Fechas especiales completas por rubro · ruleta · sorteos y rifas · cliente del mes · Instagram · «cumpleaños del restaurante» y «datos curiosos» | ⬜ Espera A9–A10 |
+| **4 · Futuro** | Fechas especiales completas por rubro · ruleta · sorteos y rifas · cliente del mes · Instagram · «cumpleaños del restaurante» y «datos curiosos». **Cada una es una pieza nueva del motor de 1A** | ⬜ Decidido: después de las fases 1 y 2 |
 
 **Lo que tienes que hacer tú cuando llegue la fase 1:** aplicar la migración en Supabase **antes** del deploy (al revés,
-todos los envíos fallan en silencio) · contestar el ritmo de cada marca · crear «Regalo que vence» en cada marca (o dejar
+todos los envíos fallan en silencio) · (el ritmo ya no se contesta: lo calcula el sistema; puedes cambiarlo en Ajustes) · crear «Regalo que vence» en cada marca (o dejar
 que salga con la insistente) · elegir el regalo pequeño y el fuerte de cada marca (o ninguno).
 
 ### 2.5 Lo que el diseño mide para saber si funciona
@@ -225,6 +226,7 @@ Cada uno es menos de una hora. Juntos protegen todo lo que viene.
 |---|---|---|
 | N1 | El «Importar CSV» crea clientes que aceptan marketing; los domicilios también nacen «consentidos» | Ley 1581 · decisión D4 |
 | N3-quinquies | La causa real del fallo (fase 0.bis) se lee de `message_logs`, cuyo INSERT es *best-effort* (`recordMessageLog()` traga su error). Si esa fila no se escribió, `error_message` dice solo el proveedor. Y `campaign_messages` no guarda el premio: el tope de reintentos del recordatorio suma los fallos de dos premios del mismo cliente que venzan a la vez | Diagnóstico incompleto en un caso raro |
+| TEST-flaky | El 2026-10-11 la suite dio «1 archivo falló» con los 1.017 tests en verde, 1 de 4 corridas, y no se repitió. Un archivo que falla al cargar (no un test) apunta al arranque del Postgres embebido o a un import. Si vuelve a pasar, guardar la salida completa de vitest | Una suite que miente a veces enseña a ignorarla |
 | N6 | Los botones sí/no del webhook de Zernio esperan 10 s antes de contestar | El mismo riesgo de apagón que se cerró en ESCALA-3 |
 | N13 | El PIN del supervisor no tiene límite de intentos | Seguridad |
 | N18 | Un test de la analítica contra el Postgres real (el 500 del 04-10 lo habría cazado) + CI (PROC-1) | Cada push a `main` despliega |
@@ -295,65 +297,66 @@ que el cron corre a las 10:00 de Bogotá (corre a las 15:00); ya está corregido
 
 ---
 
-## 8. Todas las preguntas abiertas, con su valor por defecto
+## 8. Las decisiones: tomadas y abiertas
 
-> **Si no contestas una, se construye con el default.** Basta «sí a los defaults salvo A5 y C4», por ejemplo.
-> Origen: spec del ciclo §9 (A1) · tercera pasada del 08-10 (A3–A6, B6) · consolidado §10.5 (Q1–Q13) y §7 · `ESTADO.md` §3 y §4.
+> **2026-10-11:** el dueño decidió los bloques A y B y parte del C, con los datos de producción del mismo día (spec del
+> ciclo §14). ✅ = decidida, lista para construir. 👀 = gesto tuyo que no frena nada. ⏳ = abierta, no frena lo que sigue.
+> Regla nueva (dueño, 11-10): lo técnico lo decide el comandante y avisa; al dueño solo se le pregunta lo que es suyo.
 
-### A. Campañas (bloquean la fase 1 y la 2)
+### A. Campañas
 
-> En el spec del ciclo §9 son las decisiones 1–14 (A1), 15 (A3), 16 (A4), 17 (A5), 18 (A7) y 19 (A6).
-
-| # | Pregunta | Default |
+| # | Decisión | Estado |
 |---|---|---|
-| **A1** | ¿Apruebas los 14 defaults del spec §9? Ritmo por marca (mensual 12·24·38·56·80) · cuentan para las 6: manuales, eventos y ciclo, no cumpleaños ni recordatorio · el contador solo se reinicia con una visita · el domicilio reinicia · backfill hacia adelante, más de 90 días → dormido sin ráfaga · trimestral a dormidos (pequeño a los 90, fuerte a los 180, máximo 2) · cooldown de 180 días del regalo fuerte · eventos no van a dormidos salvo casilla · probar «Regalo que vence» como UTILITY · sin puntos extra por volver · grupo de control del 10 % (0 en marcas de menos de 200 clientes) · hora: cena 16:30 · «Le mostramos lo otro» solo con domicilio · Mensaje libre se quita si en un mes nadie lo usa | Sí a todos |
-| **A2** | ¿Se mantienen «máximo 3 mensajes al mes y 7 días entre cada uno»? | Sí |
-| **A3** | ¿El recordatorio de vencimiento solo para el regalo fuerte? (H2: con los dos, el tope de 3 se rompe) | Sí |
-| **A4** | ¿Ritmos corregidos? Semanal 7·14·26·42·58 y quincenal 10·17·29·45·61 (H1) | Sí |
-| **A5** | ¿El ciclo se enciende marca por marca, con una piloto dos semanas, o en las 25 a la vez? ¿Cuál es la piloto? | Piloto: Sushi Service |
-| **A6** | Lo automático en «Para hoy»: ¿sale solo si no tocas nada, o nada sale sin tu OK? | Sale solo; «Hoy no» lo pospone |
-| **A7** | ¿La pestaña «Premios» sale de Campañas y va a Recompensas (tu Tarea 1)? Campañas quedaría con Ciclo e Historial | Sí |
-| **A8** | Abrir el prototipo v2 y decir qué sobra o qué falta | (gesto) |
-| **A9** | «Cumpleaños del restaurante» y «datos curiosos»: ¿eventos del calendario o toques del ciclo? | Eventos |
-| **A10** | ¿Fechas especiales completas, ruleta, sorteos e Instagram quedan para la fase 4? | Sí |
+| A1 | Las 14 decisiones base del ciclo (spec §9, 1–14) **más el motor de piezas**: cada comunicación es una pieza registrada para que cumpleaños del restaurante, eventos del momento, rifas y activaciones se agreguen sin rediseñar | ✅ |
+| A2 | Máximo 3 mensajes de marketing al mes y 7 días entre cada uno | ✅ |
+| A3 | El aviso «tu premio vence» sale por WhatsApp y solo para el regalo fuerte. Cada mensaje guarda su canal (hoy solo WhatsApp) | ✅ |
+| A4 | **Ritmo personal** para clientes con 3 o más días con visita; **ritmo de la marca** calculado con sus datos para los nuevos. Cuatro ritmos validados: cafetería 7·14·26·42·58 · casual 10·17·29·45·61 · restaurante 14·28·42·60·80 · ocasiones 21·38·56·80·110 (`docs/features/ritmo-adaptativo.md`) | ✅ |
+| A5 | Piloto de dos semanas en **Don Alirio** (no Sushi Service: su línea Twilio muere) | ✅ |
+| A6 | Lo automático de «Para hoy» sale solo; «Hoy no» lo pospone | ✅ |
+| A7 | «Premios» sale de Campañas y va a Recompensas | ✅ |
+| A8 | Abrir el prototipo y decir qué sobra | 👀 no frena la fase 1 |
+| A9 | Cumpleaños del restaurante y datos curiosos: piezas tipo evento | ✅ |
+| A10 | Fechas especiales, ruleta, sorteos e Instagram: después de las fases 1 y 2, sobre el mismo motor | ✅ |
+| A11 | **Sin Wallet** de Google ni Apple, ni para avisos ni para la tarjeta. El diferencial es WhatsApp | ✅ |
+| A12 | **La métrica principal es la segunda visita** (línea base 11-10: ~22 % en Sushi Service y Don Alirio) | ✅ |
 
-### B. Plantillas (bloquean la sesión 3)
+### B. Plantillas
 
-| # | Pregunta | Default |
+| # | Decisión | Estado |
 |---|---|---|
-| **B1** | ¿Reducir de 13 a 8 aprobaciones por marca, poniendo la variación en variables? | Sí, ahora que ninguna marca Zernio ha mandado mensajes reales |
-| **B2** | ¿Probar UTILITY en bienvenida, puntos, premios, recordatorio y «Regalo que vence»? ¿En qué marca? | Sí, en una marca Twilio |
-| **B3** | «Nivel desbloqueado» y «Recordatorio de premio»: ¿plantillas propias o fundidas en «puntos sumados»? | Propias |
-| **B4** | Plantillas puntuales: ¿biblioteca que se reutiliza o de un solo uso? ¿Separadas en pestañas dentro de Plantillas? | Biblioteca, en pestañas |
-| **B5** | ¿Las marcas Zernio pueden crear plantillas libres desde el panel? ¿Qué variables además de nombre, puntos y próximo premio? | Sí; las mismas tres |
-| **B6** | ¿Las cuatro plantillas nuevas entran juntas para que cada marca vaya a Meta una sola vez? (§3.2) | Sí |
-| **B7** | ¿El AIOS deja de crear plantillas y se las pide al producto? (paso 1 del plan) | Sí |
+| B1 | Bajar de 13 a 8 aprobaciones de Meta por marca | ✅ |
+| B2 | Probar la categoría UTILITY en bienvenida, puntos, recordatorios y «Regalo que vence», en **Sushi Fun** | ✅ |
+| B3 | «Nivel desbloqueado» y «Recordatorio de premio» como plantillas propias. **Ojo:** P1-a encontró cuatro punteros fuera del catálogo, no dos; la sesión de plantillas los cubre todos | ✅ |
+| B4 | Plantillas puntuales en una biblioteca reutilizable, en pestaña aparte dentro de Plantillas | ✅ |
+| B5 | Las marcas Zernio crean plantillas libres desde el panel | ✅ |
+| B6 | Las plantillas nuevas juntas, un solo viaje a Meta por marca | ✅ |
+| B7 | El AIOS deja de crear plantillas y se las pide al producto | ✅ |
 
 ### C. Recompensas, tarjeta, reseñas, referidos
 
-| # | Pregunta | Default |
+| # | Decisión o pregunta | Estado |
 |---|---|---|
-| **C1** | ¿Recompensas absorbe también lo de Ajustes (premio de la agresiva, de la reseña, puntos, Black) o solo la pestaña? | Los premios sí; puntos y Black después |
-| **C2** | «Temporal»: ¿un premio con fechas propias (nuevo) o la ventana de reclamo de cada otorgamiento (existe)? | La ventana que existe |
-| **C3** | ¿Se unifican los tres modelos de premio (catálogo, texto libre de invitaciones, niveles y caja)? ¿Qué se hace con `rewards`, en desuso? | No por ahora; las invitaciones eligen del catálogo |
-| **C4** | «10 visitas»: ¿llenar los 10 sellos o llegar a Black? ¿Las estrellas cuentan tarjetas completadas o niveles? ¿Dónde se ven? ¿El 10 es igual para todas las marcas? | — (sin default) |
-| **C5** | Sin la pantalla posterior: ¿la elección de premio o caja pasa a la roja, se entrega el seguro solo, o la resuelve el mesero? ¿El pop-up de reseña sale al escanear o al abrir la tarjeta? | Pasa a la roja |
-| **C6** | Reseñas: ¿interruptor explícito? Sin premio, ¿se quita el paso 2? ¿Premio al tocar el enlace o cuando el mesero ve la reseña? ¿Uno de por vida o por periodo? ¿Por sede o por marca? | Interruptor; sin paso 2; al tocar; de por vida; por marca |
-| **C7** | Referidos: ¿gana el que refiere, el referido o ambos? ¿Premio del catálogo o puntos? ¿Al registrarse el amigo o cuando el mesero valida su primera visita? ¿Mensaje propio o un toque del ciclo? | — (sin default) |
-| **C8** | «Pop-ups de Google»: ¿Google Wallet, notificaciones del navegador o WhatsApp con botones? | WhatsApp con botones |
-| **C9** | Black: ¿por visitas, puntos o ambos? ¿Qué es el beneficio permanente? ¿Se pierde? ¿Hay un nivel encima? (deuda 17.b) | — (sin default) |
-| **C10** | ¿Qué pasa al superar el último nivel de premios? (§8.1) | — (sin default) |
+| C1 | Recompensas absorbe los premios que hoy están en Ajustes; puntos y Black, después | ✅ |
+| C2 | «Temporal» es la ventana de reclamo que ya existe | ✅ |
+| C3 | Los tres tipos de premio no se unifican todavía; las invitaciones eligen del catálogo | ✅ |
+| C4 | «10 visitas»: ¿llenar los 10 sellos o llegar a Black? ¿Qué cuentan las estrellas y dónde se ven? ¿El 10 es igual para todas las marcas? (dato: en Don Alirio hay clientes con 27 visitas) | ⏳ |
+| C5 | La elección de premio o caja misteriosa pasa a la tarjeta roja cuando se elimine la pantalla posterior | ✅ |
+| C6 | Reseñas: interruptor explícito, sin paso 2 cuando no hay premio, premio al tocar el enlace, uno por cliente de por vida, por marca | ✅ |
+| C7 | Referidos: ¿gana el que refiere, el referido o ambos? ¿Premio del catálogo o puntos? ¿Al registrarse o cuando el mesero valida la primera visita? | ⏳ |
+| C8 | Los «pop-ups» son WhatsApp con botones (sin Wallet, A11) | ✅ |
+| C9 | Black: ¿por visitas o por puntos? ¿Se pierde? ¿Hay algo encima? (deuda 17.b) | ⏳ |
+| C10 | ¿Qué pasa al superar el último nivel de premios? | ⏳ |
 
 ### D. Operación y negocio
 
-| # | Pregunta | Default |
+| # | Pregunta | Estado |
 |---|---|---|
-| **D1** | El aviso diario de salud: ¿por qué canal (WhatsApp, correo, Telegram) y a quién (tú, o también cada restaurante)? Desbloquea casi toda la ola P3 | WhatsApp, solo a ti |
-| **D2** | Errores: ¿Sentry (cuesta) o un log drain de Vercel? | — |
-| **D3** | Zernio: ¿Team compartido con el otro proyecto o dedicado? | — |
-| **D4** | Consentimiento (Ley 1581): ¿el «Importar CSV» deja de contar como consentimiento? ¿Un domicilio cuenta? ¿Qué pasa con los clientes que aceptaron antes de la casilla de Meta? | El CSV no consiente; el domicilio sí; los anteriores no se mandan a Meta |
-| **D5** | Multi-sede: ¿el administrador de sede ve lo histórico sin sede (0.DELTA)? ¿El tope global de la caja pasa a ser por sede (0.GAMMA)? ¿Un celular por sede (0.THETA)? ¿Dos premios de reseña por cliente con varias sedes (F10)? ¿Qué teléfono responde el aviso automático de domicilios (D9)? | — |
-| **D6** | Cobro: ¿política de corte por mora, pasarela (Wompi) y precio único? | — |
-| **D7** | AIOS: ¿se suma pronto un segundo operador? ¿Alta en lote? ¿Autorregistro? | — |
-| **D8** | Menores: el texto de 18.c · qué muestra un subdominio sin marca (hoy muestra Sushi Service) · la hora del recordatorio de premio (hoy 11:00 Bogotá) · qué es «Sushi Service Barra» · pasar Frangal a «Sin WhatsApp» | Página neutra; recordatorio a la hora de la marca |
-| **D9** | ¿Confirmas el orden de trabajo de §1? | Sí |
+| D1 | El aviso diario de salud: ¿por qué canal y a quién? (propuesta: WhatsApp, solo al dueño) | ⏳ |
+| D2 | Registro de errores: ¿Sentry (cuesta) o los logs de Vercel? | ⏳ |
+| D3 | Zernio: ¿cuenta compartida con el otro proyecto o dedicada? | ⏳ |
+| D4 | Consentimiento: ¿el CSV importado deja de contar como aceptación? ¿El domicilio sí cuenta? (propuesta: sí y sí) | ⏳ |
+| D5 | Multi-sede: histórico sin sede (0.DELTA), tope de la caja por sede (0.GAMMA), un celular por sede (0.THETA), reseñas por sede (F10), teléfono del aviso de domicilios (D9) | ⏳ |
+| D6 | Cobro: corte por mora, pasarela (Wompi) y precio | ⏳ |
+| D7 | AIOS: ¿segundo operador, altas en lote, autorregistro? | ⏳ |
+| D8 | Menores: texto de 18.c · qué muestra un subdominio sin marca (propuesta: página neutra) · hora del recordatorio · «Sushi Service Barra» · Frangal sin WhatsApp | ⏳ |
+| D9 | El orden de trabajo de §1 | ✅ (el dueño lo sigue) |

@@ -87,9 +87,9 @@ El sistema funciona como un **CRM automatizado con gamificación** que conecta t
 
 | Función | Descripción |
 |---------|-------------|
-| **Cumpleaños automático** | Cron diario a las 8am. Detecta cumpleañeros, envía mensaje personalizado con puntos actuales. Sin duplicados (1 año de dedup). |
+| **Cumpleaños automático** | Saluda hasta dos días antes del cumpleaños, a la 1 p. m. (hora de Bogotá), con los puntos actuales. Sin duplicados (1 año de dedup). |
 | **Reactivación suave (21 días)** | "Tus puntos te esperan, estás cerca de [próximo premio]". |
-| **Reactivación agresiva (25+ días)** | "Tus puntos llevan tiempo sin moverse — no dejes enfriar tu progreso". |
+| **Reactivación agresiva (25+ días)** | "Tus puntos llevan tiempo sin moverse — no dejes enfriar tu progreso". Sale **una sola vez** mientras el cliente no vuelva (desde el 2026-10-11). |
 | **Frequency Cap inteligente** | Ningún cliente recibe más de 1 mensaje cada 7 días. Protege la relación. |
 | **Recovery Zone** | Clientes entre 18–25 días sin visitar están reservados exclusivamente para reactivación automática; las campañas manuales los saltan. |
 | **Días configurables** | El dueño puede cambiar cuándo dispara la reactivación desde el dashboard. |
@@ -97,6 +97,25 @@ El sistema funciona como un **CRM automatizado con gamificación** que conecta t
 | **Pre-event blackout** | Antes de eventos programados, las campañas manuales se pausan automáticamente para no saturar. |
 | **Mensajes dopamínicos** | Tono cálido, cercano, enérgico. Con emojis moderados, números visibles, progreso claro. Aprobado por Meta (compliant). |
 | **Segmentación inteligente** | SegmentRadar en dashboard: Activos, Recuperación, Perdidos, Cumpleaños. Filtros por ciudad, visitas, tier. |
+
+### 3.1.bis Se adapta a tu clientela *(en construcción: piloto en Don Alirio)*
+
+> *"Tu programa de fidelización aprende el ritmo de cada cliente y le escribe cuando de verdad te está extrañando."*
+
+> ⚠️ **No prometer en una venta hasta que el piloto esté corriendo.** Diseño, datos y ángulo completo:
+> `docs/features/ritmo-adaptativo.md`.
+
+| Función | Descripción |
+|---------|-------------|
+| **Ritmo personal** | El sistema mide cada cuánto vuelve cada cliente y le escribe en su momento: al de la cafetería a la semana, al del restaurante al mes. |
+| **Ritmo de tu negocio** | Para los clientes nuevos usa el ritmo de tu marca, calculado con tus propios datos. Cafetería, casual, restaurante u ocasiones. |
+| **Cero configuración** | El dueño no elige días. Puede cambiar el ritmo en Ajustes si quiere, pero no tiene que hacerlo. |
+| **Siempre dentro de los topes** | Los cuatro ritmos están validados: nunca más de 3 mensajes al mes ni menos de 7 días entre uno y otro. |
+| **Medido contra no hacer nada** | Una parte de los clientes no recibe mensaje, para comparar: «con mensaje volvieron X %, sin mensaje Y %». |
+| **Por WhatsApp, sin instalar nada** | Sin apps ni tarjetas de Wallet: el aviso llega a la app que el cliente ya abre todo el día. |
+
+**El dato que lo justifica (producción, 2026-10-11):** casi 8 de cada 10 clientes nunca vuelven por segunda vez, y el
+ritmo real cambia muchísimo entre negocios: en una cafetería la mitad vuelve en 6 días; en un restaurante de sushi, en 27.
 
 ### 3.2 Sistema de Puntos que Hace que los Clientes Quieran Volver
 

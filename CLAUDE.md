@@ -105,6 +105,8 @@ las migraciones en Supabase, y lo ordena él. La sesión de cierre se lo pide en
 | Domicilios (webhook, IA, intake) | `docs/features/delivery-webhook.md` + `delivery-ai-parsing.md` |
 | Plantillas de WhatsApp | `docs/features/whatsapp-templates.md` + `docs/PLANTILLAS.md` |
 | Campañas, opt-out, cola y presupuesto de envío | `docs/features/campaigns.md` + `send-governance.md` |
+| El ciclo de recuperación, el ritmo de cada cliente, el motor de piezas | `docs/features/ritmo-adaptativo.md` + spec `docs/superpowers/specs/2026-10-04-ciclo-de-recuperacion-design.md` (§3.2.bis, §14) |
+| Qué falta y qué decidió el dueño | `docs/PENDIENTES.md` (§1 orden, §8 decisiones) |
 | Panel / dashboard | `docs/features/dashboard.md` |
 | Tarjeta del cliente | `docs/features/wallet-card.md` + `design-system.md` |
 | Logo, paleta, `tenants.config`, QR Studio | `docs/features/identidad-visual.md` (+ `qr-studio.md`) |

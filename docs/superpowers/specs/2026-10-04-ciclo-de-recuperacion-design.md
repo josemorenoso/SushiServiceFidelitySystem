@@ -9,7 +9,10 @@
 > y campañas estén en el mismo lugar… más fácil, más visual y dopamínico para el dueño»*.
 > **Prototipo navegable:** `2026-10-04-ciclo-de-recuperacion-mockup.html` (al lado de este archivo; se abre en el
 > navegador tal cual) y publicado en <https://claude.ai/artifact/EKRPox4mCdvsSwiGbETDB5> (privado hasta que el dueño lo comparta).
-> **Prompt para construir:** `docs/prompts/2026-10-04-ciclo-fase-0-y-1.md`.
+> **Prompt para construir:** fases 0 y 0.bis HECHAS y desplegadas (`2746d49`, 2026-10-11). Fase 1A:
+> `docs/prompts/2026-10-11-ciclo-fase-1a-motor-base.md`. **Cuarta pasada (2026-10-11, §14):** el dueño decidió todo el
+> bloque A con datos reales de producción: ritmo personal por cliente, ritmos por tipo de negocio, motor de piezas
+> enchufables, canal por mensaje, sin Wallet, piloto en Don Alirio. Feature: `docs/features/ritmo-adaptativo.md`.
 
 ---
 
@@ -127,18 +130,20 @@ Lo que **no** sabemos, y el diseño no finge saber:
 - **Toda visita** —escaneo del mesero, QR de mesa o domicilio— devuelve al cliente a **Activo**, abre el ciclo **n+1** y
   anota qué toque lo trajo (§3.4). Responde 16.d: **el domicilio cuenta** (ya hoy escribe `last_visit_at`).
 
-### 3.2 Los toques del ciclo (ritmo mensual; los otros ritmos en §3.2.bis)
+### 3.2 Los toques del ciclo (ritmo «restaurante»; los otros ritmos y cómo se elige en §3.2.bis)
 
 | Toque (como lo ve el dueño) | id | Día | Qué dice | Plantilla | Regalo | Cuenta para «6» |
 |---|---|---|---|---|---|---|
-| **Le recordamos** | `t1` | 12 | «Tienes {{2}} puntos, te faltan pocos para {{3}}». Sin oferta. En el ciclo 1 es el empujón a la **segunda visita** | `reactivation_no_reward` (existe) | — | sí |
-| **Le regalamos algo** | `t2` | 24 | Regalo **pequeño** que vence el domingo siguiente | `gift_expiring` (**nueva**, §4) · sin ella aprobada: `reactivation_aggressive` (existe) y el regalo igual queda en la tarjeta | pequeño | sí |
-| **Le mostramos lo otro** | `t3` | 38 | Si solo vino al local → «también llevamos a tu puerta». Si solo pidió → «ven, en el local es otra cosa». Sin oferta. **Solo existe si la marca tiene domicilio** (`tenants.config.has_delivery_webhook`, 00066); si no, el ciclo tiene cuatro toques | `campaign_presencial_to_domicilio` / `campaign_domicilio_to_presencial` (existen) · `source_channels='both'`: se salta | — | sí |
-| **Rescate** | `t4` | 56 | Regalo **fuerte** que vence el domingo siguiente (**es la agresiva de hoy**, con su recordatorio 2 días antes) | `gift_expiring` · sin ella: `reactivation_aggressive` | fuerte (cooldown 180 d; en cooldown, el pequeño) | sí (el recordatorio, no) |
+| **Le recordamos** | `t1` | 14 | «Tienes {{2}} puntos, te faltan pocos para {{3}}». Sin oferta. En el ciclo 1 es el empujón a la **segunda visita** | `reactivation_no_reward` (existe) | — | sí |
+| **Le regalamos algo** | `t2` | 28 | Regalo **pequeño** que vence el domingo siguiente | `gift_expiring` (**nueva**, §4) · sin ella aprobada: `reactivation_aggressive` (existe) y el regalo igual queda en la tarjeta | pequeño | sí |
+| **Le mostramos lo otro** | `t3` | 42 | Si solo vino al local → «también llevamos a tu puerta». Si solo pidió → «ven, en el local es otra cosa». Sin oferta. **Solo existe si la marca tiene domicilio** (`tenants.config.has_delivery_webhook`, 00066); si no, el ciclo tiene cuatro toques | `campaign_presencial_to_domicilio` / `campaign_domicilio_to_presencial` (existen) · `source_channels='both'`: se salta | — | sí |
+| **Rescate** | `t4` | 60 | Regalo **fuerte** que vence el domingo siguiente (**es la agresiva de hoy**, con su recordatorio 2 días antes) | `gift_expiring` · sin ella: `reactivation_aggressive` | fuerte (cooldown 180 d; en cooldown, el pequeño) | sí (el recordatorio, no) |
 | **Despedida** | `t5` | 80 | «Tus puntos siguen ahí, nosotros guardamos tu progreso». Sin oferta. Después, silencio | `reactivation_aggressive` (existe; su texto ya dice eso) | — | sí → **dormido** |
 
-Por qué estos huecos: 12 → 24 → 38 → 56 → 80 son +12, +14, +18, +24. Mes 1: dos toques. Mes 2: dos toques (+ el
-recordatorio del regalo del rescate cae en el día ~61, mes 3). Mes 3: recordatorio + despedida. Nunca más de 3 al mes,
+Por qué estos huecos (ajustados el 11-10 con los datos de Sushi Service: mediana 27 días, 75 % en 49, 90 % en 74):
+14 → 28 → 42 → 60 → 80 son +14, +14, +18, +20. El segundo toque cae en la mediana, el rescate entre el 75 % y el 90 %,
+la despedida cuando ya volvió el 90 %. Antes empezaba el día 12, antes de que la mayoría volviera sola. Mes 1: dos
+toques. Mes 2: dos toques (+ el recordatorio del regalo del rescate, entre el día 63 y el 69). Mes 3: recordatorio + despedida. Nunca más de 3 al mes,
 nunca menos de 7 días entre dos toques; el recordatorio está exento del cap de 7 por diseño (D5 de `reward-grants.md`) y
 sigue contando en el mensual. Si la marca no configura ningún regalo, los toques salen igual con las plantillas que ya tiene:
 **el ciclo funciona desde el día uno para las 25 marcas.**
@@ -147,22 +152,39 @@ sigue contando en el mensual. Si la marca no configura ningún regalo, los toque
 (contando el recordatorio del rescate, que con «vence el domingo» cae entre 3 y 9 días después del toque). **Se comprueba
 simulando 365 fechas de visita, no a mano** (§13, H1). El regalo pequeño **no lleva recordatorio** (§13, H2). Vale para los presets y para quien edite los días a mano (opción avanzada, escondida).
 
-### 3.2.bis El ritmo del negocio: una pregunta, no cinco números
+### 3.2.bis El ritmo: lo pone cada cliente, no el dueño (cuarta pasada, 2026-10-11)
 
-Al activar el ciclo (y en Ajustes después), **una sola pregunta**: *«¿Cada cuánto vuelve un cliente típico?»*
+> Detalle, datos y ángulo de venta: `docs/features/ritmo-adaptativo.md`. Reemplaza «una pregunta por marca» de la
+> segunda pasada: la pregunta sigue existiendo en Ajustes, pero ya nadie tiene que contestarla.
 
-| Respuesta | Toques (días sin venir) | El ciclo dura | Para quién |
-|---|---|---|---|
-| **Cada semana** | 7 · 14 · 26 · 42 · 58 | ~58 días | almuerzo ejecutivo, cafetería de paso, comida rápida de barrio |
-| **Cada quince días** | 10 · 17 · 29 · 45 · 61 | ~61 días | casual de fin de semana |
-| **Cada mes** (default) | 12 · 24 · 38 · 56 · 80 | ~80 días | la mayoría: sushi, parrilla, pizzería de salida |
-| **De vez en cuando** | 21 · 38 · 56 · 80 · 110 | ~110 días | celebraciones, alta cocina, ocasiones |
+**Cuatro ritmos validados** (los cuatro cumplen 7 días entre mensajes y 3 al mes contando el recordatorio del rescate,
+comprobado por simulación sobre 365 fechas de visita con «vence el domingo» y el tope real, por mes calendario):
 
-Los cuatro cumplen la validación de §3.2 contando el recordatorio del rescate, **comprobado por simulación** sobre 365
-fechas de visita con «vence el domingo» y el tope mensual real (por mes calendario). Los días de semanal y quincenal se
-corrigieron el 08-10: los de la segunda pasada (7·14·24·38·52 y 10·20·32·46·64) pasaban de 3 al mes (§13, H1). El calibrador automático (fase 3) no
-inventa días: **sugiere el preset** mirando la mediana de días entre visitas de los que vuelven, y el dueño confirma.
-Las marcas con `reactivation_soft_days`/`aggressive_days` propios entran con el preset más cercano y un aviso.
+| id | Ritmo | Toques (días sin venir) | Mediana de referencia | Para quién |
+|---|---|---|---|---|
+| `cafe` | Cafetería / diario | 7 · 14 · 26 · 42 · 58 | ~6 | café, panadería, almuerzo ejecutivo, comida rápida (Don Alirio: mediana 6) |
+| `casual` | Casual / quincenal | 10 · 17 · 29 · 45 · 61 | ~13 | casual de fin de semana |
+| `restaurant` | Restaurante / mensual | 14 · 28 · 42 · 60 · 80 | ~27 | sushi, parrilla, salida (Sushi Service: mediana 27) |
+| `occasional` | Ocasiones | 21 · 38 · 56 · 80 · 110 | ~45 | celebraciones, alta cocina |
+
+Para la cafetería el tope de 3 al mes es el límite: 7·14·21·30·45 y 7·14·24·34·48 lo rompen (simulado).
+
+**Cómo se elige, de lo más fino a lo más general:**
+
+1. **Ritmo personal** (cliente con 3 o más días distintos con visita): la mediana de días entre SUS visitas elige el
+   ritmo más cercano: < 9 → `cafe` · 9–18 → `casual` · 19–35 → `restaurant` · > 35 → `occasional` (cortes = punto
+   medio geométrico entre las medianas de referencia). Se fija **al abrir el ciclo** (trigger de visita) en
+   `customers.cycle_rhythm` y no cambia a mitad de ciclo. Se elige entre ritmos validados y no se calculan días a
+   medida porque días a medida podrían romper el tope en silencio (el defecto H1).
+2. **Ritmo de la marca** (cliente con 1 o 2 días con visita): `admin_settings.cycle_rhythm`. Por defecto `auto`: la
+   mediana de días entre visitas de todos los clientes de la marca, mismos cortes, **si hay al menos 30 regresos**; con
+   menos, `restaurant`. Si el dueño contesta la pregunta en Ajustes («¿cada cuánto vuelve un cliente típico?»), su
+   respuesta manda sobre el cálculo.
+3. Las marcas con `reactivation_soft_days`/`aggressive_days` propios no cambian nada hasta que se enciende el ciclo
+   (`cycle_enabled`); al encenderlo rige este esquema.
+
+Con los datos del 11-10: Don Alirio → `cafe` · Sushi Service → `restaurant` · Sushi Fun → `restaurant` (⚠️ su 2,4 % de
+regreso parece visitas no migradas: se verifica en la fase 1A) · Planeta Wings → `restaurant` (menos de 30 regresos).
 
 ### 3.3 Las reglas de cadencia
 
@@ -198,8 +220,8 @@ Al escribir `last_visit_at` (hoy en `customer.service.ts:98` y en el alta con `c
 
 - Entra a dormido al sexto toque **o** tras la despedida (lo primero). `dormant_since = now()`.
 - **A los 90 días:** `gift_expiring` con el regalo **pequeño**. **A los 180:** con el regalo **fuerte**. Si no vuelve,
-  archivado. El orden no es capricho: con el ritmo mensual el rescate sale el día 56, el dormido empieza el día 80 y el
-  primer toque trimestral cae el día ~170: **114 días desde el regalo fuerte, dentro del cooldown de 180**. El segundo
+  archivado. El orden no es capricho: con el ritmo `restaurant` el rescate sale el día 60, el dormido empieza el día 80 y el
+  primer toque trimestral cae el día ~170: **110 días desde el regalo fuerte, dentro del cooldown de 180**. El segundo
   cae el día ~260, 204 días después: libre. Si se invirtiera, el primer toque saldría sin regalo o no saldría.
 - Interruptor por marca `cycle_heartbeat_enabled` (default **encendido**: a un cliente que ya no responde, un mensaje por
   trimestre es el mínimo del canal y el regalo solo cuesta si viene). En pantalla se llama «toque trimestral».
@@ -208,7 +230,7 @@ Al escribir `last_visit_at` (hoy en `customer.service.ts:98` y en el alta con `c
 ### 3.6 Ciclo n: Juanita y Sara
 
 - **Juanita** (1 visita, día 42, ciclo 1): está entre «le mostramos lo otro» y el rescate. Lo que la trae es el regalo
-  fuerte del día 56; en la caja de su etapa cuenta como **nueva**.
+  fuerte del día 60; en la caja de su etapa cuenta como **nueva**.
 - **Sara** (3.ª visita, ciclo 3): mismo esquema, pero (a) si su ciclo 2 recibió el regalo fuerte hace menos de **180
   días**, en el rescate recibe el **pequeño** (`strong_offer_last_at`); (b) con ≥ 5 visitas el sistema **salta «le
   recordamos»** (ya conoce el programa; menos mensajes a los fieles); (c) el regalo pequeño **rota** si la marca cargó
@@ -226,7 +248,7 @@ Eventos: cuentan para la fatiga (§3.3) y **pausan el toque** de su audiencia en
 ### 3.8 Backfill: cómo entra la base que ya existe (responde 16.e)
 
 **Hacia adelante, sin reescribir historia.** Cada cliente entra al ciclo **en el día en el que ya está**
-(`today - last_visit_at`): el del día 42 verá el rescate el día 56; el del día 200 pasa **directo a dormido** con
+(`today - last_visit_at`): el del día 42 verá el rescate el día 60; el del día 200 pasa **directo a dormido** con
 `dormant_since = hoy` (su primer toque trimestral, dentro de 90 días, con el regalo pequeño). Los 508 «perdidos» de la
 captura **no reciben una ráfaga el día del despliegue**. `cycle_no` arranca en 1 para todos.
 
@@ -413,7 +435,9 @@ ALTER TABLE customers
                                   CHECK (cycle_state IN ('activo','dormido','archivado')),
   ADD COLUMN dormant_since        timestamptz,
   ADD COLUMN heartbeats_sent      integer     NOT NULL DEFAULT 0,
-  ADD COLUMN strong_offer_last_at timestamptz;
+  ADD COLUMN strong_offer_last_at timestamptz,
+  ADD COLUMN cycle_rhythm         text CHECK (cycle_rhythm IN ('cafe','casual','restaurant','occasional'));
+                                  -- ritmo PERSONAL fijado al abrir el ciclo (§3.2.bis); NULL = usa el de la marca
 
 -- el libro de toques: idempotencia, atribución y grupo de control
 CREATE TABLE customer_cycle_touches (
@@ -426,6 +450,7 @@ CREATE TABLE customer_cycle_touches (
   status              text NOT NULL DEFAULT 'pending'
                       CHECK (status IN ('pending','queued','sent','failed','holdout','deferred')),
   holdout             boolean NOT NULL DEFAULT false,                 -- grupo de control: NO se envía, SÍ se atribuye
+  channel             text NOT NULL DEFAULT 'whatsapp' CHECK (channel IN ('whatsapp')),  -- canal (§14); hoy solo WhatsApp
   due_at              timestamptz NOT NULL DEFAULT now(),             -- cuándo le tocaba: la atribución usa esto (H5)
   sent_at             timestamptz,
   campaign_message_id uuid REFERENCES campaign_messages(id) ON DELETE SET NULL,
@@ -458,7 +483,8 @@ sin venir nace `dormido` con `dormant_since = now()` (§3.8). Sin ráfaga.
 
 ### 7.2 El motor: puro, y espejo entre cron y pantalla
 
-`src/lib/cycle-engine.ts` (sin I/O, como `points-engine.ts`): `daysForRhythm(preset)`, `resolveStage(diasSinVenir, config)`,
+`src/lib/cycle-engine.ts` (sin I/O, como `points-engine.ts`): `RHYTHM_PRESETS`, `rhythmFromMedian(dias)`,
+`medianGap(diasConVisita)`, `effectiveRhythm(personal, marca)`, `daysForRhythm(preset)`, `resolveStage(diasSinVenir, config)`,
 `validateStageConfig(config)`, `bandsFromConfig(config)`, `shouldSkipT1(visits)`, `strongOfferAllowed(lastAt, now)`,
 `heartbeatPrize(seq)`, `expiresOnSunday(sendDate, minDays)`, `isHoldout(customerId, stage, cycleNo, pct)`. Lo consumen el cron, los
 endpoints y el navegador: **si la pantalla y el cron calcularan la etapa por separado, anunciarían días distintos**.
@@ -482,7 +508,7 @@ toque **se puede repetir mañana** (N3 muere por construcción). Dormidos: el tr
 | GET | `/api/dashboard/cycle/projection?from&to` | por fecha, cuántos entran a cada etapa (aritmética sobre `last_visit_at`: sin tabla nueva) + eventos + fechas especiales |
 | GET | `/api/dashboard/cycle/customers?stage=t4` o `?day=42` o `?state=dormido` | la lista, paginada, con `cycle_no`, visitas, puntos, último toque, `returned_at` |
 | POST | `/api/dashboard/cycle/gift` | manda un regalo (§6.5): es la ruta `campaigns/manual` con `preset='gift_expiring'` + `rewardId` + regla de vencimiento + `audience` + `not_before` |
-| PUT | `/api/dashboard/settings` | claves nuevas: `cycle_enabled` (default `false`: se enciende por marca, decisión 17), `cycle_rhythm` (`weekly|biweekly|monthly|occasional`), `cycle_stage_days` (json, solo avanzado), `cycle_small_reward_ids`, `cycle_strong_reward_id`, `cycle_fatigue_touches`, `cycle_heartbeat_enabled`, `cycle_strong_cooldown_days`, `cycle_send_slot`, `cycle_holdout_pct`. Entran a la **lista cerrada** del PUT (ítem de P1) |
+| PUT | `/api/dashboard/settings` | claves nuevas: `cycle_enabled` (default `false`: se enciende por marca, decisión 17), `cycle_rhythm` (`auto|cafe|casual|restaurant|occasional`, default `auto`), `cycle_stage_days` (json, solo avanzado), `cycle_small_reward_ids`, `cycle_strong_reward_id`, `cycle_fatigue_touches`, `cycle_heartbeat_enabled`, `cycle_strong_cooldown_days`, `cycle_send_slot`, `cycle_holdout_pct`. Entran a la **lista cerrada** del PUT (ítem de P1) |
 
 Todo con `requireTenantId()` para leer y `exigirAlcanceDeMarca()` para escribir (como `reward-tiers`).
 
@@ -523,11 +549,13 @@ columnas que no existen y PostgREST devuelve 42703 en silencio.
 
 ---
 
-## 9. Decisiones del dueño (con el default: si no dice nada, se construye así)
+## 9. Decisiones del dueño
+
+> **Todas DECIDIDAS el 2026-10-11** (§14). Cambiaron respecto al default las filas 1, 9 y 17; se agregaron 20 a 24.
 
 | # | Pregunta | Default propuesto | Por qué |
 |---|---|---|---|
-| 1 (16.a) | Días de los toques | **Una pregunta por marca** (§3.2.bis); default «cada mes» = 12 · 24 · 38 · 56 · 80 | Un reloj para 25 marcas está mal para 24; cinco números editables es lo que nadie va a tocar |
+| 1 (16.a) | Días de los toques | **Ritmo personal por cliente + ritmo de la marca calculado con sus datos** (§3.2.bis); cuatro ritmos validados; `restaurant` = 14 · 28 · 42 · 60 · 80 | Datos del 11-10: Don Alirio mediana 6 días, Sushi Service 27. Un reloj por marca tampoco alcanza: dentro de Don Alirio hay clientes de cada 2 días y de cada mes |
 | 2 (16.b) | Qué cuenta para las «6» | manual + calendario + ciclo; **no** cumpleaños ni recordatorio | El recordatorio habla de lo que ya es suyo; el cumpleaños es relación, no marketing |
 | 3 (16.c) | ¿Se reinicia el contador por tiempo? | **No.** Solo con la visita. El tiempo activa el toque trimestral | Reiniciar por tiempo reabre el drip a quien ya dijo que no con su silencio |
 | 4 (16.d) | ¿Domicilio reinicia? | **Sí** | Ya lo hace; y es una venta |
@@ -535,7 +563,7 @@ columnas que no existen y PostgREST devuelve 42703 en silencio.
 | 6 | Toque trimestral a dormidos | Encendido, 90 (pequeño) y 180 (fuerte) días, máx. 2 | Mínimo del canal; el regalo cuesta solo si viene; el orden esquiva el cooldown |
 | 7 | Cooldown del regalo fuerte | 180 días por cliente | Freno al «espero a que me llegue algo mejor» |
 | 8 | ¿Los eventos van a dormidos? | No, salvo casilla en el evento | Un festival grande puede valer la excepción |
-| 9 | `gift_expiring` también como UTILITY | Probar en una marca | Barato; si pasa, más barato aún |
+| 9 | `gift_expiring` también como UTILITY | Probar en **Sushi Fun** (decisión B2) | Barato; si pasa, más barato aún |
 | 10 | ¿Puntos extra por volver? | **No se construye** | Segunda moneda; los puntos los da la visita |
 | 11 | Grupo de control (`holdout`) | **10 %** por toque; 0 en marcas con < 200 clientes | Sin él, el 14 % no dice nada; con 50 clientes, 10 % es ruido |
 | 12 | Hora de envío por marca | **Cena (16:30 Bogotá)**; almuerzo (10:30) como alternativa | Un restaurante se decide antes de la comida, no a las 15:00 |
@@ -543,9 +571,14 @@ columnas que no existen y PostgREST devuelve 42703 en silencio.
 | 14 | Mensaje libre | Se queda un mes como salida de emergencia; si nadie lo usa, se quita | El objetivo es que «mandar un regalo» cubra el 90 % |
 | 15 | Recordatorio de vencimiento | **Solo para el regalo fuerte** (rescate y segundo trimestral) | Con el del pequeño, ningún ritmo de huecos crecientes cabe en 3 al mes (§13, H2) |
 | 16 | Ritmos semanal y quincenal | 7·14·26·42·58 y 10·17·29·45·61 | Los de la segunda pasada rompían el tope (§13, H1) |
-| 17 | Encendido | **Por marca**, con una piloto dos semanas (Sushi Service) | Sube el volumen de mensajes y el costo de golpe en 25 marcas (§13, H7) |
+| 17 | Encendido | **Por marca**, con una piloto dos semanas: **Don Alirio** (la línea Twilio de Sushi Service muere y Don Alirio es el mejor caso para el ritmo personal) | Sube el volumen de mensajes y el costo de golpe en 25 marcas (§13, H7) |
 | 18 | «Premios» | Sale de Campañas y va a Recompensas | Es la Tarea 1 del dueño |
 | 19 | Lo automático en «Para hoy» | Sale solo; «Hoy no» lo pospone | Un dueño que no entra al panel no puede ser el que destraba el envío |
+| 20 | Comunicaciones enchufables | **Motor de piezas** (§14.3): cada tipo de comunicación se registra con audiencia, plantilla, canal y reglas de tope | El dueño: «que las bases queden fuertes para que soporten adiciones»: cumpleaños del restaurante, eventos del momento, rifas, activaciones |
+| 21 | Canal | Cada mensaje guarda su canal; hoy solo WhatsApp | Deja la puerta abierta a notificaciones en Android sin rediseñar |
+| 22 | Wallet (Google / Apple) | **No.** Ni para avisos ni para la tarjeta | La competencia usa Wallet; el diferencial es WhatsApp. En iPhone no hay notificación web sin agregar la página al inicio |
+| 23 | Métrica principal | **La segunda visita** | Datos del 11-10: ~78 % de los clientes nunca vuelve por segunda vez |
+| 24 | «Cumpleaños del restaurante», «datos curiosos», fechas especiales, rifas, ruleta, Instagram | Piezas tipo evento sobre el mismo motor, **después** de las fases 1 y 2 | Decisiones A9 y A10 |
 
 ---
 
@@ -639,4 +672,59 @@ el prompt de la fase 1. Resumen para el dueño en `docs/PENDIENTES.md` §2.3.
 
 Además quedaban abiertas, y pasan a §9: qué hace lo automático de «Para hoy» si el dueño no toca nada (decisión 19) y la
 pestaña «Premios» (decisión 18).
+
+---
+
+## 14. Cuarta pasada (2026-10-11): las decisiones del dueño, con datos de producción
+
+El dueño contestó el bloque A (`docs/PENDIENTES.md` §8) y pidió, textual: *«necesito que el sistema me retorne a los
+clientes, que para los dueños sea exageradamente fácil de usar… que haya posibilidad de ampliar nuestra comunicación,
+agregar eventos especiales fácilmente, comunicaciones de eventos del momento, cumpleaños del restaurante… rifas,
+activaciones… lo que quiero es que las bases queden fuertes para que soporten adiciones luego»*.
+
+### 14.1 Los datos (consulta de solo lectura sobre `visits`, 2026-10-11)
+
+| Marca | Clientes | Volvieron ≥ 1 vez | Días entre visitas: p25 · mediana · p75 · p90 | Máx. visitas |
+|---|---|---|---|---|
+| sushi-service | 601 | 22,5 % | 13 · 27 · 49 · 74,4 | 9 |
+| don-alirio | 334 | 21,6 % | 2 · 6 · 12 · 24 | 27 |
+| sushi-fun | 289 | 2,4 % ⚠️ | 13 · 26 · 66 · 75 | 4 |
+| clubplanetawingsenvigado | 47 | 4,3 % | 7 · 8 · 9 · 9,6 (2 regresos) | 2 |
+
+### 14.2 Qué cambió
+
+| Tema | Antes | Ahora |
+|---|---|---|
+| Ritmo | Una pregunta por marca, cuatro presets | **Ritmo personal** (≥ 3 días con visita) + **ritmo de la marca calculado** (`auto`); la pregunta queda como ajuste opcional (§3.2.bis) |
+| Ritmo «restaurante» | 12 · 24 · 38 · 56 · 80 | **14 · 28 · 42 · 60 · 80** (alineado a la mediana y los percentiles de Sushi Service; simulado: cumple) |
+| Comunicaciones | El ciclo como sistema propio, cumpleaños y eventos aparte | **Motor de piezas** (§14.3) |
+| Canal | Implícito (WhatsApp) | `customer_cycle_touches.channel`, hoy solo `whatsapp` |
+| Avisos de vencimiento y «pop-ups» | Se evaluó Wallet | **Sin Wallet** (decisión 22). Aviso del fuerte por WhatsApp; los «pop-ups» son WhatsApp con botones (C8) |
+| Piloto | Sushi Service | **Don Alirio** |
+| Métrica principal | Retorno por toque | **Segunda visita** (línea base ~22 %); el retorno por toque sigue como métrica de cada pieza |
+
+### 14.3 El motor de piezas: la base para lo que venga
+
+Cada comunicación del sistema es una **pieza registrada** en `src/lib/communications/registry.ts` (puro, sin I/O). Una
+pieza declara:
+
+| Campo | Qué es | Ejemplos |
+|---|---|---|
+| `key` | El tipo | `cycle_touch`, `birthday`, `reward_reminder`, `calendar_event`, `manual`, `golden_bullet`; después `brand_anniversary`, `raffle`, `activation` |
+| `messageType` y `campaignSource` | Cómo se graba hoy (espejo de `messaging.ts` y `MONTHLY_CAP_SOURCES`) | `reactivation` / `reactivation` |
+| `countsForFatigue` | Si suma para las 6 sin volver (decisión 2) | ciclo, manual, evento: sí · cumpleaños, recordatorio: no |
+| `countsForMonthlyCap` · `exemptFromFrequencyCap` | Sus topes | recordatorio: cuenta en el mensual, exento de los 7 días |
+| `channels` | Por dónde puede salir | `['whatsapp']` |
+| `pausesCycleTouch` | Si su blackout pospone el toque del ciclo (§3.3 regla 5) | evento: sí |
+
+**En la fase 1A el registro no reemplaza nada:** se construye leyendo las constantes que ya existen, y un test exige que
+diga lo mismo que `MONTHLY_CAP_SOURCES`, los exentos del drenador y `message_class_map`. Desde ahí, los emisores nuevos
+consultan el registro en vez de copiar reglas. **Agregar «cumpleaños del restaurante» o una rifa será registrar una pieza
+y escribir su audiencia**, no tocar el motor ni los topes.
+
+### 14.4 Lo que la fase 1A tiene que verificar antes de calibrar
+
+- **Sushi Fun:** si hay clientes con `total_visits ≥ 2` y una sola fila en `visits` (visitas no migradas). Si es así, su
+  ritmo de marca queda en `restaurant` fijo hasta reconstruir el histórico, y no se usa su 2,4 % para nada.
+- Que la mediana de la marca se calcule sobre **días distintos** con visita (dos escaneos el mismo día son una visita).
 

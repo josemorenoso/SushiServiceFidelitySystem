@@ -33,6 +33,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Decisiones del dueño del 2026-10-11 a los docs + feature «se adapta a tu clientela» + prompt de la fase 1A (solo docs) | Opus 5.5 | `docs/features/ritmo-adaptativo.md` (nuevo), `docs/superpowers/specs/2026-10-04-ciclo-de-recuperacion-design.md`, `docs/prompts/2026-10-11-ciclo-fase-1a-motor-base.md` (nuevo), `docs/PENDIENTES.md`, `ESTADO.md`, `CHANGELOG.md`, `CLAUDE.md` (una fila), docs de producto/ventas que listen funciones | — | en vuelo |
 
 ## 3. Siguiente, en orden
 

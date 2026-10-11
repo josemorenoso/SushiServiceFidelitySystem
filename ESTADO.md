@@ -33,6 +33,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Registrar el push de las fases 0 y 0.bis (`2746d49`) — 2026-10-11 | Opus 5.5 | `ESTADO.md`, `docs/PENDIENTES.md`, `CHANGELOG.md` | — | en vuelo |
 
 ## 3. Siguiente, en orden
 

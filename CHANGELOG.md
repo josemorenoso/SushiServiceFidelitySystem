@@ -8,6 +8,15 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [deploy + docs] — 2026-10-11 — P1-a en producción, 00069 aplicada, prompt de plantillas
+
+- Push por orden del dueño: P1-a (`611332d`: tope mensual que ya no se apaga ante un error, plantillas Twilio
+  paginadas, lista cerrada de ajustes, permisos de marca en plantillas, caché de la WABA) + docs. Sin migración.
+  Antes: tsc limpio · 71 archivos / 1.017 tests (una corrida de cuatro dio «1 archivo falló» sin repetirse: PENDIENTES §5).
+- **00069 aplicada por el dueño** en el Supabase del producto. **La 00030 NO corrió:** 18 tablas conservan el DEFAULT
+  puente a Sushi Service (consulta del 11-10). `ESTADO.md` 0.SEGURIDAD e ítem 9.
+- Nuevo `docs/prompts/2026-10-11-plantillas-un-solo-libro.md` (B3–B6, N5-bis, OPER-4-bis), en paralelo con la fase 1A.
+
 ## [docs] — 2026-10-11 — Decisiones del dueño (bloques A y B), feature «se adapta a tu clientela» y prompt de la fase 1A
 
 **Pedido:** «registra todo… añade esto en los features del sistema, un software que se adapta a tu clientela es un ángulo

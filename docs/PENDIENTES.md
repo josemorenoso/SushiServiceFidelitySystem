@@ -34,9 +34,9 @@
 
 | # | Qué | Necesita de ti antes | Migración |
 |---|---|---|---|
-| 1 | **Gestos de hoy** (§6.1): pegar la 00069, mirar los registros del Supabase del AIOS | Nada: solo hacerlo | — |
+| 1 | **Gestos de hoy** (§6.1): ~~la 00069~~ (aplicada el 11-10), mirar los registros del Supabase del AIOS | Nada: solo hacerlo | — |
 | 2 | ✅ **Campañas, fases 0 y 0.bis: HECHAS el 2026-10-08 y el 2026-10-10** (sin migración; **pusheadas juntas a `main` el 2026-10-11, `2746d49`**). Un envío fallido ya no bloquea 30 o 360 días, pero cada toque admite 3 fallidos y no más · la insistente sale una vez mientras el cliente no vuelva · `error_message` dice la causa real · el texto de Campañas dice la verdad · una sola escala de días, también en Clientes y en «Rescatar Perdidos» | Nada. Línea base del SQL en `ESTADO.md` 0.CICLO; repetir la consulta hacia el 2026-11-11 | no |
-| 3 | **Plantillas, pasos 1 a 3** (§3): un solo libro de plantillas, cerrar el hueco catálogo ↔ código, una sola pantalla. **Y en la misma sesión, las cuatro plantillas nuevas juntas** (§3.2) para que cada marca pase por Meta una sola vez | Nada: B1–B7 ✅ decididas (§8). Prompt: lo escribe el comandante | 0 o 1 |
+| 3 | **Plantillas, pasos 1 a 3** (§3): un solo libro de plantillas, cerrar el hueco catálogo ↔ código, una sola pantalla. **Y en la misma sesión, las cuatro plantillas nuevas juntas** (§3.2) para que cada marca pase por Meta una sola vez | Nada: B1–B7 ✅ decididas (§8). **Prompt listo:** `docs/prompts/2026-10-11-plantillas-un-solo-libro.md` (puede correr en paralelo con la 1A). B1 y B7 (AIOS, 13 → 8) van en una sesión posterior | 0 o 1 |
 | 4 | **Campañas, fase 1: el motor del ciclo.** **1A, la base** (migración, triggers, ritmo personal y de la marca, motor de piezas, canal; nada se envía): prompt listo en `docs/prompts/2026-10-11-ciclo-fase-1a-motor-base.md`. **1B, los envíos** (cron, drenador, regalos, piloto en Don Alirio): después de 1A | Nada: A1–A7 ✅ decididas (§8). Al desplegar 1A: aplicar su migración ANTES del push | 1 (en 1A) |
 | 5 | **Recompensas en un solo lugar** (S-1) | Nada: C1–C3 ✅ decididas | 0 o 1 |
 | 6 | **Campañas, fase 2: la pantalla** (dos o tres sesiones) | A8: mirar el prototipo (no frena la fase 1) | no |
@@ -243,8 +243,8 @@ Cada uno es menos de una hora. Juntos protegen todo lo que viene.
 
 ### 6.1 Hoy (cinco minutos cada uno)
 
-1. **Pegar la 00069 entera** en el SQL Editor del Supabase del **producto**. Cierra dos agujeros entre marcas que están
-   vivos (AISLA-2, OPUS-4). Después, la consulta (c) del prompt de la ola 0: dice si la 00030 y la 00015 corrieron. (`ESTADO.md` 0.SEGURIDAD)
+1. ~~Pegar la 00069~~ — **aplicada el 2026-10-11.** La consulta (c) confirmó que **la 00030 no corrió**: 18 tablas
+   conservan el DEFAULT puente a Sushi Service. Aplicarla pide antes barrer los INSERT sin `tenant_id` (`ESTADO.md` §3, ítem 9).
 2. **Mirar que los registros (sign-ups) del Supabase del AIOS estén apagados.** Si están prendidos, cualquiera con la anon key
    entra al AIOS. (N2)
 3. **Confirmar `ZERNIO_API_KEY` y `ZERNIO_WEBHOOK_SECRET`** vigentes en los dos Vercel.

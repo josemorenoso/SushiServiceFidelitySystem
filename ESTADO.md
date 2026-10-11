@@ -33,20 +33,18 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
-| Push de P1-a, registrar 00069 aplicada y la 00030 pendiente, prompt de plantillas (solo docs) — 2026-10-11 | Opus 5.5 | `ESTADO.md`, `docs/PENDIENTES.md`, `CHANGELOG.md`, `docs/prompts/2026-10-11-plantillas-un-solo-libro.md` (nuevo) | — | en vuelo |
 
 ## 3. Siguiente, en orden
 
-0.SEGURIDAD **Ola 0: DESPLEGADA el 2026-10-04 (`main` = `c055e8e`; AIOS `b1b2465` v1.13.2). Falta que el dueño
-   aplique la 00069 (punto 1).** Cerrado en código, cada uno con un test que falla contra el código viejo: AISLA-1 (`resolve` solo
+0.SEGURIDAD **Ola 0: DESPLEGADA el 2026-10-04 (`main` = `c055e8e`; AIOS `b1b2465` v1.13.2). La 00069 la aplicó el
+   dueño el 2026-10-11** en el Supabase del producto (sin reportar error). **La 00030 NO corrió:** la consulta (c) del
+   11-10 devolvió el DEFAULT puente `a1b2c3d4-…` en 18 tablas (`customers`, `visits`, `campaigns`, `campaign_messages`,
+   `admin_settings`, `message_logs`, `restaurant_locations`, `staff_users`…): la regla de `CLAUDE.md` sigue viva. Cerrado en código, cada uno con un test que falla contra el código viejo: AISLA-1 (`resolve` solo
    otorga lo que `check-in/status` ofrece), AISLA-2 y OPUS-4 (migración **00069**), OPER-4 (`PUT` de settings con
    alcance de marca), AISLA-5 (`timingSafeEqual`), el CSV (`logs-*.csv` ignorado; el archivo sigue en la raíz) y
    ALTA-7. Detalle: `docs/AUDITORIA-ESCALA-1000-2026-09-28.md` §7. **Lo que falta, del dueño y en este orden:**
-   1. **AISLA-2: las dos funciones ya están cerradas** (el dueño corrió el (a) del prompt el 03-10 sin error; el 29
-      lo había corrido en el Supabase del AIOS, donde falló). **Falta pegar la `00069` entera** en el SQL Editor del
-      proyecto del PRODUCTO (el de `tenants`): cierra el resto y las políticas de la 00015. Bien = «Success. No rows
-      returned». Si aborta con «siguen ejecutables por anon/authenticated: X», X es una función que no está en el
-      repo: pasársela a una sesión. Después, la consulta (c) del prompt de la ola 0 **sola**: dice si la 00030 corrió.
+   1. ~~La 00069~~ — aplicada el 2026-10-11. Si el dueño ve algún día «siguen ejecutables por anon/authenticated: X»,
+      X es una función que no está en el repo: pasársela a una sesión.
    2. ~~Desplegar~~ — hecho el 04 (§1, Código). El código no necesita la 00069; la 00069 cierra un agujero vivo.
       `ESTADO.md`, `CHANGELOG.md` y la auditoría §7 viven solo en la rama (en `main` quedaron las versiones viejas).
    **Queda abierto, fuera de la ola:** la carrera de dos `resolve` simultáneos (`points-mystery-box.md` §7.4.ter) y
@@ -355,8 +353,9 @@
 8. **De `docs/AUDITORIA-POST-DEPLOY-2026-09-06.md`** queda vivo el AMARILLO de `reward-reminder` (Crons). El
    ROJO 3 está entero en `main` y vive solo hasta que corra la 00053. Sigue stale `docs/04-deployment.md`.
    (`docs/ESTADO-REQUERIMIENTOS.md` quedó reemplazado el 04-10; la **18.e** ya está hecha: el punto 7 se puede cerrar.)
-9. **Aplicar la 00030** en ventana tranquila (cierra el riesgo del DEFAULT puente). **¿Ya corrió con «todas» (29)?**
-   Se confirma con la consulta (2) del prompt de la ola 0; si corrió, `CLAUDE.md` y el §6 cambian.
+9. **Aplicar la 00030** en ventana tranquila (cierra el riesgo del DEFAULT puente). **Confirmado el 11-10: NO corrió**
+   (18 tablas con el DEFAULT). Antes de aplicarla, una sesión tiene que barrer los INSERT sin `tenant_id`: con la 00030
+   puesta, un INSERT así deja de irse callado a Sushi Service y pasa a fallar en producción.
 10. **Onboarding de los 25**: wildcard DNS ya resuelto y probado con Sushi Fun.
 
 **El norte** (dueño, 2026-09-05, corregido el 09-11): **Meta ya está entera** — píxel + API de Conversiones, y

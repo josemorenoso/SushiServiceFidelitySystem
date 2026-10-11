@@ -556,7 +556,10 @@ software, no en las del AIOS, y el bucket tiene que ser el del proyecto `bredfyu
   ningún mensaje). La advertencia de responsabilidad de la decisión 3 cubre el editor del catálogo.
 - **En Twilio el puntero se escribe al CREAR** (`fillEmptyPointer()`), no al aprobarse: es lo deliberado
   desde v2.15.0. Un envío con la plantilla aún en revisión falla en Meta; los presets y el cron de
-  cumpleaños lo esquivan preguntando por la aprobación, el check-in no.
+  cumpleaños lo esquivan preguntando por la aprobación; el check-in y el cron `reward-reminder` no. El
+  cron es el caso caro: cada día de revisión cuenta como un fallido y al tercero ese premio se queda sin
+  recordatorio para siempre (`docs/PENDIENTES.md` PL-2-a, a cerrar antes de que una marca Twilio con el
+  recordatorio encendido apriete «Enviar los N juntos»).
 - **Reemplazar una plantilla Twilio rechazada** no tiene botón propio: se crea una corregida en la
   Biblioteca y, aprobada, se elige con «Elegir otra».
 - **No se agregó botón de opt-out a las plantillas MARKETING.** Meta lo pide para marketing desde

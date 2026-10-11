@@ -187,8 +187,14 @@
    1. **Desplegar** (va con la 1A: la 00070 se aplica ANTES del push; plantillas no trae migración).
    2. **Por marca, un solo viaje a Meta:** Plantillas → Mensajes automáticos → leer los tres textos nuevos y
       «Cumpleaños — dos días antes» y apretar **«Enviar los N juntos a Meta»**. Vale para Planeta Wings (Zernio) y para
-      Sushi Service, Sushi Fun, Don Alirio, Frangal y demo-ventas (Twilio). Tepuy, cuando tenga número. Meta tarda 24-72 h;
-      cada mensaje se activa solo al aprobarse. Los textos completos están en `docs/PLANTILLAS.md` § Las tres del 2026-10-11.
+      Sushi Service, Sushi Fun, Don Alirio, Frangal y demo-ventas (Twilio). Tepuy, cuando tenga número. Meta tarda 24-72 h.
+      En **Zernio** cada mensaje se activa solo al aprobarse. En **Twilio NO**: el puntero se escribe al CREAR
+      (`fillEmptyPointer()`, PL-2), así que durante la revisión los envíos de esa plantilla fallan en Meta.
+      ⚠️ **Recordatorio de premio en Twilio:** si la marca tiene `reward_reminder_enabled = true`, el cron lo intenta
+      cada día con la plantilla en revisión, cada intento cuenta como fallido, y al tercero ese premio se queda SIN
+      recordatorio para siempre (tope de la fase 0.bis). Antes del botón, o se apaga el recordatorio en esas marcas
+      hasta que Meta apruebe, o se hace PL-2-a (`docs/PENDIENTES.md` §3.3). Los textos completos están en
+      `docs/PLANTILLAS.md` § Las tres del 2026-10-11.
    3. **Planeta Wings:** con solo abrir Plantillas, lo que el AIOS dejó en su WABA queda registrado (un aviso verde lo
       lista). Las aprobadas que nadie activó siguen pidiendo «Activar»: activarlas es decisión del dueño.
    Queda para otras sesiones: B7 (el AIOS deja de crear plantillas; su copia NO tiene las tres nuevas) y B1 (menos
@@ -383,6 +389,9 @@ automatizaciones dentro del restaurante y **Google** para reseñas.
   los que se registran desde hoy; los anteriores aceptaron WhatsApp y nada más, y sus check-ins **sí** se mandan
   con el celular hasheado. Separarlos cuesta guardar la versión del consentimiento por cliente y filtrar en
   `scheduleMetaConversion()`. Es una decisión, no un bug.
+- **Borrar el worktree viejo `.kilo/worktrees/ivy-city`** (del 25-09, de la herramienta Kilo): limpio, su commit `311bbe9`
+  ya está en la rama y no tiene `node_modules` enlazado, así que borrarlo no toca el de la raíz. Viola la regla de
+  worktrees y **duplica el lint** (los 14 errores son 7 de `src/` más su copia). `git worktree remove .kilo/worktrees/ivy-city`.
 - **Borrar las ramas locales ya mergeadas** (`feat/salud-aios`, `feat/domicilios`, `feat/conexiones`, `feat/visual`,
   `preview/capa-visual`) y el **stash** olvidado de `fix/opt-out-visible` (`git stash show -p stash@{0}` para mirarlo).
 - **Borrar el Supabase de Sushi Fun.** Esperar a un fin de semana de operación normal. El respaldo son los

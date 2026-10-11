@@ -33,6 +33,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Ciclo fase 1A: base del motor (migración, triggers, ritmo adaptativo, motor de piezas), nada se envía — 2026-10-11 | Opus 5.5 | `supabase/migrations/00070_*.sql` · `src/lib/cycle-engine.ts` · `src/lib/communications/registry.ts` · `src/lib/settings-keys.ts` · `src/constants/rankings.ts` (solo un comentario) · `tests/**` nuevos · `SQL-PARA-CORRER/ciclo-fase-1a/` · `docs/DB_SCHEMA.md` · `docs/features/ritmo-adaptativo.md` · `docs/features/campaigns.md` · `docs/PENDIENTES.md` · `ESTADO.md` · `CHANGELOG.md` | **00070** | en vuelo |
 
 ## 3. Siguiente, en orden
 

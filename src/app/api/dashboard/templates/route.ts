@@ -6,6 +6,11 @@ import { listZernioTemplates } from '@/lib/zernio/messaging'
 import { mapZernioTemplateToItem } from '@/lib/zernio/template-listing'
 import { resolveGoldenBulletProvider } from '@/services/club-optin.service'
 import { listarContenidoTwilio } from '@/lib/twilio/content-list'
+import { exigirAlcanceDeMarca } from '@/lib/alcance-de-marca'
+import { clasificarParaLaBiblioteca } from '@/lib/template-library'
+import { getMultipleSettings } from '@/services/settings.service'
+import { TEMPLATE_CATALOG, nombreDePlantillaLibre, validarPlantillaLibre } from '@/constants/template-catalog'
+import { crearPlantillaLibreZernio, TemplateError } from '@/services/template.service'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,7 +27,26 @@ const TWILIO_CONTENT_API = 'https://content.twilio.com/v1/Content'
  * de la marca (la línea de coexistencia en Zernio con lo demás en Twilio; ver
  * `resolveGoldenBulletProvider`). Solo se acepta `zernio` si el tenant tiene la
  * cuenta conectada; si no, cae al de la marca.
+ *
+ * Desde el 2026-10-11 cada plantilla trae además `en_uso_por` (el mensaje automático que
+ * la usa) y `biblioteca` (`true` = es de las de campaña): la pestaña Biblioteca y
+ * Campañas → Mensaje libre separan con eso (`src/lib/template-library.ts`).
  */
+
+/** Punteros de la marca para saber qué plantilla usa cada mensaje. Si no se leen, nada «en uso». */
+async function punterosDe(tenantId: string | null): Promise<Record<string, string>> {
+  if (!tenantId) return {}
+  try {
+    return await getMultipleSettings(
+      [...TEMPLATE_CATALOG.map((t) => t.settingsKey), 'reactivation_with_reward_template_sid', 'reactivation_template_sid'],
+      tenantId
+    )
+  } catch (error) {
+    console.error('[Templates] No se pudieron leer los punteros para la biblioteca:', error)
+    return {}
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -51,8 +75,15 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ templates: [], provider, error: 'Zernio no configurado' })
       }
       try {
-        const listado = await listZernioTemplates(tenant.zernio_account_id)
-        const templates = (listado.templates ?? []).map(mapZernioTemplateToItem)
+        const [listado, pointers] = await Promise.all([
+          listZernioTemplates(tenant.zernio_account_id),
+          punterosDe(tenant.id),
+        ])
+        const templates = clasificarParaLaBiblioteca(
+          (listado.templates ?? []).map(mapZernioTemplateToItem),
+          pointers,
+          'zernio'
+        )
         return NextResponse.json({ templates, provider })
       } catch (error) {
         console.error('[Templates] Zernio API error:', error instanceof Error ? error.message : error)
@@ -95,7 +126,7 @@ export async function GET(request: NextRequest) {
 
     const contents: TwilioContentItem[] = listado.contents
 
-    const templates = contents.map((t) => {
+    const items = contents.map((t) => {
       const ar = t.approval_requests
       const approvalStatus = (ar?.status || 'draft').toLowerCase()
       const category = ar?.category || 'MARKETING'
@@ -133,6 +164,7 @@ export async function GET(request: NextRequest) {
         updatedAt: t.date_updated,
       }
     })
+    const templates = clasificarParaLaBiblioteca(items, await punterosDe(tenantId), 'twilio')
 
     return NextResponse.json({ templates, provider })
   } catch (error) {
@@ -141,6 +173,20 @@ export async function GET(request: NextRequest) {
   }
 }
 
+/**
+ * POST — una plantilla LIBRE para la biblioteca de campañas (B4 y B5, 2026-10-11).
+ *
+ * Body: `{ name, body, category, variables }` (`variables` = el ejemplo de cada `{{n}}`).
+ *
+ *   · Alcance de MARCA (N5-bis): la plantilla queda en la cuenta de WhatsApp de la marca.
+ *     Antes bastaba una sesión y un administrador de UNA sede creaba plantillas en ella.
+ *   · Una sola regla para los dos proveedores (`validarPlantillaLibre()`, la misma que ve el
+ *     formulario): antes esta ruta no exigía la línea de SALIR ni variables sin huecos.
+ *   · Marca Zernio → `crearPlantillaLibreZernio()` (hasta hoy una marca Zernio no podía
+ *     crear una plantilla libre). Marca Twilio → la Content API, como siempre.
+ *
+ * Ninguna escribe un puntero: una plantilla libre no es de ningún mensaje automático.
+ */
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -149,7 +195,54 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
     }
 
-    const creds = await getTenantTwilioCredentials()
+    const guardia = await exigirAlcanceDeMarca(
+      request,
+      'Las plantillas son de la marca: solo un super usuario puede crearlas.'
+    )
+    if (!guardia.ok) return guardia.res
+
+    const payload = (await request.json().catch(() => ({}))) as {
+      name?: unknown
+      category?: unknown
+      body?: unknown
+      variables?: unknown
+    }
+    const name = typeof payload.name === 'string' ? payload.name : ''
+    const messageBody = typeof payload.body === 'string' ? payload.body : ''
+    const category = typeof payload.category === 'string' ? payload.category : 'UTILITY'
+    const samples: Record<string, string | undefined> = {}
+    if (payload.variables && typeof payload.variables === 'object') {
+      for (const [k, v] of Object.entries(payload.variables as Record<string, unknown>)) {
+        if (typeof v === 'string') samples[k] = v
+      }
+    }
+
+    const issues = validarPlantillaLibre({ name, body: messageBody, category, samples })
+    if (issues.length > 0) {
+      return NextResponse.json({ error: issues.join(' ') }, { status: 400 })
+    }
+
+    const tenant = await getTenantById(guardia.tenantId)
+    if (!tenant) return NextResponse.json({ error: 'Negocio no encontrado' }, { status: 404 })
+
+    if (tenant.messaging_provider === 'zernio') {
+      try {
+        const created = await crearPlantillaLibreZernio({ tenant, name, body: messageBody, category, samples })
+        return NextResponse.json({
+          success: true,
+          approval_submitted: true,
+          approval_error: null,
+          template: { sid: created.name, name: created.name, status: created.status.toLowerCase() },
+        })
+      } catch (err) {
+        if (err instanceof TemplateError) {
+          return NextResponse.json({ error: err.message }, { status: err.status })
+        }
+        throw err
+      }
+    }
+
+    const creds = await getTenantTwilioCredentials(tenant.id)
     if (!creds) {
       return NextResponse.json({ error: 'Twilio no configurado' }, { status: 400 })
     }
@@ -158,52 +251,22 @@ export async function POST(request: NextRequest) {
       'Content-Type': 'application/json',
     }
 
-    const body = await request.json()
-    const { name, language, category, body: messageBody, variables } = body
+    // El nombre que ve Meta: minúsculas, números y guion bajo (la misma regla que Zernio).
+    const whatsappName = nombreDePlantillaLibre(name)
 
-    if (!name || !messageBody) {
-      return NextResponse.json({ error: 'Nombre y cuerpo son requeridos' }, { status: 400 })
-    }
-
-    // Reglas que Meta aplica SIEMPRE — validarlas aquí evita quemar un ciclo de
-    // aprobación de 24-72h (y golpes a la reputación del número por rechazos):
-    const trimmedBody = String(messageBody).trim()
-    if (/^\{\{\d+\}\}/.test(trimmedBody) || /\{\{\d+\}\}\s*$/.test(trimmedBody)) {
-      return NextResponse.json({
-        error: 'Meta rechaza plantillas que empiezan o terminan con una variable. Agrega texto antes de la primera variable y después de la última (ej: "¡Hola {{1}}!" en vez de "{{1}} hola").',
-      }, { status: 400 })
-    }
-    if (trimmedBody.length > 1024) {
-      return NextResponse.json({
-        error: `El cuerpo supera el límite de 1024 caracteres de WhatsApp (actual: ${trimmedBody.length}).`,
-      }, { status: 400 })
-    }
-
-    // WhatsApp template name: lowercase letters, numbers, underscores only (Meta policy)
-    const whatsappName = name
-      .toLowerCase()
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remove accents
-      .replace(/[^a-z0-9_]/g, '_')                      // replace invalid chars with _
-      .replace(/_+/g, '_')                               // collapse multiple underscores
-      .replace(/^_|_$/g, '')                             // trim leading/trailing underscores
-      .slice(0, 512)
-
-    // Build variables map: {{1}}, {{2}}, etc.
-    const varMatches = messageBody.match(/\{\{\d+\}\}/g) || []
-    const uniqueVars = [...new Set(varMatches)] as string[]
+    // El ejemplo de cada {{n}}: Twilio lo pide en `variables`, y Meta lo revisa.
     const variablesMap: Record<string, string> = {}
-    uniqueVars.forEach((v) => {
-      const num = v.replace(/[{}]/g, '')
-      variablesMap[num] = variables?.[num] || `variable_${num}`
-    })
+    for (const m of messageBody.matchAll(/\{\{(\d+)\}\}/g)) {
+      variablesMap[m[1]] = (samples[m[1]] ?? '').trim()
+    }
 
     const twilioBody = {
       friendly_name: name,
-      language: language || 'es',
+      language: 'es',
       variables: Object.keys(variablesMap).length > 0 ? variablesMap : undefined,
       types: {
         'twilio/text': {
-          body: messageBody,
+          body: messageBody.trim(),
         },
       },
     }
@@ -215,7 +278,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (!res.ok) {
-      const errData = await res.json()
+      const errData = await res.json().catch(() => ({}))
       console.error('[Templates] Create error:', errData)
       return NextResponse.json({
         error: errData.message || 'Error creando plantilla en Twilio',
@@ -241,7 +304,7 @@ export async function POST(request: NextRequest) {
           },
           body: JSON.stringify({
             name: whatsappName,
-            category: category || 'UTILITY',
+            category,
           }),
         }
       )

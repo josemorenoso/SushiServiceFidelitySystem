@@ -56,6 +56,13 @@ interface TwilioTemplate {
   category: string
   /** true = la URL de media lleva una variable que la campaña no rellena (eventos, `{{6}}`) */
   media_needs_variable?: boolean
+  /**
+   * `true` = de la Biblioteca para campañas (Plantillas, 2026-10-11); `false` = la usa un
+   * mensaje automático. Lo calcula `GET /api/dashboard/templates` (`src/lib/template-library.ts`).
+   */
+  biblioteca?: boolean
+  /** El mensaje automático que la usa, si alguno. */
+  en_uso_por?: string | null
 }
 
 interface PresetCampaign {
@@ -591,27 +598,41 @@ export function ManualCampaigns() {
               <p className="text-xs text-muted-foreground">Cargando plantillas...</p>
             )}
 
-            {templates.length > 0 && (
-              <div className="space-y-2">
-                {templates.map((t) => (
-                  <div
-                    key={t.sid}
-                    onClick={() => setSelectedTemplate(t)}
-                    className={`cursor-pointer rounded-lg border p-3 text-xs transition-all hover:shadow-sm ${
-                      selectedTemplate?.sid === t.sid
-                        ? 'border-primary ring-2 ring-primary/20 bg-primary/5'
-                        : 'border-border'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="font-medium">{t.friendly_name}</span>
-                      <Badge variant="outline" className="text-[10px]">{t.category}</Badge>
+            {/* Primero la Biblioteca para campañas (Plantillas, 2026-10-11): las que el dueño
+                creó para esto. Después, aparte, las de los mensajes automáticos, que también
+                se pueden mandar pero no nacieron para una campaña. */}
+            {[
+              { titulo: 'De tu biblioteca', lista: templates.filter((t) => t.biblioteca !== false) },
+              { titulo: 'De tus mensajes automáticos', lista: templates.filter((t) => t.biblioteca === false) },
+            ]
+              .filter((grupo) => grupo.lista.length > 0)
+              .map((grupo, i, grupos) => (
+                <div key={grupo.titulo} className="space-y-2">
+                  {grupos.length > 1 && (
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                      {grupo.titulo}
+                    </p>
+                  )}
+                  {grupo.lista.map((t) => (
+                    <div
+                      key={t.sid}
+                      onClick={() => setSelectedTemplate(t)}
+                      className={`cursor-pointer rounded-lg border p-3 text-xs transition-all hover:shadow-sm ${
+                        selectedTemplate?.sid === t.sid
+                          ? 'border-primary ring-2 ring-primary/20 bg-primary/5'
+                          : 'border-border'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-medium">{t.friendly_name}</span>
+                        <Badge variant="outline" className="text-[10px]">{t.en_uso_por ?? t.category}</Badge>
+                      </div>
+                      <p className="text-muted-foreground line-clamp-2 italic">&quot;{t.body}&quot;</p>
                     </div>
-                    <p className="text-muted-foreground line-clamp-2 italic">&quot;{t.body}&quot;</p>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                  {i === 0 && grupos.length > 1 && <div className="pt-1" />}
+                </div>
+              ))}
           </div>
 
           <div className="flex gap-2">

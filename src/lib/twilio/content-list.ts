@@ -8,6 +8,8 @@
  * Campañas → Manuales, de Ajustes › Plantillas y del reporte «Del set estándar te faltan»
  * (que además las daba por faltantes y ofrecía crearlas de nuevo). Una marca Twilio con
  * historia —cada rechazo de Meta obliga a crear otra con nombre nuevo— llega a 100 sola.
+ * Desde el 2026-10-11 lo usan Plantillas (las dos pestañas: `getTwilioCatalogState()` y la
+ * Biblioteca), Campañas y el reporte del set estándar.
  *
  * Todo o nada: si una página falla, se devuelve el fallo y no la mitad leída. Una lista
  * cortada que parece entera es justo el defecto que esto arregla.

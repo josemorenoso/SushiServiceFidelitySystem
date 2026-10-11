@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getTenantTwilioCredentials } from '@/lib/twilio/tenant-credentials'
+import { exigirAlcanceDeMarca } from '@/lib/alcance-de-marca'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,6 +15,14 @@ export async function POST(
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+
+    // N5-bis (2026-10-11): las plantillas son de la MARCA, no de una sede. Antes bastaba una
+    // sesión y un administrador de UNA sede sometía plantillas en la cuenta de la marca.
+    const guardia = await exigirAlcanceDeMarca(
+      request,
+      'Las plantillas son de la marca: solo un super usuario puede mandarlas a Meta.'
+    )
+    if (!guardia.ok) return guardia.res
 
     // Multitenant: la plantilla vive en la subcuenta del tenant, no en la master.
     const creds = await getTenantTwilioCredentials()

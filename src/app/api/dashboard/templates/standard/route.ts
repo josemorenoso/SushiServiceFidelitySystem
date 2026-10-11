@@ -23,6 +23,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getTenantIdFromJwt, getTenantById } from '@/lib/tenant'
+import { exigirAlcanceDeMarca } from '@/lib/alcance-de-marca'
 import {
   TwilioCatalogError,
   createStandardTemplate,
@@ -83,6 +84,14 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const resolved = await resolveTenant()
   if ('response' in resolved) return resolved.response
+
+  // N5-bis (2026-10-11): crear una plantilla del set estándar escribe en la cuenta Twilio
+  // de la MARCA (y su puntero): exige alcance de marca, como el camino Zernio desde P1-a.
+  const guardia = await exigirAlcanceDeMarca(
+    request,
+    'Las plantillas son de la marca: solo un super usuario puede crearlas.'
+  )
+  if (!guardia.ok) return guardia.res
 
   let key: unknown
   try {

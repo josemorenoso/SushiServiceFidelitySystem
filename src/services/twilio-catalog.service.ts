@@ -52,7 +52,12 @@ import {
   isTemplateKey,
   resolveTemplateEmoji,
 } from '@/constants/template-catalog'
-import type { TemplateKey } from '@/types/template.types'
+import type {
+  TemplateCatalogEntry,
+  TemplateCatalogResponse,
+  TemplateKey,
+  TemplateOption,
+} from '@/types/template.types'
 import type { Tenant } from '@/types/tenant.types'
 import { listarContenidoTwilio } from '@/lib/twilio/content-list'
 
@@ -255,6 +260,139 @@ export async function getStandardCatalogReport(tenant: Tenant): Promise<Standard
     templates,
     missingCount: templates.filter((t) => t.state === 'missing' && !t.needsMedia).length,
     warning: approvals.warning,
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// La pantalla única: el catálogo de una marca Twilio con la forma del de Zernio
+// ─────────────────────────────────────────────────────────────
+
+interface TwilioContentItem {
+  sid: string
+  friendly_name: string
+  language: string
+  types?: Record<string, { body?: string; media?: string[] }>
+  approval_requests?: { status?: string; category?: string; rejection_reason?: string }
+}
+
+/** El cuerpo de una plantilla de la Content API, sea del tipo que sea. */
+export function cuerpoDeTwilio(t: TwilioContentItem): string | null {
+  const types = t.types ?? {}
+  const body =
+    types['twilio/text']?.body ||
+    types['twilio/media']?.body ||
+    types['twilio/quick-reply']?.body ||
+    types['twilio/card']?.body ||
+    types['whatsapp/card']?.body ||
+    types['twilio/list-picker']?.body
+  return typeof body === 'string' && body.trim() ? body : null
+}
+
+/** Estado de Meta según Twilio, en minúsculas. Sin solicitud = `draft` (nunca se mandó). */
+function estadoDeTwilio(t: TwilioContentItem): string {
+  return (t.approval_requests?.status || 'draft').toLowerCase()
+}
+
+/**
+ * El catálogo de una marca **Twilio**, con la MISMA forma que `getTemplateCatalogState()`
+ * le da a una Zernio, para que Plantillas sea UNA pantalla para los dos proveedores
+ * (prompt del 2026-10-11, punto 4).
+ *
+ * Twilio no tiene `template_versions`: lo que manda es el puntero de `admin_settings` y lo
+ * que Twilio dice de esa plantilla (`enWhatsApp`: estado real, categoría con que Meta la
+ * dejó, texto, motivo del rechazo). Además viajan:
+ *   · `elegibles` — las aprobadas de la cuenta, para «Elegir otra». Es lo que hacían los
+ *     desplegables de Ajustes › Plantillas, que ya no existen: sin esto una marca Twilio se
+ *     quedaba sin forma de asignar una plantilla hecha a mano (las de evento, por ejemplo).
+ *   · `sistemaAntiguo` — la reactivación «con premio», que no está en el catálogo.
+ *
+ * Solo LEE. Crear sigue siendo `createStandardTemplate()` (aditivo, `fillEmptyPointer()`);
+ * elegir otra es el `PUT /api/dashboard/settings` de siempre, que en Twilio lo acepta.
+ * Si la lista de Twilio no se puede leer, no se cae: `aviso` lo dice y cada mensaje queda
+ * con lo que dice `admin_settings`.
+ */
+export async function getTwilioCatalogState(tenant: Tenant): Promise<TemplateCatalogResponse> {
+  assertTwilioTenant(tenant)
+
+  const creds = await getTenantTwilioCredentials(tenant.id)
+  if (!creds) {
+    throw new TwilioCatalogError(
+      'Este negocio no tiene su cuenta de WhatsApp (Twilio) configurada todavía. Avísale al equipo de Cada1.',
+      400
+    )
+  }
+
+  let aviso: string | null = null
+  let contenidos: TwilioContentItem[] = []
+  const [pointers, listado] = await Promise.all([
+    fetchPointers(tenant.id),
+    listarContenidoTwilio<TwilioContentItem>(creds.basicAuth).catch((error: unknown) => {
+      console.error('[twilio-catalog] listado', error)
+      return null
+    }),
+  ])
+  if (!listado || !listado.ok) {
+    aviso =
+      'No se pudo leer el estado de tus plantillas en WhatsApp en este momento. Cada mensaje muestra lo que tiene asignado; prueba «Actualizar» en un rato.'
+  } else {
+    contenidos = listado.contents
+  }
+  const porSid = new Map(contenidos.map((t) => [t.sid, t]))
+
+  const brandName = resolveBranding(tenant.config).name
+  const emoji = resolveTemplateEmoji(tenant.business_type, tenant.config?.template_emoji)
+
+  const entries: TemplateCatalogEntry[] = TEMPLATE_CATALOG.filter(
+    // Una reemplazada (el cumpleaños del día mismo) solo si la marca ya la tiene.
+    (definition) => !definition.replacedBy || pointers[definition.settingsKey]
+  ).map((definition) => {
+    const pointer = pointers[definition.settingsKey] ?? null
+    const t = pointer ? porSid.get(pointer) : undefined
+    return {
+      definition,
+      current: null,
+      pending: null,
+      lastRejected: null,
+      suggestedBody: buildTemplateBody(definition.key, brandName, emoji),
+      suggestedName: metaName(definition.baseName, brandName),
+      adoptedRef: pointer,
+      approvedInWaba: null,
+      blockedReason: definition.header
+        ? 'Este mensaje lleva imagen o video y todavía no se crea desde acá: créalo en Twilio y elígelo con «Elegir otra» cuando Meta lo apruebe.'
+        : null,
+      enWhatsApp: t
+        ? {
+            ref: t.sid,
+            status: estadoDeTwilio(t),
+            category: t.approval_requests?.category || definition.category,
+            body: cuerpoDeTwilio(t),
+            rejectionReason: t.approval_requests?.rejection_reason?.trim() || null,
+          }
+        : null,
+    }
+  })
+
+  const elegibles: TemplateOption[] = contenidos
+    .filter((t) => estadoDeTwilio(t) === 'approved')
+    .map((t) => ({
+      ref: t.sid,
+      name: t.friendly_name,
+      body: cuerpoDeTwilio(t) ?? '(sin texto)',
+      category: t.approval_requests?.category || '',
+      hasMedia: Boolean(t.types?.['twilio/media'] || t.types?.['whatsapp/card']),
+    }))
+
+  return {
+    provider: 'twilio',
+    brandName,
+    entries,
+    wabaTemplates: null,
+    aviso,
+    elegibles,
+    sistemaAntiguo: {
+      reactivationWithRewardSid: pointers.reactivation_with_reward_template_sid ?? null,
+      reactivationRewardId: pointers.reactivation_reward_id ?? null,
+    },
   }
 }
 

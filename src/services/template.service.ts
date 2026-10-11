@@ -38,8 +38,12 @@ import {
   buildTemplateBody,
   buildTemplateExample,
   detectTemplateStyle,
+  esNombreDelCatalogo,
+  nombreDePlantillaLibre,
   resolveTemplateEmoji,
+  validarPlantillaLibre,
   validateTemplateBody,
+  variablesDe,
   validateTemplateName,
 } from '@/constants/template-catalog'
 import { createZernioTemplate, getZernioTemplateStatus } from '@/lib/zernio/templates'
@@ -1537,6 +1541,74 @@ export async function refreshTemplateStatusFromProvider(
     status: detail.template.status,
     reason: detail.template.rejected_reason ?? null,
   })
+}
+
+// ─────────────────────────────────────────────────────────────
+// Plantillas libres: la biblioteca para campañas (B4 y B5, 2026-10-11)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Crea una plantilla LIBRE en la WABA de una marca Zernio y la somete a Meta: la que el
+ * dueño escribe para una campaña puntual. Hasta el 2026-10-11 una marca Zernio no tenía
+ * cómo (decisión B5); Twilio sí, por la misma ruta (`POST /api/dashboard/templates`).
+ *
+ * Usa el endpoint de creación VERIFICADO del contrato de Zernio §4 (`createZernioTemplate`),
+ * el mismo del catálogo: ninguna ruta nueva. No es de ningún mensaje automático, así que no
+ * deja fila en `template_versions` ni toca un puntero: vive en la WABA, y desde ahí la lista
+ * la pestaña Biblioteca y la usa Campañas → Mensaje libre. Las reglas son las de
+ * `validarPlantillaLibre()`, las mismas que el formulario.
+ */
+export async function crearPlantillaLibreZernio(input: {
+  tenant: Tenant
+  name: string
+  body: string
+  category: string
+  samples: Record<string, string | undefined>
+}): Promise<{ name: string; status: ZernioTemplateStatus }> {
+  const { tenant } = input
+  assertZernioTenant(tenant)
+
+  const issues = validarPlantillaLibre(input)
+  if (issues.length > 0) throw new TemplateError(issues.join(' '), 400)
+
+  const name = nombreDePlantillaLibre(input.name)
+  if (esNombreDelCatalogo(name)) {
+    throw new TemplateError(
+      `"${name}" es el nombre de uno de tus mensajes automáticos. Ponle a esta un nombre propio (por ejemplo, el de la campaña).`,
+      409
+    )
+  }
+  // EN VIVO, no del caché: un listado viejo diría «libre» a un nombre recién usado.
+  const waba = await fetchWabaTemplates(tenant.zernio_account_id)
+  if (waba?.some((t) => t.name === name)) {
+    throw new TemplateError(`Ya existe en tu cuenta de WhatsApp una plantilla llamada "${name}". Ponle otro nombre.`, 409)
+  }
+
+  const body = input.body.trim()
+  const bodyExample = Array.from({ length: variablesDe(body) }, (_, i) => (input.samples[String(i + 1)] ?? '').trim())
+
+  try {
+    const created = await createZernioTemplate({
+      accountId: tenant.zernio_account_id,
+      name,
+      category: input.category as 'MARKETING' | 'UTILITY',
+      language: TEMPLATE_LANGUAGE,
+      bodyText: body,
+      bodyExample,
+    })
+    invalidarCacheDeLaWaba(tenant.id)
+    return { name, status: created.template?.status ?? 'PENDING' }
+  } catch (err) {
+    invalidarCacheDeLaWaba(tenant.id)
+    console.error(`[Templates] Zernio rechazó la plantilla libre ${name}:`, err instanceof Error ? err.message : err)
+    if (err instanceof ZernioApiError && err.status === 400) {
+      throw new TemplateError(`WhatsApp no aceptó la plantilla "${name}": ${zernioErrorDetail(err.body)}.`, 400)
+    }
+    throw new TemplateError(
+      'WhatsApp no respondió a tiempo. Antes de volver a intentarlo, revisa la lista en un rato: puede que sí se haya creado.',
+      502
+    )
+  }
 }
 
 export { CATALOG_SIZE }

@@ -1,26 +1,13 @@
 'use client'
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { Settings, DollarSign, Save, Loader2, CheckCircle, Crown, CalendarHeart, Mail, RefreshCw, Gift, UserPlus, X, Plus, Zap, MapPin, Sparkles, Package, TrendingUp, Flame, ScanLine, Star, Megaphone } from 'lucide-react'
+import Link from 'next/link'
+import { Settings, DollarSign, Save, Loader2, CheckCircle, Crown, Mail, RefreshCw, X, Plus, Zap, MapPin, Flame, ScanLine, Star, Megaphone, ArrowRight } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { PointsCalibrator } from '@/components/dashboard/PointsCalibrator'
 import type { PointsEngineConfig } from '@/lib/points-engine'
 import { normalizeMetaPixelId } from '@/lib/meta-pixel'
-
-interface TwilioTemplate {
-  sid: string
-  friendly_name: string
-  approval_status: string
-  body: string
-}
-
-interface RewardOption {
-  id: string
-  visit_milestone: number | null
-  title: string
-  is_active: boolean
-}
 
 /** Premio del catálogo de campaña (Dashboard > Premios de campaña, migración 00031). */
 interface CampaignRewardOption {
@@ -50,43 +37,6 @@ function SaveButton({ saving, saved, onClick, disabled }: { saving: boolean; sav
   )
 }
 
-interface TemplateSelectorProps {
-  label: string
-  icon: React.ReactNode
-  hint: string
-  value: string
-  onChange: (sid: string) => void
-  templates: TwilioTemplate[]
-}
-
-function TemplateSelector({ label, icon, hint, value, onChange, templates }: TemplateSelectorProps) {
-  const selected = templates.find((t) => t.sid === value)
-  return (
-    <div className="space-y-1.5">
-      <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest" style={{ color: '#6b7280' }}>
-        {icon}
-        {label}
-      </label>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm transition-colors outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/50"
-      >
-        <option value="">— Sin plantilla (NO se enviará mensaje) —</option>
-        {templates.map((t) => (
-          <option key={t.sid} value={t.sid}>{t.friendly_name}</option>
-        ))}
-      </select>
-      <p className="text-[10px]" style={{ color: '#b0b0b0' }}>{hint}</p>
-      {selected && (
-        <p className="text-xs italic" style={{ color: '#9ca3af' }}>
-          {selected.body?.slice(0, 120)}{(selected.body?.length ?? 0) > 120 ? '...' : ''}
-        </p>
-      )}
-    </div>
-  )
-}
-
 const DEFAULT_BLACK_BENEFITS = [
   '15% descuento permanente',
   'Eventos exclusivos',
@@ -109,26 +59,9 @@ export default function SettingsPage() {
   const [benefitsSaving, setBenefitsSaving] = useState(false)
   const [benefitsSaved, setBenefitsSaved] = useState(false)
 
-  // Templates (ALL message types)
-  const [templates, setTemplates] = useState<TwilioTemplate[]>([])
-  const [templatesLoading, setTemplatesLoading] = useState(true)
-  const [rewards, setRewards] = useState<RewardOption[]>([])
-  const [welcomeTemplateSid, setWelcomeTemplateSid] = useState('')
-  const [birthdayTemplateSid, setBirthdayTemplateSid] = useState('')
-  const [birthdayUpcomingTemplateSid, setBirthdayUpcomingTemplateSid] = useState('')
-  const [reactivationNoRewardSid, setReactivationNoRewardSid] = useState('')
-  const [reactivationWithRewardSid, setReactivationWithRewardSid] = useState('')
-  const [reactivationRewardId, setReactivationRewardId] = useState('')
-  const [safeRewardTemplateSid, setSafeRewardTemplateSid] = useState('')
-  const [mysteryBoxResultTemplateSid, setMysteryBoxResultTemplateSid] = useState('')
-  const [goldenBoxResultTemplateSid, setGoldenBoxResultTemplateSid] = useState('')
-  const [pointsEarnedFarTemplateSid, setPointsEarnedFarTemplateSid] = useState('')
-  const [pointsEarnedNearTemplateSid, setPointsEarnedNearTemplateSid] = useState('')
-  const [reactivationAggressiveTemplateSid, setReactivationAggressiveTemplateSid] = useState('')
-  const [eventTemplateImageSid, setEventTemplateImageSid] = useState('')
-  const [eventTemplateVideoSid, setEventTemplateVideoSid] = useState('')
-  const [templatesSaving, setTemplatesSaving] = useState(false)
-  const [templatesSaved, setTemplatesSaved] = useState(false)
+  // Las plantillas de WhatsApp ya no se eligen acá (2026-10-11): se crean, se mandan a
+  // Meta y se eligen en Plantillas, una sola pantalla para Twilio y Zernio. Esta página
+  // solo lee el puntero del recordatorio, para no dejar encenderlo sin plantilla.
 
   // Points system config
   const [pointsMin, setPointsMin] = useState('60')
@@ -235,42 +168,17 @@ export default function SettingsPage() {
   useEffect(() => {
     Promise.all([
       fetch('/api/dashboard/settings').then((r) => r.json()),
-      fetch('/api/dashboard/templates').then((r) => r.json()),
-      fetch('/api/dashboard/rewards').then((r) => r.json()),
       fetch('/api/dashboard/location').then((r) => r.ok ? r.json() : null).catch(() => null),
       fetch('/api/dashboard/campaign-rewards?active=true').then((r) => r.ok ? r.json() : []).catch(() => []),
       fetch('/api/dashboard/reward-tiers').then((r) => r.ok ? r.json() : []).catch(() => []),
       fetch('/api/dashboard/tenant-config').then((r) => r.ok ? r.json() : null).catch(() => null),
     ])
-      .then(([settingsData, templatesData, rewardsData, locationData, campaignRewardsData, tiersData, tenantConfigData]) => {
+      .then(([settingsData, locationData, campaignRewardsData, tiersData, tenantConfigData]) => {
         setSettings(settingsData)
         if (settingsData.avg_ticket) setAvgTicket(settingsData.avg_ticket)
         if (settingsData.black_benefits) {
           try { setBenefits(JSON.parse(settingsData.black_benefits)) } catch { /* keep default */ }
         }
-        if (settingsData.welcome_template_sid) setWelcomeTemplateSid(settingsData.welcome_template_sid)
-        if (settingsData.birthday_template_sid) setBirthdayTemplateSid(settingsData.birthday_template_sid)
-        if (settingsData.birthday_upcoming_template_sid) setBirthdayUpcomingTemplateSid(settingsData.birthday_upcoming_template_sid)
-        // reactivación: legacy reactivation_template_sid migra a reactivation_no_reward por defecto
-        const legacyReact = settingsData.reactivation_template_sid ?? ''
-        setReactivationNoRewardSid(settingsData.reactivation_no_reward_template_sid ?? legacyReact)
-        setReactivationWithRewardSid(settingsData.reactivation_with_reward_template_sid ?? '')
-        setReactivationRewardId(settingsData.reactivation_reward_id ?? '')
-        setSafeRewardTemplateSid(settingsData.reward_safe_template_sid ?? '')
-        setMysteryBoxResultTemplateSid(settingsData.mystery_box_result_template_sid ?? '')
-        setGoldenBoxResultTemplateSid(settingsData.golden_box_result_template_sid ?? '')
-        setPointsEarnedFarTemplateSid(settingsData.points_earned_far_template_sid ?? '')
-        setPointsEarnedNearTemplateSid(settingsData.points_earned_near_template_sid ?? '')
-        setReactivationAggressiveTemplateSid(settingsData.reactivation_aggressive_template_sid ?? '')
-        setEventTemplateImageSid(settingsData.event_template_image_sid ?? '')
-        setEventTemplateVideoSid(settingsData.event_template_video_sid ?? '')
-
-        const allTemplates: TwilioTemplate[] = templatesData.templates ?? []
-        setTemplates(allTemplates)
-
-        const allRewards: RewardOption[] = Array.isArray(rewardsData) ? rewardsData : []
-        setRewards(allRewards.filter((r) => r.is_active))
-
         // Points system config
         if (settingsData.points_per_visit_min) setPointsMin(settingsData.points_per_visit_min)
         if (settingsData.points_per_visit_max) setPointsMax(settingsData.points_per_visit_max)
@@ -324,7 +232,6 @@ export default function SettingsPage() {
       .catch(() => {})
       .finally(() => {
         setLoading(false)
-        setTemplatesLoading(false)
       })
   }, [])
 
@@ -352,34 +259,6 @@ export default function SettingsPage() {
       setTimeout(() => setBenefitsSaved(false), 3000)
     } catch { /* silent */ } finally {
       setBenefitsSaving(false)
-    }
-  }
-
-  const handleSaveTemplates = async () => {
-    setTemplatesSaving(true)
-    setTemplatesSaved(false)
-    try {
-      await Promise.all([
-        saveSetting('welcome_template_sid', welcomeTemplateSid),
-        saveSetting('birthday_template_sid', birthdayTemplateSid),
-        saveSetting('birthday_upcoming_template_sid', birthdayUpcomingTemplateSid),
-        saveSetting('reactivation_no_reward_template_sid', reactivationNoRewardSid),
-        saveSetting('reactivation_with_reward_template_sid', reactivationWithRewardSid),
-        saveSetting('reactivation_reward_id', reactivationRewardId),
-        saveSetting('reward_safe_template_sid', safeRewardTemplateSid),
-        saveSetting('mystery_box_result_template_sid', mysteryBoxResultTemplateSid),
-        saveSetting('golden_box_result_template_sid', goldenBoxResultTemplateSid),
-        saveSetting('points_earned_far_template_sid', pointsEarnedFarTemplateSid),
-        saveSetting('points_earned_near_template_sid', pointsEarnedNearTemplateSid),
-        saveSetting('reactivation_aggressive_template_sid', reactivationAggressiveTemplateSid),
-        saveSetting('reward_reminder_template_sid', reminderTemplateSid),
-        saveSetting('event_template_image_sid', eventTemplateImageSid),
-        saveSetting('event_template_video_sid', eventTemplateVideoSid),
-      ])
-      setTemplatesSaved(true)
-      setTimeout(() => setTemplatesSaved(false), 3000)
-    } catch { /* silent */ } finally {
-      setTemplatesSaving(false)
     }
   }
 
@@ -438,7 +317,7 @@ export default function SettingsPage() {
         return
       }
       if (!reminderTemplateSid) {
-        setGrantError('Elige la plantilla del recordatorio abajo, en Plantillas de WhatsApp.')
+        setGrantError('Primero activa el mensaje «Recordatorio de premio» en Plantillas: sin él, el recordatorio no puede salir.')
         return
       }
     }
@@ -660,7 +539,6 @@ export default function SettingsPage() {
     ? new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(Number(avgTicket))
     : ''
 
-  const approvedTemplates = templates.filter((t) => t.approval_status === 'approved')
 
   return (
     <div className="space-y-8">
@@ -1268,7 +1146,11 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* ─── PLANTILLAS WHATSAPP (TODAS) ─── */}
+      {/* ─── PLANTILLAS WHATSAPP ─── */}
+      {/* Hasta el 2026-10-11 acá había 15 desplegables y un «Guardar» para asignar plantillas
+          que se creaban en otra pantalla. Ahora crear, mandar a Meta y elegir es UNA sola
+          pantalla, Plantillas, para Twilio y Zernio. Queda esta tarjeta porque varios avisos
+          del sistema todavía dicen «configúrala en Ajustes». */}
       <div className="dashboard-card p-6 max-w-2xl">
         <div className="flex items-center gap-3 mb-2">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ background: 'rgba(99, 102, 241, 0.15)' }}>
@@ -1276,214 +1158,22 @@ export default function SettingsPage() {
           </div>
           <div>
             <h2 className="text-base font-bold" style={{ color: '#1a1c1d' }}>Plantillas WhatsApp</h2>
-            <p className="text-xs" style={{ color: '#9ca3af' }}>Asigna una plantilla aprobada a cada tipo de mensaje.</p>
+            <p className="text-xs" style={{ color: '#9ca3af' }}>Ahora viven en un solo lugar.</p>
           </div>
         </div>
-
-        <div className="rounded-lg p-3 mb-4" style={{ background: 'rgba(239, 68, 68, 0.06)', border: '1px solid rgba(239, 68, 68, 0.15)' }}>
-          <p className="text-xs font-medium" style={{ color: '#DC2626' }}>
-            ⚠️ TODOS los mensajes de WhatsApp requieren plantilla aprobada por Meta. No existe ventana de 24h porque el cliente nunca envía un mensaje al negocio.
-          </p>
-          <p className="text-xs mt-1" style={{ color: '#7F1D1D' }}>
-            Sin plantilla configurada = el mensaje NO se enviará.
-          </p>
-        </div>
-
-        {templatesLoading ? (
-          <div className="flex items-center gap-2 py-4">
-            <Loader2 className="h-4 w-4 animate-spin" style={{ color: '#9ca3af' }} />
-            <span className="text-sm" style={{ color: '#9ca3af' }}>Cargando plantillas...</span>
-          </div>
-        ) : approvedTemplates.length === 0 ? (
-          <div className="rounded-lg p-4 text-center" style={{ background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.2)' }}>
-            <p className="text-sm font-medium" style={{ color: '#D97706' }}>No hay plantillas aprobadas</p>
-            <p className="text-xs mt-1" style={{ color: '#92400E' }}>
-              Ve a Dashboard &gt; Plantillas, crea las plantillas necesarias y espera aprobación de Meta.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {/* Welcome (registro nuevo) */}
-            <TemplateSelector
-              label="Bienvenida (registro nuevo)"
-              icon={<UserPlus className="h-3.5 w-3.5" style={{ color: '#10B981' }} />}
-              hint="Variables: {{1}}=nombre · {{2}}=pts iniciales · {{3}}=roadmap tiers"
-              value={welcomeTemplateSid}
-              onChange={setWelcomeTemplateSid}
-              templates={approvedTemplates}
-            />
-
-            {/* Birthday — dos días antes (la nueva, 2026-10-04) */}
-            <TemplateSelector
-              label="Cumpleaños — dos días antes"
-              icon={<CalendarHeart className="h-3.5 w-3.5" style={{ color: '#EC4899' }} />}
-              hint="Variables: {{1}}=nombre · {{2}}=camino de niveles. Aprobada, reemplaza sola a la de abajo y el saludo sale hasta dos días antes."
-              value={birthdayUpcomingTemplateSid}
-              onChange={setBirthdayUpcomingTemplateSid}
-              templates={approvedTemplates}
-            />
-
-            {/* Birthday — el día mismo (la anterior) */}
-            <TemplateSelector
-              label="Cumpleaños — el día (versión anterior)"
-              icon={<CalendarHeart className="h-3.5 w-3.5" style={{ color: '#EC4899' }} />}
-              hint="Variables: {{1}}=nombre · {{2}}=camino de niveles. Se usa solo mientras la de arriba no esté aprobada."
-              value={birthdayTemplateSid}
-              onChange={setBirthdayTemplateSid}
-              templates={approvedTemplates}
-            />
-
-            {/* Reactivation Suave (día 21) */}
-            <TemplateSelector
-              label="Reactivación Suave (día 21)"
-              icon={<RefreshCw className="h-3.5 w-3.5" style={{ color: '#F97316' }} />}
-              hint="Variables: {{1}}=nombre · {{2}}=pts actuales · {{3}}=próximo premio. Cron día 21 sin visitar."
-              value={reactivationNoRewardSid}
-              onChange={setReactivationNoRewardSid}
-              templates={approvedTemplates}
-            />
-
-            {/* ── Sistema antiguo (legacy) ── */}
-            <details className="rounded-lg border border-dashed" style={{ borderColor: 'rgba(156,163,175,0.4)' }}>
-              <summary className="cursor-pointer px-3 py-2 text-[10px] font-semibold uppercase tracking-widest select-none" style={{ color: '#9ca3af' }}>
-                Sistema antiguo — No usar si ya migraste a puntos
-              </summary>
-              <div className="px-3 pb-3 space-y-3 pt-2">
-                <TemplateSelector
-                  label="Reactivación CON regalo (legacy)"
-                  icon={<RefreshCw className="h-3.5 w-3.5" style={{ color: '#9ca3af' }} />}
-                  hint="Variables: {{1}}=nombre, {{3}}=premio. Solo instancias que aún no migraron a puntos."
-                  value={reactivationWithRewardSid}
-                  onChange={setReactivationWithRewardSid}
-                  templates={approvedTemplates}
-                />
-                <div className="space-y-1.5">
-                  <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest" style={{ color: '#9ca3af' }}>
-                    <Gift className="h-3.5 w-3.5" />
-                    Recompensa fija (legacy)
-                  </label>
-                  <select
-                    value={reactivationRewardId}
-                    onChange={(e) => setReactivationRewardId(e.target.value)}
-                    className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm transition-colors outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/50"
-                  >
-                    <option value="">— Sin recompensa fija —</option>
-                    {rewards.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.title}{r.visit_milestone !== null ? ` (visita #${r.visit_milestone})` : ' (sin milestone)'}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </details>
-
-            {/* Reactivation AGRESIVA (25d+) */}
-            <TemplateSelector
-              label="Reactivación AGRESIVA (25d+)"
-              icon={<Flame className="h-3.5 w-3.5" style={{ color: '#DC2626' }} />}
-              hint="Variables: {{1}}=nombre · {{2}}=puntos · {{3}}=próximo tier · {{4}}=premio · {{5}}=fecha límite. {{4}} y {{5}} solo si configuraste un premio arriba."
-              value={reactivationAggressiveTemplateSid}
-              onChange={setReactivationAggressiveTemplateSid}
-              templates={approvedTemplates}
-            />
-
-            {/* Recordatorio de vencimiento del premio (migración 00031) */}
-            <TemplateSelector
-              label="Premio por vencer (recordatorio)"
-              icon={<Flame className="h-3.5 w-3.5" style={{ color: '#F59E0B' }} />}
-              hint="Variables: {{1}}=nombre · {{2}}=premio · {{3}}=días restantes. Se envía solo si activaste el recordatorio arriba."
-              value={reminderTemplateSid}
-              onChange={setReminderTemplateSid}
-              templates={approvedTemplates}
-            />
-
-            <div className="border-t border-dashed border-gray-200 pt-4">
-              <p className="text-[10px] font-semibold uppercase tracking-widest mb-3" style={{ color: '#6b7280' }}>
-                Sistema de Puntos + Mystery Box
-              </p>
-
-              {/* Puntos sumados (lejos) */}
-              <TemplateSelector
-                label="Puntos sumados (lejos del premio)"
-                icon={<TrendingUp className="h-3.5 w-3.5" style={{ color: '#3B82F6' }} />}
-                hint="Variables: {{1}}=nombre, {{2}}=puntos ganados hoy, {{3}}=puntos totales, {{4}}=roadmap tiers"
-                value={pointsEarnedFarTemplateSid}
-                onChange={setPointsEarnedFarTemplateSid}
-                templates={approvedTemplates}
-              />
-
-              {/* Puntos sumados (cerca) */}
-              <TemplateSelector
-                label="Puntos sumados (cerca del premio)"
-                icon={<TrendingUp className="h-3.5 w-3.5" style={{ color: '#10B981' }} />}
-                hint="Variables: {{1}}=nombre, {{2}}=puntos ganados hoy, {{3}}=puntos totales, {{4}}=próximo premio"
-                value={pointsEarnedNearTemplateSid}
-                onChange={setPointsEarnedNearTemplateSid}
-                templates={approvedTemplates}
-              />
-
-              {/* Premio seguro */}
-              <TemplateSelector
-                label="Premio seguro (cliente eligió 'a la segura')"
-                icon={<Package className="h-3.5 w-3.5" style={{ color: '#6366F1' }} />}
-                hint="Variables: {{1}}=nombre, {{2}}=tier, {{3}}=premio ganado, {{4}}=roadmap tiers"
-                value={safeRewardTemplateSid}
-                onChange={setSafeRewardTemplateSid}
-                templates={approvedTemplates}
-              />
-
-              {/* Mystery Box resultado */}
-              <TemplateSelector
-                label="Mystery Box resultado"
-                icon={<Sparkles className="h-3.5 w-3.5" style={{ color: '#8B5CF6' }} />}
-                hint="Variables: {{1}}=nombre, {{2}}=tier, {{3}}=premio mystery box, {{4}}=roadmap tiers"
-                value={mysteryBoxResultTemplateSid}
-                onChange={setMysteryBoxResultTemplateSid}
-                templates={approvedTemplates}
-              />
-
-              {/* Golden Box resultado */}
-              <TemplateSelector
-                label="Golden Box resultado (pity timer)"
-                icon={<Crown className="h-3.5 w-3.5" style={{ color: '#FFD700' }} />}
-                hint="Variables: {{1}}=nombre, {{2}}=premio golden box, {{3}}=roadmap tiers"
-                value={goldenBoxResultTemplateSid}
-                onChange={setGoldenBoxResultTemplateSid}
-                templates={approvedTemplates}
-              />
-            </div>
-
-            <div className="border-t border-dashed border-gray-200 pt-4">
-              <p className="text-[10px] font-semibold uppercase tracking-widest mb-3" style={{ color: '#6b7280' }}>
-                Calendario / Eventos
-              </p>
-              <p className="text-[10px] mb-3" style={{ color: '#b0b0b0' }}>
-                Plantillas con imagen o video para campañas del calendario. La imagen/video se adjunta al crear cada evento.
-              </p>
-
-              <TemplateSelector
-                label="Evento con imagen (JPG/PNG)"
-                icon={<CalendarHeart className="h-3.5 w-3.5" style={{ color: '#6366F1' }} />}
-                hint="Variables: {{1}}=nombre · {{2}}=restaurante · {{3}}=título evento · {{4}}=fecha · {{5}}=CTA"
-                value={eventTemplateImageSid}
-                onChange={setEventTemplateImageSid}
-                templates={approvedTemplates}
-              />
-
-              <TemplateSelector
-                label="Evento con video (MP4)"
-                icon={<Sparkles className="h-3.5 w-3.5" style={{ color: '#8B5CF6' }} />}
-                hint="Variables: {{1}}=nombre · {{2}}=restaurante · {{3}}=título evento · {{4}}=fecha · {{5}}=CTA"
-                value={eventTemplateVideoSid}
-                onChange={setEventTemplateVideoSid}
-                templates={approvedTemplates}
-              />
-            </div>
-
-            <SaveButton saving={templatesSaving} saved={templatesSaved} onClick={handleSaveTemplates} disabled={templatesSaving} />
-          </div>
-        )}
+        <p className="text-sm mb-4" style={{ color: '#6b7280' }}>
+          Los mensajes que tu negocio envía solo (bienvenida, puntos, cumpleaños, recordatorios…) se crean,
+          se mandan a WhatsApp y se eligen en <strong>Plantillas</strong>. Allí ves el estado real de cada
+          uno y, si WhatsApp rechazó alguno, el motivo.
+        </p>
+        <Link
+          href="/dashboard/templates"
+          className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white"
+          style={{ background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)' }}
+        >
+          Ir a Plantillas
+          <ArrowRight className="h-4 w-4" />
+        </Link>
       </div>
     </div>
   )

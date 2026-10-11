@@ -591,8 +591,101 @@ export function validateTemplateName(name: string): string[] {
   return issues
 }
 
+// ─────────────────────────────────────────────────────────────
+// Plantillas libres (la biblioteca para campañas, decisiones B4 y B5)
+// ─────────────────────────────────────────────────────────────
+
 /**
- * Auto-chequeo del banco: verifica los 13 textos contra las mismas reglas que
+ * Palabras de texto FIJO de un cuerpo (las variables no cuentan). Meta rechaza con
+ * `INVALID_FORMAT` («too many variable parameters relative to the message length») un
+ * cuerpo con menos de 3 palabras por variable + 1: se aprendió con un rechazo en
+ * producción (2026-09-11, Sushi Fun). El test del catálogo cuenta igual.
+ */
+export function contarPalabrasFijas(body: string): number {
+  return body
+    .replace(/\{\{\d+\}\}/g, ' ')
+    .split(/\s+/)
+    .filter((w) => /[\p{L}\p{N}]/u.test(w)).length
+}
+
+/**
+ * El nombre con que una plantilla libre queda en WhatsApp: lo que tipeó el dueño, pasado por
+ * `normalizeTemplateName()` y sin guiones bajos sueltos en las puntas (los espacios del
+ * borde se volverían `_` y Meta exige empezar por letra).
+ */
+export function nombreDePlantillaLibre(raw: string): string {
+  return normalizeTemplateName(raw.trim()).replace(/^_+|_+$/g, '')
+}
+
+/** Categorías que el dueño puede pedir para una plantilla libre. */
+export const CATEGORIAS_LIBRES = ['MARKETING', 'UTILITY'] as const
+
+/**
+ * Por qué una plantilla LIBRE (la que el dueño escribe para una campaña) no se puede
+ * mandar a Meta, en sus palabras. Vacía = se puede. La MISMA regla para Twilio y Zernio, en
+ * el formulario y en el servidor: antes había tres validadores con reglas distintas
+ * (`docs/PENDIENTES-PLANTILLAS.md` §1.9) y el de las libres no exigía la línea de SALIR ni
+ * variables sin huecos.
+ *
+ * `samples` son los valores de ejemplo que Meta revisa, uno por variable.
+ */
+export function validarPlantillaLibre(input: {
+  name: string
+  body: string
+  category: string
+  samples: Record<string, string | undefined>
+}): string[] {
+  const issues: string[] = []
+  issues.push(...validateTemplateName(nombreDePlantillaLibre(input.name)))
+
+  if (!(CATEGORIAS_LIBRES as readonly string[]).includes(input.category)) {
+    issues.push('Elige si es de marketing (promos, campañas) o de utilidad (avisos y confirmaciones).')
+  }
+
+  issues.push(...problemasDelCuerpoLibre(input.body, input.category))
+
+  for (let i = 1; i <= variablesDe(input.body); i++) {
+    const sample = (input.samples[String(i)] ?? '').trim()
+    if (!sample) issues.push(`Falta el valor de ejemplo de {{${i}}}: WhatsApp lo pide para revisarla.`)
+    else if (sample.includes('\n')) issues.push(`El ejemplo de {{${i}}} no puede tener saltos de línea.`)
+  }
+  return issues
+}
+
+/** Cuántas variables lleva un cuerpo: el `{{n}}` más alto (los huecos los marca la validación). */
+export function variablesDe(body: string): number {
+  const indices = [...body.matchAll(/\{\{(\d+)\}\}/g)].map((m) => Number(m[1]))
+  return indices.length > 0 ? Math.max(...indices) : 0
+}
+
+/**
+ * Solo el CUERPO de una plantilla libre: las reglas de Meta de `validateTemplateBody()` (con
+ * tantas variables como lleve, sin huecos) más la proporción de 3 palabras fijas por
+ * variable + 1. El formulario lo muestra mientras el dueño escribe.
+ */
+export function problemasDelCuerpoLibre(rawBody: string, category: string): string[] {
+  const body = rawBody.trim()
+  const variables = variablesDe(body)
+  const issues = validateTemplateBody(body, { category, expectedVariables: variables })
+  if (body && variables > 0 && contarPalabrasFijas(body) < 3 * variables + 1) {
+    issues.push(
+      `Le falta texto: con ${variables} ${variables === 1 ? 'dato variable' : 'datos variables'} WhatsApp pide al menos ${3 * variables + 1} palabras fijas (lleva ${contarPalabrasFijas(body)}).`
+    )
+  }
+  return issues
+}
+
+/**
+ * ¿Este nombre es el de un mensaje automático del catálogo (`bienvenida`, `bienvenida_v3`…)?
+ * Una plantilla libre no puede llamarse así: el panel la tomaría por una versión de ese
+ * mensaje al reconocer la WABA (`reconciliarConLaWaba()`).
+ */
+export function esNombreDelCatalogo(name: string): boolean {
+  return TEMPLATE_CATALOG.some((t) => new RegExp(`^${t.baseName}(?:_v\\d+)?$`).test(name))
+}
+
+/**
+ * Auto-chequeo del banco: verifica todos los textos contra las mismas reglas que
  * aplicamos a una edición del dueño. Existe para que un texto nuevo mal escrito
  * falle en un test (tests/template-catalog.test.ts) y no en una respuesta de
  * Meta 48 horas después.

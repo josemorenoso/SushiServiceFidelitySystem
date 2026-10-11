@@ -25,6 +25,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
+import { TEMPLATE_CATALOG } from '@/constants/template-catalog'
 
 const TENANT = 'aaaaaaaa-0000-4000-8000-000000000000'
 
@@ -118,6 +119,12 @@ function clavesDeLasPantallas(): string[] {
     ]) {
       for (const m of src.matchAll(re)) claves.add(m[1])
     }
+    // Plantillas › Mensajes automáticos (2026-10-11) escribe el puntero de CADA mensaje del
+    // catálogo con su clave (`definition.settingsKey`): en una marca Twilio, «Elegir otra»
+    // reemplazó a los 15 desplegables de Ajustes. La clave no es un literal: sale del catálogo.
+    if (/saveSetting\(\s*entry\.definition\.settingsKey/.test(src)) {
+      for (const t of TEMPLATE_CATALOG) claves.add(t.settingsKey)
+    }
   }
   return [...claves].sort()
 }
@@ -125,10 +132,14 @@ function clavesDeLasPantallas(): string[] {
 const CLAVES = clavesDeLasPantallas()
 
 describe('OPER-4 · las claves que mandan las pantallas', () => {
-  it('la lectura del código encuentra las de Ajustes y las del Golden Bullet', () => {
+  it('la lectura del código encuentra las de Ajustes, las de Plantillas y las del Golden Bullet', () => {
     // Si esto baja, el extractor dejó de ver una pantalla: arreglar el extractor, no el número.
-    expect(CLAVES.length).toBeGreaterThanOrEqual(44)
+    // 2026-10-11: 46 (los punteros se mudaron de Ajustes a Plantillas y el catálogo creció a 16).
+    expect(CLAVES.length).toBeGreaterThanOrEqual(46)
     expect(CLAVES).toContain('welcome_template_sid')
+    expect(CLAVES).toContain('tier_unlocked_template_sid')
+    expect(CLAVES).toContain('reactivation_with_reward_template_sid')
+    expect(CLAVES).toContain('reactivation_reward_id')
     expect(CLAVES).toContain('reward_reminder_days_before')
     expect(CLAVES).toContain('golden_bullet_reply_si_image_url')
     expect(CLAVES).toContain('golden_bullet_invite_slug')

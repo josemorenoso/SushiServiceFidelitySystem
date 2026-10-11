@@ -189,15 +189,40 @@ export interface TemplateCatalogResponse {
   brandName: string
   entries: TemplateCatalogEntry[]
   /**
+   * TODAS las plantillas que hay de verdad en la WABA, con el estado de Meta: las del
+   * catálogo, las del Golden Bullet, las de prueba. `null` si Zernio no respondió (la
+   * pantalla sigue con lo que sabe la base) y siempre en Twilio (su lista la trae la
+   * pestaña Biblioteca, `GET /api/dashboard/templates`).
+   */
+  wabaTemplates: ListedTemplateItem[] | null
+  /**
    * Lo que la pantalla le hizo a la base al abrirse, en palabras del dueño: plantillas
    * que ya estaban en WhatsApp y el panel no conocía (`reconciliarConLaWaba()`). Vacía
    * casi siempre. Solo Zernio.
    */
   reconocidas?: string[]
+  /** Un aviso que no frena la pantalla (Twilio: no se pudo leer su lista de plantillas). */
+  aviso?: string | null
   /**
-   * TODAS las plantillas que hay de verdad en la WABA, con el estado de Meta:
-   * las 13 del catálogo, las del Golden Bullet, las de prueba. `null` si Zernio
-   * no respondió (la pantalla sigue con lo que sabe la base).
+   * Solo Twilio: las plantillas APROBADAS de su cuenta, para «Elegir otra» en cada mensaje.
+   * Es lo que hacían los desplegables de Ajustes › Plantillas hasta el 2026-10-11. En
+   * Zernio no hay: el puntero lo mueve solo `promoteVersion()`.
    */
-  wabaTemplates: ListedTemplateItem[] | null
+  elegibles?: TemplateOption[]
+  /**
+   * Solo Twilio: la reactivación «con premio» del sistema anterior (puntero + premio fijo),
+   * que no está en el catálogo y la retira la fase 1B del ciclo. Vivía en Ajustes; mientras
+   * exista, una marca tiene que poder cambiarla desde algún lado.
+   */
+  sistemaAntiguo?: { reactivationWithRewardSid: string | null; reactivationRewardId: string | null }
+}
+
+/** Una plantilla aprobada que el dueño puede elegir para un mensaje (Twilio). */
+export interface TemplateOption {
+  /** ContentSid. */
+  ref: string
+  name: string
+  body: string
+  category: string
+  hasMedia: boolean
 }

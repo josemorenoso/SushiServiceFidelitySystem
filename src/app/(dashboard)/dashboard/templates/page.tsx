@@ -1,65 +1,63 @@
 'use client'
 
 /**
- * Plantillas — la pantalla se bifurca según el proveedor de mensajería del negocio.
+ * Plantillas — UNA pantalla para los dos proveedores (2026-10-11, «un solo libro»).
  *
- *   Zernio → `TemplateCatalogEditor`: el catálogo estándar de 13 mensajes con
- *            estilo único y edición tipo documento (§12 de
- *            docs/requerimientos/REQUERIMIENTOS_AGOSTO_2026.md).
- *   Twilio → `TwilioTemplateManager`: exactamente la pantalla anterior, sin un
- *            solo cambio. Decisión textual del dueño sobre los 4 tenants que ya
- *            operan en Twilio: "déjalos así, ni los toques".
+ * Dos pestañas:
+ *   · **Mensajes automáticos** — `TemplateCatalogEditor`: un renglón por mensaje del
+ *     catálogo, con su estado real y su botón, sea la marca Twilio o Zernio. Reemplaza a
+ *     la pantalla Twilio de antes, a su tarjeta «Del set estándar te faltan» y a
+ *     Ajustes › Plantillas WhatsApp (los 15 desplegables).
+ *   · **Biblioteca para campañas** — `TemplateLibrary`: las plantillas puntuales que el
+ *     dueño crea para una campaña, reutilizables, en los dos proveedores (decisiones B4 y
+ *     B5). Campañas → Mensaje libre las lista.
  *
- * La bifurcación NO se decide en el cliente por comodidad: `GET
- * /api/dashboard/templates/catalog` responde 409 con el proveedor real cuando el
- * negocio no es Zernio. El servidor es quien manda; esto solo lee su respuesta.
- * El guardarraíl de verdad está en `template.service.ts`, donde ninguna ruta
- * puede saltárselo.
+ * Hasta esa fecha la pantalla se bifurcaba: `GET …/catalog` contestaba 409 a un negocio
+ * Twilio y caía al gestor Twilio. Ahora esa ruta contesta a los dos con la misma forma.
+ *
+ * ⚠️ Ni un `useSearchParams()`: en Next.js 16 fuerza el CSR bailout del grupo `(dashboard)`.
+ * La pestaña inicial se lee de `?tab=` con `window.location` vía `useSyncExternalStore`,
+ * igual que Domicilios y Recompensas.
  *
  * Docs: docs/features/whatsapp-templates.md
  */
 
-import { useEffect, useState } from 'react'
+import { useState, useSyncExternalStore } from 'react'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import TemplateCatalogEditor from '@/components/dashboard/templates/TemplateCatalogEditor'
-import TwilioTemplateManager from '@/components/dashboard/templates/TwilioTemplateManager'
+import TemplateLibrary from '@/components/dashboard/templates/TemplateLibrary'
 
-type Mode = 'loading' | 'catalog' | 'twilio'
+const TABS = new Set(['mensajes', 'biblioteca'])
+
+const noSubscribe = () => () => {}
+const leerTabDeUrl = () => {
+  try {
+    return new URLSearchParams(window.location.search).get('tab')
+  } catch {
+    return null
+  }
+}
 
 export default function TemplatesPage() {
-  const [mode, setMode] = useState<Mode>('loading')
+  // La URL no cambia mientras la página vive: no hay a qué suscribirse.
+  const tabDeUrl = useSyncExternalStore(noSubscribe, leerTabDeUrl, () => null)
+  const [tabElegida, setTab] = useState<string | null>(null)
+  const tab = tabElegida ?? (tabDeUrl && TABS.has(tabDeUrl) ? tabDeUrl : 'mensajes')
 
-  useEffect(() => {
-    let cancelled = false
+  return (
+    <Tabs value={tab} onValueChange={setTab}>
+      <TabsList>
+        <TabsTrigger value="mensajes">Mensajes automáticos</TabsTrigger>
+        <TabsTrigger value="biblioteca">Biblioteca para campañas</TabsTrigger>
+      </TabsList>
 
-    const resolveProvider = async () => {
-      try {
-        const res = await fetch('/api/dashboard/templates/catalog')
-        if (cancelled) return
-        // 409 = el negocio no es Zernio. Cualquier otro fallo (401, 500, red) NO
-        // debe dejar al dueño sin pantalla: el gestor Twilio es el que existía
-        // antes y sabe mostrar sus propios errores.
-        setMode(res.status === 409 || !res.ok ? 'twilio' : 'catalog')
-      } catch {
-        if (!cancelled) setMode('twilio')
-      }
-    }
+      <TabsContent value="mensajes" className="mt-4">
+        <TemplateCatalogEditor />
+      </TabsContent>
 
-    resolveProvider()
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  if (mode === 'loading') {
-    return (
-      <div className="space-y-3">
-        <div className="h-8 w-64 rounded bg-muted animate-pulse" />
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="h-24 rounded-lg bg-muted animate-pulse" />
-        ))}
-      </div>
-    )
-  }
-
-  return mode === 'catalog' ? <TemplateCatalogEditor /> : <TwilioTemplateManager />
+      <TabsContent value="biblioteca" className="mt-4">
+        <TemplateLibrary />
+      </TabsContent>
+    </Tabs>
+  )
 }

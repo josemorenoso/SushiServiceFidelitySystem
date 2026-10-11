@@ -269,6 +269,19 @@ cap mensual. Por eso las guardas se re-evalúan **al enviar**:
 `cancelled` **no es un fallo**: no consume intentos ni vuelve a la cola. Un fallo de envío sí:
 vuelve con backoff (15 min → 1 h → 4 h) y se rinde como `failed` al tercer intento.
 
+**Una guarda que no se puede verificar no deja salir la tanda** (P1-a, 2026-10-11). Desde N7 el
+cap mensual LANZA ante un fallo de base (antes contestaba «nadie llegó al tope» y la tanda salía sin
+tope). El drenador lo atrapa **por marca**: la tanda vuelve a la cola por `markQueueItemFailed()`
+—backoff y tope de 3 intentos, como un fallo de envío— con `last_error` «No se pudieron verificar las
+guardas de envío…», la marca sale de esa vuelta y las demás siguen drenando. Antes, un `throw` ahí
+habría tumbado la corrida entera con un 500.
+
+**Lo posterior al envío ya no falla callado** (N8). Si el `UPDATE` de `last_campaign_at` o el `INSERT`
+de `campaign_messages` fallan después de que el mensaje salió, no se lanza (no hay cómo «des-enviar»),
+pero queda `[QueueDrain][FALLO] reason=last_campaign_at_error` / `campaign_messages_insert_error` con
+la marca y el tamaño. Sin esas filas el cap mensual y las dedups no ven el envío: el log es lo que
+permite corregirlo a mano.
+
 > **Limitación honesta:** `sendTemplateMessage()` devuelve `null` para *todos* sus modos de fallo
 > (sin credenciales, opt-out, cupo agotado, rechazo del proveedor). El drenador no puede
 > distinguirlos, así que trata cualquier `null` como reintentable. Es conservador a propósito:

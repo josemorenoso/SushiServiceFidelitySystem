@@ -110,6 +110,7 @@ export async function findBirthdayCustomers(
   )
 
   if (error) {
+    logDbFailure({ scope: 'Campaigns', reason: 'birthday_customers_error', error, context: { tenant_id: tenantId } })
     throw new Error(`Error buscando cumpleañeros: ${error.message}`)
   }
 
@@ -121,27 +122,36 @@ export async function findBirthdayCustomers(
  * Finds customers inactive for more than `reactivationDays` (default REACTIVATION_DAYS),
  * respecting the global frequency cap (last_campaign_at).
  * El valor configurable viene de admin_settings via getReactivationDaysConfig().
+ *
+ * Pagina de a 1.000 (`leerTodo()`, N7): sin eso PostgREST cortaba en silencio y una marca
+ * con más de mil inactivos dejaba fuera de la reactivación al resto, todos los días los
+ * mismos. Un fallo de base LANZA (y queda en el log): nunca es «no hay inactivos».
  */
 export async function findInactiveCustomers(tenantId: string, reactivationDays: number = REACTIVATION_DAYS): Promise<Customer[]> {
   const supabase = getServiceClient()
   const cutoffDate = new Date(Date.now() - reactivationDays * 24 * 60 * 60 * 1000).toISOString()
   const campaignCapDate = new Date(Date.now() - FREQUENCY_CAP_DAYS * 24 * 60 * 60 * 1000).toISOString()
 
-  const { data, error } = await supabase
-    .from('customers')
-    .select('*')
-    .eq('tenant_id', tenantId)
-    .lt('last_visit_at', cutoffDate)
-    .not('last_visit_at', 'is', null)
-    .eq('accepts_marketing', true)
-    .is('whatsapp_opt_out_at', null)
-    .or(`last_campaign_at.is.null,last_campaign_at.lt.${campaignCapDate}`)
+  const { data, error } = await leerTodo<Customer>((desde, hasta) =>
+    supabase
+      .from('customers')
+      .select('*')
+      .eq('tenant_id', tenantId)
+      .lt('last_visit_at', cutoffDate)
+      .not('last_visit_at', 'is', null)
+      .eq('accepts_marketing', true)
+      .is('whatsapp_opt_out_at', null)
+      .or(`last_campaign_at.is.null,last_campaign_at.lt.${campaignCapDate}`)
+      .order('id', { ascending: true })
+      .range(desde, hasta)
+  )
 
   if (error) {
+    logDbFailure({ scope: 'Campaigns', reason: 'inactive_customers_error', error, context: { tenant_id: tenantId } })
     throw new Error(`Error buscando inactivos: ${error.message}`)
   }
 
-  return data ?? []
+  return data
 }
 
 /**
@@ -605,8 +615,22 @@ function getMonthBoundaries(refDate: Date = new Date()) {
 }
 
 /**
+ * Cuántos uuid van en cada `.in('customer_id', …)`. Cada uno ocupa ~37 caracteres de la
+ * URL de PostgREST: con miles de clientes la URL pasaba de los ~16 KB que acepta el
+ * gateway y la consulta entera fallaba. 150 deja la URL en ~6 KB.
+ */
+export const LOTE_DEL_TOPE_MENSUAL = 150
+
+/**
  * Returns a Set of customer IDs that have ALREADY reached the monthly marketing cap
  * within the current month. Use it to exclude them from new sends.
+ *
+ * N7 (2026-10-11): metía todos los uuid en UN `.in()` sin paginar y, ante un error,
+ * devolvía un Set vacío —«nadie llegó al tope»— con un `console.error` suelto: el tope de 3
+ * al mes dejaba de aplicarse justo con las marcas grandes. Ahora va en lotes de
+ * `LOTE_DEL_TOPE_MENSUAL`, cada lote paginado de a 1.000, y un error de base LANZA después
+ * de pasar por `logDbFailure`. Quien llama decide qué hacer con una corrida que no pudo
+ * verificar el tope; lo que no puede es mandar como si nadie lo hubiera alcanzado.
  */
 export async function getCustomersAtMonthlyCap(
   customerIds: string[],
@@ -615,26 +639,39 @@ export async function getCustomersAtMonthlyCap(
   if (customerIds.length === 0) return new Set()
   const supabase = getServiceClient()
   const { startISO, nextMonthISO } = getMonthBoundaries()
-
-  // Join campaign_messages -> campaigns to count only relevant sources within the month.
-  // Note: we count "sent" messages by sent_at timestamp (which falls inside the month window).
-  const { data, error } = await supabase
-    .from('campaign_messages')
-    .select('customer_id, campaigns!inner(source)')
-    .in('customer_id', customerIds)
-    .eq('status', 'sent')
-    .gte('sent_at', startISO)
-    .lt('sent_at', nextMonthISO)
-    .in('campaigns.source', MONTHLY_CAP_SOURCES as unknown as string[])
-
-  if (error) {
-    console.error(`[MonthlyCap] Error consultando campaign_messages: ${error.message}`)
-    return new Set()
-  }
+  const ids = [...new Set(customerIds)]
 
   const counts: Record<string, number> = {}
-  for (const row of (data ?? []) as { customer_id: string }[]) {
-    counts[row.customer_id] = (counts[row.customer_id] ?? 0) + 1
+  for (let i = 0; i < ids.length; i += LOTE_DEL_TOPE_MENSUAL) {
+    const lote = ids.slice(i, i + LOTE_DEL_TOPE_MENSUAL)
+    // Join campaign_messages -> campaigns to count only relevant sources within the month.
+    // Se cuentan los que SALIERON (`ESTADOS_QUE_SALIERON`) por `sent_at` dentro del mes.
+    const { data, error } = await leerTodo<{ customer_id: string }>((desde, hasta) =>
+      supabase
+        .from('campaign_messages')
+        .select('id, customer_id, campaigns!inner(source)')
+        .in('customer_id', lote)
+        .in('status', [...ESTADOS_QUE_SALIERON])
+        .gte('sent_at', startISO)
+        .lt('sent_at', nextMonthISO)
+        .in('campaigns.source', MONTHLY_CAP_SOURCES as unknown as string[])
+        .order('id', { ascending: true })
+        .range(desde, hasta)
+    )
+
+    if (error) {
+      logDbFailure({
+        scope: 'MonthlyCap',
+        reason: 'monthly_cap_error',
+        error,
+        context: { clientes: ids.length, lote_desde: i },
+      })
+      throw new Error(`No se pudo verificar el tope mensual de marketing: ${error.message}`)
+    }
+
+    for (const row of data) {
+      counts[row.customer_id] = (counts[row.customer_id] ?? 0) + 1
+    }
   }
 
   const atCap = new Set<string>()

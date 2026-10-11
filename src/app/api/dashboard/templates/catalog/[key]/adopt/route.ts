@@ -15,13 +15,14 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { getTenantIdFromJwt, getTenantById } from '@/lib/tenant'
+import { getTenantById } from '@/lib/tenant'
+import { exigirAlcanceDeMarca } from '@/lib/alcance-de-marca'
 import { isTemplateKey } from '@/constants/template-catalog'
 import { adoptApprovedTemplate, TemplateError } from '@/services/template.service'
 
 export const dynamic = 'force-dynamic'
 
-export async function POST(_request: Request, { params }: { params: Promise<{ key: string }> }) {
+export async function POST(request: Request, { params }: { params: Promise<{ key: string }> }) {
   try {
     const supabase = await createClient()
     const {
@@ -34,14 +35,15 @@ export async function POST(_request: Request, { params }: { params: Promise<{ ke
       return NextResponse.json({ error: 'Esa plantilla no existe en el catálogo.' }, { status: 404 })
     }
 
-    const tenantId = await getTenantIdFromJwt()
-    if (!tenantId) {
-      return NextResponse.json(
-        { error: 'Vuelve a iniciar sesión para activar el mensaje.' },
-        { status: 401 }
-      )
-    }
-    const tenant = await getTenantById(tenantId)
+    // Las plantillas son de la MARCA (un puntero por marca, sin sede): editarlas, mandarlas a
+    // Meta o activarlas exige alcance de marca (N5, 2026-10-11). Antes bastaba una sesión, y
+    // un administrador de UNA sede cambiaba el mensaje que reciben los clientes de todas.
+    const guardia = await exigirAlcanceDeMarca(
+      request,
+      'Las plantillas son de la marca: solo un super usuario puede cambiarlas.'
+    )
+    if (!guardia.ok) return guardia.res
+    const tenant = await getTenantById(guardia.tenantId)
     if (!tenant) return NextResponse.json({ error: 'Negocio no encontrado' }, { status: 404 })
 
     const result = await adoptApprovedTemplate({

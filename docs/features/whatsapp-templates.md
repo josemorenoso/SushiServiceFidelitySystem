@@ -63,7 +63,9 @@ Lo que pasa por debajo:
 ```
 
 **El invariante que sostiene todo:** `promoteVersion()` es el **único** punto del sistema que escribe
-`admin_settings.<settings_key>`, y solo corre cuando Meta ya dijo `APPROVED`.
+`admin_settings.<settings_key>`, y solo corre cuando Meta ya dijo `APPROVED`. Desde el 2026-10-11 el
+`PUT /api/dashboard/settings` lo respeta en las marcas Zernio: ahí cambiar un puntero da 400 (ver
+«Guardas» abajo). En las Twilio el dueño sigue eligiéndolos en Ajustes.
 
 ## El alta de un negocio nuevo: enviar tal cual o editar
 
@@ -313,6 +315,36 @@ por el AIOS que quedaron «en revisión» sin salir nunca (el dueño ya lo habí
 - «Enviar a Meta» (el botón sin editor) sigue con el nombre automático: si choca, el 400 lo dice.
 - **El puntero no cambia por el nombre**: lo escribe `promoteVersion()` al aprobarse, como siempre.
 
+## Guardas (ola P1-a, 2026-10-11)
+
+- **Solo la marca toca las plantillas (N5).** `PUT …/catalog/[key]`, `POST …/submit` y `POST …/adopt`
+  pasan por `exigirAlcanceDeMarca()`: un administrador de UNA sede recibe 403 (las plantillas y sus
+  punteros son de la marca, no hay plantilla por sede). El operador de Cada1 pasa. Siguen sin esa
+  guarda las rutas de Twilio (`POST /api/dashboard/templates`, `[sid]/submit`, `standard`):
+  `docs/PENDIENTES.md` §3.3.
+- **Ajustes acepta una lista cerrada (OPER-4).** `src/lib/settings-keys.ts`: las claves que escriben
+  las pantallas, leídas del código (test `p1a-settings-claves.test.ts`). Otra clave = 400. Un
+  puntero de una marca Zernio = 400 con el porqué; guardarlo con el MISMO valor que ya tiene = 200
+  sin escribir (Ajustes manda los 15 juntos en cada «Guardar»). ⚠️ `handleSaveTemplates` traga el
+  error en silencio: en una marca Zernio, elegir otra plantilla en Ajustes no guarda y no avisa.
+- **La pantalla no llama a la WABA en cada carga (N16).** `getTemplateCatalogState()` guarda el
+  listado 60 s por marca (`WABA_CACHE_MS`), en la memoria del proceso: sin infraestructura nueva. En
+  Vercel cada instancia tiene el suyo, así que lo peor es una lectura de más, nunca un dato de más de
+  60 s. Se invalida al crear o someter (`createAndSubmit()`, salga bien o mal) y en
+  `applyProviderTemplateStatus()` (webhook de Meta y «Usar la aprobada»). Someter, adoptar y validar
+  un nombre siguen leyendo la WABA EN VIVO: ahí un listado viejo decidiría mal.
+- **Twilio se lista entero (N23).** `src/lib/twilio/content-list.ts` sigue `meta.next_page_url`
+  (solo de `content.twilio.com`) y es todo o nada: si una página falla, la ruta contesta el error de
+  siempre en vez de una lista cortada. Lo usan `GET /api/dashboard/templates` y el reporte «Del set
+  estándar te faltan» (`twilio-catalog.service.ts`), que con 100+ veía punteros vivos como huérfanos.
+- **Paridad catálogo ↔ código (OPER-6).** `p1a-plantillas-paridad.test.ts` falla si el código nombra
+  un puntero que el catálogo no define. Hoy hay **cuatro** excepciones conocidas, no dos:
+  `tier_unlocked_template_sid` y `reward_reminder_template_sid` (decisión B3) y las legacy
+  `reactivation_with_reward_template_sid` y `reactivation_template_sid`, que el cron de reactivación
+  todavía lee (`PENDIENTES.md` §3.1 paso 2).
+- `fetchPointers()` ya no confunde un fallo de lectura con «no hay punteros» (lanza 500): con los
+  punteros vacíos, «Usar la aprobada» creía libre un mensaje que se estaba enviando.
+
 ## Archivos
 
 | Archivo | Rol |
@@ -325,6 +357,9 @@ por el AIOS que quedaron «en revisión» sin salir nunca (el dueño ya lo habí
 | `src/app/api/dashboard/templates/catalog/route.ts` | `GET` estado del catálogo |
 | `src/app/api/dashboard/templates/catalog/[key]/route.ts` | `PUT` editar una plantilla |
 | `src/app/api/dashboard/templates/catalog/[key]/submit/route.ts` | `POST` enviar el texto del catálogo tal cual |
+| `src/app/api/dashboard/templates/catalog/[key]/adopt/route.ts` | `POST` activar la aprobada que ya estaba en la WABA |
+| `src/lib/settings-keys.ts` | La lista cerrada del `PUT` de Ajustes y la regla de los punteros |
+| `src/lib/twilio/content-list.ts` | Todas las páginas de la Content API de Twilio |
 | `src/app/api/webhook/zernio/route.ts` | Recibe `whatsapp.template.status_updated` |
 | `src/components/dashboard/templates/TemplateCatalogEditor.tsx` | La pantalla (Zernio) |
 | `src/components/dashboard/templates/TemplateEditorDialog.tsx` | El editor tipo documento |

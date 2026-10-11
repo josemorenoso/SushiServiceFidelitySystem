@@ -18,7 +18,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { getTenantIdFromJwt, getTenantById } from '@/lib/tenant'
+import { getTenantById } from '@/lib/tenant'
+import { exigirAlcanceDeMarca } from '@/lib/alcance-de-marca'
 import { isTemplateKey } from '@/constants/template-catalog'
 import { saveTemplateEdit, TemplateError } from '@/services/template.service'
 
@@ -51,14 +52,15 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: 'El nombre de la plantilla no es válido.' }, { status: 400 })
     }
 
-    const tenantId = await getTenantIdFromJwt()
-    if (!tenantId) {
-      return NextResponse.json(
-        { error: 'Vuelve a iniciar sesión para guardar cambios.' },
-        { status: 401 }
-      )
-    }
-    const tenant = await getTenantById(tenantId)
+    // Las plantillas son de la MARCA (un puntero por marca, sin sede): editarlas, mandarlas a
+    // Meta o activarlas exige alcance de marca (N5, 2026-10-11). Antes bastaba una sesión, y
+    // un administrador de UNA sede cambiaba el mensaje que reciben los clientes de todas.
+    const guardia = await exigirAlcanceDeMarca(
+      request,
+      'Las plantillas son de la marca: solo un super usuario puede cambiarlas.'
+    )
+    if (!guardia.ok) return guardia.res
+    const tenant = await getTenantById(guardia.tenantId)
     if (!tenant) return NextResponse.json({ error: 'Negocio no encontrado' }, { status: 404 })
 
     const result = await saveTemplateEdit({

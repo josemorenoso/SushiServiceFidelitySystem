@@ -271,6 +271,27 @@ Ahora van en un `finally`, el cliente se anota en cuanto el envío sale (antes d
 sigue su camino. Un envío que **salió** pero no se pudo grabar ya no se graba como `failed`: aborta la
 marca en vez de seguir mandando sin dejar rastro.
 
+### Un fallo de base no es «nadie» (ola P1-a, 2026-10-11)
+
+- **Tope de 3 al mes** (`getCustomersAtMonthlyCap()`, N7). Metía todos los uuid en UN `.in()` (con
+  miles, la URL revienta) y ante un error devolvía «nadie llegó al tope» con un `console.error` suelto:
+  el tope se dejaba de aplicar justo con las marcas grandes. Ahora va en lotes de
+  `LOTE_DEL_TOPE_MENSUAL` = 150, cada lote paginado de a 1.000, cuenta los que salieron
+  (`ESTADOS_QUE_SALIERON`) y un error **lanza** (`[MonthlyCap][FALLO] reason=monthly_cap_error`). Qué
+  pasa entonces: reactivación y recordatorio abortan esa marca (las demás siguen, `allSettled`); la
+  campaña manual responde 500; el evento del calendario queda `failed` con el motivo; el drenador
+  devuelve la tanda a la cola con backoff (`send-governance.md`). Nadie recibe un cuarto mensaje por un
+  timeout.
+- **`findInactiveCustomers()`** pagina de a 1.000 (`leerTodo()`, orden por `id`): con más de mil
+  inactivos, PostgREST cortaba en silencio y el resto no entraba nunca a la reactivación.
+  `findBirthdayCustomers()` ya paginaba; las dos dejan log (`[Campaigns][FALLO]`) además de lanzar.
+- **`getActiveTenants()`** (N8) lanza ante un error: los tres crons respondían
+  `ok: true, tenants_processed: 0`, un día sin cumpleaños ni reactivación que parecía «no hay marcas».
+  Ahora es un 500 con la causa en el log.
+- **Las burbujas de riesgo** (`AtRiskBubbles.tsx`, N3-quater) leen el 500 del estimador como «no sé»:
+  «Elegibles hoy: —» y el botón deshabilitado, igual que `ManualCampaigns` desde la fase 0.bis. Con 0
+  elegibles el botón también queda deshabilitado.
+
 ### Campaña Manual (`/api/dashboard/campaigns/manual`)
 ```
 Fetch clientes con filtros (ciudad, visitas, edad, canal)

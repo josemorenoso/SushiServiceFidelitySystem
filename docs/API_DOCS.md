@@ -1316,6 +1316,8 @@ texto en vez de dejar que se apriete y devuelva un 409 por una variable que el d
 
 #### `PUT /api/dashboard/templates/catalog/:key` — Admin JWT
 
+> **Alcance de marca** (N5, 2026-10-11): un administrador de UNA sede recibe **403**; las plantillas son de la marca.
+
 Guarda la edición de una plantilla. `:key` es el `definition.key` (ej. `welcome`, `birthday`).
 
 > **No es una edición in-place.** Crea una plantilla nueva en Zernio y la somete a Meta.
@@ -1354,6 +1356,8 @@ bloquear va a ser su culpa") no se sostiene sin ese registro.
 
 #### `POST /api/dashboard/templates/catalog/:key/submit` — Admin JWT
 
+> **Alcance de marca** (N5, 2026-10-11): un administrador de UNA sede recibe **403**; las plantillas son de la marca.
+
 Manda a revisión de Meta el texto que el catálogo propone para el estilo del negocio, **sin pasar por
 el editor**. Es el camino del alta: un tenant nuevo nace con las 13 sin configurar y en la mayoría no
 hay nada que cambiar.
@@ -1385,6 +1389,8 @@ La pantalla no llega a ese 409 de media faltante: `GET /catalog` ya devuelve `bl
 entrada y el botón sale deshabilitado con el motivo escrito.
 
 #### `POST /api/dashboard/templates/catalog/:key/adopt` — Admin JWT
+
+> **Alcance de marca** (N5, 2026-10-11): un administrador de UNA sede recibe **403**; las plantillas son de la marca.
 
 Empieza a usar para `:key` la plantilla que **ya está aprobada** en la WABA (`approvedInWaba` del
 `GET`). No crea nada en Meta. **No recibe body**: qué plantilla se conecta lo decide el servidor contra
@@ -1539,7 +1545,17 @@ Actualiza una configuración por clave.
 }
 ```
 
-**Response 400:** `{ "error": "key y value son requeridos" }`
+**Response 400:** `{ "error": "key y value son requeridos" }` (`value` tiene que ser texto).
+
+**Lista cerrada (OPER-4, 2026-10-11).** Solo acepta las claves de `src/lib/settings-keys.ts` (las que
+escriben Ajustes y el Golden Bullet). Exige alcance de MARCA (`exigirAlcanceDeMarca()`: 403 a un
+administrador de sede).
+
+- Otra clave → **400** `{ "error": "«x» no es un ajuste que se pueda cambiar desde el panel." }`.
+- Un puntero de plantilla (`*_template_sid`, `event_template_*_sid`) en una marca **Zernio**: cambiarlo
+  → **400** con el porqué (el único escritor es `promoteVersion()`); mandarlo con el MISMO valor que ya
+  tiene → **200** `{ "message": "Sin cambios", … }` sin escribir. En una marca Twilio se guarda.
+- **503** si no se pudo leer el proveedor o la clave actual (fallo de base, no de permisos).
 
 ---
 

@@ -64,6 +64,7 @@ import {
   type QueueRow,
 } from '@/services/send-queue.service'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { isDbFailure, logDbFailure } from '@/lib/db-failure'
 
 export const dynamic = 'force-dynamic'
 /** El presupuesto de tiempo real lo impone TIME_BUDGET_MS; esto solo evita que
@@ -264,7 +265,21 @@ async function drenarTenant(tenantId: string, res: Resultado): Promise<Resultado
 
   // ── Re-evaluación de las guardas de demanda ──
   // Se hace sobre la tanda entera (2 consultas) en vez de por item.
-  const permitidos = await filtrarPorGuardas(tenantId, items, res)
+  //
+  // Si una guarda no se puede verificar (hoy: el tope mensual, que desde N7 LANZA ante un
+  // fallo de base en vez de contestar «nadie llegó»), la tanda NO sale: vuelve a la cola
+  // con backoff por `markQueueItemFailed()` —el mismo camino que un fallo de envío, con su
+  // tope de intentos— y el tenant sale de esta vuelta. Las demás marcas siguen drenando:
+  // un `throw` acá tumbaba la corrida entera.
+  let permitidos: QueueRow[]
+  try {
+    permitidos = await filtrarPorGuardas(tenantId, items, res)
+  } catch (err) {
+    const motivo = `No se pudieron verificar las guardas de envío: ${err instanceof Error ? err.message : 'error desconocido'}`
+    console.error(`[QueueDrain][FALLO] reason=guardas_error tenant=${tenantId} detalle="${motivo}"`)
+    for (const item of items) await markQueueItemFailed(item, motivo)
+    return { procesados: 0, agotado: true, quedaCola: true }
+  }
 
   const enviadosParaMarcar: string[] = []
   // Golden Bullet: los contactos importados no son clientes, así que no caben
@@ -373,11 +388,39 @@ async function drenarTenant(tenantId: string, res: Resultado): Promise<Resultado
 
   const db = getServiceClient()
 
+  // Los mensajes YA salieron: estas escrituras no se pueden «deshacer» lanzando, pero un
+  // fallo no puede pasar callado (N8). Sin `last_campaign_at` el cliente queda expuesto a
+  // otra campaña dentro de los 7 días; sin la fila de `campaign_messages` el tope mensual y
+  // las dedups no ven este envío. Queda en el log con la causa, para corregirlo a mano.
   if (enviadosParaMarcar.length > 0) {
-    await db.from('customers').update({ last_campaign_at: ahora }).in('id', enviadosParaMarcar)
+    const { error: marcarError } = await db
+      .from('customers')
+      .update({ last_campaign_at: ahora })
+      .in('id', enviadosParaMarcar)
+      .eq('tenant_id', tenantId)
+    if (isDbFailure(marcarError)) {
+      logDbFailure({
+        scope: 'QueueDrain',
+        reason: 'last_campaign_at_error',
+        error: marcarError,
+        context: { tenant_id: tenantId, clientes: enviadosParaMarcar.length },
+      })
+    }
   }
   if (registrosCampana.length > 0) {
-    await db.from('campaign_messages').insert(registrosCampana)
+    const { error: registroError } = await db.from('campaign_messages').insert(registrosCampana)
+    if (isDbFailure(registroError)) {
+      logDbFailure({
+        scope: 'QueueDrain',
+        reason: 'campaign_messages_insert_error',
+        error: registroError,
+        context: {
+          tenant_id: tenantId,
+          filas: registrosCampana.length,
+          campanas: [...new Set(registrosCampana.map((r) => r.campaign_id))].join(','),
+        },
+      })
+    }
   }
   await markImportedContactsResult(importadosEnviados, importadosRebotados)
 

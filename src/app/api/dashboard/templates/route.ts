@@ -5,6 +5,7 @@ import { getTenantIdFromJwt, getTenantById } from '@/lib/tenant'
 import { listZernioTemplates } from '@/lib/zernio/messaging'
 import { mapZernioTemplateToItem } from '@/lib/zernio/template-listing'
 import { resolveGoldenBulletProvider } from '@/services/club-optin.service'
+import { listarContenidoTwilio } from '@/lib/twilio/content-list'
 
 export const dynamic = 'force-dynamic'
 
@@ -66,26 +67,17 @@ export async function GET(request: NextRequest) {
     if (!creds) {
       return NextResponse.json({ templates: [], provider, error: 'Twilio no configurado' })
     }
-    const headers = {
-      Authorization: creds.basicAuth,
-      'Content-Type': 'application/json',
-    }
-
     // ContentAndApprovals trae plantillas + estado de aprobación + motivo de rechazo
-    // en UNA llamada. Antes se hacía 1 fetch de ApprovalRequests POR plantilla (N+1):
-    // con 24 plantillas, "Sincronizar" tardaba varios segundos.
-    const res = await fetch(`${TWILIO_CONTENT_API}AndApprovals?PageSize=100`, {
-      headers,
-      cache: 'no-store',
-    })
+    // por página. Antes se hacía 1 fetch de ApprovalRequests POR plantilla (N+1):
+    // con 24 plantillas, "Sincronizar" tardaba varios segundos. Y se leía UNA sola
+    // página de 100: pasadas 100, las demás desaparecían (N23). Ahora se recorren todas.
+    const listado = await listarContenidoTwilio<TwilioContentItem>(creds.basicAuth)
 
-    if (!res.ok) {
-      const errText = await res.text()
-      console.error('[Templates] Twilio API error:', res.status, errText)
+    if (!listado.ok) {
+      console.error('[Templates] Twilio API error:', listado.status, listado.detalle)
       return NextResponse.json({ templates: [], error: 'Error consultando Twilio' })
     }
 
-    const data = await res.json()
     interface TwilioContentItem {
       sid: string
       friendly_name: string
@@ -101,7 +93,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const contents: TwilioContentItem[] = data.contents || []
+    const contents: TwilioContentItem[] = listado.contents
 
     const templates = contents.map((t) => {
       const ar = t.approval_requests

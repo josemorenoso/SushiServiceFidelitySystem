@@ -54,6 +54,7 @@ import {
 } from '@/constants/template-catalog'
 import type { TemplateKey } from '@/types/template.types'
 import type { Tenant } from '@/types/tenant.types'
+import { listarContenidoTwilio } from '@/lib/twilio/content-list'
 
 const TWILIO_CONTENT_API = 'https://content.twilio.com/v1/Content'
 
@@ -138,26 +139,25 @@ interface TwilioApprovalSummary {
   status: string
 }
 
-/** ContentSid → estado de aprobación, en UNA llamada (igual que la pantalla). */
+/**
+ * ContentSid → estado de aprobación, igual que la pantalla. TODAS las páginas (N23):
+ * con una sola, un puntero que caía en la página 2 se veía como «no existe en Twilio».
+ */
 async function fetchTwilioApprovals(
   basicAuth: string
 ): Promise<{ bySid: Map<string, TwilioApprovalSummary>; warning: string | null }> {
   const bySid = new Map<string, TwilioApprovalSummary>()
   try {
-    const res = await fetch(`${TWILIO_CONTENT_API}AndApprovals?PageSize=100`, {
-      headers: { Authorization: basicAuth, 'Content-Type': 'application/json' },
-      cache: 'no-store',
-    })
-    if (!res.ok) {
+    const listado = await listarContenidoTwilio<{ sid: string; approval_requests?: { status?: string } }>(
+      basicAuth
+    )
+    if (!listado.ok) {
       return {
         bySid,
-        warning: `No se pudo leer la lista de plantillas de Twilio (HTTP ${res.status}). Se muestra lo que dice admin_settings.`,
+        warning: `No se pudo leer la lista de plantillas de Twilio (HTTP ${listado.status}). Se muestra lo que dice admin_settings.`,
       }
     }
-    const data = (await res.json()) as {
-      contents?: Array<{ sid: string; approval_requests?: { status?: string } }>
-    }
-    for (const item of data.contents ?? []) {
+    for (const item of listado.contents) {
       bySid.set(item.sid, {
         sid: item.sid,
         status: (item.approval_requests?.status ?? 'draft').toLowerCase(),

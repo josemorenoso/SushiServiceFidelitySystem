@@ -31,7 +31,17 @@ export function normalizeHost(host: string | null | undefined): string | null {
   return clean.startsWith('www.') ? clean.slice(4) : clean
 }
 
-/** Resolver tenant por dominio (host header) — rutas públicas: check-in. */
+/**
+ * Resolver tenant por dominio (host header) — rutas públicas: check-in.
+ *
+ * ⚠️ CONSERVA SU FIRMA (`CLAUDE.md`: cambiarla toca 16 archivos) y su comportamiento ante
+ * un fallo de base: devuelve `null`, NO lanza. Sus llamadores son la superficie pública
+ * (check-in, tarjeta, branding del layout, escáner del mesero) y todos tratan `null` como
+ * «este host no es de nadie» → 404 o la marca por defecto; un `throw` los convertiría en
+ * 500 en la página que ve el cliente. Lo que cambia (N8, 2026-10-11) es que el fallo ya no
+ * es indistinguible de «no existe»: queda en el log con `logDbFailure`. `.maybeSingle()`
+ * en vez de `.single()` para que «cero filas» no traiga error y el log solo hable de fallos.
+ */
 export async function getTenantByDomain(host: string | null | undefined): Promise<Tenant | null> {
   const domain = normalizeHost(host)
   if (!domain) return null
@@ -41,8 +51,12 @@ export async function getTenantByDomain(host: string | null | undefined): Promis
     .select(TENANT_COLUMNS)
     .eq('domain', domain)
     .eq('is_active', true)
-    .single()
-  if (error || !data) return null
+    .maybeSingle()
+  if (isDbFailure(error)) {
+    logDbFailure({ scope: 'Tenant', reason: 'getTenantByDomain_error', error, context: { domain } })
+    return null
+  }
+  if (!data) return null
   return data as Tenant
 }
 
@@ -214,15 +228,26 @@ export async function getActiveLocations(tenantId: string): Promise<ActiveLocati
   return data as ActiveLocation[]
 }
 
-/** Todos los tenants activos — usado por crons que procesan todos los clientes en un solo disparo (birthday, reactivation). */
+/**
+ * Todos los tenants activos — usado por crons que procesan todos los clientes en un solo
+ * disparo (birthday, reactivation, reward-reminder).
+ *
+ * Un fallo de base LANZA (N8, 2026-10-11). Antes devolvía `[]` y el cron respondía
+ * `ok: true, tenants_processed: 0`: un día entero sin cumpleaños ni reactivación que se
+ * veía igual que «no hay marcas». Los tres crons la llaman dentro de su `try`, así que
+ * ahora responden 500 con la causa en el log.
+ */
 export async function getActiveTenants(): Promise<Tenant[]> {
   const supabase = getServiceClient()
   const { data, error } = await supabase
     .from('tenants')
     .select(TENANT_COLUMNS)
     .eq('is_active', true)
-  if (error || !data) return []
-  return data as Tenant[]
+  if (isDbFailure(error)) {
+    logDbFailure({ scope: 'Tenant', reason: 'getActiveTenants_error', error })
+    throw new Error(`No se pudieron leer las marcas activas: ${error.message}`)
+  }
+  return (data ?? []) as Tenant[]
 }
 
 /** Resolver tenant por id — usado por crons de sistema que iteran filas con tenant_id. */

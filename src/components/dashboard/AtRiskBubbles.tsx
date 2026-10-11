@@ -68,6 +68,8 @@ export function AtRiskBubbles({ groups, loading, isDemo, softDays, aggressiveDay
   const [loadingTemplates, setLoadingTemplates] = useState(false)
   const [selectedTemplate, setSelectedTemplate] = useState<ApprovedTemplate | null>(null)
   const [eligibleCount, setEligibleCount] = useState<number | null>(null)
+  /** El estimador falló (500 o red): se muestra «—» y no se deja enviar (N3-quater). */
+  const [eligibleFailed, setEligibleFailed] = useState(false)
 
   const maxCount = Math.max(...groups.map((g) => g.count), 1)
   const totalAtRisk = groups.reduce((sum, g) => sum + g.count, 0)
@@ -118,10 +120,16 @@ export function AtRiskBubbles({ groups, loading, isDemo, softDays, aggressiveDay
 
     let active = true
     setEligibleCount(null)
+    setEligibleFailed(false)
+    // Un 500 del estimador no es «0 elegibles»: es «no sé». Igual que ManualCampaigns (N3-ter).
     fetch(`/api/dashboard/campaigns/estimate?${params}`)
-      .then((res) => res.json())
-      .then((data) => { if (active) setEligibleCount(data.count ?? 0) })
-      .catch(() => { if (active) setEligibleCount(null) })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}))
+        if (!active) return
+        if (res.ok && typeof data.count === 'number') setEligibleCount(data.count)
+        else setEligibleFailed(true)
+      })
+      .catch(() => { if (active) setEligibleFailed(true) })
     return () => { active = false }
   }, [selected, isDemo, templatesLoaded, fetchTemplates, riskLevels])
 
@@ -368,6 +376,13 @@ export function AtRiskBubbles({ groups, loading, isDemo, softDays, aggressiveDay
                 <span className="font-semibold">{selected?.daysRange}</span> sin visitar
               </p>
 
+              {!isDemo && eligibleFailed && (
+                <p className="text-xs" style={{ color: '#9ca3af' }}>
+                  Elegibles hoy: <strong style={{ color: '#374151' }}>—</strong> — no pudimos calcularlos ahora
+                  mismo. Cierra y vuelve a intentarlo en un momento.
+                </p>
+              )}
+
               {!isDemo && eligibleCount !== null && selected && eligibleCount < selected.count && (
                 <p className="text-xs" style={{ color: '#9ca3af' }}>
                   Elegibles hoy: <strong style={{ color: '#374151' }}>{eligibleCount}</strong> — el resto está
@@ -482,14 +497,16 @@ export function AtRiskBubbles({ groups, loading, isDemo, softDays, aggressiveDay
             {!sent && (
               <button
                 onClick={handleSendCampaign}
-                disabled={sending || (!isDemo && !selectedTemplate)}
+                disabled={sending || (!isDemo && (!selectedTemplate || eligibleFailed || eligibleCount === 0))}
                 className="btn-premium flex-1 h-11 flex items-center justify-center gap-2 rounded-xl text-sm font-semibold disabled:opacity-50"
                 style={{ letterSpacing: '-0.01em' }}
               >
                 <Send className="h-3.5 w-3.5" strokeWidth={1.5} />
                 {sending
                   ? 'Enviando...'
-                  : `WhatsApp → ${!isDemo && eligibleCount !== null ? eligibleCount : selected?.count ?? 0}`}
+                  : `WhatsApp → ${
+                      isDemo ? selected?.count ?? 0 : eligibleFailed ? '—' : eligibleCount ?? selected?.count ?? 0
+                    }`}
               </button>
             )}
           </div>

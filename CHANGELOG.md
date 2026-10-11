@@ -8,6 +8,21 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [fix] — 2026-10-11 — P1-a: arreglos chicos de campañas y plantillas (sin migración, sin desplegar)
+
+- **N3-quater:** las burbujas leen el 500 del estimador como «—» y no dejan enviar (`AtRiskBubbles.tsx`). Sin test (UI).
+- **N7:** `getCustomersAtMonthlyCap()` en lotes de 150 uuid, paginado, y LANZA ante un error (antes: «nadie llegó al
+  tope», sin log); `findInactiveCustomers()` pagina de a 1.000. El drenador devuelve la tanda a la cola si no puede verificar.
+- **N8:** `getActiveTenants()` lanza (los crons daban `ok, 0 marcas`); `getTenantByDomain()` conserva firma y `null`
+  pero deja log; el drenador loguea `last_campaign_at` y `campaign_messages` fallidos tras enviar.
+- **OPER-4:** `PUT settings` con lista cerrada (`src/lib/settings-keys.ts`, 44 claves leídas de las pantallas); un
+  puntero en una marca Zernio da 400 (mismo valor = 200 sin escribir). **N5:** catálogo/edit/submit/adopt con alcance de marca.
+- **N16:** caché de la WABA 60 s por marca en memoria, invalidado al crear/someter/adoptar y por el webhook.
+  **N23:** la Content API de Twilio se pagina entera (`src/lib/twilio/content-list.ts`; también «Del set estándar»).
+- **OPER-6:** test de paridad catálogo ↔ punteros: **4** excepciones conocidas (no 2). De paso: `fetchPointers()` lee `error`.
+- Tests: 6 archivos `tests/unit/p1a-*` (+88). **24 fallan contra `2746d49`** (src de ese commit puesto sin stash,
+  restaurado después; OPER-6 y los «sigue funcionando» pasan por construcción). Suite: 71 archivos / 1017 tests.
+
 ## [deploy] — 2026-10-11 — Fases 0 y 0.bis del ciclo en producción
 
 - Push fast-forward por orden del dueño: `origin/main` = `origin/feat/multisede-aios` = `2746d49` (fases 0 y 0.bis +

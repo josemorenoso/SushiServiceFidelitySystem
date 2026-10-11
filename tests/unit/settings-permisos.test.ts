@@ -50,23 +50,26 @@ vi.mock('@/lib/supabase/server', () => ({
   }),
 }))
 
-function builder(op: string, fila: Record<string, unknown> = {}): unknown {
+function builder(op: string, fila: Record<string, unknown> = {}, tabla = 'admin_settings'): unknown {
   const b: Record<string, unknown> = {
     select: () => b,
     eq: () => b,
     maybeSingle: () => b,
-    update: (f: Record<string, unknown>) => builder('update', f),
-    insert: (f: Record<string, unknown>) => builder('insert', f),
+    update: (f: Record<string, unknown>) => builder('update', f, tabla),
+    insert: (f: Record<string, unknown>) => builder('insert', f, tabla),
     then: (ok: (v: unknown) => unknown) => {
       if (op !== 'select') escrituras.push({ op, fila })
-      return Promise.resolve({ data: null, error: null }).then(ok)
+      // Desde OPER-4 la ruta lee el proveedor de la marca antes de escribir un puntero de
+      // plantilla: esta es una marca Twilio, donde el dueño sí los elige en Ajustes.
+      const data = tabla === 'tenants' ? { messaging_provider: 'twilio' } : null
+      return Promise.resolve({ data, error: null }).then(ok)
     },
   }
   return b
 }
 
 vi.mock('@supabase/supabase-js', () => ({
-  createClient: () => ({ from: () => builder('select') }),
+  createClient: () => ({ from: (tabla: string) => builder('select', {}, tabla) }),
 }))
 
 // ═══════════════════════════════════════════════════════════════

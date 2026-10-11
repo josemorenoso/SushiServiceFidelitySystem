@@ -77,6 +77,9 @@ interface Constructor {
   not(c: string, o: string, x: unknown): Constructor
   is(c: string, x: unknown): Constructor
   or(expr: string): Constructor
+  // `findInactiveCustomers()` y el tope mensual paginan desde P1-a (N7): el doble ordena y corta.
+  order(c: string, o?: { ascending?: boolean }): Constructor
+  range(desde: number, hasta: number): Constructor
   limit(n: number): Constructor
   single(): Constructor
   maybeSingle(): Constructor
@@ -88,6 +91,8 @@ function consulta(tabla: string): Constructor {
   let op: 'select' | 'insert' | 'update' = 'select'
   let carga: Fila = {}
   let limite = Infinity
+  let desdeFila = 0
+  let orden: { col: string; asc: boolean } | null = null
   let modo: 'varias' | 'una' | 'una-o-ninguna' = 'varias'
 
   function ejecutar(): { data: unknown; error: { message: string; code?: string } | null } {
@@ -103,7 +108,11 @@ function consulta(tabla: string): Constructor {
       for (const f of elegidas) Object.assign(f, carga)
       return { data: null, error: null }
     }
-    const recortadas = elegidas.slice(0, limite)
+    if (orden) {
+      const { col, asc } = orden
+      elegidas.sort((a, b) => (comparar(a[col], b[col]) ?? 0) * (asc ? 1 : -1))
+    }
+    const recortadas = elegidas.slice(desdeFila, desdeFila + limite)
     if (modo === 'varias') return { data: recortadas, error: null }
     return { data: recortadas[0] ?? null, error: null }
   }
@@ -124,6 +133,8 @@ function consulta(tabla: string): Constructor {
     },
     is: (c, x) => (filtros.push((f) => (x === null ? valor(f, c) == null : valor(f, c) === x)), b),
     or: (expr) => (filtros.push(filtroOr(expr)), b),
+    order: (c, o) => ((orden = { col: c, asc: o?.ascending !== false }), b),
+    range: (desde, hasta) => ((desdeFila = desde), (limite = hasta - desde + 1), b),
     limit: (n) => ((limite = n), b),
     single: () => ((modo = 'una'), b),
     maybeSingle: () => ((modo = 'una-o-ninguna'), b),

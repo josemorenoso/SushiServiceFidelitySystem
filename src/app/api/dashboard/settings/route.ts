@@ -4,6 +4,7 @@ import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { requireTenantId } from '@/lib/tenant'
 import { exigirAlcanceDeMarca } from '@/lib/alcance-de-marca'
 import { isDbFailure, logDbFailure } from '@/lib/db-failure'
+import { decidirEscrituraDeAjuste, esPunteroDePlantilla } from '@/lib/settings-keys'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -47,7 +48,10 @@ export async function GET() {
  * `*_template_sid` vigente incluido—. El GET sigue abierto a cualquier sesión de la
  * marca: leer no cruza marcas, y la pantalla de Ajustes la abren los dos roles.
  *
- * ⚠️ Qué claves acepta NO cambió acá: eso es 0.PLANTILLAS (`ESTADO.md` §3).
+ * Y desde OPER-4 (2026-10-11) solo acepta las claves de una LISTA CERRADA
+ * (`src/lib/settings-keys.ts`): lo que las pantallas escriben de verdad. Un puntero de
+ * plantilla se acepta en una marca Twilio (el dueño la elige en Ajustes) y se rechaza
+ * con 400 en una marca Zernio, donde el único escritor es `promoteVersion()`.
  */
 export async function PUT(req: NextRequest) {
   const guardia = await exigirAlcanceDeMarca(
@@ -57,14 +61,42 @@ export async function PUT(req: NextRequest) {
   if (!guardia.ok) return guardia.res
   const tenantId = guardia.tenantId
 
-  const body = await req.json()
-  const { key, value } = body as { key: string; value: string }
+  const body = await req.json().catch(() => ({}))
+  const { key, value } = body as { key?: unknown; value?: unknown }
 
-  if (!key || value === undefined) {
+  if (typeof key !== 'string' || !key || typeof value !== 'string') {
     return NextResponse.json({ error: 'key y value son requeridos' }, { status: 400 })
   }
 
   const service = getServiceClient()
+
+  // El proveedor solo importa para un puntero de plantilla: no se paga la consulta en el resto.
+  let proveedor: string | null = null
+  if (esPunteroDePlantilla(key)) {
+    const { data: tenant, error: tenantError } = await service
+      .from('tenants')
+      .select('messaging_provider')
+      .eq('id', tenantId)
+      .maybeSingle()
+    if (isDbFailure(tenantError) || !tenant) {
+      if (tenantError) {
+        logDbFailure({
+          scope: 'Settings',
+          reason: 'provider_lookup_error',
+          error: tenantError,
+          context: { tenant_id: tenantId, key },
+        })
+      }
+      return NextResponse.json(
+        {
+          error: 'Problema técnico',
+          message: 'No pudimos guardar la configuración ahora mismo. Intenta de nuevo en un momento.',
+        },
+        { status: 503 }
+      )
+    }
+    proveedor = (tenant.messaging_provider as string | null) ?? null
+  }
 
   // Try update first, then insert if not exists.
   //
@@ -75,7 +107,7 @@ export async function PUT(req: NextRequest) {
   // fallo de LECTURA, no de escritura).
   const { data: existing, error: existingError } = await service
     .from('admin_settings')
-    .select('key')
+    .select('key, value')
     .eq('key', key)
     .eq('tenant_id', tenantId)
     .maybeSingle()
@@ -94,6 +126,20 @@ export async function PUT(req: NextRequest) {
       },
       { status: 503 }
     )
+  }
+
+  const decision = decidirEscrituraDeAjuste({
+    key,
+    valor: value,
+    proveedor,
+    valorActual: (existing?.value as string | null | undefined) ?? null,
+  })
+  if (!decision.ok) {
+    return NextResponse.json({ error: decision.error }, { status: decision.status })
+  }
+  if (!decision.escribir) {
+    // Un puntero de una marca Zernio guardado con el MISMO valor: nada que cambiar.
+    return NextResponse.json({ message: 'Sin cambios', key, value })
   }
 
   let error

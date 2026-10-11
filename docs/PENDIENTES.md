@@ -1,6 +1,6 @@
 # PENDIENTES — todo lo que falta, en un solo lugar
 
-> **Última actualización:** 2026-10-10 (ciclo fase 0.bis: sale N3-bis y N3-ter de §5, entran N3-quater y N3-quinquies; la consulta de la fase 0 ya corrió y su gesto pasa al de Planeta Wings). Antes 2026-10-08 (Opus 5.5, solo docs). **Es la puerta de entrada a lo que falta.** Si algo
+> **Última actualización:** 2026-10-11 (P1-a: salen N3-quater, N7, N8 de §5 y N5, N16, N23, OPER-4, OPER-6 de §3.3; entran N5-bis, N23-bis y OPER-4-bis; OPER-6 encontró **cuatro** punteros fuera del catálogo, no dos). Antes 2026-10-10 (ciclo fase 0.bis: sale N3-bis y N3-ter de §5, entran N3-quater y N3-quinquies; la consulta de la fase 0 ya corrió y su gesto pasa al de Planeta Wings). Antes 2026-10-08 (Opus 5.5, solo docs). **Es la puerta de entrada a lo que falta.** Si algo
 > pendiente no está aquí, no está pendiente: o se hizo, o hay que agregarlo aquí.
 > **Regla:** lo que se termina se **saca** de este archivo (no se tacha) y pasa al `CHANGELOG.md`. El detalle de cada
 > cosa vive en su documento de origen; aquí va una línea, el estado y dónde leer más.
@@ -146,7 +146,7 @@ nombre editable de la plantilla (`8cf5ed4`), «Cumpleaños — dos días antes»
 |---|---|---|---|
 | 1 | **Un solo libro de plantillas:** el AIOS deja de crearlas y le pide al producto que las cree. Muere la copia de textos, el sondeo manual, el paso 5 del AIOS y el estado «activo sin texto» | Dos catálogos que se ignoran (1.1, 1.4) | ⬜ · decisión B7 |
 | 1.bis | **Adoptar lo que ya existe en la WABA** (el punto 1 del prompt del 12-09): leer la categoría real, decir «ya existe» en vez de «reintenta más tarde» | El 400 de Planeta Wings | ⬜ · prompt listo |
-| 2 | **Cerrar el hueco catálogo ↔ código:** `tier_unlocked` y `reward_reminder` entran al catálogo. Hoy, en Zernio, **subir de nivel es silencio total** y el recordatorio de premio no sale | 1.2 | ⬜ · decisión B3 |
+| 2 | **Cerrar el hueco catálogo ↔ código:** `tier_unlocked` y `reward_reminder` entran al catálogo. Hoy, en Zernio, **subir de nivel es silencio total** y el recordatorio de premio no sale. Y las legacy `reactivation_with_reward_template_sid` y `reactivation_template_sid`, que el cron de reactivación todavía lee, se retiran. Las cuatro son las excepciones de `tests/unit/p1a-plantillas-paridad.test.ts` (OPER-6): al cerrar este paso, salen de ahí | 1.2 | ⬜ · decisión B3 |
 | 3 | **Una sola pantalla «Mensajes» para Twilio y Zernio:** un renglón por mensaje, un botón, el puntero se asigna solo al aprobar. Desaparecen Ajustes › Plantillas y el formulario suelto de Twilio | 1.3, 1.7 | ⬜ |
 | 4 | **Reducir de 13 a 8 aprobaciones por marca**, con la variación en variables | 1.5 | ⬜ · decisión B1 |
 | 5 | **Probar UTILITY** en bienvenida, puntos, premios y recordatorio (y en «Regalo que vence»), en una marca | 1.6 | ⬜ · decisión B2 |
@@ -168,12 +168,10 @@ sesión, cada marca hace **un solo viaje** a Meta (un botón, 24-72 h) en vez de
 | S-2.2 | Las automáticas «no se tocan, se usa la misma, se modifica si hace falta» | 🟡 (Zernio sí; Twilio no edita fuera del catálogo) |
 | S-2.3 | Crear plantillas libres. Twilio sí puede; **Zernio no tiene cómo desde el panel** | ⬜ · decisión B5 |
 | S-2.4 | **Restricción tuya: no rediseñar cómo se ven** («me encanta cómo se ven ahora») | regla |
-| N5 | Un administrador de sede puede editar, someter o adoptar plantillas de toda la marca | ⬜ micro |
+| N5-bis | Las rutas de plantillas de **Twilio** (`POST /api/dashboard/templates`, `[sid]/submit`, `standard`) siguen sin alcance de marca: un administrador de sede crea y somete plantillas en la cuenta de la marca. N5 cerró solo las del catálogo (P1-a, 2026-10-11) | ⬜ micro |
 | N9 | Una marca Zernio del AIOS no deja rastro de ningún rechazo ni pausa de sus 13 plantillas | ⬜ (lo cierra el paso 1) |
-| N16 | La pantalla Mensajes llama a la WABA de Zernio en cada carga, sin caché | ⬜ micro |
-| N23 | Campañas → Manuales no pagina las plantillas de Twilio: pasadas 100, desaparecen. Y el envío manual solo rellena nombre, puntos y próximo premio | ⬜ micro |
-| OPER-4 | `PUT /api/dashboard/settings` acepta cualquier clave: un puntero de plantilla se puede pisar sin pasar por `promoteVersion()`. Falta la lista cerrada | ⬜ micro |
-| OPER-6 | Test de paridad entre el catálogo y las claves que el código consume | ⬜ |
+| N23-bis | El envío manual solo rellena nombre, puntos y próximo premio (la paginación de N23 se cerró en P1-a) | ⬜ micro |
+| OPER-4-bis | En una marca **Zernio**, Ajustes › Plantillas ya no cambia punteros (400, P1-a), pero `handleSaveTemplates` traga el error: el dueño aprieta Guardar y no pasa nada, sin aviso. Y `tier_unlocked`, `reward_reminder` y `reactivation_with_reward` quedan **sin ningún escritor desde el panel** en Zernio hasta B3. Arreglo chico: mostrar el error (cambia la pantalla: decisión del dueño, S-2.4) | ⬜ micro · decisión |
 
 ### 3.4 Plantillas que cada marca tiene que crear hoy (gestos, no código)
 
@@ -226,15 +224,11 @@ Cada uno es menos de una hora. Juntos protegen todo lo que viene.
 | ID | Qué | Por qué importa |
 |---|---|---|
 | N1 | El «Importar CSV» crea clientes que aceptan marketing; los domicilios también nacen «consentidos» | Ley 1581 · decisión D4 |
-| N3-quater | El diálogo de las burbujas (`AtRiskBubbles.tsx:123`, `data.count ?? 0`) lee el **500** del estimador como «0 elegibles». La fase 0.bis arregló el estimador y `ManualCampaigns`, pero ese archivo no era de su territorio. Arreglo: `res.ok && typeof data.count === 'number' ? data.count : null` | Un fallo se ve como «nadie a quién escribirle» |
 | N3-quinquies | La causa real del fallo (fase 0.bis) se lee de `message_logs`, cuyo INSERT es *best-effort* (`recordMessageLog()` traga su error). Si esa fila no se escribió, `error_message` dice solo el proveedor. Y `campaign_messages` no guarda el premio: el tope de reintentos del recordatorio suma los fallos de dos premios del mismo cliente que venzan a la vez | Diagnóstico incompleto en un caso raro |
 | N6 | Los botones sí/no del webhook de Zernio esperan 10 s antes de contestar | El mismo riesgo de apagón que se cerró en ESCALA-3 |
-| N7 | Tres búsquedas sin paginar; el tope mensual, ante un error, **no se aplica** y no deja log | Fatiga y cupo |
-| N8 | Errores tragados en `getActiveTenants()` y `getTenantByDomain()`; escrituras posteriores al envío sin leer `error` | Un fallo de base se ve como «nada que hacer» |
 | N13 | El PIN del supervisor no tiene límite de intentos | Seguridad |
 | N18 | Un test de la analítica contra el Postgres real (el 500 del 04-10 lo habría cazado) + CI (PROC-1) | Cada push a `main` despliega |
 | SEG-2 · SEG-3 | La carrera de dos `resolve` simultáneos · `PUT tenant-config` abierto a un administrador de sede | Prompt listo: `docs/prompts/2026-10-04-seg2-resolve-y-tenant-config.md` |
-| OPER-4 | Lista cerrada de claves en `PUT settings` | Ver §3.3 |
 | 0.ETA | La importación de CSV cuenta como importados los que la base rechazó | Con 2+ sedes reporta éxito sobre cero filas |
 | 0.ESCALA (c) | Ninguna pantalla lee el error de la analítica: un 500 se ve como «0 clientes» | Lo que pasó el 04-10 |
 | AISLA-5 · AISLA-8 | Test del `timingSafeEqual` · el resto de AISLA-8 | Auditoría §3.1 |

@@ -28,7 +28,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js'
-import { logDbFailure } from '@/lib/db-failure'
+import { isDbFailure, logDbFailure } from '@/lib/db-failure'
 import {
   CATALOG_SIZE,
   DEFAULT_TEMPLATE_STYLE,
@@ -130,11 +130,18 @@ async function fetchVersions(tenantId: string): Promise<TemplateVersion[]> {
 
 async function fetchPointers(tenantId: string): Promise<Record<string, string>> {
   const supabase = getServiceClient()
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('admin_settings')
     .select('key, value')
     .eq('tenant_id', tenantId)
     .in('key', TEMPLATE_CATALOG.map((t) => t.settingsKey))
+
+  // Un fallo de lectura no es «no hay punteros» (2026-10-11): con los punteros vacíos,
+  // «Usar la aprobada» creía libre un mensaje que se está enviando y lo reemplazaba.
+  if (isDbFailure(error)) {
+    logDbFailure({ scope: 'Templates', reason: 'pointers_read_error', error, context: { tenant_id: tenantId } })
+    throw new TemplateError('No se pudo leer el estado de las plantillas.', 500)
+  }
 
   const pointers: Record<string, string> = {}
   for (const row of data ?? []) {
@@ -167,7 +174,9 @@ export async function getTemplateCatalogState(tenant: Tenant): Promise<TemplateC
   const [versions, pointers, waba] = await Promise.all([
     fetchVersions(tenant.id),
     fetchPointers(tenant.id),
-    tenant.zernio_account_id ? fetchWabaTemplates(tenant.zernio_account_id) : Promise.resolve(null),
+    tenant.zernio_account_id
+      ? fetchWabaTemplatesCacheada(tenant.id, tenant.zernio_account_id)
+      : Promise.resolve(null),
   ])
   const wabaNames = (waba ?? []).map((t) => t.name)
 
@@ -219,6 +228,42 @@ export async function getTemplateCatalogState(tenant: Tenant): Promise<TemplateC
     ),
     wabaTemplates: waba ? waba.map(mapZernioTemplateToItem) : null,
   }
+}
+
+/**
+ * Caché corto del listado de la WABA, por marca (N16, 2026-10-11).
+ *
+ * La pantalla de Plantillas llamaba a Zernio en CADA carga (y la abren varias veces por
+ * sesión: volver de editar, cambiar de pestaña). El listado cambia solo cuando nosotros
+ * creamos, sometemos o adoptamos una plantilla —y entonces se invalida acá mismo— o
+ * cuando Meta resuelve una revisión, que llega por el webhook y también invalida.
+ *
+ * Sin infraestructura: un `Map` en la memoria del proceso. En Vercel cada instancia tiene
+ * el suyo y una instancia fría arranca vacía, así que lo peor es una lectura de más, nunca
+ * un dato viejo de más de `WABA_CACHE_MS`. Solo lo usa la LECTURA de la pantalla:
+ * someter, adoptar y validar un nombre siguen leyendo la WABA en vivo, porque ahí un
+ * listado viejo sí decide mal. Un fallo (`null`) no se guarda.
+ */
+export const WABA_CACHE_MS = 60_000
+const wabaCache = new Map<string, { accountId: string; leidaEn: number; templates: ZernioTemplateSummary[] }>()
+
+async function fetchWabaTemplatesCacheada(
+  tenantId: string,
+  accountId: string
+): Promise<ZernioTemplateSummary[] | null> {
+  const guardada = wabaCache.get(tenantId)
+  if (guardada && guardada.accountId === accountId && Date.now() - guardada.leidaEn < WABA_CACHE_MS) {
+    return guardada.templates
+  }
+  const templates = await fetchWabaTemplates(accountId)
+  if (templates) wabaCache.set(tenantId, { accountId, leidaEn: Date.now(), templates })
+  else wabaCache.delete(tenantId)
+  return templates
+}
+
+/** Olvida el listado guardado de una marca: la próxima carga de la pantalla lee la WABA. */
+export function invalidarCacheDeLaWaba(tenantId: string): void {
+  wabaCache.delete(tenantId)
 }
 
 /**
@@ -728,6 +773,7 @@ async function createAndSubmit(input: CreateAndSubmitInput): Promise<SaveTemplat
   let providerTemplateId: string | null = null
   let providerStatus: ZernioTemplateStatus = 'PENDING'
 
+  // Pase lo que pase con la creación, la WABA pudo cambiar: la pantalla relee (N16).
   try {
     const created = await createZernioTemplate({
       accountId: tenant.zernio_account_id,
@@ -740,7 +786,9 @@ async function createAndSubmit(input: CreateAndSubmitInput): Promise<SaveTemplat
     })
     providerTemplateId = created.template?.id ?? null
     providerStatus = created.template?.status ?? 'PENDING'
+    invalidarCacheDeLaWaba(tenant.id)
   } catch (err) {
+    invalidarCacheDeLaWaba(tenant.id)
     const detail = err instanceof Error ? err.message : String(err)
     console.error(`[Templates] Zernio rechazó la creación de ${providerRef}:`, detail)
 
@@ -956,6 +1004,9 @@ export async function applyProviderTemplateStatus(
   input: ProviderTemplateStatusInput
 ): Promise<TemplateStatusOutcome> {
   const supabase = getServiceClient()
+  // Meta resolvió una revisión (o el botón «Usar la aprobada» pasa por acá): el estado que
+  // muestra la pantalla cambió en la WABA. Se invalida antes de nada (N16).
+  invalidarCacheDeLaWaba(input.tenantId)
 
   const { data, error } = await supabase
     .from('template_versions')

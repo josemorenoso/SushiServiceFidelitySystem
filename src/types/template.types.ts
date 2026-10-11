@@ -24,18 +24,25 @@ export type TemplateStyle = (typeof TEMPLATE_STYLES)[number]
  */
 export type TemplateVersionStyle = TemplateStyle | 'personalizado'
 
-/** Las 13 plantillas del catálogo estándar. */
+/**
+ * Las plantillas del catálogo estándar: las 16 de un negocio nuevo (`CATALOG_SIZE`) más
+ * el cumpleaños del día mismo, reemplazado. `tier_unlocked`, `reward_reminder` y
+ * `gift_expiring` entraron juntas el 2026-10-11 (decisiones B3 y B6 del dueño).
+ */
 export type TemplateKey =
   | 'welcome'
   | 'points_earned_far'
   | 'points_earned_near'
+  | 'tier_unlocked'
   | 'reward_safe'
   | 'mystery_box_result'
   | 'golden_box_result'
+  | 'reward_reminder'
   | 'birthday'
   | 'birthday_upcoming'
   | 'reactivation_no_reward'
   | 'reactivation_aggressive'
+  | 'gift_expiring'
   | 'campaign_presencial_to_domicilio'
   | 'campaign_domicilio_to_presencial'
   | 'event_image'

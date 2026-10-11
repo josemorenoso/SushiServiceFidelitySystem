@@ -1,12 +1,16 @@
 /**
- * CATÁLOGO ESTÁNDAR de plantillas de WhatsApp — la estructura de las 13.
+ * CATÁLOGO ESTÁNDAR de plantillas de WhatsApp — la estructura de las 16.
  *
  * REQUERIMIENTOS_AGOSTO_2026.md §12, punto 1: "Un solo set base de plantillas,
  * igual para todos los tenants. Hoy cada alta termina con un conjunto
  * ligeramente distinto según quién lo haya armado a mano". Este archivo es esa
- * fuente única: todo tenant Zernio nuevo nace con exactamente estas 13.
+ * fuente única: todo tenant nuevo nace con exactamente estas 16 (`CATALOG_SIZE`).
+ * Eran 13 hasta el 2026-10-11: «Nivel desbloqueado» y «Recordatorio de premio» las
+ * consumía el código sin estar acá (en Zernio, subir de nivel era silencio total), y
+ * «Regalo que vence» es la del ciclo de recuperación. Entraron juntas para que cada
+ * marca haga UN solo viaje a Meta (decisiones B3 y B6 del dueño).
  *
- * Los TEXTOS no están aquí — están en `template-texts.ts` (banco de 13).
+ * Los TEXTOS no están aquí — están en `template-texts.ts`.
  * Aquí vive la estructura: qué plantilla es, a qué clave de `admin_settings`
  * apunta, su categoría ante Meta y — lo más importante — el CONTRATO DE
  * VARIABLES.
@@ -54,7 +58,7 @@ export const TEMPLATE_LANGUAGE = 'es'
  * No es el largo de `TEMPLATE_CATALOG`: una entrada con `replacedBy` (hoy, el cumpleaños
  * del día mismo) sigue ahí para las marcas que todavía la usan, pero a nadie se le ofrece.
  */
-export const CATALOG_SIZE = 13
+export const CATALOG_SIZE = 16
 
 /**
  * Token que puede aparecer en un `sample` para decir "aquí va el nombre del
@@ -181,12 +185,36 @@ export const TEMPLATE_CATALOG: readonly CatalogTemplate[] = [
       { index: 4, label: 'Premio del próximo nivel', sample: 'Bebida gratis' },
     ],
   },
+  // ⚠️ NIVEL DESBLOQUEADO (B3, 2026-10-11). El check-in, los domicilios y el override del
+  // panel la mandan al cruzar un nivel EN VEZ de «puntos sumados» (cadena `else if`): una
+  // marca sin ella no recibe NADA en el mejor momento del cliente. Hasta hoy el código la
+  // leía sin que el catálogo la definiera, así que ninguna marca Zernio podía crearla.
+  // El contrato es el que ya mandan los tres emisores (`check-in/route.ts`,
+  // `delivery.service.ts`, `check-in-override`): no se toca.
+  {
+    key: 'tier_unlocked',
+    settingsKey: 'tier_unlocked_template_sid',
+    baseName: 'nivel_desbloqueado',
+    category: 'MARKETING',
+    label: 'Nivel desbloqueado',
+    description: 'Le avisa al cliente que subió de nivel y qué premio desbloqueó, en el momento del cruce.',
+    whenSent:
+      'Al registrar una visita o un domicilio que lo hace subir de nivel. Mientras no exista, en ese momento no le llega nada: ni el nivel ni los puntos.',
+    variables: [
+      { index: 1, label: 'Nombre del cliente', sample: 'Luis' },
+      { index: 2, label: 'Nombre del nivel', sample: 'Bronce' },
+      { index: 3, label: 'Premio seguro del nivel', sample: 'Bebida gratis' },
+      { index: 4, label: 'Camino de niveles', sample: ROADMAP_SAMPLE },
+    ],
+  },
   {
     key: 'reward_safe',
     settingsKey: 'reward_safe_template_sid',
     baseName: 'tier_desbloqueado_safe',
     category: 'MARKETING',
-    label: 'Nivel desbloqueado — premio seguro',
+    // Se llamaba «Nivel desbloqueado — premio seguro»: con la de arriba en el catálogo, dos
+    // filas decían «Nivel desbloqueado». Esta es la confirmación de lo que el cliente ELIGIÓ.
+    label: 'Premio seguro — confirmación',
     description: 'Confirma el premio que el cliente eligió al alcanzar un nivel, e indica cómo reclamarlo.',
     whenSent: 'Cuando cruza un nivel y elige el premio seguro en vez de la Mystery Box.',
     variables: [
@@ -223,6 +251,25 @@ export const TEMPLATE_CATALOG: readonly CatalogTemplate[] = [
       { index: 1, label: 'Nombre del cliente', sample: 'Pedro' },
       { index: 2, label: 'Premio ganado', sample: 'Postre del chef' },
       { index: 3, label: 'Camino de niveles', sample: ROADMAP_SAMPLE },
+    ],
+  },
+  // ⚠️ RECORDATORIO DE PREMIO (B3, 2026-10-11). Lo manda el cron `reward-reminder`, que
+  // sale sin hacer nada si la marca no la tiene. Mismo caso que «Nivel desbloqueado»: el
+  // código la leía y el catálogo no la definía. Contrato del cron, que no se toca:
+  // `{1: nombre, 2: premio, 3: días que le quedan}` (un número: «3», «1», «0»).
+  {
+    key: 'reward_reminder',
+    settingsKey: 'reward_reminder_template_sid',
+    baseName: 'recordatorio_premio',
+    category: 'MARKETING',
+    label: 'Recordatorio de premio',
+    description: 'Le recuerda al cliente que tiene un premio sin reclamar y cuántos días le quedan.',
+    whenSent:
+      'En el envío automático diario, unos días antes de que venza un premio sin reclamar. Solo si el recordatorio está encendido en Ajustes.',
+    variables: [
+      { index: 1, label: 'Nombre del cliente', sample: 'Andrea' },
+      { index: 2, label: 'Premio por reclamar', sample: 'Postre del chef' },
+      { index: 3, label: 'Días que le quedan', sample: '3' },
     ],
   },
   // ⚠️ LAS DOS DE CUMPLEAÑOS (dueño, 2026-10-04). El saludo pasó a salir DOS DÍAS ANTES
@@ -292,6 +339,28 @@ export const TEMPLATE_CATALOG: readonly CatalogTemplate[] = [
       { index: 1, label: 'Nombre del cliente', sample: 'Daniela' },
       { index: 2, label: 'Saldo total de puntos', sample: '128' },
       { index: 3, label: 'Premio del próximo nivel', sample: 'Bebida gratis o Mystery Box' },
+    ],
+  },
+  // ⚠️ REGALO QUE VENCE (B6, 2026-10-11). La plantilla del ciclo de recuperación (spec
+  // `docs/superpowers/specs/2026-10-04-ciclo-de-recuperacion-design.md` §4): una sola,
+  // aprobada una vez, y el regalo y la fecha cambian solos. Entra AHORA para que cada marca
+  // la mande a Meta en el mismo viaje que las otras nuevas; quién la usa (y el adaptador a
+  // la insistente mientras una marca no la tenga aprobada) es de la fase 1B del ciclo.
+  // Hasta entonces nadie la envía: `p1a-plantillas-paridad.test.ts` lo sabe.
+  {
+    key: 'gift_expiring',
+    settingsKey: 'gift_expiring_template_sid',
+    baseName: 'regalo_que_vence',
+    category: 'MARKETING',
+    label: 'Regalo que vence',
+    description: 'Le cuenta al cliente que le guardaste un regalo y hasta cuándo puede venir por él.',
+    whenSent:
+      'Todavía no se envía: la usará el ciclo de recuperación cuando se encienda en tu marca. Puedes dejarla aprobada desde ya.',
+    variables: [
+      { index: 1, label: 'Nombre del cliente', sample: 'Juanita' },
+      { index: 2, label: 'Regalo', sample: '½ rollo gratis' },
+      { index: 3, label: 'Fecha límite', sample: 'domingo 11 de octubre' },
+      { index: 4, label: 'Camino de niveles', sample: ROADMAP_SAMPLE },
     ],
   },
   {

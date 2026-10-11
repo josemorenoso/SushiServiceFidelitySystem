@@ -1,6 +1,9 @@
 /**
- * BANCO DE TEXTOS de las plantillas de WhatsApp — las 13 de un negocio nuevo (más el
+ * BANCO DE TEXTOS de las plantillas de WhatsApp — las 16 de un negocio nuevo (más el
  * cumpleaños del día mismo, reemplazado el 2026-10-04 y vivo solo donde ya está), en UN solo estilo.
+ * Las tres últimas en entrar (2026-10-11) son «Nivel desbloqueado», «Recordatorio de premio»
+ * y «Regalo que vence»: textos NUEVOS en el mismo tono, que el dueño revisa en el panel antes
+ * de mandarlos a Meta (nada se somete solo).
  *
  * Hasta el 2026-09-10 había tres estilos (cálido, elegante, urbano). El dueño
  * los quitó, textual: "siempre cálido, nada de eso sirve". Quedó el cálido,
@@ -122,6 +125,17 @@ export const TEMPLATE_TEXTS: Record<TemplateKey, TemplateBodyBuilder> = {
     `¡{{1}}, gracias por tu visita! Esperamos que hayas disfrutado tu experiencia ${emoji}\n\n¡Casi lo lograste! Sumaste *+{{2}} puntos* 🔥\n\nTu saldo: *{{3}} puntos*\n\nLa próxima visita reclama tu *{{4}}* o si quieres probar suerte, selecciona la *Mystery Box* con premios todavía mejores 🎲\n\n¡Vuelve pronto que ya casi es tuyo!\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
 
   // ─────────────────────────────────────────────────────────────
+  // 3-bis · Nivel desbloqueado — MARKETING (texto nuevo, 2026-10-11)
+  //     {{1}} nombre · {{2}} nivel · {{3}} premio seguro · {{4}} roadmap
+  //     Sale EN EL MOMENTO del cruce, antes de que el cliente elija: por eso ofrece las dos
+  //     salidas (la segura y la Mystery Box) y no da ninguna por elegida. «Al registrar tu
+  //     visita» sirve igual para el check-in (elige ahí mismo) y para el domicilio (elige
+  //     en la próxima visita, cuando el sistema le vuelve a ofrecer el nivel).
+  // ─────────────────────────────────────────────────────────────
+  tier_unlocked: (brand, emoji) =>
+    `¡{{1}}, subiste de nivel! 🏆${emoji}\n\nAlcanzaste el nivel *{{2}}* y desbloqueaste un premio 🎁\n\nPuedes ir a la segura con *{{3}}* o probar suerte con la *Mystery Box* 🎲 Elige tu premio al registrar tu visita y te confirmamos por aquí.\n\nAsí sigue tu camino de premios:\n\n{{4}}\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
+
+  // ─────────────────────────────────────────────────────────────
   // 4 · Tier desbloqueado, premio seguro — MARKETING
   //     {{1}} nombre · {{2}} tier · {{3}} premio · {{4}} roadmap
   // ─────────────────────────────────────────────────────────────
@@ -141,6 +155,17 @@ export const TEMPLATE_TEXTS: Record<TemplateKey, TemplateBodyBuilder> = {
   // ─────────────────────────────────────────────────────────────
   golden_box_result: (brand, emoji) =>
     `¡{{1}}, gracias por volver! Esperamos hayas disfrutado tu experiencia ${emoji}\n\nHoy tenías la *Golden Box* activada ✨🎲\n\nTu premio: *{{2}}*\n\nMuestra *este mensaje* al mesero para reclamar tu premio 🎁\n\n{{3}}\n\nLa suerte está de tu lado, sigue sumando puntos y desbloquea nuevas recompensas 🍀\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
+
+  // ─────────────────────────────────────────────────────────────
+  // 6-bis · Recordatorio de premio — MARKETING (texto nuevo, 2026-10-11)
+  //     {{1}} nombre · {{2}} premio · {{3}} días que le quedan (un número)
+  //     «Días que te quedan: 3» y no «vence en 3 días»: el cron manda el número pelado,
+  //     y con 1 o con 0 la otra forma queda mal escrita en un texto que Meta aprueba literal.
+  //     Cómo se reclama es lo que de verdad pasa: el mesero registra la visita y el premio
+  //     le salta en la pantalla (`docs/features/reward-grants.md`). Sin urgencia falsa.
+  // ─────────────────────────────────────────────────────────────
+  reward_reminder: (brand, emoji) =>
+    `¡Hola {{1}}! Tienes un premio esperándote 🎁${emoji}\n\nTe ganaste *{{2}}* y todavía no lo reclamas.\n\n⏳ Días que te quedan para reclamarlo: *{{3}}*\n\nVen a visitarnos: cuando registren tu visita, tu premio aparece solo y te lo entregan ahí mismo.\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
 
   // ─────────────────────────────────────────────────────────────
   // 7 · Cumpleaños — MARKETING
@@ -174,6 +199,16 @@ export const TEMPLATE_TEXTS: Record<TemplateKey, TemplateBodyBuilder> = {
   // ─────────────────────────────────────────────────────────────
   reactivation_aggressive: (brand, emoji) =>
     `Hola *{{1}}* 👀${emoji}\n\nTus *{{2}} puntos* llevan tiempo sin moverse\n\nEstás cerca de ganarte *{{3}}* — sería una lástima dejarlo ahí\n\nVuelve esta semana y sigue sumando, nosotros mantenemos tu progreso 💪\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
+
+  // ─────────────────────────────────────────────────────────────
+  // 9-bis · Regalo que vence — MARKETING (2026-10-11)
+  //     {{1}} nombre · {{2}} regalo · {{3}} fecha límite («domingo 11 de octubre») · {{4}} roadmap
+  //     El texto del spec del ciclo §4, literal. Lo usará la fase 1B («Le regalamos algo»,
+  //     «Rescate», los toques trimestrales). «Tus puntos siguen intactos» ataca la confusión
+  //     de que reclamar un premio gasta puntos (problema 6 del spec).
+  // ─────────────────────────────────────────────────────────────
+  gift_expiring: (brand, emoji) =>
+    `¡Hola {{1}}! Tenemos algo para ti 🎁${emoji}\n\nTe guardamos *{{2}}*. Ven antes del *{{3}}*, muestra este mensaje y es tuyo.\n\nAsí vas en tu camino de premios:\n\n{{4}}\n\nTus puntos siguen intactos: los premios se desbloquean, no se gastan 💪\n\n_— ${brand}_\n\n${OPT_OUT_LINE}`,
 
   // ─────────────────────────────────────────────────────────────
   // 10 · Campaña Presencial → Domicilio — MARKETING

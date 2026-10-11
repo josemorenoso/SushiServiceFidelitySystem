@@ -1,7 +1,7 @@
 /**
  * El banco de textos de plantillas, contra las reglas duras de Meta.
  *
- * POR QUÉ IMPORTA: cada uno de los 13 textos es una aprobación de Meta aparte,
+ * POR QUÉ IMPORTA: cada texto del banco es una aprobación de Meta aparte,
  * y el veredicto tarda 24-72h. Un texto que empieza
  * con una variable, que pierde un `{{n}}` que el backend sí manda, o que se
  * olvida la línea de opt-out en una plantilla MARKETING, no falla aquí: falla
@@ -57,6 +57,71 @@ describe('catálogo estándar', () => {
     expect(buildTemplateBody('birthday_upcoming', MARCA, RESTAURANTE).toLowerCase()).not.toContain('feliz cumpleaños')
   })
 
+  it('las tres nuevas del 2026-10-11 están, son MARKETING y nacen en el slot que el código ya lee', () => {
+    // B3 y B6: «Nivel desbloqueado» y «Recordatorio de premio» las consumía el código sin
+    // estar en el catálogo; «Regalo que vence» es la del ciclo. Entran juntas: un solo viaje.
+    expect(TEMPLATE_CATALOG_BY_KEY.tier_unlocked).toMatchObject({
+      settingsKey: 'tier_unlocked_template_sid',
+      baseName: 'nivel_desbloqueado',
+      category: 'MARKETING',
+    })
+    expect(TEMPLATE_CATALOG_BY_KEY.reward_reminder).toMatchObject({
+      settingsKey: 'reward_reminder_template_sid',
+      baseName: 'recordatorio_premio',
+      category: 'MARKETING',
+    })
+    expect(TEMPLATE_CATALOG_BY_KEY.gift_expiring).toMatchObject({
+      settingsKey: 'gift_expiring_template_sid',
+      baseName: 'regalo_que_vence',
+      category: 'MARKETING',
+    })
+  })
+
+  it('el contrato de variables de las nuevas es el que YA mandan sus emisores', () => {
+    // check-in, domicilios y override: {1: nombre, 2: nivel, 3: premio seguro, 4: camino}.
+    expect(TEMPLATE_CATALOG_BY_KEY.tier_unlocked.variables.map((v) => v.label)).toEqual([
+      'Nombre del cliente',
+      'Nombre del nivel',
+      'Premio seguro del nivel',
+      'Camino de niveles',
+    ])
+    // cron reward-reminder: {1: nombre, 2: premio, 3: días que le quedan}.
+    expect(TEMPLATE_CATALOG_BY_KEY.reward_reminder.variables.map((v) => v.label)).toEqual([
+      'Nombre del cliente',
+      'Premio por reclamar',
+      'Días que le quedan',
+    ])
+    // spec del ciclo §4: {1: nombre, 2: regalo, 3: fecha límite, 4: camino}.
+    expect(TEMPLATE_CATALOG_BY_KEY.gift_expiring.variables.map((v) => v.label)).toEqual([
+      'Nombre del cliente',
+      'Regalo',
+      'Fecha límite',
+      'Camino de niveles',
+    ])
+  })
+
+  it('«Regalo que vence» es el texto del spec del ciclo §4, literal', () => {
+    expect(buildTemplateBody('gift_expiring', MARCA, RESTAURANTE)).toBe(
+      `¡Hola {{1}}! Tenemos algo para ti 🎁${RESTAURANTE}\n\nTe guardamos *{{2}}*. Ven antes del *{{3}}*, muestra este mensaje y es tuyo.\n\nAsí vas en tu camino de premios:\n\n{{4}}\n\nTus puntos siguen intactos: los premios se desbloquean, no se gastan 💪\n\n_— ${MARCA}_\n\n${OPT_OUT_LINE}`
+    )
+  })
+
+  it('«Nivel desbloqueado» sale ANTES de que el cliente elija: no da ninguna salida por elegida', () => {
+    const cuerpo = buildTemplateBody('tier_unlocked', MARCA, RESTAURANTE)
+    expect(cuerpo).not.toMatch(/elegiste/i)
+    expect(cuerpo).toContain('Mystery Box')
+  })
+
+  it('«Recordatorio de premio» no conjuga el número de días: el cron manda «1» y «0» también', () => {
+    const cuerpo = buildTemplateBody('reward_reminder', MARCA, RESTAURANTE)
+    expect(cuerpo).not.toMatch(/\{\{3\}\}\*? días/)
+    expect(renderTemplatePreview('reward_reminder', cuerpo, MARCA)).toContain('*3*')
+  })
+
+  it('una marca nueva necesita 16 aprobaciones: las 13 de antes + las tres nuevas', () => {
+    expect(CATALOG_SIZE).toBe(16)
+  })
+
   it('no repite settingsKey ni baseName — los dos son identificadores', () => {
     const settingsKeys = TEMPLATE_CATALOG.map((t) => t.settingsKey)
     const baseNames = TEMPLATE_CATALOG.map((t) => t.baseName)
@@ -79,7 +144,7 @@ describe('catálogo estándar', () => {
 })
 
 describe('banco de textos', () => {
-  it('los 13 textos pasan las reglas de Meta', () => {
+  it('todos los textos del banco pasan las reglas de Meta (las tres nuevas incluidas)', () => {
     expect(assertCatalogTextsAreValid(MARCA)).toEqual([])
   })
 
@@ -337,7 +402,7 @@ describe('nombre de la plantilla en Meta', () => {
     expect(validateTemplateName('bienvenida_pw')).toEqual([])
   })
 
-  it('los 13 nombres base del catálogo pasan la misma validación que el dueño', () => {
+  it('los nombres base del catálogo pasan la misma validación que el dueño', () => {
     for (const t of TEMPLATE_CATALOG) {
       expect(validateTemplateName(t.baseName), t.key).toEqual([])
     }

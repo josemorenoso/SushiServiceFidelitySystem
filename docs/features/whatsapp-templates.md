@@ -1,8 +1,11 @@
-# Plantillas de WhatsApp — catálogo estándar, un solo estilo y edición sin huecos
+# Plantillas de WhatsApp — un solo libro, una sola pantalla, edición sin huecos
 
-> **Estado:** implementado (v2.12.0, 2026-08-30) · **Alcance:** solo tenants `messaging_provider='zernio'`
-> **Requerimiento:** `docs/requerimientos/REQUERIMIENTOS_AGOSTO_2026.md` §12 (primera prioridad del proyecto)
-> **Migración:** `supabase/migrations/00039_template_catalog.sql`
+> **Estado:** implementado (v2.12.0, 2026-08-30) · **«Un solo libro», 2026-10-11:** la pantalla sirve a
+> Twilio y a Zernio, el panel reconoce lo que ya está en la WABA, el catálogo pasa de 13 a 16 y hay una
+> Biblioteca para campañas · **Alcance del editor (versiones, `promoteVersion()`):** marcas Zernio
+> **Requerimiento:** `docs/requerimientos/REQUERIMIENTOS_AGOSTO_2026.md` §12 (primera prioridad del proyecto) ·
+> decisiones B3–B6 del dueño (`docs/PENDIENTES.md` §8) · prompt `docs/prompts/2026-10-11-plantillas-un-solo-libro.md`
+> **Migración:** `supabase/migrations/00039_template_catalog.sql` (el 2026-10-11 no hizo falta ninguna)
 
 ## El problema que resuelve
 
@@ -21,12 +24,12 @@ Son **decisiones tomadas**, no supuestos. No volver a preguntarlas ni cambiarlas
 
 | # | Decisión | Dónde vive en el código |
 |---|----------|-------------------------|
-| 1 | **Un catálogo estándar de 13 plantillas**, igual para todo tenant nuevo | `src/constants/template-catalog.ts` |
+| 1 | **Un catálogo estándar**, igual para todo tenant nuevo: 13 hasta el 2026-10-11, **16** desde entonces (`CATALOG_SIZE`) | `src/constants/template-catalog.ts` |
 | 2 | **Un solo estilo.** Hubo tres hasta el 2026-09-10; el dueño los quitó (*"siempre cálido, nada de eso sirve"*) | `TEMPLATE_STYLES = ['calido']` |
 | 3 | **El dueño edita sus propias plantillas**, con advertencia de responsabilidad y registro de quién y cuándo | `template_versions.edited_by` / `disclaimer_accepted_at` |
 | 4 | ~~El estilo es sugerencia, no candado~~ **Retirado el 2026-09-10** con los estilos. `admin_settings.template_style` ya no se lee; `applyStyleToCatalog()` y `StyleSelector` se borraron | — |
-| 5 | **Banco de textos fijo** (13). Sin LLM por ahora. Lo que varía por `business_type` es solo el emoji | `src/constants/template-texts.ts` |
-| 6 | **Solo tenants nuevos por Zernio.** Los 4 tenants Twilio no se tocan | `assertZernioTenant()` |
+| 5 | **Banco de textos fijo** (16). Sin LLM por ahora. Lo que varía por `business_type` es solo el emoji | `src/constants/template-texts.ts` |
+| 6 | **El editor es solo para Zernio.** Los textos aprobados de los tenants Twilio no se tocan. Desde el 2026-10-11 ven la MISMA pantalla: crean lo que les falta y eligen la plantilla de cada mensaje, sin editor | `assertZernioTenant()` |
 
 Y la que ordena todo el diseño — **Pregunta 1, resuelta**:
 
@@ -62,15 +65,16 @@ Lo que pasa por debajo:
    → la pantalla se lo dice al dueño con el motivo, para que corrija
 ```
 
-**El invariante que sostiene todo:** `promoteVersion()` es el **único** punto del sistema que escribe
-`admin_settings.<settings_key>`, y solo corre cuando Meta ya dijo `APPROVED`. Desde el 2026-10-11 el
-`PUT /api/dashboard/settings` lo respeta en las marcas Zernio: ahí cambiar un puntero da 400 (ver
-«Guardas» abajo). En las Twilio el dueño sigue eligiéndolos en Ajustes.
+**El invariante que sostiene todo:** en una marca Zernio, `promoteVersion()` es el **único** punto del
+sistema que escribe `admin_settings.<settings_key>`, y solo corre cuando Meta ya dijo `APPROVED`. El
+`PUT /api/dashboard/settings` lo respeta: ahí cambiar un puntero Zernio da 400 (ver «Guardas» abajo). En
+las Twilio el dueño elige la plantilla de cada mensaje en Plantillas («Elegir otra», que usa ese mismo
+`PUT`); `fillEmptyPointer()` rellena solo una clave vacía al crear.
 
 ## El alta de un negocio nuevo: enviar tal cual o editar
 
 `aios_provision_tenant` **no siembra ningún `*_template_sid`**: un tenant recién creado llega a esta
-pantalla con las 13 vacías. Hasta 2026-09-06 el único camino que las creaba en bloque era el de
+pantalla con todos los mensajes vacíos. Hasta 2026-09-06 el único camino que las creaba en bloque era el de
 cambiar de estilo (ya retirado), que solo aparecía al elegir un estilo DISTINTO al actual. Un negocio
 que quisiera el texto estándar **no tenía ningún botón**: eran 13 ediciones a mano para mandar
 textos que nadie quería cambiar. Reportado por el dueño.
@@ -127,6 +131,46 @@ Al final de la pantalla va la **lista real de la WABA** (`wabaTemplates`), con n
 si es del Golden Bullet y qué mensaje la está usando. Es la única excepción al vocabulario sin nombres
 técnicos de esta pantalla, pedida por el dueño: sin ella no había dónde ver si una plantilla salió.
 
+### Un solo libro: lo que ya está en la WABA y el panel no sabía (2026-10-11)
+
+«Activar» resolvía las APROBADAS. Quedaba el resto del alta por el AIOS (Planeta Wings, 12-09): las que
+estaban **en revisión** se veían «Pendiente de enviar» y «Enviar a Meta» chocaba por nombre; cuando Meta
+las aprobaba, el webhook las descartaba (`sin versión registrada`); y las que el AIOS sí apuntó se veían
+«Activo, pero no tenemos su texto». Ahora `getTemplateCatalogState()`, ANTES de dibujar, pasa cada mensaje
+por `reconciliarConLaWaba()` (PURA) y aplica lo que diga:
+
+| Acción | Cuándo | Qué escribe |
+|---|---|---|
+| `vigente` | Puntero sin fila y en la WABA hay una APROBADA con ese nombre | La fila como vigente, con su texto y su categoría REALES. **No toca el puntero** (ya apunta ahí) |
+| `pendiente` | Mensaje vacío y en la WABA hay una en revisión (`PENDING`/`IN_APPEAL`) que sirve | La fila `pending`: el webhook la encuentra al aprobarse y `promoteVersion()` mueve el puntero |
+| `rechazada` | Mensaje que el panel nunca tocó y en la WABA hay una rechazada que sirve | La fila `rejected` con el motivo de Meta (`getZernioTemplateStatus`) |
+| `aprobar` / `rechazar` | Una pendiente del panel que Meta ya resolvió y cuyo webhook no llegó | El veredicto por `applyProviderTemplateStatus()`, como si hubiera llegado |
+
+Reglas: «sirve» = nombre base o `_vN` (gana el N más alto), idioma del catálogo, la misma portada y
+EXACTAMENTE las variables del contrato (`cuerpoCompatible()`); un `failed` con ese nombre no la tapa (es
+el «Enviar a Meta» que chocó, y su fila se reutiliza); la categoría que se guarda es la de **Meta**, que
+recategoriza (la «bienvenida» de Planeta Wings se pidió UTILITY y quedó MARKETING). Una **aprobada** para
+un mensaje vacío **no** se registra sola: activarla hace que el mensaje empiece a llegar, y eso lo decide
+el dueño con «Activar». Lo que se registró viaja en `reconocidas` y la pantalla lo cuenta en un aviso.
+
+Cada mensaje trae además `enWhatsApp`: lo que dice el proveedor de la plantilla en uso (estado real,
+categoría de Meta, texto). Con eso la pantalla dice «Pausado por Meta» —antes una PAUSED era invisible— y
+«WhatsApp la clasificó como Marketing (se pidió Utilidad)».
+
+**Es la pantalla la que hace de webhook de respaldo**, al abrirse: no hay cron. Lee la WABA con el caché
+de 60 s de P1-a (N16).
+
+### El 400 «ya existe»: se adopta, nunca «vuelve a intentarlo más tarde»
+
+Si Zernio contesta **400** al crear, `adoptarLaQueYaExiste()` lee la WABA EN VIVO. Si la plantilla con
+ese nombre está ahí, es de este mensaje y sirve, se ADOPTA con su estado y su categoría reales y el dueño
+lee «Ya existe en tu cuenta de WhatsApp una plantilla llamada …»: aprobada → queda activa (por
+`promoteVersion()`); en revisión → pendiente, se activa sola; rechazada → anotada con el motivo (409).
+Nunca con un mensaje VIVO (sería reemplazarlo por un texto que el dueño no escribió: 409 que lo dice) y
+solo si el texto es el mismo o lo que se mandaba era el del catálogo tal cual. Si la WABA no la tiene, el
+400 fue por otra cosa y sigue el camino de siempre: el motivo del proveedor, sin «más tarde».
+`nextProviderRef()` ya miraba la unión de `template_versions` y la WABA (2026-10-02).
+
 ### Las 2 de evento y su media de muestra
 
 Las del calendario llevan cabecera de imagen/video, y Meta **descarga** un archivo de muestra para
@@ -157,30 +201,50 @@ cuenta — si ya está configurado para los eventos de mensajes, hay que **agreg
 **No hay poll periódico, y es deliberado.** El webhook es el camino documentado; montar un cron
 duplicado antes de verlo fallar en producción es trabajo que puede no hacer falta.
 
-## Las 13 plantillas
+## Los 16 mensajes
 
-Port fiel de `scripts/twilio-create-text-templates.mjs` (11) + `twilio-create-media-templates.mjs` (2),
-vía `Level 2.0/aios-constelarys/src/lib/zernio/templates-catalog.ts`.
+Los 11 de texto originales son el port fiel de `scripts/twilio-create-text-templates.mjs`; las 2 de evento
+se reescribieron el 2026-09-10; «Cumpleaños — dos días antes» entró el 2026-10-04; y las tres últimas, el
+2026-10-11, **juntas**, para que cada marca haga UN solo viaje a Meta (decisión B6).
 
 | Plantilla | `settings_key` | Categoría | Variables |
 |---|---|---|---|
 | Bienvenida | `welcome_template_sid` | UTILITY | 3 |
 | Puntos sumados — lejos | `points_earned_far_template_sid` | MARKETING | 4 |
 | Puntos sumados — cerca | `points_earned_near_template_sid` | MARKETING | 4 |
-| Nivel desbloqueado (premio seguro) | `reward_safe_template_sid` | MARKETING | 4 |
+| **Nivel desbloqueado** (2026-10-11) | `tier_unlocked_template_sid` | MARKETING | 4: nombre · nivel · premio seguro · camino |
+| Premio seguro — confirmación | `reward_safe_template_sid` | MARKETING | 4 |
 | Mystery Box — resultado | `mystery_box_result_template_sid` | MARKETING | 4 |
 | Golden Box — resultado | `golden_box_result_template_sid` | MARKETING | 3 |
+| **Recordatorio de premio** (2026-10-11) | `reward_reminder_template_sid` | MARKETING | 3: nombre · premio · días que le quedan |
 | Cumpleaños — dos días antes | `birthday_upcoming_template_sid` | MARKETING | 2 |
 | Reactivación suave | `reactivation_no_reward_template_sid` | MARKETING | 3 |
 | Reactivación insistente | `reactivation_aggressive_template_sid` | MARKETING | 3 |
+| **Regalo que vence** (2026-10-11) | `gift_expiring_template_sid` | MARKETING | 4: nombre · regalo · fecha límite · camino |
 | Campaña → domicilio | `campaign_presencial_to_domicilio_template_sid` | MARKETING | 3 |
 | Campaña → presencial | `campaign_domicilio_to_presencial_template_sid` | MARKETING | 3 |
 | Evento con imagen | `event_template_image_sid` | MARKETING | 5 + header |
 | Evento con video | `event_template_video_sid` | MARKETING | 5 + header |
 
+### Las tres del 2026-10-11 (decisiones B3 y B6)
+
+- **«Nivel desbloqueado»** y **«Recordatorio de premio»** las consumía el código sin que el catálogo las
+  definiera (`docs/PENDIENTES-PLANTILLAS.md` §1.2). En una marca Zernio, subir de nivel era **silencio
+  total** (check-in, domicilios y el override del panel la mandan EN VEZ de «puntos sumados») y el cron
+  `reward-reminder` salía sin hacer nada. Su contrato es el que ya mandaban sus emisores. «Premio seguro —
+  confirmación» se llamaba «Nivel desbloqueado — premio seguro»: se renombró para no tener dos filas iguales.
+- **«Regalo que vence»** es la del ciclo de recuperación (texto literal del spec §4). **Nadie la envía
+  todavía**: quién la usa y el adaptador a la insistente son de la fase 1B. Entra ya para que el viaje a
+  Meta sea uno (`p1a-plantillas-paridad.test.ts` la tiene en `SIN_EMISOR_TODAVIA`).
+- Las legacy `reactivation_with_reward_template_sid` y `reactivation_template_sid` **no entran**: las
+  retira la fase 1B. Siguen como excepciones de la paridad, con ese motivo escrito.
+- Los tres textos son nuevos, en tono cálido, sin emoji de rubro, y pasan las 5 reglas y el 3N+1. **El
+  dueño los ve en el panel antes de mandarlos**: nada se somete solo. El AIOS NO los tiene en su copia
+  (eso cambia con B7, otra sesión).
+
 ### Una plantilla reemplazada: el cumpleaños del día mismo (2026-10-04)
 
-`TEMPLATE_CATALOG` tiene **14 entradas**, y un negocio nuevo necesita **13** (`CATALOG_SIZE`). La 14ª es
+`TEMPLATE_CATALOG` tiene **17 entradas**, y un negocio nuevo necesita **16** (`CATALOG_SIZE`). La de más es
 `birthday` («¡Feliz cumpleaños!», `birthday_template_sid`), marcada `replacedBy: 'birthday_upcoming'`.
 El saludo pasó a salir hasta dos días antes, y ese texto dicho dos días antes está mal. Como un texto
 aprobado no se reescribe, la redacción nueva es **otra** plantilla con **otro** puntero.
@@ -213,10 +277,10 @@ nada de eso sirve"*. `calido` es el port literal del catálogo que estuvo en pro
 (00039) aceptan los nombres viejos: una fila histórica con `elegante` no rompe nada, y
 `personalizado` sigue significando "el dueño lo editó a mano".
 
-**Son 13 textos.** Lo único que varía por `business_type` es el emoji horneado. Cada texto es una
+**Son 16 textos.** Lo único que varía por `business_type` es el emoji horneado. Cada texto es una
 aprobación de Meta aparte.
 
-⚠️ **El AIOS lleva una COPIA de estos 13 textos** (`Level 2.0/aios-constelarys/src/lib/zernio/
+⚠️ **El AIOS lleva una COPIA de 13 de estos textos** (no tiene las tres del 2026-10-11) (`Level 2.0/aios-constelarys/src/lib/zernio/
 templates-catalog.ts`) porque es un repo aparte y es quien crea las plantillas al dar de alta un
 cliente. Se regenera desde la fuente con un script, no a mano. El 09 esa copia creó 12 plantillas con
 🍣 horneado porque nunca recibió el arreglo del emoji por rubro: si un texto cambia acá, hay que
@@ -256,7 +320,7 @@ Tres reglas que hay que preservar:
    texto sin editar se detectaría como `personalizado` y la pantalla le diría al dueño que dejó de
    usar el estilo que sí está usando. `emojiOf(tenant)` en `template.service.ts` es la única fuente.
 3. **Nada de emojis de un rubro concreto en `template-texts.ts`.**
-   `tests/unit/template-catalog.test.ts` recorre las 39 combinaciones y falla si aparece
+   `tests/unit/template-catalog.test.ts` recorre todo el banco y falla si aparece
    🍣 🍕 🍔 🌮 ☕ 🍜 🥢 💈 💅 o 🍽️ horneado.
 
 Cambiar el emoji **no cambia las plantillas ya aprobadas**: el texto que Meta aprobó es literal. Solo
@@ -317,16 +381,17 @@ por el AIOS que quedaron «en revisión» sin salir nunca (el dueño ya lo habí
 
 ## Guardas (ola P1-a, 2026-10-11)
 
-- **Solo la marca toca las plantillas (N5).** `PUT …/catalog/[key]`, `POST …/submit` y `POST …/adopt`
-  pasan por `exigirAlcanceDeMarca()`: un administrador de UNA sede recibe 403 (las plantillas y sus
-  punteros son de la marca, no hay plantilla por sede). El operador de Cada1 pasa. Siguen sin esa
-  guarda las rutas de Twilio (`POST /api/dashboard/templates`, `[sid]/submit`, `standard`):
-  `docs/PENDIENTES.md` §3.3.
+- **Solo la marca toca las plantillas (N5 y N5-bis).** `PUT …/catalog/[key]`, `POST …/submit` y
+  `POST …/adopt` (P1-a) y, desde el 2026-10-11, las de Twilio —`POST /api/dashboard/templates`,
+  `POST …/[sid]/submit` y `POST …/standard`— pasan por `exigirAlcanceDeMarca()`: un administrador de UNA
+  sede recibe 403 (las plantillas y sus punteros son de la marca). El operador de Cada1 pasa. Test:
+  `plantillas-twilio-permisos.test.ts`.
 - **Ajustes acepta una lista cerrada (OPER-4).** `src/lib/settings-keys.ts`: las claves que escriben
-  las pantallas, leídas del código (test `p1a-settings-claves.test.ts`). Otra clave = 400. Un
-  puntero de una marca Zernio = 400 con el porqué; guardarlo con el MISMO valor que ya tiene = 200
-  sin escribir (Ajustes manda los 15 juntos en cada «Guardar»). ⚠️ `handleSaveTemplates` traga el
-  error en silencio: en una marca Zernio, elegir otra plantilla en Ajustes no guarda y no avisa.
+  las pantallas, leídas del código (test `p1a-settings-claves.test.ts`, que desde el 2026-10-11 suma los
+  punteros del catálogo cuando Plantillas los escribe con `entry.definition.settingsKey`). Otra clave =
+  400. Un puntero de una marca Zernio = 400 con el porqué; el MISMO valor que ya tiene = 200 sin escribir.
+  **OPER-4-bis cerrado (2026-10-11):** Ajustes ya no tiene los desplegables ni el «Guardar» que tragaba
+  ese 400; en Plantillas, un error al elegir se muestra.
 - **La pantalla no llama a la WABA en cada carga (N16).** `getTemplateCatalogState()` guarda el
   listado 60 s por marca (`WABA_CACHE_MS`), en la memoria del proceso: sin infraestructura nueva. En
   Vercel cada instancia tiene el suyo, así que lo peor es una lectura de más, nunca un dato de más de
@@ -338,10 +403,10 @@ por el AIOS que quedaron «en revisión» sin salir nunca (el dueño ya lo habí
   siempre en vez de una lista cortada. Lo usan `GET /api/dashboard/templates` y el reporte «Del set
   estándar te faltan» (`twilio-catalog.service.ts`), que con 100+ veía punteros vivos como huérfanos.
 - **Paridad catálogo ↔ código (OPER-6).** `p1a-plantillas-paridad.test.ts` falla si el código nombra
-  un puntero que el catálogo no define. Hoy hay **cuatro** excepciones conocidas, no dos:
-  `tier_unlocked_template_sid` y `reward_reminder_template_sid` (decisión B3) y las legacy
-  `reactivation_with_reward_template_sid` y `reactivation_template_sid`, que el cron de reactivación
-  todavía lee (`PENDIENTES.md` §3.1 paso 2).
+  un puntero que el catálogo no define. Desde el 2026-10-11 quedan **dos** excepciones, las legacy
+  `reactivation_with_reward_template_sid` y `reactivation_template_sid` (las retira la fase 1B del ciclo),
+  y un puntero del catálogo sin emisor todavía, `gift_expiring_template_sid` (`SIN_EMISOR_TODAVIA`: el
+  test obliga a sacarlo de ahí cuando la 1B lo empiece a mandar).
 - `fetchPointers()` ya no confunde un fallo de lectura con «no hay punteros» (lanza 500): con los
   punteros vacíos, «Usar la aprobada» creía libre un mensaje que se estaba enviando.
 
@@ -349,22 +414,28 @@ por el AIOS que quedaron «en revisión» sin salir nunca (el dueño ya lo habí
 
 | Archivo | Rol |
 |---|---|
-| `src/constants/template-catalog.ts` | Estructura de las 13 + validación + preview |
-| `src/constants/template-texts.ts` | Banco de 39 textos |
+| `src/constants/template-catalog.ts` | Estructura de los 16 + validación (también la de las libres: `validarPlantillaLibre`) + preview |
+| `src/constants/template-texts.ts` | Banco de textos (uno por mensaje) |
 | `src/types/template.types.ts` | Tipos compartidos (evita el ciclo catálogo ↔ textos) |
-| `src/services/template.service.ts` | Toda la lógica: estado, edición, promoción, detector |
+| `src/services/template.service.ts` | Zernio: estado, reconciliación con la WABA, edición, promoción, detector, libres |
+| `src/services/twilio-catalog.service.ts` | Twilio: `getTwilioCatalogState()` (la pantalla única), crear lo que falta, `fillEmptyPointer()` |
+| `src/lib/template-library.ts` | Qué plantilla es de la Biblioteca y qué mensaje usa cada una |
 | `src/lib/zernio/templates.ts` | Adaptador REST de Zernio (crear / consultar) |
-| `src/app/api/dashboard/templates/catalog/route.ts` | `GET` estado del catálogo |
+| `src/app/api/dashboard/templates/catalog/route.ts` | `GET` estado del catálogo (los dos proveedores) |
+| `src/app/api/dashboard/templates/route.ts` | `GET` la cuenta entera (con `biblioteca`/`en_uso_por`) · `POST` una libre, Twilio o Zernio |
 | `src/app/api/dashboard/templates/catalog/[key]/route.ts` | `PUT` editar una plantilla |
 | `src/app/api/dashboard/templates/catalog/[key]/submit/route.ts` | `POST` enviar el texto del catálogo tal cual |
 | `src/app/api/dashboard/templates/catalog/[key]/adopt/route.ts` | `POST` activar la aprobada que ya estaba en la WABA |
 | `src/lib/settings-keys.ts` | La lista cerrada del `PUT` de Ajustes y la regla de los punteros |
 | `src/lib/twilio/content-list.ts` | Todas las páginas de la Content API de Twilio |
 | `src/app/api/webhook/zernio/route.ts` | Recibe `whatsapp.template.status_updated` |
-| `src/components/dashboard/templates/TemplateCatalogEditor.tsx` | La pantalla (Zernio) |
-| `src/components/dashboard/templates/TemplateEditorDialog.tsx` | El editor tipo documento |
-| `src/components/dashboard/templates/TwilioTemplateManager.tsx` | La pantalla anterior, intacta |
-| `tests/unit/template-catalog.test.ts` | Los 13 textos contra las reglas de Meta |
+| `src/app/(dashboard)/dashboard/templates/page.tsx` | Las dos pestañas |
+| `src/components/dashboard/templates/TemplateCatalogEditor.tsx` | Mensajes automáticos (los dos proveedores) |
+| `src/components/dashboard/templates/TemplateEditorDialog.tsx` | El editor tipo documento (Zernio) |
+| `src/components/dashboard/templates/TemplateLibrary.tsx` | Biblioteca para campañas (ex `TwilioTemplateManager`) |
+| `src/components/dashboard/templates/TemplateSelector.tsx` | El desplegable «elige una aprobada» (venía de Ajustes) |
+| `tests/unit/template-catalog.test.ts` | Los textos contra las reglas de Meta |
+| `tests/unit/plantillas-*.test.ts` | Un solo libro: WABA, pantalla única, biblioteca, permisos Twilio |
 
 ## La UX: por qué el vocabulario es el que es
 
@@ -372,7 +443,8 @@ por el AIOS que quedaron «en revisión» sin salir nunca (el dueño ya lo habí
 
 - El dueño ve **"mensajes"**, no "plantillas". Ve **"Activo"** y **"Revisando un cambio"**, no
   `approved`/`pending`. Nunca ve un SID, un nombre técnico ni la palabra "versión".
-- No elige nombre, categoría, idioma ni valores de ejemplo: todo eso lo pone el catálogo.
+- No elige categoría, idioma ni valores de ejemplo: todo eso lo pone el catálogo. El nombre lo puede
+  cambiar en el editor (2026-09-12) y solo hace falta cuando el sugerido choca.
 - Las variables no se explican como `{{1}}` — son fichas con nombre ("Nombre del cliente") que se
   insertan con un clic donde está el cursor.
 - La vista previa muestra el mensaje **ya armado con datos de ejemplo**, que es lo que quiere juzgar.
@@ -381,43 +453,55 @@ por el AIOS que quedaron «en revisión» sin salir nunca (el dueño ya lo habí
 y que mientras tanto sus clientes siguen recibiendo el mensaje anterior. Ocultarle eso lo dejaría
 creyendo que ya cambió.
 
-### Tenants Twilio
+### Marcas Twilio: la misma pantalla (2026-10-11)
 
-La pantalla se bifurca por proveedor: `GET /api/dashboard/templates/catalog` responde **409** si el
-negocio no es Zernio, y `page.tsx` cae al `TwilioTemplateManager` — la pantalla anterior, movida a un
-componente **sin un solo cambio de comportamiento**. El guardarraíl de verdad no está en la UI sino en
-`assertZernioTenant()`, dentro del servicio, para que ninguna ruta pueda saltárselo.
+Hasta el 2026-10-11 la pantalla se bifurcaba (`GET …/catalog` contestaba 409 a Twilio y caía al gestor
+Twilio, con la tarjeta «Del set estándar te faltan N» y Ajustes › Plantillas aparte para asignar). Ahora
+`GET …/catalog` les contesta con `getTwilioCatalogState()`, la MISMA forma que a Zernio:
 
-#### Completar huecos del set estándar (v2.15.0)
-
-Encima de esa pantalla se dibuja **«Del set estándar te faltan N»**
-(`StandardCatalogGaps.tsx` → `twilio-catalog.service.ts` → `/api/dashboard/templates/standard`).
-
-Existe por un reporte concreto del dueño: *"al apartado le faltan las plantillas de invitar a
-restaurante los que piden por domicilio e invitar a domicilio los que piden por restaurante"*. Las
-dos **sí están** en el catálogo y en el script de alta de Twilio, pero ese script solo corrió
-completo en algunas altas —el problema original de §12— y sus presets en `ManualCampaigns.tsx` se
-ocultan solos mientras su `admin_settings.*_template_sid` no apunte a una plantilla aprobada
-(§15.2). Resultado: una campaña que no se podía lanzar y ninguna pista de por qué.
-
-**Es estrictamente aditivo y no contradice la decisión 6** (*"los 4 tenants Twilio déjalos así, ni
-los toques"*): crea las que faltan y jamás reemplaza, reescribe ni re-somete una existente.
-
-| Estado | Qué significa | Qué se puede hacer |
+| Estado de la fila | Qué significa | Botón |
 |---|---|---|
-| `missing` | No hay puntero en `admin_settings` | Crear con un click |
-| `orphan` | Hay puntero, pero Twilio no conoce ese ContentSid | Nada automático: repuntar una plantilla viva es una decisión |
-| `pending` | Creada, esperando a Meta | Esperar |
-| `approved` | Funcionando | Nada |
+| Pendiente de enviar | No hay puntero | **Enviar a Meta** (`POST …/standard`: crea con el texto del catálogo, la somete y `fillEmptyPointer()` deja el puntero) — las 2 de evento no, con el motivo a la vista |
+| Sin enviar a Meta | La plantilla asignada existe pero nunca se sometió | **Enviar a Meta** (`POST …/[sid]/submit`) |
+| En revisión de WhatsApp | Twilio la tiene en revisión | — |
+| Activo | Aprobada | — |
+| Rechazado por WhatsApp | Rechazada, con el motivo de Meta a la vista | **Elegir otra** |
+| Pausado por Meta | Meta la frenó | **Elegir otra** |
+| Apunta a una plantilla que ya no existe | Twilio no conoce ese ContentSid | **Elegir otra** |
 
-**El invariante del puntero se mantiene y se afina.** `promoteVersion()` sigue siendo el único que
-**cambia** un `admin_settings.*_template_sid` que ya tiene valor, y solo tras la aprobación de Meta —
-así ningún negocio se queda 24-72 h sin ese mensaje. `fillEmptyPointer()` solo **rellena una clave
-vacía** y se niega en redondo si encuentra un valor: rellenar un hueco no puede abrir uno.
+**«Elegir otra»** está en todas las filas Twilio: el desplegable que vivía en Ajustes
+(`TemplateSelector`, con las aprobadas de la cuenta en `elegibles`) y el `PUT /api/dashboard/settings`
+de siempre. Y la reactivación «con premio» del sistema anterior (puntero + premio fijo), que no está en el
+catálogo, quedó en un bloque plegado «Sistema antiguo» al final: así ninguna marca pierde forma de asignar
+algo que asignaba en Ajustes. **No hay editor en Twilio**: sus textos aprobados no se tocan (decisión 6).
 
-Escribir el puntero antes de la aprobación es seguro y deliberado: `isPresetSendable()` exige además
-que el SID esté en la lista de aprobadas de Twilio, así que el preset sigue oculto hasta que Meta
-responda — y cuando responda, aparece solo, sin que nadie tenga que volver a entrar.
+**Estrictamente aditivo** sigue siendo crear: `createStandardTemplate()` solo llena huecos y jamás
+reemplaza, reescribe ni re-somete una existente. `fillEmptyPointer()` escribe el puntero al CREAR (antes de
+la aprobación) y se niega si ya hay valor; los presets de Campañas exigen además que la plantilla esté
+aprobada (`isPresetSendable()`), y el cron de cumpleaños lo pregunta (`isTwilioTemplateApproved()`).
+
+**Ajustes › Plantillas WhatsApp** perdió los 15 desplegables y su «Guardar». Queda una tarjeta que lleva a
+Plantillas, porque varios avisos del sistema (calendario, crons) todavía dicen «configúrala en Ajustes».
+
+### La Biblioteca para campañas (decisiones B4 y B5, 2026-10-11)
+
+Pestaña aparte en Plantillas (`TemplateLibrary`, el gestor Twilio de siempre, con el mismo aspecto):
+las plantillas que el dueño crea para una campaña puntual, reutilizables, **en los dos proveedores**.
+
+- **No hay tabla nueva.** La cuenta de WhatsApp ya es donde viven (WABA o Content API). Lo que faltaba era
+  separarlas: `clasificarParaLaBiblioteca()` marca `biblioteca` (ningún mensaje automático la usa y, en
+  Zernio, su nombre no es el de un mensaje del catálogo) y `en_uso_por`. La lista muestra primero las de
+  campaña y, plegadas, las de los mensajes automáticos: es también la lista entera de la cuenta que el
+  dueño pidió el 2026-10-02.
+- **Una marca Zernio ya puede crear una libre** (B5): `POST /api/dashboard/templates` →
+  `crearPlantillaLibreZernio()` → el `POST /v1/whatsapp/templates` verificado (contrato §4), el mismo del
+  catálogo. No puede llamarse como un mensaje del catálogo (`bienvenida_v7`: el panel la confundiría con
+  una versión) ni repetir un nombre de la WABA.
+- **Una sola regla** para las libres, en el formulario y en el servidor (`validarPlantillaLibre()`):
+  nombre de Meta, variables sin huecos, línea de SALIR en MARKETING, 3 palabras fijas por variable + 1 y un
+  ejemplo por variable. Antes la ruta Twilio no exigía SALIR ni variables sin huecos (§1.9).
+- **Campañas → Mensaje libre** lista primero «De tu biblioteca» y después «De tus mensajes automáticos».
+  Lo que rellena es lo de siempre: `{{1}}` nombre, `{{2}}` puntos, `{{3}}` próximo premio (N23-bis).
 
 ## Configuración
 
@@ -457,19 +541,24 @@ software, no en las del AIOS, y el bucket tiene que ser el del proyecto `bredfyu
   puntero con el mensaje viejo y degradaría a la vigente sin que nadie apretara nada, y entre la
   edición y el veredicto de Meta caben 72 horas. Antes solo se miraba `is_current`.
 - **Meta puede PAUSAR una plantilla ya vigente** por baja calidad. §12 no dice qué hacer con eso y no
-  se inventó una política: se registra y se avisa en el log, el puntero no se toca. Es material del
-  Bloque 3 de gobernanza de envío.
+  se inventó una política: el puntero no se toca. Desde el 2026-10-11 **se ve** (la fila dice «Pausado
+  por Meta»), pero nadie avisa ni deja de enviar. Es material del Bloque 3 de gobernanza de envío.
 - **No hay aviso proactivo al dueño** cuando Meta rechaza: se entera al entrar a la pantalla. Mandarle
   un correo o un WhatsApp no está en §12.
 - **Generación de textos con LLM** — §12 respuesta 5: *"banco fijo, llm luego"*. El prompt P4 de
   `PROMPTS_SESIONES_BARATAS.md` queda para una fase posterior.
-- **Los 4 tenants Twilio** no reciben el catálogo estándar *completo*: sus plantillas existentes no
-  se tocan (decisión 6, textual: "déjalos así, ni los toques"). Desde v2.15.0 sí pueden **rellenar
-  los huecos** —crear las que nunca se les crearon— desde su propia pantalla. Lo que sigue sin
-  existir para ellos es el editor tipo documento.
-- **Las 2 plantillas de evento (media) no se pueden crear desde la pantalla de Twilio.** Llevan
-  header de imagen/video y siguen dependiendo de `scripts/twilio-create-media-templates.mjs`. La
-  tarjeta las muestra como informativas, sin botón.
+- **Los tenants Twilio** no reciben el editor tipo documento: sus plantillas existentes no se tocan
+  (decisión 6, textual: "déjalos así, ni los toques"). Rellenan huecos y eligen; no editan.
+- **Las 2 plantillas de evento (media) no se pueden crear desde la pantalla en Twilio.** Llevan
+  header de imagen/video y siguen dependiendo de `scripts/twilio-create-media-templates.mjs` o de la
+  consola; la fila lo dice y, aprobada, se elige con «Elegir otra».
+- **Una plantilla libre no deja registro de quién la creó** (no hay fila en `template_versions`: no es de
+  ningún mensaje). La advertencia de responsabilidad de la decisión 3 cubre el editor del catálogo.
+- **En Twilio el puntero se escribe al CREAR** (`fillEmptyPointer()`), no al aprobarse: es lo deliberado
+  desde v2.15.0. Un envío con la plantilla aún en revisión falla en Meta; los presets y el cron de
+  cumpleaños lo esquivan preguntando por la aprobación, el check-in no.
+- **Reemplazar una plantilla Twilio rechazada** no tiene botón propio: se crea una corregida en la
+  Biblioteca y, aprobada, se elige con «Elegir otra».
 - **No se agregó botón de opt-out a las plantillas MARKETING.** Meta lo pide para marketing desde
   2024, pero las 11 que hay ya están **aprobadas con la línea de texto** *"Responde SALIR…"*, y
   cambiar el componente obligaría a re-someter las 11 (24-72 h cada una) sin evidencia de que haga

@@ -7,7 +7,10 @@
 > **Última actualización:** 2026-05-25 — Variables corregidas, opt-out agregado, reactivación agresiva con {{4}}
 
 > **📌 Desde v2.12.0 (2026-08-30) este documento describe el estilo `calido`, que es uno de tres.**
-> El catálogo estándar de 13 plantillas (un solo estilo desde el 2026-09-10), la edición desde
+> **2026-10-11:** el catálogo pasó a **16** (entraron «Nivel desbloqueado», «Recordatorio de premio» y
+> «Regalo que vence», § Las tres del 2026-10-11) y las plantillas se crean, se mandan a Meta y se ELIGEN en
+> Dashboard → Plantillas, para Twilio y Zernio: Ajustes ya no asigna punteros.
+> El catálogo estándar (un solo estilo desde el 2026-09-10), la edición desde
 > el dashboard y el flujo "crear → esperar aprobación → cambiar puntero" viven en
 > **`docs/features/whatsapp-templates.md`**. Los textos ya no se copian a mano: están tipados en
 > `src/constants/template-texts.ts`, y la tabla de variables de abajo es la versión en prosa del
@@ -21,8 +24,8 @@
 
 | Tipo Twilio | Uso | Cómo se crea | Assigned en |
 |---|---|---|---|
-| `twilio/text` | Comunicaciones operativas (bienvenida, puntos, premios, mystery box, cumpleaños, reactivación, campañas) | Dashboard → Plantillas → formulario | `admin_settings` vía Dashboard → Ajustes |
-| `twilio/media` | Invitaciones a eventos del calendario con imagen o video | `scripts/twilio-create-media-templates.mjs` (una sola vez) | `admin_settings` directo en Supabase: `event_template_image_sid` / `event_template_video_sid` |
+| `twilio/text` | Comunicaciones operativas (bienvenida, puntos, premios, mystery box, cumpleaños, reactivación, campañas) | Dashboard → Plantillas → Mensajes automáticos → «Enviar a Meta» (las del catálogo) o Biblioteca para campañas (las libres) | Sola al crearla desde Mensajes automáticos, o «Elegir otra» en la fila del mensaje |
+| `twilio/media` | Invitaciones a eventos del calendario con imagen o video | `scripts/twilio-create-media-templates.mjs` (una sola vez) o la consola de Twilio | Dashboard → Plantillas → la fila del evento → «Elegir otra», cuando Meta la apruebe |
 
 ---
 
@@ -66,12 +69,15 @@ Esta tabla es la verdad única del sistema. El backend envía exactamente estas 
 | **Bienvenida** | Nombre | Puntos iniciales | Roadmap tiers | — |
 | **Puntos sumados (lejos)** | Nombre | Pts ganados hoy | Pts totales | Roadmap tiers |
 | **Puntos sumados (cerca)** | Nombre | Pts ganados hoy | Pts totales | Premio próximo |
-| **Tier desbloqueado** | Nombre | Nombre tier | Premio safe | Roadmap tiers |
+| **Nivel desbloqueado** (al cruzar, antes de elegir; 3-bis) | Nombre | Nombre tier | Premio safe | Roadmap tiers |
+| **Premio seguro** (después de elegir; 4) | Nombre | Nombre tier | Premio ganado | Roadmap tiers |
 | **Mystery Box resultado** | Nombre | Nombre tier | Premio ganado | Roadmap tiers |
 | **Golden Box resultado** | Nombre | Premio ganado | Roadmap tiers | — |
+| **Recordatorio de premio** (6-bis) | Nombre | Premio por reclamar | Días que le quedan (número) | — |
 | **Cumpleaños** (7 y 7-bis, el mismo contrato) | Nombre | Camino de niveles (`buildTiersRoadmap`, NO el saldo) | — | — |
 | **Reactivación suave (21d)** | Nombre | Pts actuales | Premio próximo | — |
 | **Reactivación agresiva (25d)** | Nombre | Pts actuales | Premio próximo | **Recompensa especial** (si configura admin) |
+| **Regalo que vence** (9-bis; sin emisor hasta la fase 1B del ciclo) | Nombre | Regalo | Fecha límite («domingo 11 de octubre») | Camino de niveles |
 | **Campaña manual** | Nombre | Pts actuales | Premio próximo | — |
 
 Las plantillas de media (eventos) mantienen 6 variables — sin cambios respecto a v0.35.
@@ -649,6 +655,82 @@ que falta `event_template_video_sid`. No envía nada equivocado.
 
 ---
 
+## Las tres del 2026-10-11 (decisiones B3 y B6 del dueño)
+
+Entraron **juntas** al catálogo para que cada marca haga UN solo viaje a Meta, junto con «Cumpleaños — dos
+días antes». Textos NUEVOS en el tono cálido, sin emoji de rubro (`${emoji}` lo pone el tipo de negocio, acá
+`[emoji]`). Pasan las 5 reglas y el 3N+1 (`tests/unit/template-catalog.test.ts`). El dueño los lee en
+Plantillas antes de mandarlos: nada se somete solo.
+
+### Plantilla 3-bis — Nivel desbloqueado
+
+**Slot:** `tier_unlocked_template_sid` · **MARKETING** · **Variables:** `{{1}}`=Nombre · `{{2}}`=Nivel ·
+`{{3}}`=Premio seguro · `{{4}}`=Roadmap
+**Cuándo se envía:** al registrar una visita o un domicilio que cruza un nivel, EN VEZ de «puntos sumados».
+Sin ella, en ese momento no llega nada. Sale antes de que el cliente elija: por eso ofrece las dos salidas.
+
+```
+¡{{1}}, subiste de nivel! 🏆[emoji]
+
+Alcanzaste el nivel *{{2}}* y desbloqueaste un premio 🎁
+
+Puedes ir a la segura con *{{3}}* o probar suerte con la *Mystery Box* 🎲 Elige tu premio al registrar tu visita y te confirmamos por aquí.
+
+Así sigue tu camino de premios:
+
+{{4}}
+
+_— [Restaurante]_
+
+_Responde SALIR para no recibir más mensajes._
+```
+
+### Plantilla 6-bis — Recordatorio de premio
+
+**Slot:** `reward_reminder_template_sid` · **MARKETING** · **Variables:** `{{1}}`=Nombre · `{{2}}`=Premio ·
+`{{3}}`=Días que le quedan (el cron manda el número pelado: «3», «1», «0»; por eso el texto no lo conjuga)
+**Cuándo se envía:** cron `reward-reminder`, unos días antes de que venza un premio sin reclamar, si el
+recordatorio está encendido en Ajustes.
+
+```
+¡Hola {{1}}! Tienes un premio esperándote 🎁[emoji]
+
+Te ganaste *{{2}}* y todavía no lo reclamas.
+
+⏳ Días que te quedan para reclamarlo: *{{3}}*
+
+Ven a visitarnos: cuando registren tu visita, tu premio aparece solo y te lo entregan ahí mismo.
+
+_— [Restaurante]_
+
+_Responde SALIR para no recibir más mensajes._
+```
+
+### Plantilla 9-bis — Regalo que vence
+
+**Slot:** `gift_expiring_template_sid` · **MARKETING** · **Variables:** `{{1}}`=Nombre · `{{2}}`=Regalo ·
+`{{3}}`=Fecha límite · `{{4}}`=Roadmap
+**Cuándo se envía:** todavía NUNCA. La usará el ciclo de recuperación (fase 1B: «Le regalamos algo»,
+«Rescate», los toques trimestrales). Texto literal del spec del ciclo §4.
+
+```
+¡Hola {{1}}! Tenemos algo para ti 🎁[emoji]
+
+Te guardamos *{{2}}*. Ven antes del *{{3}}*, muestra este mensaje y es tuyo.
+
+Así vas en tu camino de premios:
+
+{{4}}
+
+Tus puntos siguen intactos: los premios se desbloquean, no se gastan 💪
+
+_— [Restaurante]_
+
+_Responde SALIR para no recibir más mensajes._
+```
+
+---
+
 ## Cómo el Sistema Elige la Plantilla Correcta
 
 ```
@@ -657,7 +739,7 @@ CLIENTE NUEVO → Escanea QR
 
 CLIENTE FRECUENTE → Escanea QR → Recibe puntos aleatorios
 ├── ¿Desbloqueó un tier?
-│   ├── SÍ → Web muestra choice (safe vs mystery box)
+│   ├── SÍ → Plantilla 3-bis (Nivel desbloqueado) en el momento + la web muestra choice (safe vs mystery box)
 │   │   ├── Eligió SAFE → Plantilla 4 (Tier desbloqueado)
 │   │   ├── Eligió MYSTERY → Plantilla 5 (Mystery Box resultado)
 │   │   └── Golden Box activa → Plantilla 6 (Golden Box resultado)
@@ -669,6 +751,8 @@ AUTOMATIZACIONES
 ├── Cumpleaños (13:00 Bogotá) → Plantilla 7-bis (hasta 2 días antes) o, sin ella aprobada, la 7 el día mismo
 ├── Día 21 sin visitar        → Plantilla 8 (Reactivación suave)
 ├── Día 25+ sin visitar       → Plantilla 9 (Reactivación agresiva)
+├── Premio por vencer         → Plantilla 6-bis (Recordatorio de premio), si está encendido
+├── (fase 1B del ciclo)       → Plantilla 9-bis (Regalo que vence)
 └── Evento programado (*/15m) → Plantilla 12 o 13 (Calendar)
 
 CAMPAÑAS MANUALES
@@ -678,7 +762,11 @@ CAMPAÑAS MANUALES
 
 ---
 
-## Configuración en Dashboard > Ajustes (v1.0.0)
+## Los punteros en `admin_settings` (se eligen en Dashboard > Plantillas desde el 2026-10-11)
+
+Hasta el 2026-10-11 se elegían en Dashboard > Ajustes › Plantillas WhatsApp. Ahora cada mensaje es una fila
+de Plantillas → Mensajes automáticos: en Twilio, «Enviar a Meta» crea la que falta y la deja asignada, y
+«Elegir otra» asigna cualquier aprobada; en Zernio el puntero lo mueve solo `promoteVersion()` al aprobarse.
 
 | Key en admin_settings | Tipo de mensaje | Variables |
 |---|---|---|
@@ -693,8 +781,14 @@ CAMPAÑAS MANUALES
 | `birthday_template_sid` | Cumpleaños — el día (reemplazada) | {{1}}=nombre, {{2}}=camino de niveles |
 | `reactivation_no_reward_template_sid` | Reactivación suave (21d) | {{1}}=nombre, {{2}}=pts actuales, {{3}}=premio |
 | `reactivation_aggressive_template_sid` | Reactivación agresiva (25d) | {{1}}=nombre, {{2}}=pts actuales, {{3}}=premio, {{4}}=recompensa especial (opcional) |
+| `reward_reminder_template_sid` | Recordatorio de premio | {{1}}=nombre, {{2}}=premio, {{3}}=días que le quedan |
+| `gift_expiring_template_sid` | Regalo que vence (fase 1B) | {{1}}=nombre, {{2}}=regalo, {{3}}=fecha límite, {{4}}=roadmap |
+| `event_template_image_sid` / `event_template_video_sid` | Evento del calendario | {{1}}=nombre, {{2}}=marca, {{3}}=título, {{4}}=fecha, {{5}}=CTA (+ media) |
 
 ### Slots legacy (mantener si la instancia aún no migró a puntos)
+
+`reactivation_with_reward_template_sid` y `reactivation_reward_id` se cambian en Plantillas → Mensajes
+automáticos → «Sistema antiguo» (marcas Twilio). Los retira la fase 1B del ciclo.
 
 | Key | Uso |
 |---|---|

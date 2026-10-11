@@ -211,11 +211,13 @@ duplicados y fuera de orden:
 - **Métricas de Zernio:** `docs/features/twilio-metrics.md` (`twilio-metrics`, `twilio-balance`) no
   tiene contraparte Zernio — el dashboard de entregabilidad/opt-outs solo cubre Twilio hoy.
 - ~~**UI de plantillas Zernio:** `dashboard/templates` sigue siendo 100% Twilio Content API.~~
-  **RESUELTO (v2.12.0, 2026-08-30)** — ver `docs/features/whatsapp-templates.md`. `dashboard/templates`
-  se bifurca por proveedor: los tenants Zernio ven el catálogo estándar de 13 plantillas con estilo y
-  edición desde el panel; los 4 tenants Twilio ven exactamente la pantalla anterior. El alta por
-  `aios_set_template_settings()` sigue funcionando y el catálogo la reconoce (los punteros cargados
-  fuera del panel se muestran como "activo, sin texto guardado" en vez de inventarles un cuerpo).
+  **RESUELTO (v2.12.0, 2026-08-30)** — ver `docs/features/whatsapp-templates.md`. Desde el 2026-10-11
+  `dashboard/templates` es UNA pantalla para los dos proveedores (Mensajes automáticos + Biblioteca para
+  campañas); en Zernio con edición desde el panel. El alta por `aios_set_template_settings()` sigue
+  funcionando y el catálogo la reconoce: al abrir la pantalla, el puntero cargado fuera del panel se
+  registra con su texto REAL de la WABA, y lo que el alta dejó en revisión o rechazado también
+  (`reconciliarConLaWaba()`). Una marca Zernio crea además plantillas libres por el mismo
+  `POST /v1/whatsapp/templates` (§4 del contrato).
 - **Balance/saldo de Zernio:** no hay endpoint equivalente a `/api/dashboard/twilio-balance` — el
   saldo de Zernio se factura a nivel de Team completo (no por profile/tenant), y el dueño del proyecto
   aún no decidió si los tenants de Cada1 van en su cuenta Zernio ya existente (compartida con otro

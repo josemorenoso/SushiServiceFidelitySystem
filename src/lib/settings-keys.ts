@@ -10,8 +10,8 @@
  *
  * DE DÓNDE SALE LA LISTA
  * ──────────────────────
- * De leer TODAS las escrituras que hacen las pantallas (`saveSetting(...)` de Ajustes y
- * los `PUT` del Golden Bullet), cruzadas con lo que el código lee de `admin_settings`.
+ * De leer TODAS las escrituras que hacen las pantallas (`saveSetting(...)` de Ajustes y de
+ * Plantillas, y los `PUT` del Golden Bullet), cruzadas con lo que el código lee de `admin_settings`.
  * Una clave que ninguna pantalla escribe no entra, con UNA excepción: las del ciclo de
  * recuperación (fase 1A, 2026-10-11), que entraron antes que su pantalla (fase 2) porque
  * el spec las fija ya. Si mañana una pantalla nueva necesita otra, se agrega acá en el
@@ -20,13 +20,14 @@
  *
  * LOS PUNTEROS DE PLANTILLA
  * ─────────────────────────
- *   · Marca **Twilio**: el dueño elige la plantilla en Ajustes › Plantillas WhatsApp por
- *     esta misma ruta. Se aceptan.
+ *   · Marca **Twilio**: el dueño elige la plantilla en Plantillas («Elegir otra», en la fila
+ *     de cada mensaje; hasta el 2026-10-11 era Ajustes › Plantillas WhatsApp) por esta
+ *     misma ruta. Se aceptan.
  *   · Marca **Zernio**: el puntero lo escribe solo `promoteVersion()` (al aprobarse una
  *     versión). Un cambio por acá se rechaza con un 400 que dice por qué. Reescribir el
- *     MISMO valor que ya tiene no es un cambio: Ajustes guarda las 15 de una vez cada vez
- *     que alguien aprieta «Guardar», y rechazar eso dejaría la sección sin guardar nunca
- *     aunque nadie haya tocado un puntero. La ruta lo contesta 200 sin escribir nada.
+ *     MISMO valor que ya tiene no es un cambio y la ruta lo contesta 200 sin escribir nada:
+ *     nació porque Ajustes guardaba las 15 de una vez en cada «Guardar» (esa sección ya no
+ *     existe, 2026-10-11) y se queda porque no cuesta nada.
  */
 
 import { TEMPLATE_CATALOG } from '@/constants/template-catalog'
@@ -86,16 +87,14 @@ const AJUSTES = [
 ] as const
 
 /**
- * Punteros que el código consume y que el catálogo NO cubre. Ajustes › Plantillas los
- * escribe en las marcas Twilio. Son las excepciones de `p1a-plantillas-paridad.test.ts`
- * (salvo la legacy `reactivation_template_sid`, que se lee pero ya no se escribe), y
- * dejan de serlo cuando entren al catálogo (`docs/PENDIENTES.md` §3.1 paso 2, decisión B3).
+ * Punteros que el código consume y que el catálogo NO cubre: la reactivación «con premio»
+ * del sistema anterior, que una marca Twilio elige en Plantillas (bloque «Sistema
+ * antiguo»). Es excepción de `p1a-plantillas-paridad.test.ts` (como la legacy
+ * `reactivation_template_sid`, que se lee pero ya no se escribe) y la retira la fase 1B del
+ * ciclo. `tier_unlocked_template_sid` y `reward_reminder_template_sid` estaban acá hasta el
+ * 2026-10-11, cuando entraron al catálogo (decisión B3).
  */
-const PUNTEROS_FUERA_DEL_CATALOGO = [
-  'tier_unlocked_template_sid',
-  'reward_reminder_template_sid',
-  'reactivation_with_reward_template_sid',
-] as const
+const PUNTEROS_FUERA_DEL_CATALOGO = ['reactivation_with_reward_template_sid'] as const
 
 /** Todo puntero de plantilla que esta ruta acepta (en Twilio). */
 export const PUNTEROS_DE_PLANTILLA: ReadonlySet<string> = new Set<string>([

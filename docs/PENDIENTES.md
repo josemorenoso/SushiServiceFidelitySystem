@@ -36,7 +36,7 @@
 |---|---|---|---|
 | 1 | **Gestos de hoy** (§6.1): ~~la 00069~~ (aplicada el 11-10), mirar los registros del Supabase del AIOS | Nada: solo hacerlo | — |
 | 2 | ✅ **Campañas, fases 0 y 0.bis: HECHAS el 2026-10-08 y el 2026-10-10** (sin migración; **pusheadas juntas a `main` el 2026-10-11, `2746d49`**). Un envío fallido ya no bloquea 30 o 360 días, pero cada toque admite 3 fallidos y no más · la insistente sale una vez mientras el cliente no vuelva · `error_message` dice la causa real · el texto de Campañas dice la verdad · una sola escala de días, también en Clientes y en «Rescatar Perdidos» | Nada. Línea base del SQL en `ESTADO.md` 0.CICLO; repetir la consulta hacia el 2026-11-11 | no |
-| 3 | **Plantillas, pasos 1 a 3** (§3): un solo libro de plantillas, cerrar el hueco catálogo ↔ código, una sola pantalla. **Y en la misma sesión, las cuatro plantillas nuevas juntas** (§3.2) para que cada marca pase por Meta una sola vez | Nada: B1–B7 ✅ decididas (§8). **Prompt listo:** `docs/prompts/2026-10-11-plantillas-un-solo-libro.md` (puede correr en paralelo con la 1A). B1 y B7 (AIOS, 13 → 8) van en una sesión posterior | 0 o 1 |
+| 3 | ✅ **Plantillas: un solo libro y una sola pantalla — HECHO el 2026-10-11** (sin migración, **sin desplegar**): el panel reconoce la WABA, las tres plantillas nuevas entraron juntas, una pantalla para Twilio y Zernio, Biblioteca para campañas (§3). Quedan B1 y B7 (AIOS, menos aprobaciones), en una sesión posterior | Desplegar; después, por marca, «Enviar los N juntos a Meta» (§3.4) | no |
 | 4 | **Campañas, fase 1B: los envíos del ciclo** (cron que decide y encola, drenador que otorga al enviar, «vence el domingo», piloto en Don Alirio). La **1A (la base) está HECHA** (2026-10-11, migración **00070 sin aplicar**, `CHANGELOG.md`): lo que deja para la 1B, en §2.4 | De la 1A (`ESTADO.md` 0.CICLO): la consulta 1 de `SQL-PARA-CORRER/ciclo-fase-1a/`, **aplicar la 00070 ANTES del push**, la consulta 2. La 1B lleva prompt aparte del comandante | 0 o 1 |
 | 5 | **Recompensas en un solo lugar** (S-1) | Nada: C1–C3 ✅ decididas | 0 o 1 |
 | 6 | **Campañas, fase 2: la pantalla** (dos o tres sesiones) | A8: mirar el prototipo (no frena la fase 1) | no |
@@ -154,48 +154,51 @@ por «mensaje libre». Detalle: spec §11.
 
 ## 3. Plantillas
 
-**Estado:** diagnóstico cerrado el 11-09 (`docs/PENDIENTES-PLANTILLAS.md`), plan **sin decidir**. Hecho desde entonces: el
-nombre editable de la plantilla (`8cf5ed4`), «Cumpleaños — dos días antes» en el catálogo (desplegado el 04-10).
+**Estado (2026-10-11):** el «un solo libro» del producto está construido, sin migración y **sin desplegar**
+(prompt `docs/prompts/2026-10-11-plantillas-un-solo-libro.md`; `docs/features/whatsapp-templates.md`): el panel
+reconoce lo que ya está en la WABA y un 400 «ya existe» adopta; «Nivel desbloqueado», «Recordatorio de premio» y
+«Regalo que vence» entraron juntas al catálogo (16); Plantillas es UNA pantalla para Twilio y Zernio y Ajustes ya no
+asigna punteros (OPER-4-bis cerrado); hay Biblioteca para campañas y las marcas Zernio crean libres (B4, B5); las
+rutas Twilio exigen alcance de marca (N5-bis). Lo que queda:
 
 ### 3.1 El plan, en orden (de `PENDIENTES-PLANTILLAS.md` §3)
 
 | # | Qué | Quita | Estado |
 |---|---|---|---|
-| 1 | **Un solo libro de plantillas:** el AIOS deja de crearlas y le pide al producto que las cree. Muere la copia de textos, el sondeo manual, el paso 5 del AIOS y el estado «activo sin texto» | Dos catálogos que se ignoran (1.1, 1.4) | ⬜ · decisión B7 |
-| 1.bis | **Adoptar lo que ya existe en la WABA** (el punto 1 del prompt del 12-09): leer la categoría real, decir «ya existe» en vez de «reintenta más tarde» | El 400 de Planeta Wings | ⬜ · prompt listo |
-| 2 | **Cerrar el hueco catálogo ↔ código:** `tier_unlocked` y `reward_reminder` entran al catálogo. Hoy, en Zernio, **subir de nivel es silencio total** y el recordatorio de premio no sale. Y las legacy `reactivation_with_reward_template_sid` y `reactivation_template_sid`, que el cron de reactivación todavía lee, se retiran. Las cuatro son las excepciones de `tests/unit/p1a-plantillas-paridad.test.ts` (OPER-6): al cerrar este paso, salen de ahí | 1.2 | ⬜ · decisión B3 |
-| 3 | **Una sola pantalla «Mensajes» para Twilio y Zernio:** un renglón por mensaje, un botón, el puntero se asigna solo al aprobar. Desaparecen Ajustes › Plantillas y el formulario suelto de Twilio | 1.3, 1.7 | ⬜ |
-| 4 | **Reducir de 13 a 8 aprobaciones por marca**, con la variación en variables | 1.5 | ⬜ · decisión B1 |
-| 5 | **Probar UTILITY** en bienvenida, puntos, premios y recordatorio (y en «Regalo que vence»), en una marca | 1.6 | ⬜ · decisión B2 |
-| 6 | **Rechazos y pausas con salida:** el motivo traducido a una acción y el editor abierto con el texto rechazado | 1.7 | ⬜ |
+| 1 | **El AIOS deja de crear plantillas** y le pide al producto que las cree (`submitSuggestedTemplate()`). Muere la copia de textos del AIOS —que NO tiene las tres del 11-10—, el sondeo manual y el paso 5 | Dos catálogos (1.1, 1.4) | ⬜ · decisión B7, otra sesión |
+| 4 | **Reducir de 16 a menos aprobaciones por marca**, con la variación en variables | 1.5 | ⬜ · decisión B1, otra sesión |
+| 5 | **Probar UTILITY** en bienvenida, puntos, premios, recordatorio y «Regalo que vence», en Sushi Fun | 1.6 | ⬜ · decisión B2 |
+| 6 | **Rechazos y pausas con salida:** el motivo traducido a una acción y el editor abierto con el texto rechazado. Ya se VEN (motivo y «Pausado por Meta» en la fila); falta traducirlos y avisar | 1.7 | ⬜ |
 | 7 | **Mostrar lo que no salió:** fallos por plantilla en Mensajes; el escáner le dice al mesero «este cliente no recibió WhatsApp» | 1.8 | ⬜ |
 | 8 | Fundir los cuatro docs de plantillas en uno | 1.9 | ⬜ |
 
-### 3.2 Una sola ronda de Meta por marca (propuesta nueva, 08-10)
+### 3.2 Lo que dejó «un solo libro» (2026-10-11)
 
-Hoy hay **cuatro plantillas nuevas** esperando, cada una por su lado: «Cumpleaños — dos días antes» (ya en el catálogo),
-«Regalo que vence» (el ciclo), «Nivel desbloqueado» y «Recordatorio de premio» (paso 2). Si entran al catálogo en la misma
-sesión, cada marca hace **un solo viaje** a Meta (un botón, 24-72 h) en vez de cuatro. Es la decisión **B6**.
+| ID | Qué | Estado |
+|---|---|---|
+| PL-1 | Varios avisos dicen todavía «configúrala en Ajustes» (`calendar.service.ts`, `EventDetailDrawer.tsx`, `calendar/page.tsx`, `campaigns/page.tsx`, el log del check-in y el cron de reactivación). Ajustes conserva una tarjeta que lleva a Plantillas, así que no mienten del todo; cambiarlos a «Plantillas» toca archivos ajenos (los crons: nadie los toca) | ⬜ micro |
+| PL-2 | En **Twilio** el puntero se escribe al CREAR (`fillEmptyPointer()`, deliberado desde v2.15.0): los presets y el cron de cumpleaños preguntan si está aprobada, el check-in no, así que entre la creación y la aprobación un cruce de nivel falla en Meta en vez de callar | ⬜ · decidir si pasa a «solo al aprobarse» (necesita guardar la pendiente Twilio en `template_versions`) |
+| PL-3 | Reemplazar una plantilla **Twilio rechazada** no tiene botón propio: se crea una corregida en la Biblioteca y se elige con «Elegir otra» | ⬜ micro |
+| PL-4 | Una plantilla libre no deja registro de quién la creó (no tiene fila en `template_versions`) | ⬜ · decisión |
 
 ### 3.3 Tu Tarea 2 (S-2) y los defectos sueltos
 
 | ID | Qué | Estado |
 |---|---|---|
-| S-2.1 | Separar las plantillas automáticas de las que creas para una campaña puntual. En Twilio la lista no marca nada | 🟡 · decisión B4 |
-| S-2.2 | Las automáticas «no se tocan, se usa la misma, se modifica si hace falta» | 🟡 (Zernio sí; Twilio no edita fuera del catálogo) |
-| S-2.3 | Crear plantillas libres. Twilio sí puede; **Zernio no tiene cómo desde el panel** | ⬜ · decisión B5 |
+| S-2.2 | Las automáticas «no se tocan, se usa la misma, se modifica si hace falta» | 🟡 (Zernio sí; Twilio elige, no edita: decisión 6) |
 | S-2.4 | **Restricción tuya: no rediseñar cómo se ven** («me encanta cómo se ven ahora») | regla |
-| N5-bis | Las rutas de plantillas de **Twilio** (`POST /api/dashboard/templates`, `[sid]/submit`, `standard`) siguen sin alcance de marca: un administrador de sede crea y somete plantillas en la cuenta de la marca. N5 cerró solo las del catálogo (P1-a, 2026-10-11) | ⬜ micro |
-| N9 | Una marca Zernio del AIOS no deja rastro de ningún rechazo ni pausa de sus 13 plantillas | ⬜ (lo cierra el paso 1) |
 | N23-bis | El envío manual solo rellena nombre, puntos y próximo premio (la paginación de N23 se cerró en P1-a) | ⬜ micro |
-| OPER-4-bis | En una marca **Zernio**, Ajustes › Plantillas ya no cambia punteros (400, P1-a), pero `handleSaveTemplates` traga el error: el dueño aprieta Guardar y no pasa nada, sin aviso. Y `tier_unlocked`, `reward_reminder` y `reactivation_with_reward` quedan **sin ningún escritor desde el panel** en Zernio hasta B3. Arreglo chico: mostrar el error (cambia la pantalla: decisión del dueño, S-2.4) | ⬜ micro · decisión |
 
-### 3.4 Plantillas que cada marca tiene que crear hoy (gestos, no código)
+### 3.4 Plantillas que cada marca tiene que mandar a Meta (gestos, no código)
 
-- **«Cumpleaños — dos días antes»**: Planeta Wings (Zernio: Enviar a Meta) · Sushi Service, Sushi Fun, Don Alirio, Frangal,
-  demo-ventas (Twilio: Crear) · Tepuy ya la trae. Mientras no esté aprobada, cada marca saluda el día mismo. (`ESTADO.md` 0.CUMPLE)
+- **Un solo viaje por marca (B6):** Plantillas → Mensajes automáticos → leer los textos nuevos («Nivel desbloqueado»,
+  «Recordatorio de premio», «Regalo que vence») y **«Enviar los N juntos a Meta»**, que manda también «Cumpleaños — dos
+  días antes» si falta. Planeta Wings (Zernio; Tepuy cuando tenga su número) y Sushi Service, Sushi Fun, Don Alirio, Frangal y demo-ventas
+  (Twilio): el mismo botón. Al abrir la pantalla de Planeta Wings, lo que el AIOS dejó en su WABA se registra solo.
+  (`ESTADO.md` 0.PLANTILLAS)
 - **Plantillas de evento con imagen** en las marcas Twilio: el cuerpo corregido (22 palabras) está en `docs/PLANTILLAS.md`
-  § Plantilla 12. Al aprobar, pegar el `HX…` en `admin_settings.event_template_*_sid`. (`ESTADO.md` 0.IOTA punto 6)
+  § Plantilla 12. Al aprobarse, se elige en Plantillas → la fila del evento → «Elegir otra» (ya no hace falta pegar el
+  `HX…` por SQL). (`ESTADO.md` 0.IOTA punto 6)
 - **Golden Bullet**: los tres textos y la plantilla (24-48 h). (`ESTADO.md` 0.GB)
 
 ---

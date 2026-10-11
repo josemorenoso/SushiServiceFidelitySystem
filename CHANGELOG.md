@@ -8,6 +8,21 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [feat] — 2026-10-11 — Plantillas: un solo libro, una sola pantalla, las tres nuevas juntas (sin migración, SIN desplegar)
+
+- **WABA:** al abrir Plantillas (Zernio) se registra lo que el alta dejó y el panel no conocía (en revisión, rechazado con
+  motivo, el puntero del AIOS con su texto real) y se aplican los veredictos cuyo webhook se perdió (`reconciliarConLaWaba`).
+  Un 400 «ya existe» adopta con estado y categoría reales; nunca «vuelve a intentarlo más tarde».
+- **Catálogo 13 → 16 (B3, B6):** «Nivel desbloqueado», «Recordatorio de premio» y «Regalo que vence» (spec del ciclo §4,
+  sin emisor hasta la 1B), textos nuevos sin emoji de rubro. Paridad: quedan solo las 2 legacy (las retira la 1B).
+- **Una pantalla:** pestañas Mensajes automáticos (Twilio y Zernio: estado real, «Enviar a Meta», «Enviar los N juntos»,
+  «Elegir otra» y «Sistema antiguo» en Twilio) y Biblioteca para campañas (B4; Zernio crea libres, B5; una sola regla de
+  validación). Ajustes › Plantillas WhatsApp pierde los 15 desplegables (OPER-4-bis): queda una tarjeta a Plantillas.
+- **N5-bis:** `POST templates`, `[sid]/submit` y `standard` exigen alcance de marca.
+- **Tests:** 4 archivos nuevos + 3 ajustados. Sin `stash` (script en el scratchpad: `git show 56544f6` de mis fuentes,
+  vitest, `git restore --source=HEAD`): **47 de 146 fallan contra el código anterior**. Suite entera con la 1A: 78 / 1.175.
+- **Del dueño, por marca:** leer los textos nuevos y «Enviar los N juntos a Meta» (un solo viaje). `ESTADO.md` 0.PLANTILLAS.
+
 ## [feat] — 2026-10-11 — Ciclo, fase 1A: la base del motor (migración 00070 SIN aplicar; nada se envía)
 
 - **00070:** `customers.cycle_*` (ciclo, fatiga, dormido, ritmo personal), `customer_cycle_touches` (UNIQUE por etapa y

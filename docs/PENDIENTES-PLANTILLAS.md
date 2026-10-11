@@ -2,7 +2,11 @@
 
 > **Fecha:** 2026-09-11 · **Origen:** el dueño, textual: *"me está causando mucha fricción el temita de las
 > plantillas, me parece que es un sistema altamente mediocre aunque le hayamos metido esfuerzo"*.
-> **Estado:** DIAGNÓSTICO CERRADO, RE-DISEÑO SIN DECIDIR. Nada de lo de abajo está construido.
+> **Estado (2026-10-11):** el dueño decidió B1–B7 (`docs/PENDIENTES.md` §8) y la sesión «un solo libro»
+> construyó, sin migración y sin desplegar, la adopción de la WABA (1.bis), el paso 2 y el paso 3 de §3, más la
+> Biblioteca para campañas (B4, B5) y el alcance de marca en Twilio (N5-bis). Marcados abajo con ✅. Quedan
+> los pasos 1 (B7, el AIOS) y 4 a 8. Lo vivo y su detalle: `docs/PENDIENTES.md` §3 y
+> `docs/features/whatsapp-templates.md`.
 > **Leído para escribirlo:** `template-catalog.ts`, `template-texts.ts`, `template.service.ts`,
 > `twilio-catalog.service.ts`, las tres pantallas (`TemplateCatalogEditor`, `TwilioTemplateManager` +
 > `StandardCatalogGaps`, `dashboard/settings` § Plantillas), `whatsapp.service.ts`, `check-in/route.ts`,
@@ -31,6 +35,9 @@ vez de fundirlos. La fricción es la suma de esas costuras. La medida: plantilla
 - El incidente del 🍣 (2026-09-09) no fue un descuido: fue el síntoma de la copia.
 
 ### 1.2 El catálogo de 13 no es el conjunto de mensajes que el código manda
+
+> ✅ **Resuelto el 2026-10-11 (B3):** `tier_unlocked` y `reward_reminder` entraron al catálogo (16, con
+> «Regalo que vence»). Las dos legacy de reactivación siguen fuera: las retira la fase 1B del ciclo.
 El código consume **15 claves** `*_template_sid`. Dos no existen en el catálogo y **ninguna pantalla Zernio
 puede crearlas**:
 
@@ -43,6 +50,10 @@ Además `reactivation_with_reward_template_sid` y el legacy `reactivation_templa
 `campaigns/page.tsx` aunque el catálogo los retiró.
 
 ### 1.3 Tres pantallas para una sola cosa, y la asignación separada de la creación
+
+> ✅ **Resuelto el 2026-10-11:** Plantillas es UNA pantalla para Twilio y Zernio (pestañas «Mensajes
+> automáticos» y «Biblioteca para campañas»); Ajustes ya no asigna punteros (queda una tarjeta que lleva a
+> Plantillas); la tarjeta «Del set estándar te faltan» se fundió en las filas.
 - **Plantillas (Zernio)**: catálogo de 13, editor tipo documento. Bien, pero sola.
 - **Plantillas (Twilio)**: lista cruda de la Content API con SID a la vista + formulario libre (nombre,
   categoría, muestras) + tarjeta «Del set estándar te faltan N». Las 2 de evento no se pueden crear ahí.
@@ -128,9 +139,9 @@ script + bucket + script de verificación + SQL a mano.
 
 | # | Qué | Efecto | Costo |
 |---|---|---|---|
-| 1 | **Un solo libro mayor.** Sacar la creación del AIOS: el paso 4 llama al producto (con `AIOS_ADMIN_PROVISION_SECRET`, que ya existe) y el producto crea las 13 con `submitSuggestedTemplate()`. Se muere la copia, el sondeo manual, el paso 5 y el estado «sin texto». El webhook conoce todas | Quita 1.1 y 1.4 | Un endpoint nuevo + borrar código del AIOS |
-| 2 | **Cerrar el hueco catálogo ↔ código.** Meter `tier_unlocked` y `reward_reminder` al catálogo, **o** fundir `tier_unlocked` en `points_earned_near`. Retirar las claves legacy de Ajustes y de `campaigns/page.tsx` | Quita 1.2 | Decisión + 2 textos |
-| 3 | **Una sola pantalla Mensajes para los dos proveedores.** Un renglón por mensaje, un botón, el puntero se asigna solo al aprobar (Zernio ya lo hace; `fillEmptyPointer` ya lo hace). Desaparecen Ajustes › Plantillas y el formulario libre de Twilio. Media de evento creable desde ahí | Quita 1.3 y el camino manual de 1.7 | Mediano: unificar `twilio-catalog.service` con `template.service` |
+| 1 | ⬜ (B7, otra sesión) **Un solo libro mayor.** Sacar la creación del AIOS: el paso 4 llama al producto (con `AIOS_ADMIN_PROVISION_SECRET`, que ya existe) y el producto crea las 13 con `submitSuggestedTemplate()`. Se muere la copia, el sondeo manual, el paso 5 y el estado «sin texto». El webhook conoce todas | Quita 1.1 y 1.4 | Un endpoint nuevo + borrar código del AIOS |
+| 2 | ✅ 2026-10-11 **Cerrar el hueco catálogo ↔ código.** Meter `tier_unlocked` y `reward_reminder` al catálogo, **o** fundir `tier_unlocked` en `points_earned_near`. Retirar las claves legacy de Ajustes y de `campaigns/page.tsx` | Quita 1.2 | Decisión + 2 textos |
+| 3 | ✅ 2026-10-11 (salvo la media de evento en Twilio) **Una sola pantalla Mensajes para los dos proveedores.** Un renglón por mensaje, un botón, el puntero se asigna solo al aprobar (Zernio ya lo hace; `fillEmptyPointer` ya lo hace). Desaparecen Ajustes › Plantillas y el formulario libre de Twilio. Media de evento creable desde ahí | Quita 1.3 y el camino manual de 1.7 | Mediano: unificar `twilio-catalog.service` con `template.service` |
 | 4 | **Reducir a 8** con la variación en variable. **Ahora es el momento barato:** ningún tenant Zernio ha mandado un mensaje real (0.IOTA) | Quita 1.5 | Cambia el contrato de variables: toca emisores y `TEMPLATE_CATALOG`; re-aprobar en los Zernio existentes |
 | 5 | **Probar UTILITY** en bienvenida, puntos sumados, premios y recordatorio, con UNA marca, sin frases promocionales | Baja costo por mensaje y saca esos envíos del tope de marketing | Una tarde + esperar a Meta |
 | 6 | **Rechazos y pausas con salida:** traducir los motivos frecuentes a una acción, abrir el editor con el texto rechazado, avisar al dueño (correo o WhatsApp), y tratar PAUSED como «dejar de enviar este mensaje y avisar» | Quita 1.7 y la mitad de 1.8 | Pequeño |
@@ -138,6 +149,11 @@ script + bucket + script de verificación + SQL a mano.
 | 8 | Borrar `flujo-plantillas-recompensas-campanas.md` y fundir los otros tres docs en uno | Quita 1.9 | Solo docs |
 
 **Los puntos 1, 2 y 3 quitan la fricción. 4 y 5 bajan el costo.** El resto es pulido.
+
+**Hecho además el 2026-10-11, fuera de la tabla:** el panel reconoce lo que ya está en la WABA (en revisión,
+rechazado con su motivo, el puntero del AIOS con su texto real) y aplica los veredictos de Meta cuyo webhook
+se perdió; un 400 «ya existe» adopta en vez de decir «vuelve a intentarlo más tarde»; una PAUSED se ve; las
+libres tienen una sola regla de validación (parte de 1.9).
 
 ## 4. Lo que NO cambia con nada de esto
 - Meta sigue tardando 24-72 h por plantilla. Ningún rediseño lo evita; solo se puede pedir menos veces (4).

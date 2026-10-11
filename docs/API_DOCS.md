@@ -140,13 +140,13 @@ impide al rol `aios_constelarys` tocar `auth.users` — ver `docs/features/alta-
 | GET | /api/dashboard/campaigns | Listar campañas del tenant (últimas 50) **(sede — no-op hoy, deuda #12)** | Admin Cookie |
 | GET | /api/dashboard/campaigns/efficiency | Eficiencia y revenue atribuido por campaña **(sede en el lado `campaigns`, no-op hoy, deuda #12)** | Admin Cookie |
 | GET | /api/dashboard/templates | Listar plantillas del proveedor (Twilio Content API o la WABA de Zernio, misma forma; `?provider=twilio\|zernio\|golden_bullet`; devuelve `provider`). Desde 2026-09-12 | Admin Cookie |
-| POST | /api/dashboard/templates | Crear plantilla + submit aprobación WhatsApp | Admin Cookie |
-| GET | /api/dashboard/templates/catalog | Estado del catálogo estándar (13 plantillas) — **solo Zernio** | Admin Cookie |
+| POST | /api/dashboard/templates | Crear una plantilla LIBRE (biblioteca para campañas) + someterla, en Twilio **o Zernio** según la marca. Alcance de marca. Desde 2026-10-11 | Admin Cookie |
+| GET | /api/dashboard/templates/catalog | Estado del catálogo estándar (16 mensajes), para **los dos proveedores** desde 2026-10-11 | Admin Cookie |
 | PUT | /api/dashboard/templates/catalog/:key | Editar una plantilla del catálogo | Admin Cookie |
 | POST | /api/dashboard/templates/catalog/:key/submit | Enviar a Meta el texto del catálogo **tal cual** | Admin Cookie |
 | POST | /api/dashboard/templates/catalog/:key/adopt | Activar la plantilla que **ya está aprobada** en la WABA | Admin Cookie |
 | GET | /api/dashboard/templates/standard | Qué le falta del set estándar — **solo Twilio** | Admin Cookie |
-| POST | /api/dashboard/templates/standard | Crear UNA plantilla estándar que falte (aditivo) | Admin Cookie |
+| POST | /api/dashboard/templates/standard | Crear UNA plantilla estándar que falte (aditivo). Alcance de marca | Admin Cookie |
 | GET | /api/dashboard/opt-outs | Clientes que pidieron salir — agnóstico de proveedor | Admin Cookie |
 | POST | /api/dashboard/check-in-override | Registrar visita extra (admin override) | Admin Cookie |
 | GET | /api/dashboard/settings | Obtener configuración del admin | Admin Cookie |
@@ -1215,57 +1215,81 @@ cron correspondiente (`/api/cron/birthday` o `/api/cron/reactivation`) del tenan
 **Response 200:**
 ```json
 {
+  "provider": "twilio",
   "templates": [
     {
       "sid": "HXxxxxxxxxxx",
       "friendly_name": "bienvenida_es",
       "language": "es",
-      "date_created": "2026-04-10T...",
-      "date_updated": "2026-04-10T...",
       "body": "¡Hola {{1}}! Bienvenido a Sushi Service...",
       "approval_status": "approved",
-      "category": "UTILITY"
+      "category": "UTILITY",
+      "en_uso_por": "Bienvenida",
+      "biblioteca": false
     }
   ]
 }
 ```
 
-**`POST /api/dashboard/templates`** — Admin JWT
+`en_uso_por` / `biblioteca` (2026-10-11): qué mensaje automático usa esa plantilla (por los punteros de
+`admin_settings`) y si es de la **Biblioteca para campañas** (`true` = ningún mensaje automático la usa y,
+en Zernio, su nombre no es el de un mensaje del catálogo). Los calcula `src/lib/template-library.ts`;
+los leen la pestaña Biblioteca y Campañas → Mensaje libre.
+
+**`POST /api/dashboard/templates`** — Admin JWT · **alcance de marca** (N5-bis, 2026-10-11)
+
+Una plantilla **libre** para la biblioteca de campañas, en el proveedor de la marca: Twilio (Content API)
+o **Zernio** (`crearPlantillaLibreZernio()`, el `POST /v1/whatsapp/templates` verificado; antes una marca
+Zernio no podía). No escribe ningún puntero.
 
 **Body:**
 ```json
 {
-  "name": "reactivacion_es",
-  "language": "es",
+  "name": "promo_viernes",
   "category": "MARKETING",
-  "body": "¡Hola {{1}}! Te extrañamos...",
-  "variables": { "1": "nombre_cliente" }
+  "body": "¡Hola {{1}}! Este viernes tenemos 2x1. Tienes {{2}} puntos. Responde SALIR para no recibir más mensajes.",
+  "variables": { "1": "María", "2": "120" }
 }
 ```
+
+Valida con `validarPlantillaLibre()` —la misma regla que el formulario—: nombre de Meta, categoría
+`MARKETING`/`UTILITY`, variables `{{1}}..{{N}}` sin huecos, no empezar ni terminar con variable, ≤1024,
+línea de SALIR en MARKETING, 3 palabras fijas por variable + 1 y un ejemplo por variable.
 
 **Response 200:**
 ```json
 {
-  "ok": true,
-  "template": { "sid": "HXxxxxxxxxxx", "...": "..." },
-  "approval": { "sid": "HXxxxxxxxxxx", "status": "received" }
+  "success": true,
+  "approval_submitted": true,
+  "approval_error": null,
+  "template": { "sid": "HXxxxxxxxxxx", "name": "promo_viernes", "status": "received" }
 }
 ```
 
+| Código | Cuándo |
+|---|---|
+| 400 | No pasa la validación, o el proveedor la rechazó (con su motivo) |
+| 403 | Un administrador de UNA sede |
+| 409 | Zernio: el nombre ya está en la WABA o es el de un mensaje del catálogo (`bienvenida_v7`) |
+| 502 | Zernio no respondió (puede haberla creado: revisar la lista antes de reintentar) |
+
 ---
 
-### Templates — catálogo estándar (Zernio)
+### Templates — catálogo estándar
 
-> **Solo tenants `messaging_provider='zernio'`.** Los 4 tenants Twilio siguen usando los dos endpoints
-> de arriba, sin cambios (decisión del dueño: "déjalos así, ni los toques"). El guardarraíl vive en
-> `assertZernioTenant()` dentro de `template.service.ts`, no en la UI.
+> **El `GET` sirve a los dos proveedores desde el 2026-10-11** (Plantillas es una sola pantalla). Editar,
+> mandar a Meta y activar (`PUT`, `…/submit`, `…/adopt`) siguen siendo **solo Zernio**: el guardarraíl
+> vive en `assertZernioTenant()` dentro de `template.service.ts`. En Twilio se crea con `…/standard` y se
+> elige con el `PUT /api/dashboard/settings` de siempre.
 >
 > Doc de feature: `docs/features/whatsapp-templates.md`.
 
 #### `GET /api/dashboard/templates/catalog` — Admin JWT
 
-Estado de las 13 plantillas del catálogo: qué se está enviando, qué está en revisión de Meta, y qué
-texto propone el estilo del negocio.
+Estado de los mensajes del catálogo: qué se está enviando, qué está en revisión de Meta, qué texto propone
+el banco y qué dice el PROVEEDOR de la plantilla en uso. En Zernio, antes de responder, registra lo que
+está en la WABA y el panel no conocía y aplica los veredictos de Meta cuyo webhook se perdió
+(`reconciliarConLaWaba()`); `reconocidas` lo cuenta en palabras del dueño.
 
 **Response 200:**
 ```json
@@ -1290,9 +1314,11 @@ texto propone el estilo del negocio.
       "suggestedBody": "¡Hola {{1}}! 🎉…",
       "adoptedRef": null,
       "approvedInWaba": null,
-      "blockedReason": null
+      "blockedReason": null,
+      "enWhatsApp": { "ref": "bienvenida", "status": "approved", "category": "MARKETING", "body": "...", "rejectionReason": null }
     }
   ],
+  "reconocidas": [],
   "wabaTemplates": [
     { "name": "puntos_sumados_lejos", "status": "approved", "category": "MARKETING", "language": "es", "body": "...", "has_media": false }
   ]
@@ -1312,7 +1338,17 @@ redactado para el dueño. Hoy solo lo llenan las 2 de evento cuando falta
 `ZERNIO_TEMPLATE_SAMPLE_IMAGE_URL` / `_VIDEO_URL`. La pantalla deshabilita "Enviar a Meta" con ese
 texto en vez de dejar que se apriete y devuelva un 409 por una variable que el dueño no puede tocar.
 
-**Response 409:** `{ "provider": "twilio" }` — el negocio no es Zernio. El frontend cae al gestor Twilio.
+`enWhatsApp` = lo que dice el proveedor de la plantilla en uso (la vigente o el puntero): estado en
+minúsculas, la categoría con que Meta la dejó (puede no ser la pedida: Meta recategoriza) y, en Twilio, el
+motivo del rechazo. `null` si no hay nada vivo o el proveedor no respondió.
+
+**Marca Twilio** (`getTwilioCatalogState()`): la misma forma, con `current`/`pending`/`lastRejected` en
+`null` (Twilio no tiene `template_versions`), `adoptedRef` = el puntero, `wabaTemplates: null`, y además
+`aviso` (no se pudo leer la lista de Twilio), `elegibles` (las aprobadas de la cuenta, para «Elegir otra»)
+y `sistemaAntiguo` (`reactivation_with_reward_template_sid` + `reactivation_reward_id`).
+
+Antes del 2026-10-11 una marca Twilio recibía **409** `{ "provider": "twilio" }` y la pantalla caía al gestor
+Twilio. Ya no.
 
 #### `PUT /api/dashboard/templates/catalog/:key` — Admin JWT
 
@@ -1442,7 +1478,7 @@ Zernio. Dice en qué punto está cada una de las 13 plantillas del catálogo est
 `pending` (esperando a Meta) · `approved`. `warning` se llena si no se pudo leer la lista de Twilio;
 en ese caso los punteros existentes se reportan como `approved` y el aviso lo explica.
 
-#### `POST /api/dashboard/templates/standard` — Admin JWT
+#### `POST /api/dashboard/templates/standard` — Admin JWT · **alcance de marca** (N5-bis, 2026-10-11)
 
 ```json
 { "key": "campaign_presencial_to_domicilio" }
@@ -1465,6 +1501,7 @@ del negocio), la somete a Meta y **rellena el puntero solo si estaba vacío**.
 | Código | Cuándo |
 |---|---|
 | 400 | `key` no es del catálogo, o lleva media (las 2 de evento no se crean desde acá) |
+| 403 | Un administrador de UNA sede |
 | 409 | El tenant es Zernio, **o** esa plantilla ya tiene puntero (esto solo llena huecos) |
 | 502 | Twilio rechazó la creación |
 

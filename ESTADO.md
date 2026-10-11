@@ -33,6 +33,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Push de P1-a, registrar 00069 aplicada y la 00030 pendiente, prompt de plantillas (solo docs) — 2026-10-11 | Opus 5.5 | `ESTADO.md`, `docs/PENDIENTES.md`, `CHANGELOG.md`, `docs/prompts/2026-10-11-plantillas-un-solo-libro.md` (nuevo) | — | en vuelo |
 
 ## 3. Siguiente, en orden
 

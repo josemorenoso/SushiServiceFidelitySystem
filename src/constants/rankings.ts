@@ -57,6 +57,11 @@ export interface CycleBand {
  *
  * Con un suave muy temprano (≤ 10) la zona arranca en el cap y la Ventana queda vacía:
  * no se devuelve (una burbuja de «7-6 días» no significa nada).
+ *
+ * ⚠️ El motor del ciclo (fase 1A, 2026-10-11) la va a REEMPLAZAR por `bandsFromConfig()`
+ * (`src/lib/cycle-engine.ts`): las cajas por etapa con los días del ritmo de la marca.
+ * Hasta la fase 2 (la pantalla) esta sigue siendo la escala de las pantallas de hoy, con
+ * los días viejos de reactivación. No se borra antes.
  */
 export function deriveCycleBands(
   rawSoft?: string | number | null,

@@ -12,9 +12,11 @@
  * ──────────────────────
  * De leer TODAS las escrituras que hacen las pantallas (`saveSetting(...)` de Ajustes y
  * los `PUT` del Golden Bullet), cruzadas con lo que el código lee de `admin_settings`.
- * Una clave que ninguna pantalla escribe no entra: si mañana una pantalla nueva necesita
- * otra, se agrega acá en el mismo commit — el test `p1a-settings-claves.test.ts` falla
- * si una pantalla manda una clave que esta lista no conoce.
+ * Una clave que ninguna pantalla escribe no entra, con UNA excepción: las del ciclo de
+ * recuperación (fase 1A, 2026-10-11), que entraron antes que su pantalla (fase 2) porque
+ * el spec las fija ya. Si mañana una pantalla nueva necesita otra, se agrega acá en el
+ * mismo commit — el test `p1a-settings-claves.test.ts` falla si una pantalla manda una
+ * clave que esta lista no conoce.
  *
  * LOS PUNTEROS DE PLANTILLA
  * ─────────────────────────
@@ -68,6 +70,19 @@ const AJUSTES = [
   'golden_bullet_reply_no_text',
   'golden_bullet_reply_si_image_url',
   'golden_bullet_invite_slug',
+  // Ciclo de recuperación (fase 1A, 2026-10-11). Ninguna pantalla las escribe todavía: la
+  // de la fase 2 lo hará por esta ruta. Defaults y saneamiento en `normalizeCycleSettings()`
+  // (`src/lib/cycle-engine.ts`, `CYCLE_SETTING_KEYS`: un test exige que las dos listas
+  // coincidan). `cycle_enabled` nace apagado en todas las marcas.
+  'cycle_enabled',
+  'cycle_rhythm',
+  'cycle_small_reward_ids',
+  'cycle_strong_reward_id',
+  'cycle_fatigue_touches',
+  'cycle_heartbeat_enabled',
+  'cycle_strong_cooldown_days',
+  'cycle_send_slot',
+  'cycle_holdout_pct',
 ] as const
 
 /**

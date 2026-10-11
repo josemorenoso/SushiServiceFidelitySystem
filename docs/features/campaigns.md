@@ -1,6 +1,6 @@
 # Feature: Campañas — Control de Tráfico Centralizado
 
-**Última actualización:** 2026-10-10 (ciclo, fase 0.bis: tope de 3 intentos fallidos por toque, la causa real del fallo, lo que salió queda marcado aunque la corrida aborte); antes 2026-10-08 (fase 0: un fallo no calla, el insistente sale una vez, una sola escala de días)
+**Última actualización:** 2026-10-11 (ciclo, fase 1A: la base del motor, migración 00070 sin aplicar, **nada se envía**; § «Fase 1A»); antes 2026-10-10 (ciclo, fase 0.bis: tope de 3 intentos fallidos por toque, la causa real del fallo, lo que salió queda marcado aunque la corrida aborte); antes 2026-10-08 (fase 0: un fallo no calla, el insistente sale una vez, una sola escala de días)
 
 > ⚠️ **Rediseño en diseño (2026-10-04, sin código todavía):** el recorrido de reactivación, las burbujas de riesgo y el
 > calendario se reemplazan por **el ciclo de recuperación** (pipeline de 90 días con cinco toques, fatiga a las 6
@@ -9,8 +9,27 @@
 > está (2026-10-08, sin migración):** un envío fallido ya no calla al cliente, el «insistente» sale UNA vez mientras el
 > cliente no vuelva (antes se repetía cada ~30 días sin tope) y la pantalla usa una sola escala de días. La medición está en
 > `SQL-PARA-CORRER/ciclo-fase-0/`. **La fase 0.bis (2026-10-10, sin migración)** le pone techo al reintento: un toque que
-> falla 3 veces no se intenta más (§ «Tope de reintentos»). **Lo que sigue abajo describe lo que el código hace HOY** y sigue siendo cierto hasta
-> que se construya la fase 1.
+> falla 3 veces no se intenta más (§ «Tope de reintentos»). **La fase 1A (2026-10-11, migración 00070) construyó la
+> base del motor sin enviar nada** (§ «Fase 1A»). **Lo que sigue abajo describe lo que el código hace HOY** y sigue
+> siendo cierto hasta la fase 1B (el cron y el drenador del ciclo).
+
+### Fase 1A (2026-10-11): la base del motor, sin envíos
+
+Lo que agrega (detalle en `docs/features/ritmo-adaptativo.md` §7 y `docs/DB_SCHEMA.md`):
+
+- **La base lleva la cuenta del ciclo** (00070): en qué ciclo está cada cliente, desde cuándo, su ritmo personal y
+  cuántos mensajes de marketing lleva sin volver. **Todo `campaign_messages` que se inserta como `sent`/`delivered`
+  pasa por el trigger `on_campaign_message_sent`**: si la campaña es `manual`, `calendar` o `reactivation` (por
+  `campaigns.source`, nunca por `type`), suma uno; al sexto el cliente pasa a `dormido`. El recordatorio de premio y el
+  cumpleaños no cuentan. **Hoy nada lee ese estado**: los crons de este documento siguen decidiendo exactamente igual.
+- **El motor de piezas** (`src/lib/communications/registry.ts`): cada comunicación de este documento (reactivación,
+  cumpleaños, recordatorio, evento, manual, Golden Bullet) declarada con sus reglas: si cansa, si cuenta para el tope de
+  3, si está exenta de los 7 días, si pausa el toque. **No reemplaza nada todavía**: un test exige que diga lo mismo que
+  `MONTHLY_CAP_SOURCES`, los exentos del drenador, `message_class_map` y el trigger.
+- **Los ajustes** `cycle_*` en la lista cerrada del PUT, con el ciclo **apagado** en todas las marcas.
+
+Lo que NO cambia: ningún cron, el drenador, las plantillas ni ninguna pantalla. `deriveCycleBands()` sigue siendo la
+escala de las pantallas hasta la fase 2 (la reemplazará `bandsFromConfig()`).
 
 ---
 

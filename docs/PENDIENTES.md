@@ -1,6 +1,6 @@
 # PENDIENTES — todo lo que falta, en un solo lugar
 
-> **Última actualización:** 2026-10-11 (**el dueño DECIDIÓ los bloques A y B y parte del C** con datos de producción: §8 queda como tabla de decisiones; feature nueva «se adapta a tu clientela», `docs/features/ritmo-adaptativo.md`; prompt de la fase 1A listo). Antes, el mismo día (P1-a: salen N3-quater, N7, N8 de §5 y N5, N16, N23, OPER-4, OPER-6 de §3.3; entran N5-bis, N23-bis y OPER-4-bis; OPER-6 encontró **cuatro** punteros fuera del catálogo, no dos). Antes 2026-10-10 (ciclo fase 0.bis: sale N3-bis y N3-ter de §5, entran N3-quater y N3-quinquies; la consulta de la fase 0 ya corrió y su gesto pasa al de Planeta Wings). Antes 2026-10-08 (Opus 5.5, solo docs). **Es la puerta de entrada a lo que falta.** Si algo
+> **Última actualización:** 2026-10-11 (**ciclo, fase 1A HECHA**: sale de §1 y de §2.4, entra lo que deja para la 1B en §2.4 y dos chicos en §5, TEST-deadlock y N-MES). Antes, el mismo día (**el dueño DECIDIÓ los bloques A y B y parte del C** con datos de producción: §8 queda como tabla de decisiones; feature nueva «se adapta a tu clientela», `docs/features/ritmo-adaptativo.md`; prompt de la fase 1A listo). Antes, el mismo día (P1-a: salen N3-quater, N7, N8 de §5 y N5, N16, N23, OPER-4, OPER-6 de §3.3; entran N5-bis, N23-bis y OPER-4-bis; OPER-6 encontró **cuatro** punteros fuera del catálogo, no dos). Antes 2026-10-10 (ciclo fase 0.bis: sale N3-bis y N3-ter de §5, entran N3-quater y N3-quinquies; la consulta de la fase 0 ya corrió y su gesto pasa al de Planeta Wings). Antes 2026-10-08 (Opus 5.5, solo docs). **Es la puerta de entrada a lo que falta.** Si algo
 > pendiente no está aquí, no está pendiente: o se hizo, o hay que agregarlo aquí.
 > **Regla:** lo que se termina se **saca** de este archivo (no se tacha) y pasa al `CHANGELOG.md`. El detalle de cada
 > cosa vive en su documento de origen; aquí va una línea, el estado y dónde leer más.
@@ -16,7 +16,7 @@
 |---|---|---|
 | **`docs/PENDIENTES.md`** (este) | La lista única: qué falta, en qué orden, qué decide el dueño | **Vigente. Empezar aquí** |
 | `ESTADO.md` | El tablero de sesiones vivas (§2) y la foto del despliegue (§1). La cola de gestos del dueño por marca (§3) | Vigente |
-| `docs/superpowers/specs/2026-10-04-ciclo-de-recuperacion-design.md` | **El diseño de las campañas nuevas** (el ciclo). Tres pasadas: la original, la revisión del dueño (§12) y la verificación del 08-10 (§13) | Vigente, sin código |
+| `docs/superpowers/specs/2026-10-04-ciclo-de-recuperacion-design.md` | **El diseño de las campañas nuevas** (el ciclo). Cuatro pasadas: la original, la revisión del dueño (§12), la verificación del 08-10 (§13) y las decisiones con datos del 11-10 (§14) | Vigente; fases 0, 0.bis y 1A construidas |
 | `docs/superpowers/specs/2026-10-04-ciclo-de-recuperacion-mockup.html` | El prototipo clicleable (v2). Publicado en <https://claude.ai/artifact/EKRPox4mCdvsSwiGbETDB5> | Vigente |
 | `docs/prompts/2026-10-04-ciclo-fase-0-y-1.md` | El prompt para construir las fases 0 y 1 del ciclo | Listo, con las correcciones del 08-10 |
 | `docs/PENDIENTES-PLANTILLAS.md` | El diagnóstico de plantillas: nueve fallas y un plan de ocho pasos | Vigente (el plan sigue «sin decidir»: §3 de aquí) |
@@ -37,7 +37,7 @@
 | 1 | **Gestos de hoy** (§6.1): ~~la 00069~~ (aplicada el 11-10), mirar los registros del Supabase del AIOS | Nada: solo hacerlo | — |
 | 2 | ✅ **Campañas, fases 0 y 0.bis: HECHAS el 2026-10-08 y el 2026-10-10** (sin migración; **pusheadas juntas a `main` el 2026-10-11, `2746d49`**). Un envío fallido ya no bloquea 30 o 360 días, pero cada toque admite 3 fallidos y no más · la insistente sale una vez mientras el cliente no vuelva · `error_message` dice la causa real · el texto de Campañas dice la verdad · una sola escala de días, también en Clientes y en «Rescatar Perdidos» | Nada. Línea base del SQL en `ESTADO.md` 0.CICLO; repetir la consulta hacia el 2026-11-11 | no |
 | 3 | **Plantillas, pasos 1 a 3** (§3): un solo libro de plantillas, cerrar el hueco catálogo ↔ código, una sola pantalla. **Y en la misma sesión, las cuatro plantillas nuevas juntas** (§3.2) para que cada marca pase por Meta una sola vez | Nada: B1–B7 ✅ decididas (§8). **Prompt listo:** `docs/prompts/2026-10-11-plantillas-un-solo-libro.md` (puede correr en paralelo con la 1A). B1 y B7 (AIOS, 13 → 8) van en una sesión posterior | 0 o 1 |
-| 4 | **Campañas, fase 1: el motor del ciclo.** **1A, la base** (migración, triggers, ritmo personal y de la marca, motor de piezas, canal; nada se envía): prompt listo en `docs/prompts/2026-10-11-ciclo-fase-1a-motor-base.md`. **1B, los envíos** (cron, drenador, regalos, piloto en Don Alirio): después de 1A | Nada: A1–A7 ✅ decididas (§8). Al desplegar 1A: aplicar su migración ANTES del push | 1 (en 1A) |
+| 4 | **Campañas, fase 1B: los envíos del ciclo** (cron que decide y encola, drenador que otorga al enviar, «vence el domingo», piloto en Don Alirio). La **1A (la base) está HECHA** (2026-10-11, migración **00070 sin aplicar**, `CHANGELOG.md`): lo que deja para la 1B, en §2.4 | De la 1A (`ESTADO.md` 0.CICLO): la consulta 1 de `SQL-PARA-CORRER/ciclo-fase-1a/`, **aplicar la 00070 ANTES del push**, la consulta 2. La 1B lleva prompt aparte del comandante | 0 o 1 |
 | 5 | **Recompensas en un solo lugar** (S-1) | Nada: C1–C3 ✅ decididas | 0 o 1 |
 | 6 | **Campañas, fase 2: la pantalla** (dos o tres sesiones) | A8: mirar el prototipo (no frena la fase 1) | no |
 | 7 | **Optimizar: los arreglos chicos** (§5), repartidos en una o dos sesiones | Solo el texto de 18.c | no |
@@ -45,7 +45,7 @@
 | 9 | Campañas, fase 3: afinar con datos (un mes después de la fase 1) | Leer el reporte | no |
 | 10 | Lo demás, por olas (§7) | §8, bloque D | varias |
 
-**La 1A (fila 4) y las plantillas (fila 3) pueden ir en paralelo:** la 1A no toca el catálogo de plantillas. **2 y 3 pueden ir en paralelo** (no comparten archivos). **3 y 4 se cruzan** en `template-catalog.ts` y `template-texts.ts`:
+**La 1A y las plantillas (fila 3) corrieron en paralelo el 11-10** sin cruzarse más que en `src/lib/settings-keys.ts` (quedó de la 1A). **2 y 3 pueden ir en paralelo** (no comparten archivos). **3 y 4 se cruzan** en `template-catalog.ts` y `template-texts.ts`:
 por eso la plantilla nueva del ciclo («Regalo que vence») entra en la sesión 3, junto con las otras tres, y la 4 ya la
 encuentra hecha. **5 y 6 se cruzan** en `campaigns/page.tsx` (la pestaña «Premios»): 5 va primero.
 
@@ -53,15 +53,15 @@ encuentra hecha. **5 y 6 se cruzan** en `campaigns/page.tsx` (la pestaña «Prem
 
 ## 2. Campañas: el ciclo de recuperación
 
-**Estado:** diseñado y revisado dos veces, verificado contra el código el 08-10. **Las fases 0 y 0.bis están construidas**
-(08-10 y 10-10, sin desplegar: N3, N4 y N15 siguen vivos en producción hasta el próximo push, que lleva las dos juntas;
-la 0 sola reintentaría cada día sin techo); de la fase 1 en adelante, cero código.
+**Estado:** diseñado y revisado cuatro veces (la cuarta, el 11-10, con datos de producción: spec §14). **Las fases 0 y
+0.bis están DESPLEGADAS** (`2746d49`, 11-10). **La 1A, la base del motor, está construida** (11-10, migración 00070 **sin
+aplicar**, nada se envía). Falta la 1B (los envíos) y de ahí en adelante.
 
 ### 2.1 Qué hace el diseño, en cinco líneas
 
 1. Cada cliente recorre un ciclo desde su última visita: **cinco toques** con huecos crecientes («Le recordamos», «Le
-   regalamos algo», «Le mostramos lo otro», «Rescate», «Despedida»). Los días salen de **una pregunta**: ¿cada cuánto
-   vuelve un cliente típico?
+   regalamos algo», «Le mostramos lo otro», «Rescate», «Despedida»). Los días salen del **ritmo de cada cliente** (con 3+
+   días de visita) o, si es nuevo, del de la marca, calculado con sus datos (`docs/features/ritmo-adaptativo.md`).
 2. **A los 6 mensajes sin volver, para.** Cuentan los tuyos (manuales y eventos). Pasa a «dormido»: un toque cada tres
    meses (máximo dos) y el cumpleaños.
 3. **Toda visita reinicia el ciclo** (QR, mesero o domicilio) y anota qué mensaje lo trajo.
@@ -117,15 +117,31 @@ Y dos cosas que el spec dejó abiertas:
 
 | Fase | Qué | Estado |
 |---|---|---|
-| **1A · La base** | Migración (el número lo da el script al construir) · los dos triggers · el backfill sin ráfaga · `cycle-engine.ts` con los cuatro ritmos, el ritmo personal y el de la marca · el **motor de piezas** (`src/lib/communications/registry.ts`) · el canal · `cycle_enabled` apagado en todas · la verificación de Sushi Fun · tests. **Nada se envía** | ⬜ **Prompt listo** (`docs/prompts/2026-10-11-ciclo-fase-1a-motor-base.md`) |
-| **1B · Los envíos** | El cron que decide y encola · el drenador que otorga al enviar · «vence el domingo» · el adaptador a la insistente · las correcciones H2, H3, H6 · encender el piloto en Don Alirio | ⬜ Después de 1A (prompt aparte) |
+| **1B · Los envíos** | El cron que decide y encola · el drenador que otorga al enviar · «vence el domingo» · el adaptador a la insistente · las correcciones H2, H3, H6 · encender el piloto en Don Alirio | ⬜ Lista para su prompt: la 1A está hecha (abajo) |
+
+**Lo que la 1A (2026-10-11) deja decidido o abierto para la 1B** (detalle en `CHANGELOG.md` y en la 00070):
+
+- **Sin ráfaga también al encender.** `resolveStage()` dice en qué etapa ESTÁ un cliente (la última cuyo día llegó), no
+  si hay que mandarle algo hoy. El backfill solo evita la ráfaga del día del despliegue; al encender una marca, un
+  cliente que ya está entre dos etapas no debe recibir de golpe la que pasó (spec §3.8: «el del día 42 verá el rescate
+  el día 60»). La regla (enviar solo en el día de la etapa, o con un margen) es de la 1B.
+- **La despedida duerme al cliente** (spec §3.5), y eso no lo hace ningún trigger: el trigger de fatiga solo cuenta. Al
+  enviar `t5`, el drenador pasa al cliente a `dormido`. Igual `heartbeats_sent` y `strong_offer_last_at`: los escribe
+  la 1B al enviar.
+- **`cycle_no` es la llave de los toques, no un contador de visitas** (el backfill puso 1 a todos; quien se registra
+  sin visita abre el ciclo 2 en la primera). La caja «nuevos / ya volvieron» de la fase 2 se arma con `total_visits`.
+- **Un toque `queued` cuyo cliente volvió** antes de que salga: el drenador tiene que mirar si el `cycle_no` del toque
+  sigue siendo el del cliente (H6 habla del cap y del tope; esto es lo mismo con la visita).
+- `cycle_stage_days` (días a mano, «avanzado», spec §7.4) **no entró** en las claves: el prompt de la 1A no lo pedía y
+  sin pantalla no tiene quién lo escriba. Si entra, `validateStageConfig()` ya está para validarlo.
 | **2 · La pantalla** | Primer uso · «Para hoy» · seis cajas · vista por fecha con proyección y fechas especiales · mandar un regalo en tres campos · evento con texto sugerido · el calendario redirige · mini-ciclo en el panel · se retiran las burbujas y las cuatro tarjetas | ⬜ Espera A7–A8 y el prompt (se escribe cuando mires el prototipo) |
 | **3 · Afinar** | El calibrador que sugiere el ritmo · regalos pequeños que rotan · reporte «con mensaje contra sin mensaje» por toque · texto del evento con el LLM | ⬜ Un mes después de la fase 1 |
 | **4 · Futuro** | Fechas especiales completas por rubro · ruleta · sorteos y rifas · cliente del mes · Instagram · «cumpleaños del restaurante» y «datos curiosos». **Cada una es una pieza nueva del motor de 1A** | ⬜ Decidido: después de las fases 1 y 2 |
 
-**Lo que tienes que hacer tú cuando llegue la fase 1:** aplicar la migración en Supabase **antes** del deploy (al revés,
-todos los envíos fallan en silencio) · (el ritmo ya no se contesta: lo calcula el sistema; puedes cambiarlo en Ajustes) · crear «Regalo que vence» en cada marca (o dejar
-que salga con la insistente) · elegir el regalo pequeño y el fuerte de cada marca (o ninguno).
+**Lo que tienes que hacer tú por la 1A, ya:** la consulta 1 de `SQL-PARA-CORRER/ciclo-fase-1a/LEEME.md` · **aplicar la
+00070 en Supabase antes del push** · la consulta 2. **Cuando llegue la 1B:** crear «Regalo que vence» en cada marca (o
+dejar que salga con la insistente) · elegir el regalo pequeño y el fuerte de cada marca (o ninguno). El ritmo no se
+contesta: lo calcula el sistema; se puede cambiar en Ajustes cuando exista la pantalla.
 
 ### 2.5 Lo que el diseño mide para saber si funciona
 
@@ -227,6 +243,8 @@ Cada uno es menos de una hora. Juntos protegen todo lo que viene.
 | N1 | El «Importar CSV» crea clientes que aceptan marketing; los domicilios también nacen «consentidos» | Ley 1581 · decisión D4 |
 | N3-quinquies | La causa real del fallo (fase 0.bis) se lee de `message_logs`, cuyo INSERT es *best-effort* (`recordMessageLog()` traga su error). Si esa fila no se escribió, `error_message` dice solo el proveedor. Y `campaign_messages` no guarda el premio: el tope de reintentos del recordatorio suma los fallos de dos premios del mismo cliente que venzan a la vez | Diagnóstico incompleto en un caso raro |
 | TEST-flaky | El 2026-10-11 la suite dio «1 archivo falló» con los 1.017 tests en verde, 1 de 4 corridas, y no se repitió. Un archivo que falla al cargar (no un test) apunta al arranque del Postgres embebido o a un import. Si vuelve a pasar, guardar la salida completa de vitest | Una suite que miente a veces enseña a ignorarla |
+| TEST-deadlock | `tests/db/ola0-seguridad.test.ts` pega la 00015 (DDL sobre `customers` y después `visits`) en la base compartida mientras otros archivos corren en paralelo; un `INSERT INTO visits` suelto de otro archivo toma `visits` y pide `customers` por la FK, y Postgres mata a uno («deadlock detected»). Lo destapó la 1A el 11-10 (2 de 3 corridas) y se resolvió ordenando las escrituras de `cycle-triggers.test.ts`; el arreglo de raíz es una línea en ola0: `LOCK TABLE customers, visits IN ACCESS EXCLUSIVE MODE` al empezar su transacción | Otros archivos que insertan visitas (`aios-health`, `multisede-*`) pueden pegarle igual, aunque menos |
+| N-MES | `getMonthBoundaries()` (`campaign.service.ts`) corta el mes con la hora del SERVIDOR (UTC en Vercel), no la de Bogotá: un envío entre las 19:00 y las 23:59 del último día del mes cuenta para el mes siguiente. Hoy no muerde (los envíos salen a las 10:30–16:30), pero el tope de 3 al mes del ciclo se apoya en esa cuenta | El validador de la 1A simula por mes calendario: si los envíos se mueven a la noche, mide otra cosa que el tope real |
 | N6 | Los botones sí/no del webhook de Zernio esperan 10 s antes de contestar | El mismo riesgo de apagón que se cerró en ESCALA-3 |
 | N13 | El PIN del supervisor no tiene límite de intentos | Seguridad |
 | N18 | Un test de la analítica contra el Postgres real (el 500 del 04-10 lo habría cazado) + CI (PROC-1) | Cada push a `main` despliega |

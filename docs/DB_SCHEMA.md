@@ -160,6 +160,7 @@ erDiagram
 | 23 | [template_versions](#template_versions) | Versiones de cada plantilla del catálogo: la vigente, la pendiente de Meta y el historial | SI | Admin: CRUD (vía service role, filtrado por tenant en código) |
 | 24 | [delivery_intake_failures](#delivery_intake_failures) | El domicilio que NO llegó a la base, con su motivo real (00053, §24-B) | SI | SELECT por marca; UPDATE/DELETE revocados |
 | 25 | [tenant_integration_secrets](#tenant_integration_secrets) | Credenciales de terceros por marca: hoy el token de la API de Conversiones de Meta (00061) | SI | **Ninguna**: solo service role. `anon`/`authenticated` revocados |
+| 26 | [customer_cycle_touches](#customer_cycle_touches) | El libro de toques del ciclo de recuperación: uno por cliente, ciclo, etapa y repetición (00070) | SI | Tenant: ALL + RESTRICTIVE de sede (`sede_visible_*`) |
 
 ---
 
@@ -190,6 +191,14 @@ erDiagram
 | `google_review_postponed_at` | `timestamptz` | SI | `NULL` | **Nueva (00032).** Tocó "La próxima lo hago" → **sí** se le vuelve a mostrar, en su próximo check-in. Informativo: el gate NO lo consulta |
 | `origin_location_id` | `uuid` | SI | `NULL` | **Nueva (00043).** Sede donde se REGISTRÓ el cliente (D2). Corregible solo por el admin de marca. NULL = sede desconocida (todo el histórico). FK **compuesta** `(origin_location_id, tenant_id)` → `restaurant_locations(id, tenant_id)` ON DELETE **RESTRICT** |
 | `last_visit_location_id` | `uuid` | SI | `NULL` | **Nueva (00043).** Caché de la sede de la última visita ("sede de casa"). Derivable de `visits`, se guarda por velocidad. La verdad canónica de "los clientes de una sede" será la vista `customer_location_membership` (00046, F5), no esta columna. Misma FK compuesta RESTRICT |
+| `cycle_no` | `integer` | NO | `1` | **Nueva (00070, ciclo de recuperación).** Ciclo vigente; sube en cada visita. Es la **llave** de `customer_cycle_touches`, **no** un contador de visitas: el backfill puso 1 a todos y quien se registra sin visita abre el ciclo 2 en la primera. «Nuevo» se mide con `total_visits` |
+| `cycle_started_at` | `timestamptz` | SI | `NULL` | **Nueva (00070).** Inicio del ciclo = la última visita (o el alta si nunca vino). Lo escriben los triggers; el backfill no deja ninguna en NULL |
+| `cycle_touches` | `integer` | NO | `0` | **Nueva (00070).** Mensajes de marketing que SALIERON desde la última visita: manual, calendario, ciclo (y Golden Bullet, que graba `source='manual'`); **no** cumpleaños ni recordatorio de premio. Lo suma el trigger `on_campaign_message_sent` |
+| `cycle_state` | `text` | NO | `'activo'` | **Nueva (00070).** `activo` \| `dormido` \| `archivado` (CHECK). Al llegar a `cycle_fatigue_touches` (6) pasa a `dormido`; la visita lo devuelve a `activo` |
+| `dormant_since` | `timestamptz` | SI | `NULL` | **Nueva (00070).** Desde cuándo duerme. Reloj del toque trimestral (90 / 180 días) |
+| `heartbeats_sent` | `integer` | NO | `0` | **Nueva (00070).** Toques trimestrales de este período dormido (máx. 2). Vuelve a 0 con la visita. Lo escribe la fase 1B |
+| `strong_offer_last_at` | `timestamptz` | SI | `NULL` | **Nueva (00070).** Último regalo FUERTE: cooldown de 180 días. Lo escribe la fase 1B |
+| `cycle_rhythm` | `text` | SI | `NULL` | **Nueva (00070).** Ritmo PERSONAL (`cafe`\|`casual`\|`restaurant`\|`occasional`, CHECK) que fija el trigger de visita con 3+ días distintos con visita. NULL = usa el de la marca (`admin_settings.cycle_rhythm`). Espejo de `rhythmFromMedian()` (`src/lib/cycle-engine.ts`) |
 | `created_at` | `timestamptz` | NO | `now()` | Fecha de creación |
 | `updated_at` | `timestamptz` | NO | `now()` | Última actualización |
 
@@ -234,6 +243,8 @@ CREATE POLICY "admin_update_customers" ON customers
 | Nombre | Evento | Función |
 |--------|--------|---------|
 | `on_customers_updated` | BEFORE UPDATE | `handle_updated_at()` |
+| `on_customer_insert_cycle` | BEFORE INSERT | `cycle_on_customer_insert()` (00070): `cycle_started_at = COALESCE(last_visit_at, created_at)`. El alta con `countFirst` es un INSERT y ningún trigger de UPDATE la ve |
+| `on_customer_visit` | BEFORE UPDATE OF `last_visit_at` WHEN (`NEW > OLD` o `OLD` NULL) | `cycle_on_customer_visit()` (00070, SECURITY DEFINER): reinicio del ciclo (`cycle_no + 1`, desde la visita, 0 toques, activo, `heartbeats_sent = 0`), **atribución** del regreso al último toque `sent`/`holdout` del ciclo que se cierra con `due_at` en los 14 días previos, y **ritmo personal** (cuenta el día de `NEW.last_visit_at`, porque `createVisit()` inserta en `visits` después). Lo disparan todos los escritores de `last_visit_at` (`incrementVisit()`: QR, mesero, override del panel, domicilio). Un error interno es WARNING: **nunca tumba la visita** |
 
 ---
 
@@ -344,6 +355,14 @@ usa `staff_activity_report()` para decidir si una visita es la PRIMERA del clien
 | `campaign_id` | `campaigns(id)` | CASCADE |
 | `customer_id` | `customers(id)` | CASCADE |
 
+**Trigger (00070):** `on_campaign_message_sent` — AFTER INSERT WHEN `status IN ('sent','delivered')` →
+`cycle_on_campaign_message_sent()` (SECURITY DEFINER): si `campaigns.source IN ('manual','calendar','reactivation')`
+suma 1 a `customers.cycle_touches`, y al llegar a `admin_settings.cycle_fatigue_touches` (6 por defecto) pasa al
+cliente a `dormido`. Filtra por **`source`**, nunca por `type`: el recordatorio de premio es `type='reactivation'`
+con `source='reward_reminder'` y no cuenta. Todos los escritores insertan con el estado final; el paso a
+`delivered` es un UPDATE y no vuelve a contar. La lista es espejo de `countsForFatigue` del motor de piezas
+(`src/lib/communications/registry.ts`). Un error interno es WARNING: nunca tumba el registro del mensaje.
+
 ---
 
 ### authorized_numbers
@@ -403,6 +422,7 @@ usa `staff_activity_report()` para decidir si una visita es la PRIMERA del clien
 | `reactivation_aggressive_days` | _(vacío inicial — fallback `25`)_ | Días de inactividad para reactivación agresiva (configurable v1.4.0, debe ser > suave) |
 | `review_reward_id` | _(vacío inicial)_ | **(00032)** Id de `campaign_rewards` que se otorga por dejar reseña. Vacío = el pop-up sale igual, pero sin premio |
 | `review_reward_window_days` | _(vacío inicial — fallback `30`)_ | **(00032)** Días que tiene el cliente para reclamar el premio por reseña |
+| `cycle_enabled` · `cycle_rhythm` · `cycle_small_reward_ids` · `cycle_strong_reward_id` · `cycle_fatigue_touches` · `cycle_heartbeat_enabled` · `cycle_strong_cooldown_days` · `cycle_send_slot` · `cycle_holdout_pct` | _(sin fila — defaults en `normalizeCycleSettings()`)_ | **(fase 1A del ciclo, 2026-10-11; sin migración de datos)** Ajustes del ciclo de recuperación. Defaults: apagado · `auto` · ninguno · `aggressive_reward_id` como respaldo · 6 · encendido · 180 · `dinner` (16:30; `lunch` = 10:30) · 10 (0 si la marca tiene < 200 clientes). Están en la lista cerrada del PUT (`src/lib/settings-keys.ts`); ninguna pantalla las escribe todavía. `cycle_fatigue_touches` lo lee también el trigger de fatiga (00070), con el mismo saneamiento |
 | `template_style` | `calido` | **(00039)** Estilo del catálogo de plantillas: `calido` \| `elegante` \| `urbano`. Es **SUGERENCIA, no candado**: el default con el que nace cada plantilla nueva, no una restricción. Cambiarlo NO reescribe nada — re-aplicarlo a las 13 es una acción explícita aparte. **Solo se siembra en tenants `messaging_provider='zernio'`**: los 4 tenants Twilio no se tocan. Ver `docs/features/whatsapp-templates.md` |
 
 > Las claves `*_template_sid` (`welcome_template_sid`, `birthday_template_sid`, `event_template_image_sid`,
@@ -1266,6 +1286,45 @@ mundo menos el service role, la tabla no existe. Es el mismo criterio que
 columna a mano.
 
 ---
+
+### customer_cycle_touches
+
+> El libro de toques del **ciclo de recuperación** (migración 00070, fase 1A). Un toque por cliente,
+> ciclo, etapa y repetición: es la idempotencia del cron (fase 1B), la **atribución** del regreso a 14
+> días y el **grupo de control**. En la fase 1A nadie escribe en ella. Diseño:
+> `docs/superpowers/specs/2026-10-04-ciclo-de-recuperacion-design.md` §7.1 y §13;
+> `docs/features/ritmo-adaptativo.md`.
+
+| Columna | Tipo | Nullable | Default | Descripción |
+|---------|------|----------|---------|-------------|
+| `id` | `uuid` | NO | `gen_random_uuid()` | PK |
+| `tenant_id` | `uuid` | NO | **ninguno** | FK → tenants(id). Sin DEFAULT puente: un INSERT sin marca **falla** (23502) en vez de irse a Sushi Service |
+| `customer_id` | `uuid` | NO | - | FK → customers(id) ON DELETE CASCADE |
+| `cycle_no` | `integer` | NO | - | El `customers.cycle_no` del ciclo en que tocaba |
+| `stage` | `text` | NO | - | `t1`…`t5` \| `heartbeat` (CHECK) |
+| `seq` | `integer` | NO | `1` | Repetición: el trimestral sale `1` y `2` |
+| `status` | `text` | NO | `'pending'` | `pending` \| `queued` \| `sent` \| `failed` \| `holdout` \| `deferred` (pospuesto por el blackout de un evento) |
+| `holdout` | `boolean` | NO | `false` | Grupo de control: NO se envía, SÍ se atribuye. CHECK: un `holdout` solo puede estar `pending`/`holdout`/`deferred`, y `status='holdout'` exige `holdout = true` |
+| `channel` | `text` | NO | `'whatsapp'` | Canal (decisión 21). CHECK: hoy solo `whatsapp` |
+| `due_at` | `timestamptz` | NO | `now()` | Cuándo le tocaba, enviado o no (H5): **la atribución mira esto** |
+| `sent_at` | `timestamptz` | SI | `NULL` | - |
+| `campaign_message_id` | `uuid` | SI | `NULL` | FK → campaign_messages(id) ON DELETE SET NULL |
+| `grant_id` | `uuid` | SI | `NULL` | FK → reward_grants(id) ON DELETE SET NULL |
+| `returned_at` | `timestamptz` | SI | `NULL` | Lo escribe el trigger de visita si este fue el último toque `sent`/`holdout` del ciclo con `due_at` en los 14 días previos |
+| `location_id` | `uuid` | SI | `NULL` | Sede. NULL = desconocida o de marca; se muestra, no se backfillea. **FK COMPUESTA** `(location_id, tenant_id)` → `restaurant_locations(id, tenant_id)` ON DELETE RESTRICT |
+| `created_at` | `timestamptz` | NO | `now()` | - |
+
+**Restricciones:** `customer_cycle_touches_once UNIQUE (customer_id, cycle_no, stage, seq)` — las cuatro NOT NULL, así
+que protege de verdad: es el anti doble disparo (8 inserciones concurrentes, gana una:
+`tests/db/cycle-triggers.test.ts`).
+
+**Índices:** el UNIQUE (sirve también para buscar por `(customer_id, cycle_no)`) ·
+`idx_customer_cycle_touches_tenant_due (tenant_id, due_at)` · `idx_customer_cycle_touches_location` parcial.
+
+**RLS:** `tenant_all_customer_cycle_touches` (marca, patrón 00026) + `sede_visible_customer_cycle_touches`
+RESTRICTIVE `TO authenticated` (patrón 00045).
+
+---
 ---
 ## Storage Buckets
 
@@ -1367,6 +1426,7 @@ columna a mano.
 
 | 65 | `00065_staff_activity_report.sql` | 2026-09-11 | **Rendimiento del equipo** (`docs/features/staff-activity.md`). NO crea tablas, NO agrega columnas y NO toca una sola fila. Función **`staff_activity_report(tenant, from, to, location_ids uuid[], include_unassigned)`** → `jsonb` con `totals`, `by_staff` y `by_table`: escaneos (`visits.source='staff_scan'`) y premios entregados (`reward_redemptions`) por mesero y por mesa, y **nuevo vs frecuente decidido por la HISTORIA** (nueva = no existe `visits` anterior de ese cliente; ni `total_visits` ni `created_at`). El alcance de sede calca `applyLocationFilter()` rama por rama (NULL = marca entera · `[]`+true = solo el cubo NULL · ids = esas sedes · `[]`+false = nada). Un escaneo sin mesero o sin mesa es una FILA propia del resultado: no se esconde. `SECURITY INVOKER`, `REVOKE` a `anon`/`authenticated`, solo `service_role`. Índice `idx_visits_customer_created`. Sin ella `/api/dashboard/staff-activity` responde 503 nombrándola. | **Aplicada** 2026-09-11 |
 | 67 | `00067_aios_attach_zernio_account.sql` | 2026-09-12 | **Zernio en paralelo a Twilio** — función `aios_attach_zernio_account(slug, profile, account, phone)` → `jsonb`, SECURITY DEFINER, solo `aios_constelarys`. Escribe los tres `tenants.zernio_*` y **nunca** `messaging_provider` (se niega con `ya_es_zernio` si la marca ya manda por Zernio; valida E.164 como la 00036). Es la excepción del Golden Bullet: la difusión por la línea de coexistencia con la marca todavía en Twilio (`docs/features/golden-bullet.md`). No es sobrecarga de `aios_activate_whatsapp` (una sobrecarga deja ambigua la llamada vieja, 42725). Sin tablas ni columnas nuevas. Test: `tests/db/aios-attach-zernio.test.ts`. | Escrita, sin aplicar |
+| 70 | `00070_ciclo_motor_base.sql` | 2026-10-11 | **Ciclo de recuperación, fase 1A: la base del motor** (nada se envía). `customers` gana `cycle_no`, `cycle_started_at`, `cycle_touches`, `cycle_state` (CHECK activo\|dormido\|archivado), `dormant_since`, `heartbeats_sent`, `strong_offer_last_at` y `cycle_rhythm` (ritmo PERSONAL, CHECK de los cuatro). Tabla nueva **`customer_cycle_touches`** (UNIQUE por cliente+ciclo+etapa+seq, FK compuesta de sede, `tenant_id` sin default, RLS de marca y de sede, CHECK que impide enviar un `holdout`). Funciones: `cycle_rhythm_from_median(double)` (cortes < 9 · < 19 · ≤ 35), `cycle_customer_median_gap(uuid, timestamptz)` (mediana de días entre DÍAS DISTINTOS con visita, hora de Bogotá) y `cycle_brand_rhythm_stats(uuid)` (mediana y regresos de la marca), espejo de `src/lib/cycle-engine.ts`. Triggers: `on_customer_insert_cycle`, **`on_customer_visit`** (BEFORE UPDATE: reinicio + atribución a 14 días + ritmo personal) y **`on_campaign_message_sent`** (fatiga por `campaigns.source`); los dos últimos con `EXCEPTION WHEN OTHERS` → WARNING: el ciclo no tumba una visita ni el registro de un mensaje. Todo cerrado a `anon`/`authenticated` (regla de la 00069). **Backfill sin ráfaga**: `cycle_started_at = COALESCE(last_visit_at, created_at)`, > 90 días sin venir → `dormido` desde hoy, ritmo personal con 3+ días, `cycle_touches` intacto; solo filas con `cycle_started_at IS NULL` (idempotente). Termina con una verificación que FALLA si falta algo. Nadie lee las columnas nuevas todavía. Tests: `tests/db/cycle-triggers.test.ts`. Consultas del dueño: `SQL-PARA-CORRER/ciclo-fase-1a/`. | Escrita, **sin aplicar**: va ANTES del push que la lleve |
 
 ### `tenant_id` en las 18 tablas de negocio
 
@@ -1408,6 +1468,20 @@ $$ LANGUAGE plpgsql;
 
 ---
 
+### El ritmo del ciclo (00070) — espejo de `src/lib/cycle-engine.ts`
+
+| Función | Qué devuelve |
+|---|---|
+| `cycle_rhythm_from_median(double precision)` | `cafe` (< 9) · `casual` (< 19) · `restaurant` (≤ 35) · `occasional`; NULL con NULL. IMMUTABLE |
+| `cycle_customer_median_gap(uuid, timestamptz DEFAULT NULL)` | Mediana (`percentile_cont(0.5)`) de días entre los días distintos con visita del cliente, hora de Bogotá; el 2.º parámetro suma un día que todavía no está en `visits`. NULL con menos de 3 días |
+| `cycle_brand_rhythm_stats(uuid)` | `(median_gap_days, returns_count)`: la mediana de todos los huecos de los clientes de la marca y cuántos son. El TS decide (`brandRhythm()`: con 30+ regresos la mediana elige; si no, `restaurant`) |
+
+Las tres: `SECURITY INVOKER`, solo `service_role` (REVOKE a `PUBLIC`, `anon`, `authenticated`). Que SQL y TS digan lo
+mismo lo verifica `tests/db/cycle-triggers.test.ts` con los mismos historiales. Los triggers del ciclo están en
+`customers` y `campaign_messages`, arriba.
+
+---
+
 ## Resumen RLS
 
 | Tabla | SELECT | INSERT | UPDATE | DELETE |
@@ -1429,3 +1503,4 @@ $$ LANGUAGE plpgsql;
 | campaign_rewards | Admin + Service | Admin + Service | Admin + Service | Admin (lógico, `is_active=false`) |
 | reward_grants | Admin + Service | Service | Service | NO |
 | review_events | Admin + Service | Service | Service | NO |
+| customer_cycle_touches | Tenant (+ sede) + Service | Tenant + Service | Tenant + Service | Tenant + Service |

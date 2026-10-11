@@ -8,6 +8,22 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [feat] — 2026-10-11 — Ciclo, fase 1A: la base del motor (migración 00070 SIN aplicar; nada se envía)
+
+- **00070:** `customers.cycle_*` (ciclo, fatiga, dormido, ritmo personal), `customer_cycle_touches` (UNIQUE por etapa y
+  ciclo, FK compuesta de sede, RLS, el control no se puede enviar), ritmo en SQL espejo del TS, triggers de alta, visita
+  (reinicio + atribución a 14 días + ritmo) y fatiga (por `campaigns.source`), backfill sin ráfaga (> 90 días → dormido).
+- **Fuera del literal del spec, a propósito:** el trigger de visita es BEFORE (una escritura); acepta `OLD.last_visit_at`
+  NULL (si no, la primera visita de un invitado no abría ciclo); un BEFORE INSERT cubre el alta con `countFirst`; el ritmo
+  cuenta la visita que `createVisit()` todavía no grabó; atribución solo a toques `sent`/`holdout`; los triggers no tumban
+  una visita ni un mensaje (WARNING, como la billetera).
+- **TS:** `src/lib/cycle-engine.ts` (ritmos, validación simulando 365 fechas, etapa, cajas, domingo, control, ajustes),
+  `src/lib/communications/registry.ts` (motor de piezas con paridad), 9 claves `cycle_*` en `settings-keys.ts`.
+- **Tests:** 3 archivos, 101 tests (46 motor · 38 Postgres · 17 registro). Sin `stash` (copia al scratchpad + `git show`):
+  con HEAD caen los 3 archivos; con el motor pero sin 00070 ni claves, 39 rojos + el registro sin cargar.
+  `cycle-triggers` ordena sus escrituras: se cruzaba en deadlock con `ola0-seguridad` (PENDIENTES §5, TEST-deadlock).
+- **Del dueño:** consulta 1 → **aplicar la 00070 ANTES del push** → consulta 2 (`SQL-PARA-CORRER/ciclo-fase-1a/`).
+
 ## [deploy + docs] — 2026-10-11 — P1-a en producción, 00069 aplicada, prompt de plantillas
 
 - Push por orden del dueño: P1-a (`611332d`: tope mensual que ya no se apaga ante un error, plantillas Twilio

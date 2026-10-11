@@ -1,8 +1,10 @@
 # Feature: «Se adapta a tu clientela» — el ritmo adaptativo del ciclo de recuperación
 
-> **Estado:** ⬜ DISEÑADO el 2026-10-11 con datos reales de producción; **se construye en la fase 1 del ciclo**
-> (1A: la base y el cálculo · 1B: los envíos). Piloto: **Don Alirio**, dos semanas. **No se promete en ventas hasta que
-> el piloto esté corriendo** (ver §6).
+> **Estado:** 🟨 **BASE CONSTRUIDA, SIN ENVÍOS** (fase 1A, 2026-10-11: migración **00070, sin aplicar**; tests en
+> verde). El sistema ya sabe calcular el ritmo de cada cliente y el de la marca, pero **nada se envía**: el cron, el
+> drenador y los regalos son la fase 1B, y el ciclo nace apagado en todas las marcas (`cycle_enabled = false`).
+> Diseñado el 2026-10-11 con datos reales de producción. Piloto: **Don Alirio**, dos semanas. **No se promete en ventas
+> hasta que el piloto esté corriendo** (ver §6).
 > **Diseño completo:** `docs/superpowers/specs/2026-10-04-ciclo-de-recuperacion-design.md` §3.2.bis y §14.
 > **Prompt de construcción:** `docs/prompts/2026-10-11-ciclo-fase-1a-motor-base.md`.
 > **Decisión del dueño (2026-10-11, textual):** *«un software que se adapta a tu clientela es un ángulo de comunicación
@@ -115,11 +117,19 @@ verificar sus visitas) · Planeta Wings → Restaurante por defecto (todavía no
 - **Para el dueño ocupado:** cero configuración. El sistema elige el ritmo con sus propios datos; el dueño aprueba
   sugerencias con un botón.
 
-## 7. Dónde vive en el código (cuando se construya)
+## 7. Dónde vive en el código
 
 | Pieza | Dónde |
 |---|---|
-| Los cuatro ritmos, la elección por mediana y la validación por simulación | `src/lib/cycle-engine.ts` (puro, sin I/O): `RHYTHM_PRESETS`, `rhythmFromMedian()`, `validateStageConfig()` |
-| El ritmo personal guardado al abrir el ciclo | `customers.cycle_rhythm` (lo escribe el trigger de visita de la migración de la fase 1A) |
-| El ritmo de la marca | `admin_settings.cycle_rhythm` (`auto` por defecto) + el cálculo de la mediana de la marca |
+| Los cuatro ritmos, la elección por mediana y la validación por simulación | `src/lib/cycle-engine.ts` (puro, sin I/O): `RHYTHM_PRESETS`, `medianGap()`, `rhythmFromMedian()`, `personalRhythm()`, `effectiveRhythm()`, `validateStageConfig()` (365 fechas de visita × con y sin domicilio) |
+| El ritmo personal guardado al abrir el ciclo | `customers.cycle_rhythm`, lo escribe el trigger `on_customer_visit` (`supabase/migrations/00070_ciclo_motor_base.sql`) con `cycle_rhythm_from_median()` + `cycle_customer_median_gap()`: la MISMA regla que el TS, comprobada con los mismos historiales en `tests/db/cycle-triggers.test.ts` |
+| El ritmo de la marca | El dato: `cycle_brand_rhythm_stats(tenant)` (00070: mediana y regresos). La decisión: `brandRhythm()` en `cycle-engine.ts` (lo elegido en `admin_settings.cycle_rhythm` manda; con `auto`, 30+ regresos o `restaurant`) |
+| Las etapas, las cajas de la pantalla, «vence el domingo», el grupo de control | `cycle-engine.ts`: `resolveStage()`, `bandsFromConfig()`, `expiresOnSunday()`, `isHoldout()`, `strongOfferAllowed()`, `heartbeatPrize()`, `shouldSkipT1()` |
+| Los ajustes de la marca y sus defaults | `normalizeCycleSettings()` en `cycle-engine.ts`; las claves, en la lista cerrada de `src/lib/settings-keys.ts` |
+| El estado de cada cliente (ciclo, fatiga, dormido) | `customers.cycle_*` y los triggers de la 00070 (`docs/DB_SCHEMA.md`) |
 | El canal de cada mensaje (hoy solo WhatsApp) | `customer_cycle_touches.channel` |
+| Las reglas de cada comunicación (motor de piezas) | `src/lib/communications/registry.ts`, con paridad en `tests/unit/communications-registry.test.ts` |
+| Las consultas del dueño (Sushi Fun y la foto del ciclo) | `SQL-PARA-CORRER/ciclo-fase-1a/LEEME.md` |
+
+**Lo que todavía no existe (fase 1B):** el cron que decide qué toque le toca a cada cliente y lo encola, el drenador
+que lo envía y otorga el regalo, y el encendido del piloto. Hasta entonces ningún código lee `cycle_rhythm`.

@@ -33,6 +33,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| **P1-a: arreglos chicos de campañas y plantillas, sin migración** (2026-10-11) — N3-quater, N7, N8, OPER-4, N5, N16, N23, OPER-6 | Opus 5.5 | `src/components/dashboard/AtRiskBubbles.tsx` · `src/services/campaign.service.ts` · `src/lib/tenant.ts` · `src/app/api/cron/queue-drain/route.ts` · `src/app/api/dashboard/settings/route.ts` · `src/lib/settings-keys.ts` (nuevo) · `src/app/api/dashboard/templates/route.ts` · `src/app/api/dashboard/templates/catalog/[key]/{route,submit/route,adopt/route}.ts` · `src/services/template.service.ts` · `src/services/twilio-catalog.service.ts` · `src/lib/twilio/content-list.ts` (nuevo) · `tests/unit/settings-permisos.test.ts` · `tests/unit/p1a-*.test.ts` (nuevos) · `docs/PENDIENTES.md` · `docs/features/{whatsapp-templates,campaigns,send-governance}.md` · `docs/API_DOCS.md` · `CHANGELOG.md` · `ESTADO.md` | — | en curso |
 
 ## 3. Siguiente, en orden
 

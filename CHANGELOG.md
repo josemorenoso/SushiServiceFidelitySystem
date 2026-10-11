@@ -8,6 +8,15 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [deploy] — 2026-10-11 — Fases 0 y 0.bis del ciclo en producción
+
+- Push fast-forward por orden del dueño: `origin/main` = `origin/feat/multisede-aios` = `2746d49` (fases 0 y 0.bis +
+  docs desde `75d0952`). Sin migración. Antes del push: tsc limpio · 65 archivos / 929 tests en verde.
+- Vercel `cada1`: producción READY (`dpl_Bhs6jCWTnTuVcDuktCTDoGLzbDeR`).
+- Desde hoy: un fallo de envío ya no calla al cliente (máximo 3 intentos por toque), el insistente sale una vez por
+  ciclo, y `campaign_messages.error_message` guarda la causa real. Repetir el SQL de `SQL-PARA-CORRER/ciclo-fase-0/`
+  hacia el 2026-11-11 y comparar con la línea base de `ESTADO.md` 0.CICLO.
+
 ## [fix] — 2026-10-10 — Ciclo, fase 0.bis: tope de reintentos, causa real del fallo y cierres chicos (N3-bis, N3-ter)
 
 **Pedido:** cerrar los riesgos de `4043421` antes del deploy. Sin migración, sin desplegar; la 0 y la 0.bis van juntas.

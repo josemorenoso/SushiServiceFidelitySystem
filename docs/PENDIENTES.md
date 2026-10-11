@@ -35,7 +35,7 @@
 | # | Qué | Necesita de ti antes | Migración |
 |---|---|---|---|
 | 1 | **Gestos de hoy** (§6.1): pegar la 00069, mirar los registros del Supabase del AIOS | Nada: solo hacerlo | — |
-| 2 | ✅ **Campañas, fases 0 y 0.bis: HECHAS el 2026-10-08 y el 2026-10-10** (sin migración; **sin desplegar**: entran juntas a producción con el próximo push, y la 0 NO va sin la 0.bis). Un envío fallido ya no bloquea 30 o 360 días, pero cada toque admite 3 fallidos y no más · la insistente sale una vez mientras el cliente no vuelva · `error_message` dice la causa real · el texto de Campañas dice la verdad · una sola escala de días, también en Clientes y en «Rescatar Perdidos» | Nada (la consulta ya corrió el 10-10: línea base en `ESTADO.md` 0.CICLO). Solo ordenar el push | no |
+| 2 | ✅ **Campañas, fases 0 y 0.bis: HECHAS el 2026-10-08 y el 2026-10-10** (sin migración; **pusheadas juntas a `main` el 2026-10-11, `2746d49`**). Un envío fallido ya no bloquea 30 o 360 días, pero cada toque admite 3 fallidos y no más · la insistente sale una vez mientras el cliente no vuelva · `error_message` dice la causa real · el texto de Campañas dice la verdad · una sola escala de días, también en Clientes y en «Rescatar Perdidos» | Nada. Línea base del SQL en `ESTADO.md` 0.CICLO; repetir la consulta hacia el 2026-11-11 | no |
 | 3 | **Plantillas, pasos 1 a 3** (§3): un solo libro de plantillas, cerrar el hueco catálogo ↔ código, una sola pantalla. **Y en la misma sesión, las cuatro plantillas nuevas juntas** (§3.2) para que cada marca pase por Meta una sola vez | B1–B7 (§8) | 0 o 1 |
 | 4 | **Campañas, fase 1: el motor del ciclo** (dos sesiones: base y cron) | A1–A6 (§8) | 1 |
 | 5 | **Recompensas en un solo lugar** (S-1) | C1–C3 | 0 o 1 |

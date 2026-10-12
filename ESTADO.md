@@ -33,6 +33,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| PL-2-a: el recordatorio no usa una plantilla Twilio sin aprobar (2026-10-12) | Sonnet 5.5 | `src/app/api/cron/reward-reminder/route.ts` · `src/app/api/check-in/route.ts` (solo el tramo «Nivel desbloqueado», y solo si resulta simple) · tests NUEVOS `tests/unit/pl-2-a-*.test.ts` (+ el doble de `isTwilioTemplateApproved` de `tests/unit/ciclo-fase-0-bis.test.ts` si lo exige) · `docs/PENDIENTES.md` §3.2 · `docs/features/whatsapp-templates.md` · `docs/features/reward-grants.md` · `ESTADO.md` · `CHANGELOG.md` | ninguna | en curso |
 
 ## 3. Siguiente, en orden
 

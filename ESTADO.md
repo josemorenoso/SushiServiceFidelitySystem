@@ -33,6 +33,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Comandante: push de la 1A + plantillas + PL-2-a y resultados de las consultas 1 y 2 de la 1A (2026-10-12) | Opus 5.5 | `ESTADO.md`, `CHANGELOG.md`, `docs/PENDIENTES.md`, `docs/prompts/2026-10-12-comandante-traspaso.md`, `SQL-PARA-CORRER/ciclo-fase-1a/LEEME.md`, `docs/features/ritmo-adaptativo.md` | — | en curso |
 
 ## 3. Siguiente, en orden
 

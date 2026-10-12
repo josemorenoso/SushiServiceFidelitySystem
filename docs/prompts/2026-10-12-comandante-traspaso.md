@@ -88,7 +88,8 @@ contexto; esto es todo lo que necesitas para seguir sin que el dueño repita nad
 ### Lo siguiente, en orden
 1. **El gesto del dueño por marca (ya se puede):** Plantillas → Mensajes automáticos → leer los textos →
    «Enviar los N juntos a Meta» (un solo viaje a Meta por marca, incluye «Cumpleaños — dos días antes»).
-2. **Escribir el prompt de la fase 1B** (lo siguiente del comandante) (los envíos): el cron que decide y encola, el drenador que otorga el regalo al
+2. **Fase 1B: el prompt YA está escrito** (12-10, `docs/prompts/2026-10-12-ciclo-fase-1b-envios.md`; el dueño lo pega en
+   una sesión Opus y el comandante VERIFICA su respuesta contra el código, migración línea por línea). Lo que cubre (los envíos): el cron que decide y encola, el drenador que otorga el regalo al
    enviar, «vence el domingo», el adaptador a la insistente mientras «Regalo que vence» no esté aprobada, encender el
    piloto en **Don Alirio**. Tiene que incluir todo lo anotado para la 1B en `docs/PENDIENTES.md` §2.4 y en el spec
    §13–§14: H2 (sin recordatorio para el regalo pequeño), H3 (la hora de la marca: el cron corre a las 15:00 Bogotá, el

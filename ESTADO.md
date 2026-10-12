@@ -33,7 +33,6 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
-| Comandante: prompt de la fase 1B del ciclo (los envíos y el piloto) (2026-10-12) | Opus 5.5 | `docs/prompts/2026-10-12-ciclo-fase-1b-envios.md` (nuevo), `docs/PENDIENTES.md`, `ESTADO.md`, `docs/prompts/2026-10-12-comandante-traspaso.md` | — (la 1B la reserva su sesión) | en curso |
 
 ## 3. Siguiente, en orden
 
@@ -66,8 +65,8 @@
    que envíe.** **PUSHEADA el 12-10** (§1, Código). **Las consultas 1 y 2 ya corrieron (12-10)** y salieron como se
    esperaba: no falta ninguna visita en ninguna marca (contador = filas; **el 2,4 % de Sushi Fun es real**, ver N-DOBLE
    en `docs/PENDIENTES.md` §5) y la foto del ciclo da Don Alirio → `cafe`, Sushi Service → `restaurant`, archivados,
-   sin backfill y mensajes contados en 0. Resultados: `SQL-PARA-CORRER/ciclo-fase-1a/LEEME.md` § Resultados. **Lo
-   siguiente es el prompt de la 1B** (del comandante). Aplicarla no enciende nada:
+   sin backfill y mensajes contados en 0. Resultados: `SQL-PARA-CORRER/ciclo-fase-1a/LEEME.md` § Resultados. **Prompt de la 1B
+   listo** (12-10): `docs/prompts/2026-10-12-ciclo-fase-1b-envios.md` (Opus, una sesión, una migración). Aplicarla no enciende nada:
    `cycle_enabled` nace apagado en todas y no hay cron. Lo que deja para la 1B: `docs/PENDIENTES.md` §2.4. Lo construido:
    `docs/features/ritmo-adaptativo.md` §7. Prompt de la 1A: `docs/prompts/2026-10-11-ciclo-fase-1a-motor-base.md`. El dueño
    decidió todo el bloque A el 11-10 con los datos de producción (spec §14; `docs/PENDIENTES.md` §8): **ritmo personal**

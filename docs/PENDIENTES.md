@@ -117,7 +117,7 @@ Y dos cosas que el spec dejó abiertas:
 
 | Fase | Qué | Estado |
 |---|---|---|
-| **1B · Los envíos** | El cron que decide y encola · el drenador que otorga al enviar · «vence el domingo» · el adaptador a la insistente · las correcciones H2, H3, H6 · encender el piloto en Don Alirio | ⬜ Lista para su prompt: la 1A está hecha (abajo) |
+| **1B · Los envíos** | El cron que decide y encola · el drenador que otorga al enviar · «vence el domingo» · el adaptador a la insistente · las correcciones H2, H3, H6 · encender el piloto en Don Alirio. **Dos reglas de la revisión de la 00070 (comandante, 12-10):** (1) **al encender una marca no se manda nada atrasado**: el backfill dejó a cada cliente en el día en que ya está, así que el cron solo envía el toque cuyo día llega desde el encendido, nunca los que ya pasaron (si no, el día del encendido salen ráfagas de toques viejos); (2) **quien ya pasó el último toque de su ritmo sin estar dormido** (ej. Don Alirio, ritmo cafetería con despedida al día 58: los clientes entre el día 58 y el 90 quedaron activos) pasa a dormido al encender, sin mensaje: su próximo contacto es el trimestral | ⬜ Lista para su prompt: la 1A está hecha (abajo) |
 
 **Lo que la 1A (2026-10-11) deja decidido o abierto para la 1B** (detalle en `CHANGELOG.md` y en la 00070):
 

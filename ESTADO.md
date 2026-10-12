@@ -33,6 +33,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Revisión del comandante de la 00070: dos notas para la fase 1B (solo docs) — 2026-10-12 | Opus 5.5 | `docs/PENDIENTES.md` | — | en vuelo |
 
 ## 3. Siguiente, en orden
 

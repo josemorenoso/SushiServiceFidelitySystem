@@ -128,6 +128,11 @@ plantilla agresiva de 4 variables sigue funcionando sin cambios.
   25 a 45 días no toca la ventana del premio.
 - **El recordatorio es exento del cap de frecuencia de 7 días, pero sujeto al cap mensual de 3.** Sin la
   excepción del cap de 7 días nunca se enviaría con ventanas cortas; sin el cap mensual sería spam.
+- **Con la plantilla sin aprobar, no se intenta (PL-2-a, 2026-10-12).** En Twilio el puntero
+  `reward_reminder_template_sid` se escribe al crear la plantilla, con Meta todavía revisándola. El cron le
+  pregunta a Twilio si está aprobada antes de mandar; si no lo está (o Twilio no contesta), ese día no se
+  intenta y **no cuenta como fallido**, así que la revisión no gasta los 3 intentos del premio. Zernio y la
+  marca demo no preguntan. Detalle en `campaigns.md` § «Tope de reintentos».
 - **La lista del mesero solo muestra clientes presentes** (check-in en las últimas 6h). Los premios de
   campaña de clientes que aún no han venido existen, pero solo saltan a la pantalla del mesero cuando el
   cliente llega.

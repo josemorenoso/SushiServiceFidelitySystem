@@ -478,7 +478,8 @@ algo que asignaba en Ajustes. **No hay editor en Twilio**: sus textos aprobados 
 **Estrictamente aditivo** sigue siendo crear: `createStandardTemplate()` solo llena huecos y jamás
 reemplaza, reescribe ni re-somete una existente. `fillEmptyPointer()` escribe el puntero al CREAR (antes de
 la aprobación) y se niega si ya hay valor; los presets de Campañas exigen además que la plantilla esté
-aprobada (`isPresetSendable()`), y el cron de cumpleaños lo pregunta (`isTwilioTemplateApproved()`).
+aprobada (`isPresetSendable()`), y el cron de cumpleaños, el cron `reward-reminder` y el check-in (al cruzar de
+nivel) lo preguntan (`isTwilioTemplateApproved()`; los dos últimos desde PL-2-a, 2026-10-12).
 
 **Ajustes › Plantillas WhatsApp** perdió los 15 desplegables y su «Guardar». Queda una tarjeta que lleva a
 Plantillas, porque varios avisos del sistema (calendario, crons) todavía dicen «configúrala en Ajustes».
@@ -555,11 +556,14 @@ software, no en las del AIOS, y el bucket tiene que ser el del proyecto `bredfyu
 - **Una plantilla libre no deja registro de quién la creó** (no hay fila en `template_versions`: no es de
   ningún mensaje). La advertencia de responsabilidad de la decisión 3 cubre el editor del catálogo.
 - **En Twilio el puntero se escribe al CREAR** (`fillEmptyPointer()`), no al aprobarse: es lo deliberado
-  desde v2.15.0. Un envío con la plantilla aún en revisión falla en Meta; los presets y el cron de
-  cumpleaños lo esquivan preguntando por la aprobación; el check-in y el cron `reward-reminder` no. El
-  cron es el caso caro: cada día de revisión cuenta como un fallido y al tercero ese premio se queda sin
-  recordatorio para siempre (`docs/PENDIENTES.md` PL-2-a, a cerrar antes de que una marca Twilio con el
-  recordatorio encendido apriete «Enviar los N juntos»).
+  desde v2.15.0. Un envío con la plantilla aún en revisión falla en Meta, así que los emisores preguntan por
+  la aprobación: los presets, el cron de cumpleaños, el cron `reward-reminder` (si no está aprobada ese día no
+  se intenta y no cuenta como fallido) y el check-in al cruzar de nivel (cae a «puntos sumados»). Los dos
+  últimos son de PL-2-a (2026-10-12), que cerró el caso caro: antes cada día de revisión del recordatorio
+  contaba como un fallido y al tercero ese premio se quedaba sin recordatorio para siempre. **Siguen sin
+  preguntar** el check-in manual del panel (`check-in-override`) y el registro de un domicilio
+  (`delivery.service.ts`), que mandan «Nivel desbloqueado» tal cual: en una marca Twilio con la plantilla en
+  revisión es un mensaje perdido (sin reintento ni tope). Cerrarlo de raíz es `docs/PENDIENTES.md` PL-2.
 - **Reemplazar una plantilla Twilio rechazada** no tiene botón propio: se crea una corregida en la
   Biblioteca y, aprobada, se elige con «Elegir otra».
 - **No se agregó botón de opt-out a las plantillas MARKETING.** Meta lo pide para marketing desde

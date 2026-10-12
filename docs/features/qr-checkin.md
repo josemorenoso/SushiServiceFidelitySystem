@@ -42,7 +42,10 @@ Tablas involucradas (detalle completo en `DB_SCHEMA.md`):
 6. Se otorgan puntos aleatorios por la visita (`awardVisitPoints`) y se registra en `point_transactions`
 7. Se evalúa si el cliente cruzó un nuevo tier (`evaluateNewTier`) comparando puntos antes/después
 8. Decisión de plantilla WhatsApp (sistema de puntos):
-   - **Tier desbloqueado** → `tier_unlocked_template_sid` con variables de tier y premio seguro.
+   - **Tier desbloqueado** → `tier_unlocked_template_sid` con variables de tier y premio seguro. En una marca
+     **Twilio** solo si Meta ya la aprobó (se le pregunta a Twilio únicamente cuando el cliente cruza de nivel,
+     nunca en un check-in normal); si no, cae a «puntos sumados» (cerca/lejos; la bienvenida, si es su primera
+     visita) en vez de fallar en Meta (PL-2-a, 2026-10-12). Zernio y la marca demo no preguntan.
    - **Cerca del próximo tier (≤30 pts)** → `points_earned_near_template_sid` con `{{2}}=puntos sumados`, `{{3}}=saldo`, `{{4}}=premio seguro del próximo tier`.
    - **Lejos del próximo tier (>30 pts)** → `points_earned_far_template_sid` con `{{2}}=puntos sumados`, `{{3}}=saldo`, `{{4}}=roadmap de tiers`.
    - Si no hay templates de puntos configuradas, NO se envía mensaje (no hay fallback legacy).

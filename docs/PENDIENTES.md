@@ -1,6 +1,6 @@
 # PENDIENTES — todo lo que falta, en un solo lugar
 
-> **Última actualización:** 2026-10-11 (**ciclo, fase 1A HECHA**: sale de §1 y de §2.4, entra lo que deja para la 1B en §2.4 y dos chicos en §5, TEST-deadlock y N-MES). Antes, el mismo día (**el dueño DECIDIÓ los bloques A y B y parte del C** con datos de producción: §8 queda como tabla de decisiones; feature nueva «se adapta a tu clientela», `docs/features/ritmo-adaptativo.md`; prompt de la fase 1A listo). Antes, el mismo día (P1-a: salen N3-quater, N7, N8 de §5 y N5, N16, N23, OPER-4, OPER-6 de §3.3; entran N5-bis, N23-bis y OPER-4-bis; OPER-6 encontró **cuatro** punteros fuera del catálogo, no dos). Antes 2026-10-10 (ciclo fase 0.bis: sale N3-bis y N3-ter de §5, entran N3-quater y N3-quinquies; la consulta de la fase 0 ya corrió y su gesto pasa al de Planeta Wings). Antes 2026-10-08 (Opus 5.5, solo docs). **Es la puerta de entrada a lo que falta.** Si algo
+> **Última actualización:** 2026-10-12 (**PL-2-a cerrada**: sale de §3.2 —el recordatorio de premio y «Nivel desbloqueado» del check-in ya no usan una plantilla Twilio sin aprobar—; PL-2 queda con los dos emisores que no preguntan; **la 00070 pasa a aplicada** el 12-10). Antes 2026-10-11 (**ciclo, fase 1A HECHA**: sale de §1 y de §2.4, entra lo que deja para la 1B en §2.4 y dos chicos en §5, TEST-deadlock y N-MES). Antes, el mismo día (**el dueño DECIDIÓ los bloques A y B y parte del C** con datos de producción: §8 queda como tabla de decisiones; feature nueva «se adapta a tu clientela», `docs/features/ritmo-adaptativo.md`; prompt de la fase 1A listo). Antes, el mismo día (P1-a: salen N3-quater, N7, N8 de §5 y N5, N16, N23, OPER-4, OPER-6 de §3.3; entran N5-bis, N23-bis y OPER-4-bis; OPER-6 encontró **cuatro** punteros fuera del catálogo, no dos). Antes 2026-10-10 (ciclo fase 0.bis: sale N3-bis y N3-ter de §5, entran N3-quater y N3-quinquies; la consulta de la fase 0 ya corrió y su gesto pasa al de Planeta Wings). Antes 2026-10-08 (Opus 5.5, solo docs). **Es la puerta de entrada a lo que falta.** Si algo
 > pendiente no está aquí, no está pendiente: o se hizo, o hay que agregarlo aquí.
 > **Regla:** lo que se termina se **saca** de este archivo (no se tacha) y pasa al `CHANGELOG.md`. El detalle de cada
 > cosa vive en su documento de origen; aquí va una línea, el estado y dónde leer más.
@@ -37,7 +37,7 @@
 | 1 | **Gestos de hoy** (§6.1): ~~la 00069~~ (aplicada el 11-10), mirar los registros del Supabase del AIOS | Nada: solo hacerlo | — |
 | 2 | ✅ **Campañas, fases 0 y 0.bis: HECHAS el 2026-10-08 y el 2026-10-10** (sin migración; **pusheadas juntas a `main` el 2026-10-11, `2746d49`**). Un envío fallido ya no bloquea 30 o 360 días, pero cada toque admite 3 fallidos y no más · la insistente sale una vez mientras el cliente no vuelva · `error_message` dice la causa real · el texto de Campañas dice la verdad · una sola escala de días, también en Clientes y en «Rescatar Perdidos» | Nada. Línea base del SQL en `ESTADO.md` 0.CICLO; repetir la consulta hacia el 2026-11-11 | no |
 | 3 | ✅ **Plantillas: un solo libro y una sola pantalla — HECHO el 2026-10-11** (sin migración, **sin desplegar**): el panel reconoce la WABA, las tres plantillas nuevas entraron juntas, una pantalla para Twilio y Zernio, Biblioteca para campañas (§3). Quedan B1 y B7 (AIOS, menos aprobaciones), en una sesión posterior | Desplegar; después, por marca, «Enviar los N juntos a Meta» (§3.4) | no |
-| 4 | **Campañas, fase 1B: los envíos del ciclo** (cron que decide y encola, drenador que otorga al enviar, «vence el domingo», piloto en Don Alirio). La **1A (la base) está HECHA** (2026-10-11, migración **00070 sin aplicar**, `CHANGELOG.md`): lo que deja para la 1B, en §2.4 | De la 1A (`ESTADO.md` 0.CICLO): la consulta 1 de `SQL-PARA-CORRER/ciclo-fase-1a/`, **aplicar la 00070 ANTES del push**, la consulta 2. La 1B lleva prompt aparte del comandante | 0 o 1 |
+| 4 | **Campañas, fase 1B: los envíos del ciclo** (cron que decide y encola, drenador que otorga al enviar, «vence el domingo», piloto en Don Alirio). La **1A (la base) está HECHA** (2026-10-11, migración **00070 aplicada por el dueño el 12-10**, `CHANGELOG.md`): lo que deja para la 1B, en §2.4 | De la 1A (`ESTADO.md` 0.CICLO): traer los resultados de las consultas 1 y 2 de `SQL-PARA-CORRER/ciclo-fase-1a/` y ordenar el push (la 00070 ya está aplicada). La 1B lleva prompt aparte del comandante | 0 o 1 |
 | 5 | **Recompensas en un solo lugar** (S-1) | Nada: C1–C3 ✅ decididas | 0 o 1 |
 | 6 | **Campañas, fase 2: la pantalla** (dos o tres sesiones) | A8: mirar el prototipo (no frena la fase 1) | no |
 | 7 | **Optimizar: los arreglos chicos** (§5), repartidos en una o dos sesiones | Solo el texto de 18.c | no |
@@ -54,8 +54,8 @@ encuentra hecha. **5 y 6 se cruzan** en `campaigns/page.tsx` (la pestaña «Prem
 ## 2. Campañas: el ciclo de recuperación
 
 **Estado:** diseñado y revisado cuatro veces (la cuarta, el 11-10, con datos de producción: spec §14). **Las fases 0 y
-0.bis están DESPLEGADAS** (`2746d49`, 11-10). **La 1A, la base del motor, está construida** (11-10, migración 00070 **sin
-aplicar**, nada se envía). Falta la 1B (los envíos) y de ahí en adelante.
+0.bis están DESPLEGADAS** (`2746d49`, 11-10). **La 1A, la base del motor, está construida** (11-10, migración 00070
+**aplicada por el dueño el 12-10**, nada se envía). Falta la 1B (los envíos) y de ahí en adelante.
 
 ### 2.1 Qué hace el diseño, en cinco líneas
 
@@ -138,8 +138,9 @@ Y dos cosas que el spec dejó abiertas:
 | **3 · Afinar** | El calibrador que sugiere el ritmo · regalos pequeños que rotan · reporte «con mensaje contra sin mensaje» por toque · texto del evento con el LLM | ⬜ Un mes después de la fase 1 |
 | **4 · Futuro** | Fechas especiales completas por rubro · ruleta · sorteos y rifas · cliente del mes · Instagram · «cumpleaños del restaurante» y «datos curiosos». **Cada una es una pieza nueva del motor de 1A** | ⬜ Decidido: después de las fases 1 y 2 |
 
-**Lo que tienes que hacer tú por la 1A, ya:** la consulta 1 de `SQL-PARA-CORRER/ciclo-fase-1a/LEEME.md` · **aplicar la
-00070 en Supabase antes del push** · la consulta 2. **Cuando llegue la 1B:** crear «Regalo que vence» en cada marca (o
+**Lo que tienes que hacer tú por la 1A, ya:** traer los resultados de la consulta 1 y de la consulta 2 de
+`SQL-PARA-CORRER/ciclo-fase-1a/LEEME.md` y ordenar el push. La 00070 **ya está aplicada** (12-10, «00070 corrida»; el
+resultado `OK 00070` no se vio desde el repo). **Cuando llegue la 1B:** crear «Regalo que vence» en cada marca (o
 dejar que salga con la insistente) · elegir el regalo pequeño y el fuerte de cada marca (o ninguno). El ritmo no se
 contesta: lo calcula el sistema; se puede cambiar en Ajustes cuando exista la pantalla.
 
@@ -177,8 +178,7 @@ rutas Twilio exigen alcance de marca (N5-bis). Lo que queda:
 | ID | Qué | Estado |
 |---|---|---|
 | PL-1 | Varios avisos dicen todavía «configúrala en Ajustes» (`calendar.service.ts`, `EventDetailDrawer.tsx`, `calendar/page.tsx`, `campaigns/page.tsx`, el log del check-in y el cron de reactivación). Ajustes conserva una tarjeta que lleva a Plantillas, así que no mienten del todo; cambiarlos a «Plantillas» toca archivos ajenos (los crons: nadie los toca) | ⬜ micro |
-| PL-2 | En **Twilio** el puntero se escribe al CREAR (`fillEmptyPointer()`, deliberado desde v2.15.0): los presets y el cron de cumpleaños preguntan si está aprobada, el check-in no, así que entre la creación y la aprobación un cruce de nivel falla en Meta en vez de callar | ⬜ · decidir si pasa a «solo al aprobarse» (necesita guardar la pendiente Twilio en `template_versions`) |
-| PL-2-a | **Lo urgente de PL-2 (revisión de cierre, 2026-10-11):** el cron `reward-reminder` tampoco pregunta si está aprobada. Con «Recordatorio de premio» recién creado en una marca Twilio con `reward_reminder_enabled = true`, cada día de revisión cuenta como un fallido, y al tercero (`agotoLosIntentosDelRecordatorio()`) ese premio **pierde su recordatorio para siempre**. Arreglo chico: en el cron, si la marca es Twilio, `isTwilioTemplateApproved()` antes de usar el puntero (como cumpleaños); si no está aprobada, no se intenta y no cuenta. Mientras no esté: no apretar «Enviar los N juntos» en una marca Twilio con el recordatorio encendido, o apagarlo hasta la aprobación | ⬜ micro · **antes del botón** |
+| PL-2 | En **Twilio** el puntero se escribe al CREAR (`fillEmptyPointer()`, deliberado desde v2.15.0). Los presets, el cron de cumpleaños, el cron `reward-reminder` y el check-in (solo «Nivel desbloqueado», al cruzar de nivel) **ya preguntan si está aprobada** (PL-2-a, 12-10: si no, ese día no se intenta y el check-in cae a «puntos sumados»). **Quedan dos emisores de «Nivel desbloqueado» que no preguntan:** el check-in manual del panel (`api/dashboard/check-in-override/route.ts`) y el registro de un domicilio (`services/delivery.service.ts`): en una marca Twilio con la plantilla en revisión mandan igual y Meta lo rechaza (un mensaje perdido, sin reintento ni tope) | ⬜ · o se les copia la pregunta (el helper son 3 líneas, ver `punteroAprobado()` del cron), o se decide que el puntero se escriba «solo al aprobarse» (necesita guardar la pendiente Twilio en `template_versions`), que las resuelve a todas |
 | PL-3 | Reemplazar una plantilla **Twilio rechazada** no tiene botón propio: se crea una corregida en la Biblioteca y se elige con «Elegir otra» | ⬜ micro |
 | PL-4 | Una plantilla libre no deja registro de quién la creó (no tiene fila en `template_versions`) | ⬜ · decisión |
 

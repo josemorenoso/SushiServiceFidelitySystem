@@ -274,6 +274,16 @@ por marca. Con `BIRTHDAY_LEAD_DAYS = 2` el cron ve a un cumpleañero tres días,
 cumpleaños casi nunca se toca: es la guarda para el día que la anticipación crezca. `campaign_messages`
 no guarda el premio: con dos premios del mismo cliente venciendo a la vez, sus fallos se suman.
 
+**Antes del tope, la plantilla tiene que estar aprobada (PL-2-a, 2026-10-12).** En Twilio el puntero se
+escribe al CREAR la plantilla, con Meta todavía revisándola (24-72 h). Sin esta guarda, el recordatorio de
+premio intentaba cada día de revisión, Meta rechazaba, cada rechazo contaba como fallido y al tercero ese
+premio se quedaba **sin recordatorio para siempre**, aunque la plantilla se aprobara al día siguiente. Ahora
+el cron `reward-reminder` le pregunta a Twilio (`isTwilioTemplateApproved()`, una vez por corrida y solo si
+hay premios por avisar): si no está aprobada, o Twilio no contesta, ese día **no se intenta, no se graba nada**
+(ni campaña ni fallidos) y queda un `console.warn` con la marca, la plantilla y el motivo; la respuesta trae
+`skipped_template_pending`. Zernio (su puntero solo existe aprobado) y la marca demo (su envío es simulado)
+no preguntan.
+
 **La causa real** (`campaign_messages.error_message`). Los tres crons grababan «Twilio no configurado o
 error de envío» para todo fallo, también en las marcas de Zernio (Planeta Wings, 5 y 6 de octubre).
 `sendTemplateMessage()` devuelve `null` para todo modo de fallo pero deja la causa en `message_logs`;

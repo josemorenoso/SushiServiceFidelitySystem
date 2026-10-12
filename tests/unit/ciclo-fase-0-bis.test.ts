@@ -207,7 +207,10 @@ vi.mock('@/services/settings.service', () => ({
   getSettingValue: async (key: string) => ajustes[key] ?? null,
   getReactivationDaysConfig: async () => ({ softDays: 21, aggressiveDays: 25 }),
 }))
-vi.mock('@/services/twilio-catalog.service', () => ({ isTwilioTemplateApproved: async () => false }))
+// «Aprobada»: el recordatorio pregunta por la aprobación (PL-2-a) y este archivo es del tope de
+// reintentos, no de eso (vive en `pl-2-a-recordatorio-sin-aprobar.test.ts`). El cumpleaños no la
+// consulta aquí: `birthday_upcoming_template_sid` nunca se pone en `ajustes`.
+vi.mock('@/services/twilio-catalog.service', () => ({ isTwilioTemplateApproved: async () => true }))
 vi.mock('@/services/reward.service', () => ({
   getRewardById: async () => null,
   getNextReward: async () => null,

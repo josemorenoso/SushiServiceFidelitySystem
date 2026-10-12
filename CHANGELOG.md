@@ -8,6 +8,22 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [fix] — 2026-10-12 — PL-2-a: una plantilla Twilio sin aprobar ya no se usa (recordatorio de premio y «Nivel desbloqueado»)
+
+- **El problema:** en Twilio el puntero se escribe al CREAR (`fillEmptyPointer()`) y Meta revisa 24-72 h. `reward-reminder`
+  intentaba cada día, Meta rechazaba y cada rechazo gastaba uno de los 3 intentos de la fase 0.bis: el premio se quedaba
+  **sin recordatorio para siempre**. Era el costo escondido de «Enviar los N juntos a Meta». Sin migración, SIN desplegar.
+- **`reward-reminder`:** en Twilio pregunta `isTwilioTemplateApproved()` (una vez por corrida, solo con premios por avisar).
+  Sin aprobar, o Twilio sin contestar: ese día no se intenta ni se graba NADA (ni campaña ni fallidos), log con marca y
+  motivo, `skipped_template_pending` en la respuesta.
+- **Check-in:** al cruzar de nivel, la misma pregunta por «Nivel desbloqueado»; sin aprobar cae a «puntos sumados» (o a la
+  bienvenida, si es su primera visita). Un check-in sin cruce no llama a Twilio (no había caché de aprobación).
+- **Zernio y la marca demo no preguntan** (puntero solo aprobado / envío simulado). Quedan sin la pregunta el check-in manual
+  del panel y el registro de un domicilio: PL-2, `PENDIENTES.md` §3.2.
+- **Tests:** 2 archivos nuevos (27 tests) + el doble de `ciclo-fase-0-bis`. Sin `stash` (scratchpad + `git show 89c6380`
+  + `trap`): **16 de los 27 fallan contra `89c6380`**. tsc limpio · lint 14 = base · suite entera 80 archivos / 1.202.
+- **Del dueño:** nada nuevo; «Enviar los N juntos a Meta» ya es seguro en marcas Twilio, una vez desplegado esto.
+
 ## [feat] — 2026-10-11 — Plantillas: un solo libro, una sola pantalla, las tres nuevas juntas (sin migración, SIN desplegar)
 
 - **WABA:** al abrir Plantillas (Zernio) se registra lo que el alta dejó y el panel no conocía (en revisión, rechazado con

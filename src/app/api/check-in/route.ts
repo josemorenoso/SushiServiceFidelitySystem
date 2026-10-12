@@ -13,6 +13,7 @@ import { findCustomerByPhone, createCustomer, incrementVisit } from '@/services/
 import { createVisit } from '@/services/visit.service'
 import { sendTemplateMessage } from '@/services/whatsapp.service'
 import { getMultipleSettings } from '@/services/settings.service'
+import { isTwilioTemplateApproved } from '@/services/twilio-catalog.service'
 import { syncGoogleContact } from '@/services/google-contacts-sync.service'
 import { rateLimit, getClientIp } from '@/lib/rate-limit'
 import { awardVisitPoints, awardWelcomeBonus } from '@/services/points.service'
@@ -144,6 +145,22 @@ async function sendCheckinTemplate(
     console.error(`[CheckIn] Error enviando plantilla ${templateType}:`, err)
     return { sent: false, templateType, reason: err instanceof Error ? err.message : 'unknown_error' }
   }
+}
+
+/**
+ * ¿Se puede usar ya el puntero de «Nivel desbloqueado»? (PL-2-a, 2026-10-12)
+ *
+ *   · Demo: `sendTemplateMessage()` simula el envío y nunca llega a Meta; no se pregunta nada.
+ *   · Zernio: el puntero solo existe ya aprobado (`promoteVersion()`).
+ *   · Twilio: el puntero se escribe al CREAR la plantilla (`fillEmptyPointer()`), con Meta
+ *     todavía revisándola, así que hay que preguntar. Ante la duda (sin cuenta, error de red
+ *     o de Twilio) cuenta como NO aprobada, igual que en los crons de cumpleaños y recordatorio.
+ *
+ * Se llama SOLO cuando el cliente cruza de nivel (raro): no hay una llamada a Twilio por check-in.
+ */
+async function nivelDesbloqueadoAprobado(tenant: Tenant, templateSid: string): Promise<boolean> {
+  if (tenant.is_demo || tenant.messaging_provider === 'zernio') return true
+  return isTwilioTemplateApproved(tenant, templateSid)
 }
 
 /**
@@ -991,7 +1008,21 @@ export async function POST(request: NextRequest) {
       // webhook externo nunca impida la entrega del mensaje al cliente.
       let whatsappStatus: WhatsAppSendStatus = { sent: false, templateType: 'none', reason: 'not_attempted' }
 
-      if (newTier) {
+      // PL-2-a: si «Nivel desbloqueado» aún no la aprobó Meta (Twilio), mandarla falla en Meta y el
+      // cliente se queda sin nada. Solo cuando cruza de nivel se pregunta, y si no está aprobada
+      // el mensaje cae al de siempre (puntos sumados; bienvenida si es su primera visita). Sin
+      // puntero configurado no se pregunta nada: `sendCheckinTemplate()` ya contesta
+      // `no_template_configured`.
+      const nivelSid = settings.tier_unlocked_template_sid
+      const nivelSinAprobar = !!newTier && !!nivelSid && !(await nivelDesbloqueadoAprobado(tenant, nivelSid))
+      if (nivelSinAprobar) {
+        console.warn(
+          `[CheckIn] (${tenant.slug}) «Nivel desbloqueado» (${nivelSid}) no figura aprobada por Meta: ` +
+            `se manda el mensaje de puntos en su lugar.`
+        )
+      }
+
+      if (newTier && !nivelSinAprobar) {
         // Tier desbloqueado: mensaje en el momento del cruce (requiere tier_unlocked_template_sid)
         whatsappStatus = await sendCheckinTemplate(
           settings.tier_unlocked_template_sid,
@@ -1015,7 +1046,8 @@ export async function POST(request: NextRequest) {
           visitLocation.locationId
         )
       } else {
-        // Sin tier nuevo: puntos sumados. Cada caso usa SU plantilla — sin fallback engañoso.
+        // Sin tier nuevo —o con «Nivel desbloqueado» aún sin aprobar (PL-2-a)—: puntos sumados.
+        // Cada caso usa SU plantilla — sin fallback engañoso.
         const isNearTier = !!(nextTierInfo && nextTierInfo.pointsRemaining <= 30)
         if (isNearTier) {
           whatsappStatus = await sendCheckinTemplate(

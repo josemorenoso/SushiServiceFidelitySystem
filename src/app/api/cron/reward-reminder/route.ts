@@ -16,6 +16,7 @@ import {
 } from '@/services/campaign.service'
 import { sendTemplateMessage } from '@/services/whatsapp.service'
 import { getMultipleSettings } from '@/services/settings.service'
+import { isTwilioTemplateApproved } from '@/services/twilio-catalog.service'
 import { DEFAULT_REWARD_REMINDER_DAYS_BEFORE } from '@/constants/rewards'
 import { getTenantBySlug, getActiveTenants } from '@/lib/tenant'
 import type { Tenant } from '@/types/tenant.types'
@@ -47,6 +48,11 @@ import type { Tenant } from '@/types/tenant.types'
  *     cada día mientras el premio siga en su ventana de aviso, y con una ventana larga eso
  *     eran muchos intentos. Ahora, MAX_INTENTOS_FALLIDOS_POR_TOQUE por premio
  *     (`agotoLosIntentosDelRecordatorio()`).
+ *   - PLANTILLA SIN APROBAR (PL-2-a, 2026-10-12): en Twilio el puntero se escribe al CREAR la
+ *     plantilla, con Meta todavía revisándola. Mientras no figure aprobada ese día NO se
+ *     intenta y NO se graba nada (ni campaña ni fallidos): si no, cada día de revisión
+ *     gastaba un intento del tope de arriba y, al tercero, el premio se quedaba SIN
+ *     recordatorio para siempre. Ver `punteroAprobado()`.
  *
  * Ref: docs/features/reward-grants.md
  */
@@ -61,8 +67,25 @@ interface TenantCronResult {
   skipped_monthly_cap: number
   /** Premios cuyo recordatorio ya falló MAX_INTENTOS_FALLIDOS_POR_TOQUE veces: no se intentan más. */
   skipped_retry_cap?: number
+  /** Premios en ventana que hoy no se intentaron porque Meta todavía no aprueba la plantilla (PL-2-a). */
+  skipped_template_pending?: number
   reminder_enabled: boolean
   error?: string
+}
+
+/**
+ * ¿Se puede usar ya el puntero de «Recordatorio de premio»? (PL-2-a)
+ *
+ *   · Demo: `sendTemplateMessage()` simula el envío y nunca llega a Meta; no se le pregunta
+ *     nada a Twilio (si se preguntara, el recordatorio de la marca demo se apagaría).
+ *   · Zernio: el puntero solo existe ya aprobado (`promoteVersion()`).
+ *   · Twilio: el puntero se escribe al CREAR la plantilla (`fillEmptyPointer()`), con Meta
+ *     todavía revisándola, así que hay que preguntar. Mismo criterio que el cron de
+ *     cumpleaños: ante la duda (sin cuenta, error de red o de Twilio) cuenta como NO aprobada.
+ */
+async function punteroAprobado(tenant: Tenant, templateSid: string): Promise<boolean> {
+  if (tenant.is_demo || proveedorDelEnvio(tenant) === 'zernio') return true
+  return isTwilioTemplateApproved(tenant, templateSid)
 }
 
 async function processTenant(tenant: Tenant): Promise<TenantCronResult> {
@@ -108,6 +131,30 @@ async function processTenant(tenant: Tenant): Promise<TenantCronResult> {
       sent: 0,
       failed: 0,
       skipped_monthly_cap: 0,
+      reminder_enabled: true,
+    }
+  }
+
+  // ─── 2.bis. ¿Meta ya aprobó la plantilla? (PL-2-a) ───
+  // Solo se pregunta con premios por avisar: sin candidatos no hay nada que mandar. Si no
+  // está aprobada, hoy no se intenta nada y no se graba nada —ni campaña ni fallidos—: cada
+  // fallido gastaría un intento del tope de la fase 0.bis, y con 24-72 h de revisión el
+  // premio se quedaba sin recordatorio para siempre. Mañana se vuelve a preguntar.
+  if (!(await punteroAprobado(tenant, templateSid))) {
+    console.warn(
+      `[Cron RewardReminder] (${tenant.slug}) La plantilla del recordatorio (${templateSid}) no figura aprobada por Meta ` +
+        `(sigue en revisión, la rechazaron o Twilio no contestó): hoy no se intenta ningún aviso y no cuenta como fallido ` +
+        `(${candidates.length} premio(s) en ventana). Sale sola en cuanto quede aprobada.`
+    )
+    return {
+      tenant_slug: tenant.slug,
+      ok: true,
+      expired,
+      candidates: candidates.length,
+      sent: 0,
+      failed: 0,
+      skipped_monthly_cap: 0,
+      skipped_template_pending: candidates.length,
       reminder_enabled: true,
     }
   }

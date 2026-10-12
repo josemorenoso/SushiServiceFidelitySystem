@@ -73,8 +73,9 @@ contexto; esto es todo lo que necesitas para seguir sin que el dueño repita nad
   premio» y «Regalo que vence» en el catálogo (16); una sola pantalla para Twilio y Zernio; biblioteca para campañas.
 - **PL-2-a:** en Twilio, el recordatorio de premio y el «Nivel desbloqueado» del check-in no usan una plantilla sin
   aprobar. Quedan sin esa pregunta el check-in manual y el registro de un domicilio (`docs/PENDIENTES.md` PL-2).
-- Verificado antes del push: tsc limpio · **80 archivos / 1.202 tests**. ⚠️ El push de un mismo commit a `main` y a la
-  rama a la vez solo armó la vista previa: **pushear `main` primero, esperar a que Vercel lo tome, después la rama**.
+- Verificado antes del push: tsc limpio · **80 archivos / 1.202 tests**. Vercel READY: `dpl_Fh1gLUgZJ7rMXSXBXuoYiELY9U7F`
+  (`feef4e6`). Con Hobby los builds van de a uno: el de producción puede tardar 2-3 min en APARECER en la lista si la
+  vista previa de la rama entró primero. No es que falte.
 
 ### Base de datos de producción
 - **00069 aplicada** (11-10): cerró los dos agujeros entre marcas (AISLA-2, OPUS-4).

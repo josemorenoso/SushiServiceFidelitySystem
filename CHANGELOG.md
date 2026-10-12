@@ -12,8 +12,8 @@
 
 - **Push** por orden del dueño: `origin/main` = la rama (16 commits sobre `56544f6`). La 00070 ya estaba aplicada (12-10).
   Antes: árbol limpio, tablero vacío, `origin/main` ancestro, tsc limpio, **80 archivos / 1.202 tests**.
-- **Vercel:** el push de `feef4e6` a `main` y a la rama a la vez solo armó la vista previa; producción arrancó con el commit
-  de docs siguiente subido a `main` solo. Regla nueva en `ESTADO.md` §1: `main` primero, la rama después.
+- **Vercel READY** en producción: `dpl_Fh1gLUgZJ7rMXSXBXuoYiELY9U7F` (`feef4e6`). Con Hobby los builds van de a uno: el de
+  producción esperó ~2,5 min detrás de la vista previa de la rama y no aparecía en la lista mientras tanto.
 - **Consulta 1:** contador = filas en las 8 marcas; a Sushi Fun no le falta ninguna visita y su 2,4 % es real. Destapó
   **N-DOBLE** (`PENDIENTES.md` §5): dos escaneos el mismo día cuentan como dos visitas (10 de 16 en Sushi Fun).
 - **Consulta 2:** Don Alirio → `cafe`, Sushi Service → `restaurant`; archivados, sin backfill y mensajes contados en 0.

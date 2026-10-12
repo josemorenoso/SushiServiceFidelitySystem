@@ -145,3 +145,30 @@ SELECT t.slug                                   AS marca,
 
 Si algún número sale raro, no hay que deshacer nada: el ciclo está apagado y nadie lee estas columnas todavía.
 Mandarle la salida a una sesión antes de la fase 1B.
+
+---
+
+## Resultados (dueño, 2026-10-12; leídos por el comandante)
+
+**Consulta 1 — la sospecha de Sushi Fun NO se confirma.** En las 8 marcas `contador_2_o_mas_y_una_sola_fila` y
+`…_y_ninguna_fila` dan **0**, y el contador coincide con las filas (sushi-service 851/852, demo-ventas 501/502, el resto
+idéntico; Sushi Fun **311/311**). No falta ninguna visita. El 2,4 % de Sushi Fun es **real**: el archivo de la mudanza
+(`SQL-PARA-CORRER/sushi-fun/06-hechos.sql`, 268 visitas del 01-06 al 05-09 con su fecha original) muestra que de sus 16
+clientes con 2+ visitas, **10 escanearon dos veces el mismo día con minutos de diferencia** (ej. 15:34 y 15:36). El
+contador los cuenta como «volvieron» (18); por días distintos —lo que usa el ciclo— regresaron 9 veces. Ver
+`docs/PENDIENTES.md` §5, N-DOBLE.
+
+**Consulta 2 — todo como se esperaba.** `archivados` 0, `sin_backfill` 0 y `con_mensajes_contados` 0 en todas.
+
+| Marca | Clientes | Activos | Dormidos | Con ritmo propio | Mediana marca (regresos) | Ritmo de la marca |
+|---|---|---|---|---|---|---|
+| sushi-service | 670 | 379 | 291 | 42 | 27 d (219) | restaurant ✅ |
+| demo-ventas | 408 | 64 | 344 | 4 | 16 d (85) | casual (demo) |
+| don-alirio | 336 | 289 | 47 | 47 (25 cafetería) | 6 d (324) | **cafe** ✅ |
+| sushi-fun | 289 | 131 | 158 | 1 | 26 d (9) | restaurant ✅ (< 30) |
+| clubplanetawingsenvigado | 64 | 64 | 0 | 0 | 8 d (2) | restaurant ✅ (< 30) |
+| clubtepuy | 39 | 39 | 0 | 0 | — (0) | restaurant |
+| cafe-frangal | 8 | 8 | 0 | 0 | — (0) | restaurant |
+| clubvipmakabro | 1 | 1 | 0 | 0 | — (0) | restaurant |
+
+Nadie eligió ritmo en Ajustes (`ritmo_elegido_en_ajustes` NULL en todas). La 00070 quedó bien aplicada.

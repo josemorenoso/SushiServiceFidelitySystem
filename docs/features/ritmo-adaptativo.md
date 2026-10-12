@@ -26,7 +26,7 @@ Consulta de solo lectura sobre `visits` (días distintos con visita por cliente,
 |---|---|---|---|---|
 | Sushi Service | 601 | 22,5 % | 13 · **27** · 49 · 74 | 9 |
 | Don Alirio (café) | 334 | 21,6 % | 2 · **6** · 12 · 24 | 27 |
-| Sushi Fun | 289 | 2,4 % ⚠️ | 13 · 26 · 66 · 75 | 4 |
+| Sushi Fun | 289 | 2,4 % (real: verificado el 12-10) | 13 · 26 · 66 · 75 | 4 |
 | Planeta Wings | 47 | 4,3 % | muy nueva para medir | 2 |
 
 Lo que dicen:
@@ -37,8 +37,10 @@ Lo que dicen:
    2 o 3 días) y clientes que vienen una vez al mes. El ritmo correcto es el del cliente, no el de la marca.
 3. **Casi 8 de cada 10 clientes nunca vuelven por segunda vez.** La **segunda visita** es la palanca más grande del
    producto y la métrica principal del ciclo (§5).
-4. ⚠️ **El 2,4 % de Sushi Fun probablemente es un error de datos**, no la realidad: al mudarla de su Supabase anterior
-   pudieron no traerse sus visitas viejas. La fase 1A lo verifica con una consulta antes de calibrar esa marca.
+4. **El 2,4 % de Sushi Fun es real** (verificado el 12-10 con la consulta 1 de la 1A): la mudanza trajo todas sus
+   visitas con su fecha original (contador 311 = filas 311). Su número bajo de regresos es de la marca, no un error de
+   datos. Lo que sí apareció: 10 de sus 16 clientes con «2 visitas» escanearon dos veces el mismo día con minutos de
+   diferencia (`docs/PENDIENTES.md` §5, N-DOBLE). El ciclo cuenta días distintos, así que eso no lo engaña.
 
 ## 3. Cómo funciona (tres capas, de la más fina a la más general)
 
@@ -87,8 +89,8 @@ de días entre visitas de todos sus clientes (mismos cortes de §3.2) cuando la 
 Con menos datos usa «Restaurante / mensual». El dueño no tiene que hacer nada: puede cambiarlo en Ajustes con una
 pregunta («¿cada cuánto vuelve un cliente típico?»), y desde ese momento manda su respuesta sobre el cálculo.
 
-Con los datos de hoy: Don Alirio → Cafetería · Sushi Service → Restaurante · Sushi Fun → Restaurante (pendiente de
-verificar sus visitas) · Planeta Wings → Restaurante por defecto (todavía no tiene 30 regresos).
+Con los datos de hoy: Don Alirio → Cafetería · Sushi Service → Restaurante · Sushi Fun → Restaurante (sus visitas están
+completas; tiene menos de 30 regresos) · Planeta Wings → Restaurante por defecto (todavía no tiene 30 regresos).
 
 ## 4. Lo que no cambia
 

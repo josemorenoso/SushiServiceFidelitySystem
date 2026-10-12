@@ -62,46 +62,32 @@ contexto; esto es todo lo que necesitas para seguir sin que el dueño repita nad
 
 ## 4. Dónde vamos (2026-10-12)
 
-### En producción (`origin/main` = `56544f6`, Vercel READY el 11-10)
+### En producción (push del 12-10, orden del dueño: `origin/main` = la rama)
 - **Fases 0 y 0.bis del ciclo:** un envío fallido ya no calla al cliente; máximo 3 intentos fallidos por toque; el
   insistente sale una vez por ciclo; `campaign_messages.error_message` guarda la causa real; una sola escala de días.
 - **P1-a:** el tope de 3 al mes ya no se apaga ante un error de base; plantillas Twilio paginadas; lista cerrada de
   ajustes; alcance de marca en las rutas de plantillas Zernio; caché de la WABA.
-
-### Commiteado y SIN push (la rama va por delante de `main`)
-- **Fase 1A del ciclo** (`163c5a0`, `22a8b43`): la base del motor. Migración **00070**, el ritmo personal y el de la
-  marca (`src/lib/cycle-engine.ts`), el motor de piezas (`src/lib/communications/registry.ts`), 9 ajustes `cycle_*`.
-  **Nada se envía todavía.** El comandante revisó la 00070 entera: segura.
-- **Plantillas, un solo libro** (`a37fdec`, `9c03807`, `4930097`, `cf31ab4`): el panel reconoce lo que ya está en la
-  WABA; «Nivel desbloqueado», «Recordatorio de premio» y «Regalo que vence» entran al catálogo (16 en total); una sola
-  pantalla para Twilio y Zernio; biblioteca para campañas; Ajustes ya no tiene los 15 desplegables.
-- Docs: `1948fdf` (revisión cruzada que encontró PL-2-a), `89c6380` (dos reglas para la 1B).
-- **PL-2-a** (`71c9fd3`, cerrada el 12-10, verificada por el comandante): en Twilio, el recordatorio de premio y el
-  «Nivel desbloqueado» del check-in ya no usan una plantilla que Meta todavía no aprobó (el check-in le pregunta a
-  Twilio solo cuando el cliente cruza de nivel y, sin aprobar, manda el mensaje de puntos). Quedan sin esa pregunta el
-  check-in manual del panel y el registro de un domicilio: `docs/PENDIENTES.md` PL-2. Esa sesión registró la 00070
-  como aplicada en `ESTADO.md` y `PENDIENTES.md`.
-- Última verificación completa (sobre `71c9fd3`, por el comandante): tsc limpio · lint 14 errores = 7 reales
-  preexistentes + su copia en `.kilo/worktrees/ivy-city` (worktree viejo de Kilo; borrarlo es decisión del dueño) ·
-  **80 archivos / 1.202 tests en verde**. Tablero vacío, árbol limpio.
+- **Fase 1A del ciclo:** la base del motor (00070, el ritmo personal y el de la marca, el motor de piezas, 9 ajustes
+  `cycle_*`). **Nada se envía todavía.**
+- **Plantillas, un solo libro:** el panel reconoce lo que ya está en la WABA; «Nivel desbloqueado», «Recordatorio de
+  premio» y «Regalo que vence» en el catálogo (16); una sola pantalla para Twilio y Zernio; biblioteca para campañas.
+- **PL-2-a:** en Twilio, el recordatorio de premio y el «Nivel desbloqueado» del check-in no usan una plantilla sin
+  aprobar. Quedan sin esa pregunta el check-in manual y el registro de un domicilio (`docs/PENDIENTES.md` PL-2).
+- Verificado antes del push: tsc limpio · **80 archivos / 1.202 tests**. ⚠️ El push de un mismo commit a `main` y a la
+  rama a la vez solo armó la vista previa: **pushear `main` primero, esperar a que Vercel lo tome, después la rama**.
 
 ### Base de datos de producción
 - **00069 aplicada** (11-10): cerró los dos agujeros entre marcas (AISLA-2, OPUS-4).
-- **00070 aplicada** (12-10, «00070 corrida», sin traer resultados). Faltan las **consultas 1 y 2** de
-  `SQL-PARA-CORRER/ciclo-fase-1a/LEEME.md` (la 1 dice si a Sushi Fun le faltan visitas; la 2, cómo quedó repartido
-  cada cliente). Pídeselas.
+- **00070 aplicada** (12-10) y **sus dos consultas leídas** (12-10): ninguna marca tiene visitas perdidas (el 2,4 % de
+  Sushi Fun es real) y la foto del ciclo salió como se esperaba. Resultados en `SQL-PARA-CORRER/ciclo-fase-1a/LEEME.md`
+  § Resultados. Destapó **N-DOBLE** (`docs/PENDIENTES.md` §5): dos escaneos el mismo día cuentan como dos visitas.
 - **00030 NO aplicada** (confirmado el 11-10): 18 tablas conservan el DEFAULT puente a Sushi Service. Todo INSERT con
   `tenant_id` explícito. Aplicarla exige antes barrer los INSERT sin `tenant_id`.
 
 ### Lo siguiente, en orden
-1. **Las consultas 1 y 2 de la 1A:** el dueño las corre y te trae los resultados; los comparas con la tabla «lo
-   esperado» del LEEME.
-2. **Push** de todo cuando el dueño diga «pushea» (1A + plantillas + PL-2-a). Sin migraciones pendientes: la 00070 ya
-   está. Todo está verificado sobre `71c9fd3`: si no entró nada nuevo, basta repetir tsc y vitest y pushear.
-3. **Después del deploy, el gesto del dueño por marca:** Plantillas → Mensajes automáticos → leer los textos →
-   «Enviar los N juntos a Meta» (un solo viaje a Meta por marca, incluye «Cumpleaños — dos días antes»). En marcas
-   Twilio, solo con PL-2-a ya en producción (entra en ese mismo push).
-4. **Escribir el prompt de la fase 1B** (los envíos): el cron que decide y encola, el drenador que otorga el regalo al
+1. **El gesto del dueño por marca (ya se puede):** Plantillas → Mensajes automáticos → leer los textos →
+   «Enviar los N juntos a Meta» (un solo viaje a Meta por marca, incluye «Cumpleaños — dos días antes»).
+2. **Escribir el prompt de la fase 1B** (lo siguiente del comandante) (los envíos): el cron que decide y encola, el drenador que otorga el regalo al
    enviar, «vence el domingo», el adaptador a la insistente mientras «Regalo que vence» no esté aprobada, encender el
    piloto en **Don Alirio**. Tiene que incluir todo lo anotado para la 1B en `docs/PENDIENTES.md` §2.4 y en el spec
    §13–§14: H2 (sin recordatorio para el regalo pequeño), H3 (la hora de la marca: el cron corre a las 15:00 Bogotá, el
@@ -109,14 +95,16 @@ contexto; esto es todo lo que necesitas para seguir sin que el dueño repita nad
    encender**, **quien pasó su último toque pasa a dormido sin mensaje**, `resolveStage()` dice la etapa y no si hay que
    mandar hoy, el paso a dormido tras la despedida lo hace el drenador, un toque en cola cuyo cliente volvió se
    descarta, y retirar `reactivation_with_reward_template_sid` y `reactivation_template_sid` (legacy).
-5. Después: **fase 2, la pantalla** (espera que el dueño mire el prototipo, A8) · **Recompensas en un solo lugar**
+3. Después: **fase 2, la pantalla** (espera que el dueño mire el prototipo, A8) · **Recompensas en un solo lugar**
    (S-1, decidido) · **plantillas B1 y B7** (13 → 8 aprobaciones y el AIOS deja de crear plantillas) · los arreglos
-   chicos que quedan en `docs/PENDIENTES.md` §3.3 y §5 (PL-2, y entre ellos TEST-deadlock, N-MES, N1, N6, N13, N18 + CI, SEG-2/SEG-3
+   chicos que quedan en `docs/PENDIENTES.md` §3.3 y §5 (PL-2, y entre ellos TEST-deadlock, N-MES, N1, N6, N13, N18 + CI, N-DOBLE, SEG-2/SEG-3
    con prompt listo en `docs/prompts/2026-10-04-seg2-resolve-y-tenant-config.md`).
 
 ### Pendientes del dueño que no son código
 - Mirar en los logs de Vercel del 5 y 6 de octubre por qué fallaron los envíos de Planeta Wings (`PENDIENTES.md` §6.1).
 - Confirmar que en el Supabase del **AIOS** está apagado «Allow new users to sign up» (N2). No se confirmó.
+- **El AIOS v1.15.1 ya está en su `main`** (`b3b4a1b`, comprobado el 12-10): su Vercel necesita `AIOS_CONNECT_LINK_SECRET`
+  (nueva) para que el link «conectar WhatsApp» funcione (`ESTADO.md` 0.AIOS, Tepuy).
 - Hacia el **2026-11-11**, repetir el SQL de `SQL-PARA-CORRER/ciclo-fase-0/` y comparar con la línea base de
   `ESTADO.md` 0.CICLO (sushi-service: 270 clientes con el insistente repetido, 418 mensajes de más).
 - Decisiones abiertas (solo suyas): C4 (las 10 visitas), C7 (referidos), C9 (Black), C10 (último nivel), D1–D8
@@ -128,7 +116,7 @@ contexto; esto es todo lo que necesitas para seguir sin que el dueño repita nad
 |---|---|---|---|---|
 | Sushi Service | 601 | 22,5 % | 27 | restaurante 14·28·42·60·80 |
 | Don Alirio (café, piloto) | 334 | 21,6 % | 6 | cafetería 7·14·26·42·58 |
-| Sushi Fun | 289 | 2,4 % ⚠️ (sospecha: visitas no migradas) | 26 | restaurante |
+| Sushi Fun | 289 | 2,4 % (real: verificado el 12-10) | 26 | restaurante |
 | Planeta Wings (Zernio) | 47 | 4,3 % | muy nueva | restaurante |
 
 - **demo-ventas** es la marca demo (`is_demo`): nunca envía WhatsApp real; sus números no cuentan.

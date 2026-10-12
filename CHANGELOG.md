@@ -8,6 +8,17 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [deploy] — 2026-10-12 — Push a `main`: ciclo 1A + plantillas «un solo libro» + PL-2-a; consultas de la 1A leídas
+
+- **Push** por orden del dueño: `origin/main` = la rama (16 commits sobre `56544f6`). La 00070 ya estaba aplicada (12-10).
+  Antes: árbol limpio, tablero vacío, `origin/main` ancestro, tsc limpio, **80 archivos / 1.202 tests**.
+- **Vercel:** el push de `feef4e6` a `main` y a la rama a la vez solo armó la vista previa; producción arrancó con el commit
+  de docs siguiente subido a `main` solo. Regla nueva en `ESTADO.md` §1: `main` primero, la rama después.
+- **Consulta 1:** contador = filas en las 8 marcas; a Sushi Fun no le falta ninguna visita y su 2,4 % es real. Destapó
+  **N-DOBLE** (`PENDIENTES.md` §5): dos escaneos el mismo día cuentan como dos visitas (10 de 16 en Sushi Fun).
+- **Consulta 2:** Don Alirio → `cafe`, Sushi Service → `restaurant`; archivados, sin backfill y mensajes contados en 0.
+- **Del dueño, ya:** Plantillas → Mensajes automáticos → «Enviar los N juntos a Meta», marca por marca.
+
 ## [fix] — 2026-10-12 — PL-2-a: una plantilla Twilio sin aprobar ya no se usa (recordatorio de premio y «Nivel desbloqueado»)
 
 - **El problema:** en Twilio el puntero se escribe al CREAR (`fillEmptyPointer()`) y Meta revisa 24-72 h. `reward-reminder`

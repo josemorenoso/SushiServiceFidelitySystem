@@ -33,6 +33,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Comandante: prompt de la fase 1B del ciclo (los envíos y el piloto) (2026-10-12) | Opus 5.5 | `docs/prompts/2026-10-12-ciclo-fase-1b-envios.md` (nuevo), `docs/PENDIENTES.md`, `ESTADO.md`, `docs/prompts/2026-10-12-comandante-traspaso.md` | — (la 1B la reserva su sesión) | en curso |
 
 ## 3. Siguiente, en orden
 

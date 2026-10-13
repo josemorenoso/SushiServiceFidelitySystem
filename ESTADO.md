@@ -33,6 +33,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Recompensas en un solo lugar (S-1), 2026-10-13 | Sonnet 5.5 | `dashboard/rewards/page.tsx` · `dashboard/campaigns/page.tsx` (solo la pestaña «Premios») · `dashboard/campaign-rewards/page.tsx` · `dashboard/settings/page.tsx` (solo los dos bloques de premio) · `components/dashboard/CampaignRewardsCatalog.tsx` · `InviteCampaignsPanel.tsx` · componentes nuevos en `components/dashboard/` · `api/dashboard/campaign-rewards/route.ts` · ruta de invitaciones si 2.4 lo pide · `tests/**` nuevos · `docs/features/{reward-grants,invite-campaigns,campaigns,dashboard}.md` · `docs/PENDIENTES.md` · `CHANGELOG.md` | por decidir en 2.4 (si hace falta, el número sale de `proxima-migracion.mjs` y se anota acá) | en curso |
 
 ## 3. Siguiente, en orden
 

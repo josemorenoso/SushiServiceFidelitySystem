@@ -342,7 +342,7 @@ pushear). Cada uno con un test que falla contra el código viejo:
 
 | ID | Estado | Cómo |
 |---|---|---|
-| AISLA-1 | ✅ cerrado en código | `resolve` solo otorga el nivel que `check-in/status` ofrece (`getNivelOfrecido()`), con límite de tasa. Queda la carrera de dos llamadas simultáneas (`points-mystery-box.md` §7.4.ter) |
+| AISLA-1 | ✅ cerrado en código | `resolve` solo otorga el nivel que `check-in/status` ofrece (`getNivelOfrecido()`), con límite de tasa. La carrera de dos llamadas simultáneas quedó abierta y la cerró SEG-2 el 2026-10-13 (§9) |
 | AISLA-2 | ✅ cerrado en la **00069** — **sigue VIVO en producción** hasta que se aplique | Barre toda `SECURITY DEFINER` de `public`, salvo 4 helpers de RLS, y aborta si algo queda abierto |
 | OPUS-4 | ✅ cerrado en la 00069 | Borra las 5 políticas. En orden nunca existieron: la 00026 borra todas las de `customers`/`visits`. Solo muerden si la 00015 se pegó después de la 00026 |
 | OPUS-2 | ✅ | `logs-*.csv` en `.gitignore` (`git check-ignore` lo confirma). El archivo sigue en la raíz: borrarlo es del dueño |
@@ -358,6 +358,7 @@ aplicada** (su `aios_register_whatsapp_connection` existe y está abierta a `ano
 
 **Encontrado de paso, sin tocar:** `PUT /api/dashboard/tenant-config` tiene la misma deuda que OPER-4 (un
 administrador de sede cambia logo, paleta, píxel… de la marca), ya anotada en `docs/features/meta-pixel.md`.
+Cerrado en código por SEG-3 el 2026-10-13 (§9).
 
 ## 8. Seguimiento — 2026-10-04: ESCALA-3 y ESCALA-4 cerradas en código
 
@@ -388,3 +389,27 @@ el código viejo:
   el despliegue en Vercel (12:10). Arreglo: los cumpleaños se cuentan en memoria sobre `customers` (`ff9fd90` en `main`). **Por qué no lo
   vio la prueba:** el doble de PostgREST trataba `birthday` como texto y nadie ejecutó las consultas contra un Postgres real. Lección: una
   lectura que se vuelve fatal hay que ejecutarla contra el esquema real, y una lectura auxiliar no debería poder tumbar el panel entero.
+
+## 9. Seguimiento — 2026-10-13: SEG-2 y SEG-3 cerradas en código
+
+**Cerrado en código** (`526f4a0` y `87ebac9` en `feat/multisede-aios`, **sin pushear**). Lo que la ola 0 dejó abierto (§7).
+Cada uno con tests que fallan contra el código viejo (16 de 32):
+
+| ID | Estado | Cómo |
+|---|---|---|
+| SEG-2 (residual de AISLA-1) | ✅ cerrado en código; **vivo en producción hasta aplicar la 00072 y desplegar** | La BASE rechaza el segundo reclamo del mismo nivel: trigger AFTER INSERT de `mystery_box_results` con `pg_advisory_xact_lock` por cliente, espejo SQL de `elegirNivelSinReclamar()` (misma clave O mismo umbral, sin mirar marca), probado caso por caso contra la función de TS. `resolveMysteryBox()` lanza `NivelYaReclamadoError` y la ruta contesta 409 antes de `grantReward()` y del WhatsApp. → `points-mystery-box.md` §7.4.ter |
+| SEG-3 | ✅ cerrado en código, sin migración | `PUT /api/dashboard/tenant-config`, `brand-logo` (POST/DELETE) y el `PUT` de `meta-conversions` exigen alcance de marca (`exigirAlcanceDeMarca()`); los GET se quedan. Las pantallas dicen el 403 en español. → `multi-sede.md` §3.septies punto 7 |
+
+**Lo que NO se cerró, dicho con todas las letras.**
+
+- **Trigger y no UNIQUE.** Dos UNIQUE parciales habrían dicho lo mismo, pero no se crean si la historia tiene duplicados, y
+  nadie la midió todavía (no hay acceso a producción desde la sesión). La consulta de solo lectura está en
+  `SQL-PARA-CORRER/seg-2-carrera-resolve/`: informa y no frena la 00072. **Los premios repetidos que ya se regalaron siguen
+  ahí**; qué hacer con los que estén sin entregar es decisión del dueño.
+- **Depende de READ COMMITTED** (el nivel de PostgREST). En REPEATABLE READ el segundo reclamo no vería al primero.
+- **SEG-3 cerró también `brand-logo` y el token de `meta-conversions`**, que el prompt nombraba como consumidores: eran el
+  mismo agujero (el DELETE del logo lo borraba para todas las sedes). Configuración no se volvió de solo lectura entera para
+  el administrador de sede: el resto de sus tarjetas ya respondía 403 desde OPER-4 y no se tocaron. **Tres de ellas se
+  tragan ese 403** («Beneficios Black», «Sistema de puntos», «Check-in»: `catch` vacío) y quedan mudas →
+  `docs/PENDIENTES.md` §5, OPER-4-mudo.
+- **Verificado con Postgres embebido y dobles, NO en producción.** La 00072 no está aplicada en ningún Supabase.

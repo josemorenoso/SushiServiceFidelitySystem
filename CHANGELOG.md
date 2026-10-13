@@ -8,6 +8,21 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [fix] — 2026-10-13 — SEG-2 y SEG-3: un premio por nivel aunque lleguen dos a la vez, y la config de la marca solo la cambia un super usuario (00072 sin aplicar)
+
+- **SEG-2 (migración 00072, SIN aplicar):** dos `POST /api/mystery-box/resolve` simultáneos del mismo cliente otorgaban
+  dos premios y dos WhatsApp. Trigger AFTER INSERT de `mystery_box_results` con `pg_advisory_xact_lock` por cliente:
+  rechaza (23505) el nivel ya reclamado con la regla de `elegirNivelSinReclamar()` (misma clave O mismo umbral, sin mirar
+  marca). `resolveMysteryBox()` → `NivelYaReclamadoError` → **409 antes de otorgar y del WhatsApp**. Trigger y no UNIQUE:
+  la historia puede tener duplicados y no se toca. Consulta del dueño: `SQL-PARA-CORRER/seg-2-carrera-resolve/`.
+- **SEG-3:** `PUT /api/dashboard/tenant-config`, `brand-logo` (POST/DELETE) y el `PUT` de `meta-conversions` pasan por
+  `exigirAlcanceDeMarca()`; los GET se quedan. Un administrador de sede recibe 403 en español; Tarjeta principal avisa y
+  apaga Guardar/Subir/Quitar, Configuración muestra el 403 y manda a Sedes para el link de SU sede.
+- **Tests:** 32 nuevos (`tests/db/mystery-box-carrera.test.ts` 17 —la ruta real contra Postgres, el espejo en 12 casos—,
+  `tenant-config-permisos` 13, `mystery-box-resolve` +2); **16 caen contra el código anterior** (la ruta vieja daba 6
+  premios por 6 llamadas). Suite: **86 archivos / 1.373 tests**. Detalle: `points-mystery-box.md` §7.4.ter,
+  `multi-sede.md` §3.septies punto 7, auditoría §9.
+
 ## [feat] — 2026-10-13 — Recompensas en un solo lugar (S-1): catálogo y selectores de premio salen de Campañas y Ajustes
 
 - **Recompensas › «Premios para regalar»** (cuarta pestaña, `?tab=premios`): el catálogo (A7, sale de Campañas) y arriba

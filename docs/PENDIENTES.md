@@ -38,7 +38,7 @@
 | 2 | ✅ **Campañas, fases 0 y 0.bis: HECHAS el 2026-10-08 y el 2026-10-10** (sin migración; **pusheadas juntas a `main` el 2026-10-11, `2746d49`**). Un envío fallido ya no bloquea 30 o 360 días, pero cada toque admite 3 fallidos y no más · la insistente sale una vez mientras el cliente no vuelva · `error_message` dice la causa real · el texto de Campañas dice la verdad · una sola escala de días, también en Clientes y en «Rescatar Perdidos» | Nada. Línea base del SQL en `ESTADO.md` 0.CICLO; repetir la consulta hacia el 2026-11-11 | no |
 | 3 | ✅ **Plantillas: un solo libro y una sola pantalla — HECHO el 2026-10-11** (sin migración, **desplegado el 2026-10-12**): el panel reconoce la WABA, las tres plantillas nuevas entraron juntas, una pantalla para Twilio y Zernio, Biblioteca para campañas (§3). Quedan B1 y B7 (AIOS, menos aprobaciones), en una sesión posterior | Por marca, «Enviar los N juntos a Meta» (§3.4) | no |
 | 4 | **Encender el ciclo** (la fase 1B, los envíos, está HECHA el 2026-10-13, `CHANGELOG.md`; el ciclo nace apagado en todas las marcas). En orden: aplicar la **00071** ANTES del push → push → encender `demo-ventas` un día (envío simulado) → Don Alirio dos semanas → medir | Elegir el regalo pequeño y el fuerte de Don Alirio (o ninguno: sale sin regalo) y mirar su `?dry=1`. Todo en `SQL-PARA-CORRER/ciclo-fase-1b/LEEME.md` | 1 (escrita) |
-| 5 | **Recompensas en un solo lugar** (S-1) | Nada: C1–C3 ✅ decididas | 0 o 1 |
+| 5 | **Recompensas en un solo lugar** (S-1) — **prompt listo** (13-10): `docs/prompts/2026-10-13-recompensas-un-solo-lugar.md` (Sonnet). Incluye los selectores de los regalos del ciclo y el agujero de permisos del catálogo (`campaign-rewards` escribe con `requireTenantId()`) | Nada: C1–C3 ✅ decididas | 0 o 1 |
 | 6 | **Campañas, fase 2: la pantalla** (dos o tres sesiones) | A8: mirar el prototipo (no frena la fase 1) | no |
 | 7 | **Optimizar: los arreglos chicos** (§5), repartidos en una o dos sesiones | Solo el texto de 18.c | no |
 | 8 | **La tarjeta, las reseñas y los referidos** (§4.2) | C4–C8 | 1–2 |
@@ -251,7 +251,8 @@ Cada uno es menos de una hora. Juntos protegen todo lo que viene.
 | N6 | Los botones sí/no del webhook de Zernio esperan 10 s antes de contestar | El mismo riesgo de apagón que se cerró en ESCALA-3 |
 | N13 | El PIN del supervisor no tiene límite de intentos | Seguridad |
 | N18 | Un test de la analítica contra el Postgres real (el 500 del 04-10 lo habría cazado) + CI (PROC-1) | Cada push a `main` despliega |
-| SEG-2 · SEG-3 | La carrera de dos `resolve` simultáneos · `PUT tenant-config` abierto a un administrador de sede | Prompt listo: `docs/prompts/2026-10-04-seg2-resolve-y-tenant-config.md` |
+| SEG-2 · SEG-3 | La carrera de dos `resolve` simultáneos · `PUT tenant-config` abierto a un administrador de sede | Prompt listo y **actualizado el 13-10**: `docs/prompts/2026-10-04-seg2-resolve-y-tenant-config.md` |
+| AIOS-NOMBRE | El link de conexión del AIOS deja que Meta ponga el nombre del portafolio (a veces el de la persona) como nombre visible de WhatsApp: le pasó a Tepuy el 13-10. Tampoco muestra «falta método de pago / verificación» después de conectar | Cada alta nueva lo repite. Prompt listo: `docs/prompts/2026-10-13-aios-link-nombre-visible.md` |
 | 0.ETA | La importación de CSV cuenta como importados los que la base rechazó | Con 2+ sedes reporta éxito sobre cero filas |
 | 0.ESCALA (c) | Ninguna pantalla lee el error de la analítica: un 500 se ve como «0 clientes» | Lo que pasó el 04-10 |
 | AISLA-5 · AISLA-8 | Test del `timingSafeEqual` · el resto de AISLA-8 | Auditoría §3.1 |

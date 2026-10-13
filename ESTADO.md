@@ -33,7 +33,6 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
-| Comandante: Tepuy conectado (ESTADO 0.AIOS) y prompts S-1, SEG-2/3 y AIOS (2026-10-13) | Opus 5.5 | `ESTADO.md`, `docs/PENDIENTES.md`, `docs/prompts/2026-10-13-*.md` (nuevos), `docs/prompts/2026-10-04-seg2-resolve-y-tenant-config.md` | — | en curso |
 
 ## 3. Siguiente, en orden
 
@@ -183,20 +182,22 @@
    24-48 h de Meta, prueba a su celular, tanda de ≤250/día hasta que Meta suba el cupo. Pendiente
    de código: `tier_unlocked_template_sid` y `reward_reminder_template_sid` fuera del catálogo
    del AIOS (§5 del runbook) — solo pesa en la migración completa.
-0.AIOS **Tepuy: WhatsApp por Zernio, a la espera del número (2026-10-08).** El +57 604 201 1009 se compró desde el
-   panel de Zernio (standalone, perfil «Default») y NUNCA se verificó en Meta: las llamadas del código no llegaron
-   (tenía desvío y buzón, `domesticOnly`); el cliente lo escribió en el popup y Meta lo bloqueó hasta el 09-10 02:14 UTC.
-   Ya está en el perfil de Tepuy. En orden:
-   1. Responder a Zernio que SÍ al cambio por un +57 601 en el perfil de Tepuy (el 604 se libera). Sin desvío ni buzón
-      hasta que esté verificado.
-   2. Vercel del AIOS: `AIOS_CONNECT_LINK_SECRET` (nueva) y `ZERNIO_API_KEY` vigente; pushear el AIOS (v1.15.1).
-   3. Cuando el número diga `verified`: AIOS → Tepuy → paso 3 «Generar link para el cliente» (alinea solo el paso 2)
-      → mandárselo al cliente. Si no está verificado, el panel no da el link.
-   Detalle: `Level 2.0/aios-constelarys/docs/features/whatsapp-connect-link.md` y su contrato §3.a.
+0.AIOS **Tepuy: WhatsApp CONECTADO (2026-10-13), todavía NO puede escribir primero.** Zernio cambió el número en el
+   mismo registro por **+57 604 201 1012** (verificado en Meta el 12-10, vence 10-01-2027). El link del AIOS (v1.15.1, ya en
+   su `main`) salió bien a la primera (el comandante lo decodificó: perfil, número e id correctos, revisión encendida) y la
+   dueña conectó: WABA `2315429052538548`, cupo `TIER_2K`. **Faltan tres cosas de la dueña** (instrucciones ya enviadas):
+   1. **Método de pago** en su WhatsApp Manager: sin él, ningún mensaje que inicie la marca sale (bienvenida, puntos,
+      campañas); las respuestas dentro de las 24 h sí. Quién paga a Meta (ella directo o Cada1) es decisión del dueño.
+   2. **El nombre visible quedó «Yenifer Yohana Calle Morera»** (Meta lo llenó con el nombre del portafolio y lo aprobó al
+      instante): cambiarlo a «Tepuy» en WhatsApp Manager ANTES del primer mensaje (revisión 1-3 días; puede pedir pruebas).
+   3. **Verificación del negocio** (RUT o Cámara de Comercio).
+   Después: Plantillas → «Enviar los N juntos a Meta» en su panel. Para que no se repita en las otras marcas:
+   `docs/prompts/2026-10-13-aios-link-nombre-visible.md` (prompt listo). La `ZERNIO_API_KEY` del `.env.local` del AIOS está
+   muerta (401); la del producto funciona.
    ⚠️ `clubtepuy.constelarys.com` (raíz) con DOS sedes activas **no debe llevar a Envigado**: por D21
    responde 409 con la lista de sedes. Si lleva a Envigado, o Laureles está inactiva en el producto, o
    Envigado tiene el dominio raíz como propio. Se mira en `/dashboard/sedes` de Tepuy.
-0.PLANTILLAS **Plantillas: un solo libro y una sola pantalla — CONSTRUIDO el 2026-10-11, sin migración, SIN desplegar**
+0.PLANTILLAS **Plantillas: un solo libro y una sola pantalla — CONSTRUIDO el 2026-10-11, sin migración, DESPLEGADO el 2026-10-12**
    (`a37fdec`, `9c03807`, `4930097`; `docs/features/whatsapp-templates.md`). El panel reconoce lo que ya está en la WABA
    (en revisión, rechazado con motivo, el puntero del AIOS con su texto real) y un 400 «ya existe» adopta; «Nivel
    desbloqueado», «Recordatorio de premio» y «Regalo que vence» entraron JUNTAS al catálogo (16); Plantillas es UNA

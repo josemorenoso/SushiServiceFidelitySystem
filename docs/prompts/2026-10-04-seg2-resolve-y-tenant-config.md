@@ -1,4 +1,4 @@
-# Prompt — SEG-2 y SEG-3: lo que la ola 0 dejó abierto (2026-10-04)
+# Prompt — SEG-2 y SEG-3: lo que la ola 0 dejó abierto (2026-10-04, actualizado el 2026-10-13)
 
 > Propuesta de la sesión que cerró ESCALA-3 y ESCALA-4. **El dueño ordena la cola**: si prefiere otro rumbo
 > (la «Ola 1: rastrear» de la auditoría §5, o el orden de `docs/ESTADO-CONSOLIDADO-2026-10-04.md` si ya existe),
@@ -12,12 +12,15 @@ Después leé `docs/features/points-mystery-box.md` §7.4.ter («Lo que esto NO 
 (la deuda del `PUT /api/dashboard/tenant-config`, hacia la línea 198) y `docs/AUDITORIA-ESCALA-1000-2026-09-28.md` §7 y §8
 (qué cerró la ola 0, qué cerraron ESCALA-3/4 y qué quedó abierto).
 
-## CONTEXTO (ya hecho: no lo repitas)
-- La ola 0 de seguridad y ESCALA-3/ESCALA-4 están **desplegadas en `main`** (`c055e8e` y `9a06670`). La migración **00069 está
-  escrita pero el dueño todavía NO la aplicó** (cierra AISLA-2): no la edites ni asumas que corrió.
-- `main` y `feat/multisede-aios` **ya no son lo mismo** (`ESTADO.md` §1, fila Código): la rama tiene cosas que no se despliegan
-  (cumpleaños, arreglos de plantillas del 02-10). Lo que haya que llevar a `main` va por `cherry-pick` en un worktree con
-  `npm ci` propio, y lo ordena el dueño.
+## CONTEXTO (ya hecho: no lo repitas) — actualizado por el comandante el 2026-10-13
+- La ola 0 de seguridad y ESCALA-3/ESCALA-4 están en producción, y **la 00069 está APLICADA** (11-10).
+- **`main` y `feat/multisede-aios` vuelven a ser la MISMA historia** (desde el 04-10; `origin/main` = la rama al 13-10).
+  Nada de `cherry-pick`: trabajas en la rama, commiteas, y el push lo ordena el dueño (fast-forward).
+- **Antes de tocar nada:** lee `ESTADO.md`, anota tu fila en §2 y commitéala sola. Si vas a necesitar migración (SEG-2
+  casi seguro), corre `node scripts/proxima-migracion.mjs` en ese momento y pon el número en tu fila: es la única reserva,
+  y puede haber otra sesión viva (Recompensas, S-1) que también saque número.
+- Desde el 10-11 la ruta de plantillas, el ciclo de recuperación (fases 0, 0.bis, 1A y 1B) y PL-2-a cambiaron mucho
+  código: lee lo que vas a tocar en su estado de HOY, no en el de este prompt.
 
 ## TAREA
 Dos agujeros que la ola 0 dejó anotados y que **siguen vivos en producción**.
@@ -72,11 +75,11 @@ Dos agujeros que la ola 0 dejó anotados y que **siguen vivos en producción**.
 - **SEG-3:** tests (patrón de `tests/unit/settings-permisos.test.ts`, con los alcances fabricados por `decideLocationScope()`)
   que fallan antes y pasan después: `role='location'` → 403 y NADA escrito; super usuario de marca y operador de Cada1 → 200;
   fallo de base → 500. Las pantallas afectadas dicen el 403 en español.
-- `tsc` limpio, lint sin errores nuevos (en la rama hoy son 14, todos preexistentes) y la suite entera en verde (hoy
-  **61 archivos / 881 tests**).
+- `tsc` limpio, lint sin errores nuevos (en la rama hoy son 14, todos preexistentes) y la suite entera en verde (al 13-10
+  **82 archivos / 1.277 tests**).
 - Docs en el mismo commit que el código: `points-mystery-box.md` §7.4.ter (se cierra «Lo que esto NO tapa»), `meta-pixel.md`
   (la deuda del `PUT` sale), `multi-sede.md` §3.septies, `ESTADO.md` (tu fila fuera, foto y cola), `CHANGELOG.md` ≤ 15
   líneas y la auditoría (§9) marcando los dos como cerrados en código. Grafo: `update .` al cerrar.
-- Resumen en diez líneas y una línea que me pida el push con el hash. Si hay migración, aclarar cuál va antes.
-  ⚠️ `main` no hace fast-forward sobre la rama (`ESTADO.md` §1, fila Código): decí qué commits hay que llevar a `main`
-  (el de código, por `cherry-pick`; los docs de seguimiento —`ESTADO`, `CHANGELOG`, auditoría— se quedan en la rama).
+- Respuesta final para el comandante (el dueño se la pega): hashes, número de migración y si va ANTES del push, archivos,
+  por cada punto qué hiciste (archivo y línea) y su test, cuántos tests fallan contra el código anterior, tsc/lint/vitest con
+  números, y la consulta de duplicados de SEG-2 que el dueño tiene que correr antes de aplicar la migración.

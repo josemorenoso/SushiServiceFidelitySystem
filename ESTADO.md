@@ -33,6 +33,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Ciclo fase 1B: los envíos (cron que decide y encola, drenador que otorga, piloto) — 2026-10-13, prompt `docs/prompts/2026-10-12-ciclo-fase-1b-envios.md` | Opus 5.5 | `supabase/migrations/00071_*.sql` · `src/app/api/cron/reactivation/route.ts` · `src/app/api/cron/queue-drain/route.ts` · `src/services/send-queue.service.ts` · `src/services/reward-grant.service.ts` · `src/app/api/cron/reward-reminder/route.ts` (solo H2) · `src/services/campaign.service.ts` (solo `getMonthBoundaries()`) · `src/lib/cycle-engine.ts` (solo la simulación del recordatorio) · `src/lib/settings-keys.ts` · `src/lib/communications/registry.ts` · servicios nuevos (`src/services/cycle*.ts`) · `tests/**` (nuevos + `p1a-plantillas-paridad` + la línea de `ola0-seguridad`) · `SQL-PARA-CORRER/ciclo-fase-1b/` · `docs/DB_SCHEMA.md` · `docs/features/{campaigns,send-governance,reward-grants,ritmo-adaptativo}.md` · `docs/PENDIENTES.md` · `ESTADO.md` · `CHANGELOG.md` | **00071** | en curso |
 
 ## 3. Siguiente, en orden
 

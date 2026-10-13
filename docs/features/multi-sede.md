@@ -1048,6 +1048,37 @@ Hay dos salidas y **la elección es del dueño** (ESTADO §3, punto 0.DELTA):
 Lo que **no** se hace es backfillear el histórico: `location_id` NULL significa «sede
 desconocida» y se muestra (§ *Cero backfill*).
 
+### 7. Quién puede CAMBIAR la tarjeta, el logo, el link de reseñas y el píxel (SEG-3, 2026-10-13, sin migración)
+
+La misma deuda del punto 5, en la config de la marca: **`PUT /api/dashboard/tenant-config`
+autenticaba con `requireTenantId()`**, y un administrador de UNA sede cambiaba logo, paleta,
+tarjeta, link de reseñas, píxel y QR Studio de TODAS. Igual sus dos escritores hermanos:
+`/api/dashboard/brand-logo` (subir un logo **borra los anteriores** del bucket; el DELETE borra
+el de la marca entera) y `PUT /api/dashboard/meta-conversions` (el token de Meta de la marca).
+La ola 0 lo había dejado anotado (`docs/AUDITORIA-ESCALA-1000-2026-09-28.md` §7).
+
+**La regla ahora:** `config` es de la MARCA. Los tres escritores pasan por
+`exigirAlcanceDeMarca()`, ANTES de leer el cuerpo; falla cerrado (401 sin sesión, 403 sin
+alcance de marca, **500 si la base falló**, nunca un 403 por eso), y el operador de Cada1 sigue
+pudiendo (el `OR` de `puedeEscribirEnLaMarca()`). **Los GET se quedan** con `requireTenantId()`,
+por lo mismo que el de premios: leer no cruza marcas, y la pantalla la abren los dos roles. La
+whitelist de rutas y `merge_tenant_config_deep()` no se tocaron. Con 0 o 1 sede activa nada cambia.
+
+**Las pantallas lo dicen, en vez de fallar mudas:**
+
+- **Tarjeta principal** (`/dashboard/marca`): con `role='location'` (lo dice
+  `/api/dashboard/locations`, el mismo dato que usa Recompensas) aparece el aviso «La tarjeta es de
+  la marca», con un enlace a Sedes; Guardar, Subir logo y Quitar quedan apagados. La vista previa
+  sigue andando.
+- **Configuración** (`/dashboard/settings`): «Reseñas de Google» y «Píxel de Meta» muestran el 403
+  del servidor al lado del botón; el de reseñas agrega que **el link de SU sede se cambia en
+  Sedes**, que es la ruta que sí le corresponde (`PATCH /api/dashboard/locations/[id]`, no se tocó).
+
+**Pruebas:** `tests/unit/tenant-config-permisos.test.ts` (13; los alcances fabricados por
+`decideLocationScope()`, la decisión real): administrador de sede → 403 sin escribir nada en los
+tres escritores; super usuario y operador de Cada1 → 200; fallo de base → 500; sin sesión → 401;
+el GET sigue abierto. Contra el código anterior caen 5.
+
 ### Cómo se verifica
 
 - `npx vitest run tests/unit/reward-tiers-permisos.test.ts` — quién puede escribir los
@@ -1064,6 +1095,9 @@ desconocida» y se muestra (§ *Cero backfill*).
 - Con ese mismo usuario, abrir «Recompensas»: se ven los premios, el cartel explica que son
   de la marca, y crear/editar/borrar están apagados. Un `PATCH` a mano contra
   `/api/dashboard/reward-tiers` tiene que responder **403**, no 200.
+- Con ese mismo usuario, abrir «Tarjeta principal»: aviso «La tarjeta es de la marca» y Guardar,
+  Subir y Quitar apagados. En Configuración, guardar el link de reseñas o el píxel dice que solo un
+  super usuario puede. `npx vitest run tests/unit/tenant-config-permisos.test.ts`.
 
 ---
 

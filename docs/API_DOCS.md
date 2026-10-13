@@ -670,6 +670,13 @@ Google que no empieza por `http(s)://` · un gradiente que no sea `linear-gradie
 `radial-gradient(...)` · un tema o tamaño de QR fuera de lista · `qr_studio.tables` fuera de 1–200 ·
 un cuerpo sin nada editable.
 
+**Response 403** (SEG-3, 2026-10-13): quien llama es administrador de UNA sede (`role='location'`).
+`config` es de la marca entera: el PUT exige alcance de marca (`exigirAlcanceDeMarca()`) — super usuario
+o el operador de Cada1 — y responde `{ "error": "La tarjeta, el logo, los colores, el link de reseñas de
+la marca y el píxel son de todas las sedes: solo un super usuario puede cambiarlos." }` sin escribir
+nada. Va ANTES de leer el cuerpo. **401** sin sesión; **500** si la base falla al resolver el alcance
+(nunca un 403 por un fallo de base). El **GET** sigue abierto a cualquier sesión de la marca.
+
 ---
 
 ### Dashboard: Logo de la marca
@@ -688,8 +695,11 @@ Acepta `image/png`, `image/jpeg` y `image/webp` de hasta 8 MB. Re-codifica **sie
 **No escribe `tenants.config`.** El único escritor de `branding.logo_url` es el endpoint de config: el
 panel hace el PUT con la URL que devuelve esto. Un solo escritor por clave.
 
-- El prefijo `<tenant_id>` del path lo impone la ruta desde `requireTenantId()`, **nunca** el cuerpo
-  de la petición: es lo que hace verificable que la marca A no escriba sobre el logo de la marca B.
+- El prefijo `<tenant_id>` del path lo impone la ruta desde la sesión (`exigirAlcanceDeMarca()`),
+  **nunca** el cuerpo de la petición: es lo que hace verificable que la marca A no escriba sobre el
+  logo de la marca B.
+- **POST y DELETE exigen alcance de marca** (SEG-3, 2026-10-13): un administrador de sede recibe
+  **403** (`El logo es de todas las sedes: solo un super usuario puede cambiarlo.`) sin tocar el bucket.
 - El SVG **no se acepta**: en un bucket público es un vector de XSS.
 - El nombre lleva timestamp para que el CDN no siga sirviendo el logo anterior.
 

@@ -27,6 +27,13 @@
  * TODO lo que se guarda pasa por la whitelist de `src/lib/tenant-config-paths.ts`:
  * los símbolos y decoraciones son ids de una lista cerrada, nunca un SVG del
  * dueño (la config es pública y viaja al navegador).
+ *
+ * QUIÉN GUARDA (SEG-3, 2026-10-13): la tarjeta es de la MARCA, así que el PUT de
+ * `tenant-config` y el logo (`brand-logo`) exigen alcance de marca. Un
+ * administrador de sede abre la pantalla, la ve y puede jugar con la vista previa,
+ * pero Guardar, Subir y Quitar quedan apagados con un aviso que dice por qué y a
+ * dónde ir (Sedes, para lo de SU sede). Si igual llega un 403, se muestra el
+ * mensaje del servidor, en español.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -122,6 +129,10 @@ export default function MarcaPage() {
   const [screen, setScreen] = useState<PreviewScreen>('card')
   const [advanced, setAdvanced] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
+  // La tarjeta es de la MARCA: un administrador de sede la ve y no la guarda. La ruta lo
+  // hace cumplir (`exigirAlcanceDeMarca()`); esto es la otra mitad: no ofrecerle botones
+  // que van a responder 403. Mismo patrón que `RewardsLevelsPanel`.
+  const [soloLectura, setSoloLectura] = useState(false)
 
   const dirty = useMemo(() => FORM_KEYS.some((k) => form[k] !== initial[k]), [form, initial])
 
@@ -183,6 +194,15 @@ export default function MarcaPage() {
       }
     })()
     return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
+    fetch('/api/dashboard/locations')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (j?.role === 'location') setSoloLectura(true)
+      })
+      .catch(() => { /* sin la respuesta, la pantalla se comporta como siempre: la ruta decide */ })
   }, [])
 
   const patch = useCallback((changes: Partial<BrandForm>) => {
@@ -311,12 +331,29 @@ export default function MarcaPage() {
         </div>
         <div className="flex items-center gap-3">
           {dirty && <span className="text-xs font-medium text-amber-600">Cambios sin guardar</span>}
-          <Button onClick={handleSave} disabled={saving || !dirty} className="min-h-11 gap-2">
+          <Button onClick={handleSave} disabled={saving || !dirty || soloLectura} className="min-h-11 gap-2">
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : saved ? <CheckCircle className="h-4 w-4" /> : <Save className="h-4 w-4" />}
             {saved ? 'Guardado' : 'Guardar'}
           </Button>
         </div>
       </div>
+
+      {soloLectura && (
+        <Card className="border-dashed">
+          <CardContent className="flex items-start gap-3 p-4">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+            <div>
+              <p className="text-sm font-medium">La tarjeta es de la marca</p>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                Acá la podés ver y probar colores en la vista previa, pero guardarla le cambiaría la tarjeta a
+                todas las sedes a la vez, así que solo lo hace un super usuario. Pedíselo a quien administra la
+                marca. El link de reseñas y los datos de tu sede se cambian en{' '}
+                <Link href="/dashboard/sedes" className="font-medium underline">Sedes</Link>.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {error && (
         <div className="flex items-start gap-2 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -348,7 +385,10 @@ export default function MarcaPage() {
                   )}
                 </div>
                 <div className="flex flex-1 flex-wrap gap-2">
-                  <label className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-md border border-input bg-background px-4 text-sm font-medium hover:bg-accent">
+                  <label
+                    aria-disabled={soloLectura || undefined}
+                    className={`inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-md border border-input bg-background px-4 text-sm font-medium hover:bg-accent${soloLectura ? ' pointer-events-none opacity-50' : ''}`}
+                  >
                     {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
                     {form.logo_url ? 'Cambiar logo' : 'Subir logo'}
                     <input
@@ -356,12 +396,12 @@ export default function MarcaPage() {
                       type="file"
                       accept="image/png,image/jpeg,image/webp"
                       onChange={handleUpload}
-                      disabled={uploading}
+                      disabled={uploading || soloLectura}
                       className="hidden"
                     />
                   </label>
                   {form.logo_url && (
-                    <Button variant="outline" onClick={handleRemoveLogo} disabled={uploading} className="min-h-11 gap-2">
+                    <Button variant="outline" onClick={handleRemoveLogo} disabled={uploading || soloLectura} className="min-h-11 gap-2">
                       <Trash2 className="h-4 w-4 text-red-600" />
                       Quitar
                     </Button>

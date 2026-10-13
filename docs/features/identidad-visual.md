@@ -209,9 +209,14 @@ antes, poner un logo lo habría roto.
 
 Vive en el bucket público `brand-assets`, en `<tenant_id>/logo-<ts>.png`.
 
-- **El prefijo `tenant_id` lo impone la ruta de subida**, desde `requireTenantId()` y nunca desde el
-  cuerpo de la petición. Es lo que hace verificable de un vistazo que la marca A no escribe sobre el
+- **El prefijo `tenant_id` lo impone la ruta de subida**, desde la sesión (`exigirAlcanceDeMarca()`)
+  y nunca desde el cuerpo de la petición. Es lo que hace verificable de un vistazo que la marca A no escribe sobre el
   logo de la marca B.
+- **Lo cambia un super usuario, no un administrador de sede** (SEG-3, 2026-10-13). El logo y la tarjeta
+  son de todas las sedes: `brand-logo` (POST y DELETE) y el PUT de `tenant-config` exigen alcance de marca
+  (`exigirAlcanceDeMarca()`). En «Tarjeta principal» el administrador de sede ve la tarjeta y prueba la
+  vista previa, pero Guardar, Subir y Quitar quedan apagados con un aviso que lo manda a Sedes para lo de
+  SU sede. `docs/features/multi-sede.md` §3.septies punto 7.
 - **Bucket público** porque el logo se dibuja en tres sitios que no pueden autenticarse: el check-in,
   la tarjeta y el canvas del póster. Es el logo comercial del restaurante, el mismo que está en su
   fachada.

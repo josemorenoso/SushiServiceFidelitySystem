@@ -10,10 +10,11 @@
  * el PUT lo reemplaza o lo borra. No hay forma de leerlo de vuelta: quien lo
  * perdió genera otro en el Administrador de eventos de Meta, que es gratis.
  *
- * ⚠️ Autentica con `requireTenantId()`, igual que `tenant-config`: un
- * `role='location'` puede cambiar el token de la marca entera. Es la misma
- * deuda que el resto de la config de marca (`docs/features/meta-pixel.md`
- * § Pendiente) y no se arregla acá sola.
+ * El token es de la MARCA: el PUT exige alcance de marca (`exigirAlcanceDeMarca()`,
+ * SEG-3, 2026-10-13), igual que el PUT de `tenant-config` que guarda el id del
+ * píxel. Hasta acá autenticaba con `requireTenantId()` y un administrador de UNA
+ * sede cambiaba o borraba el token de todas. El GET (si hay token y de cuándo) se
+ * queda abierto a cualquier sesión de la marca.
  *
  * Ref: docs/features/meta-pixel.md
  */
@@ -22,6 +23,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { requireTenantId } from '@/lib/tenant'
+import { exigirAlcanceDeMarca } from '@/lib/alcance-de-marca'
 import { logDbFailure } from '@/lib/db-failure'
 import { META_CONVERSIONS_PROVIDER } from '@/lib/meta-conversions-server'
 import { validarTokenDeMeta } from '@/lib/meta-conversions'
@@ -67,6 +69,14 @@ export async function GET() {
 
 export async function PUT(request: NextRequest) {
   try {
+    const guardia = await exigirAlcanceDeMarca(
+      request,
+      'El token de Meta es de todas las sedes: solo un super usuario puede cambiarlo.'
+    )
+    if (!guardia.ok) return guardia.res
+    const tenantId = guardia.tenantId
+
+    // La sesión hace falta igual: `updated_by` dice quién cargó el token.
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
@@ -75,7 +85,6 @@ export async function PUT(request: NextRequest) {
     const validado = validarTokenDeMeta(body.token)
     if (!validado.ok) return NextResponse.json({ error: validado.error }, { status: 400 })
 
-    const tenantId = await requireTenantId()
     const service = getServiceClient()
 
     if (validado.token === '') {

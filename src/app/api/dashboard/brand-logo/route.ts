@@ -10,8 +10,8 @@
  * ──────────────────────────────────────────────
  * `brand-assets/<tenant_id>/logo-<ts>.png`. El prefijo no es cosmético: es lo que
  * hace verificable de un vistazo que la marca A no puede escribir sobre el logo
- * de la marca B. Y lo impone ESTA ruta — el `tenant_id` sale de
- * `requireTenantId()`, nunca del cuerpo de la petición.
+ * de la marca B. Y lo impone ESTA ruta — el `tenant_id` sale de la sesión
+ * (`exigirAlcanceDeMarca()`), nunca del cuerpo de la petición.
  *
  * POR QUÉ SE RE-CODIFICA SIEMPRE A PNG
  * ────────────────────────────────────
@@ -23,15 +23,22 @@
  *      oscuros en la tarjeta: hace falta canal alfa, y el JPEG no lo tiene.
  *   3. Tamaño acotado sin pedirle al dueño que redimensione nada.
  *
+ * QUIÉN PUEDE (SEG-3, 2026-10-13). El logo es de la MARCA: subir uno borra los
+ * anteriores del bucket, y el DELETE borra el de todas las sedes. Las dos pasan por
+ * `exigirAlcanceDeMarca()`, igual que el PUT de `tenant-config` que guarda la URL;
+ * hasta acá bastaba con `requireTenantId()` y un administrador de UNA sede le
+ * borraba el logo a la marca entera.
+ *
  * Ref: docs/features/identidad-visual.md · patrón calcado de
  *      `src/app/api/dashboard/calendar/media-upload/route.ts`
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
-import { requireTenantId } from '@/lib/tenant'
+import { exigirAlcanceDeMarca } from '@/lib/alcance-de-marca'
 import sharp from 'sharp'
+
+const SOLO_LA_MARCA_LOGO = 'El logo es de todas las sedes: solo un super usuario puede cambiarlo.'
 
 const BUCKET_ID = 'brand-assets'
 
@@ -56,11 +63,9 @@ function getServiceClient() {
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-
-    const tenantId = await requireTenantId()
+    const guardia = await exigirAlcanceDeMarca(request, SOLO_LA_MARCA_LOGO)
+    if (!guardia.ok) return guardia.res
+    const tenantId = guardia.tenantId
 
     const formData = await request.formData()
     const file = formData.get('file')
@@ -148,13 +153,11 @@ export async function POST(request: NextRequest) {
  * Borra TODOS los archivos del tenant en el bucket. Igual que el POST, no toca
  * `tenants.config`: el panel limpia `branding.logo_url` con su propio PUT.
  */
-export async function DELETE() {
+export async function DELETE(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-
-    const tenantId = await requireTenantId()
+    const guardia = await exigirAlcanceDeMarca(request, SOLO_LA_MARCA_LOGO)
+    if (!guardia.ok) return guardia.res
+    const tenantId = guardia.tenantId
     const db = getServiceClient()
 
     const { data: files, error: listError } = await db.storage.from(BUCKET_ID).list(tenantId)

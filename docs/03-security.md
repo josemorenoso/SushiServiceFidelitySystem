@@ -105,11 +105,12 @@ nunca un administrador de UNA sede. El guardián es `exigirAlcanceDeMarca()`
 |------|-------|
 | `POST/PATCH/DELETE /api/dashboard/reward-tiers` | 2026-09-09 |
 | `PUT /api/dashboard/settings` (todo `admin_settings`, `*_template_sid` incluidos) | ola 0, 2026-10-03 (OPER-4) |
+| `PUT /api/dashboard/tenant-config` (tarjeta, logo, paleta, link de reseñas de la marca, píxel) | 2026-10-13 (SEG-3) |
+| `POST/DELETE /api/dashboard/brand-logo` (el archivo del logo: subir uno borra los anteriores) | 2026-10-13 (SEG-3) |
+| `PUT /api/dashboard/meta-conversions` (el token de Meta de la marca) | 2026-10-13 (SEG-3) |
 
-Las lecturas (`GET`) siguen abiertas a cualquier sesión de la marca: leer no cruza marcas.
-**Sigue abierta la misma deuda en `PUT /api/dashboard/tenant-config`** (`docs/features/meta-pixel.md`):
-autentica con `requireTenantId()`, así que un `role='location'` cambia logo, paleta, tarjeta,
-link de reseñas y píxel de la marca entera. No entró en la ola 0.
+Las lecturas (`GET`) siguen abiertas a cualquier sesión de la marca: leer no cruza marcas. El link de
+reseñas de UNA sede no es de la marca: lo cambia su administrador por `/dashboard/sedes`.
 
 ## Permisos de sede del dashboard (F7, D10)
 

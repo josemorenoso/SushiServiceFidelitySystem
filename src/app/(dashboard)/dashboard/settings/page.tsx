@@ -283,16 +283,17 @@ export default function SettingsPage() {
     setReviewSaving(true)
     setReviewSaved(false)
     try {
-      const [resConfig] = await Promise.all([
-        fetch('/api/dashboard/tenant-config', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ google_maps_url: url }),
-        }),
-      ])
+      const resConfig = await fetch('/api/dashboard/tenant-config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ google_maps_url: url }),
+      })
       if (!resConfig.ok) {
-        const data = await resConfig.json()
-        throw new Error(data.error ?? 'Error guardando el link')
+        const data = await resConfig.json().catch(() => ({}))
+        // 403 = administrador de sede (SEG-3): el link de la MARCA es de un super usuario,
+        // pero el de SU sede sí lo puede cambiar, en Sedes. Se lo decimos en vez de dejarlo ahí.
+        const aDondeIr = resConfig.status === 403 ? ' El link de reseñas de tu sede se cambia en Sedes.' : ''
+        throw new Error((data.error ?? 'Error guardando el link') + aDondeIr)
       }
       setReviewSaved(true)
       setTimeout(() => setReviewSaved(false), 3000)
@@ -342,7 +343,8 @@ export default function SettingsPage() {
         body: JSON.stringify({ 'integrations.meta_pixel_id': raw }),
       })
       if (!res.ok) {
-        const data = await res.json()
+        // Un 403 (administrador de sede, SEG-3) trae su motivo en español: se muestra tal cual.
+        const data = await res.json().catch(() => ({}))
         throw new Error(data.error ?? 'Error guardando el píxel')
       }
       setMetaPixelId(normalizeMetaPixelId(raw) ?? '')

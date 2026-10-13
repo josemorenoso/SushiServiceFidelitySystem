@@ -137,6 +137,11 @@ Lo que sí sigue siendo de Cada1 y no tiene problema: **números agregados** sin
   `tenant_integration_secrets` (00061), que solo lee el service role, y ningún endpoint lo devuelve.
   Un `access_token` en `config.integrations` es la fuga que la regla 1 de ese espacio existe para
   evitar.
+- **El píxel y el token son de la MARCA: los cambia un super usuario** (SEG-3, 2026-10-13). El
+  `PUT` de `tenant-config` (el id) y el de `meta-conversions` (el token) pasan por
+  `exigirAlcanceDeMarca()`; un administrador de UNA sede recibe 403 con el motivo en español, y la
+  tarjeta «Píxel de Meta» de Configuración lo muestra al lado del botón. Los GET siguen abiertos a la
+  marca. `docs/features/multi-sede.md` §3.septies punto 7.
 - **Las pantallas del mesero NO se miden** (`isMeasuredPath()`). No es una cuestión legal sino de
   calidad del dato: el mesero abre la pantalla de escaneo cuarenta veces por turno desde el celular
   del local. Medirlo mete al empleado en la audiencia con el perfil del cliente más fiel que existe,
@@ -195,8 +200,5 @@ Lo que sí sigue siendo de Cada1 y no tiene problema: **números agregados** sin
   `scheduleMetaConversion()`; hoy no se hace.
 - **`META_GRAPH_API_VERSION` = v23.0.** Meta la retira en ~2027; cuando la API responda 400 con
   `code: 2635`, se sube en `meta-conversions.ts`.
-- **`PUT /api/dashboard/tenant-config` autentica con `requireTenantId()`**, así que un
-  `role='location'` puede cambiar el píxel de la marca entera. Es la misma deuda que se cerró el 09
-  en `/api/dashboard/reward-tiers` (`exigirAlcanceDeMarca()`) y sigue abierta para TODA la config de
-  la marca —logo, paleta, tarjeta, link de reseñas—, no solo para el píxel. No se tocó acá: arreglarlo
-  es una sesión propia y cambia el comportamiento de seis pantallas.
+- ~~`PUT /api/dashboard/tenant-config` abierto a un administrador de sede~~ — cerrado en código por
+  SEG-3 (2026-10-13), junto con el token: ver arriba, «El píxel y el token son de la MARCA».

@@ -18,14 +18,28 @@
  * convierte al patch anidado que espera la base. Se eligió plano porque hace
  * imposible mandar un espacio entero por accidente: cada campo viaja solo.
  *
- * Ref: docs/features/identidad-visual.md · docs/features/review-flow.md
+ * QUIÉN ESCRIBE (SEG-3, 2026-10-13). `config` es de la MARCA entera, así que el PUT
+ * exige alcance de marca: `exigirAlcanceDeMarca()`, el guardián de OPER-4
+ * (`settings`) y de `reward-tiers`. Hasta acá autenticaba con `requireTenantId()`
+ * y un administrador de UNA sede cambiaba logo, paleta, tarjeta, link de reseñas,
+ * píxel y QR Studio de todas. El GET se queda abierto a cualquier sesión de la
+ * marca: leer no cruza marcas, y la pantalla la abren los dos roles. El link de
+ * reseñas de UNA sede no pasa por acá: se guarda por `/dashboard/sedes`.
+ *
+ * Ref: docs/features/identidad-visual.md · docs/features/review-flow.md ·
+ *      docs/features/multi-sede.md §3.septies
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { requireTenantId } from '@/lib/tenant'
+import { exigirAlcanceDeMarca } from '@/lib/alcance-de-marca'
 import { buildConfigPatch, projectEditablePaths } from '@/lib/tenant-config-paths'
+
+/** Lo que lee en su pantalla un administrador de sede que intenta guardar. */
+const SOLO_LA_MARCA_CONFIG =
+  'La tarjeta, el logo, los colores, el link de reseñas de la marca y el píxel son de todas las sedes: solo un super usuario puede cambiarlos.'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -64,12 +78,14 @@ export async function GET() {
 
 export async function PUT(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+    // La puerta va PRIMERO, antes de leer el cuerpo: un administrador de sede no
+    // tiene que recibir los 400 de validación de una pantalla que no le toca.
+    // Falla CERRADO: 401 sin sesión, 403 sin alcance de marca, 500 si la base falló.
+    const guardia = await exigirAlcanceDeMarca(request, SOLO_LA_MARCA_CONFIG)
+    if (!guardia.ok) return guardia.res
+    const tenantId = guardia.tenantId
 
     const body = (await request.json()) as Record<string, unknown>
-    const tenantId = await requireTenantId()
     const service = getServiceClient()
 
     const built = buildConfigPatch(body)

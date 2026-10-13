@@ -8,6 +8,11 @@
  * El dueño crea "2x1 en sushi", le queda un enlace y su QR, lo manda por WhatsApp
  * o lo pone en redes. Acá ve cuántos se registraron, cuántos VINIERON (el mesero
  * les entregó) y cuántos dejaron vencer el premio.
+ *
+ * El premio se ELIGE del catálogo de la marca (Recompensas › Premios para regalar) o se escribe
+ * libre, como siempre (S-1, C3, 2026-10-13). Elegir del catálogo solo LLENA el título: la
+ * invitación guarda el texto (`qr_campaigns.reward_title`), igual que cada premio otorgado guarda
+ * su título como snapshot, así que no hace falta enlazarla por id (sin migración).
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -19,6 +24,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Plus, Copy, Download, Link2, Loader2, Pause, Play, Crosshair, Check } from 'lucide-react'
 import { toast } from 'sonner'
+import type { CampaignReward } from '@/types/database.types'
 
 interface Stats { granted: number; redeemed: number; pending: number; expired: number }
 interface Campaign {
@@ -74,7 +80,7 @@ function InviteQr({ url, nombre }: { url: string; nombre: string }) {
   )
 }
 
-export function InviteCampaignsPanel() {
+export function InviteCampaignsPanel({ irAPremios }: { irAPremios?: () => void } = {}) {
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [publicBase, setPublicBase] = useState('')
   const [goldenSlug, setGoldenSlug] = useState<string | null>(null)
@@ -87,6 +93,10 @@ export function InviteCampaignsPanel() {
   const [name, setName] = useState('')
   const [rewardTitle, setRewardTitle] = useState('')
   const [rewardDesc, setRewardDesc] = useState('')
+  // El catálogo de premios para regalar (solo activos) y cuál se eligió. `null` = no se pudo leer:
+  // se dice, y el premio se puede escribir libre igual.
+  const [catalogo, setCatalogo] = useState<CampaignReward[] | null>(null)
+  const [catalogoId, setCatalogoId] = useState('')
   const [windowDays, setWindowDays] = useState<string>('30')
   const [maxGrants, setMaxGrants] = useState<string>('')
   const [endsAt, setEndsAt] = useState<string>('')
@@ -108,6 +118,24 @@ export function InviteCampaignsPanel() {
   useEffect(() => {
     void cargar()
   }, [cargar])
+
+  useEffect(() => {
+    fetch('/api/dashboard/campaign-rewards?active=true')
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        const data: unknown = await r.json()
+        if (!Array.isArray(data)) throw new Error('respuesta inesperada')
+        setCatalogo(data as CampaignReward[])
+      })
+      .catch(() => setCatalogo(null))
+  }, [])
+
+  const elegirDelCatalogo = (id: string) => {
+    setCatalogoId(id)
+    const premio = catalogo?.find((p) => p.id === id)
+    // Elegir llena el título. «Escribir uno libre» (vacío) deja lo que ya se había escrito.
+    if (premio) setRewardTitle(premio.title)
+  }
 
   const crear = async () => {
     if (!name.trim() || !rewardTitle.trim()) return
@@ -132,7 +160,7 @@ export function InviteCampaignsPanel() {
       }
       toast.success('Invitación creada. Copiá el enlace o descargá el QR.')
       setCreando(false)
-      setName(''); setRewardTitle(''); setRewardDesc(''); setWindowDays('30'); setMaxGrants(''); setEndsAt('')
+      setName(''); setRewardTitle(''); setRewardDesc(''); setCatalogoId(''); setWindowDays('30'); setMaxGrants(''); setEndsAt('')
       await cargar()
     } catch {
       toast.error('Error de conexión')
@@ -224,7 +252,38 @@ export function InviteCampaignsPanel() {
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="inv-reward" className="text-xs uppercase tracking-wide text-muted-foreground">Qué se regala</Label>
-                <Input id="inv-reward" value={rewardTitle} onChange={(e) => setRewardTitle(e.target.value)} placeholder="2x1 en sushi rolls" />
+                {catalogo === null ? (
+                  <p className="text-xs text-muted-foreground">
+                    No se pudo leer el catálogo de premios: escríbelo a mano.
+                  </p>
+                ) : catalogo.length > 0 ? (
+                  <select
+                    id="inv-reward-catalogo"
+                    value={catalogoId}
+                    onChange={(e) => elegirDelCatalogo(e.target.value)}
+                    className="h-9 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm transition-colors outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/50"
+                  >
+                    <option value="">— Escribir uno libre —</option>
+                    {catalogo.map((p) => (
+                      <option key={p.id} value={p.id}>{p.title}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Aún no tienes premios en el catálogo.{' '}
+                    {irAPremios && (
+                      <button type="button" className="underline" onClick={irAPremios}>
+                        Crear uno en Premios para regalar
+                      </button>
+                    )}
+                  </p>
+                )}
+                <Input
+                  id="inv-reward"
+                  value={rewardTitle}
+                  onChange={(e) => { setRewardTitle(e.target.value); setCatalogoId('') }}
+                  placeholder="2x1 en sushi rolls"
+                />
               </div>
             </div>
             <div className="space-y-1.5">

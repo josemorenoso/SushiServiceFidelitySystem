@@ -1,11 +1,15 @@
 'use client'
 
 /**
- * Recompensas — una sola pantalla con tres pestañas.
+ * Recompensas — una sola pantalla con cuatro pestañas.
  *
  * · Niveles y premios — lo que ganan por puntos (lo que siempre estuvo acá).
  * · Invitaciones — un enlace o QR que regala algo a quien se registre
  *   (docs/features/invite-campaigns.md).
+ * · Premios para regalar — el catálogo de premios que las campañas regalan y para qué se usa
+ *   cada uno (regalo fuerte, regalo pequeño, reseña). Era la pestaña «Premios» de Campañas y dos
+ *   bloques de Ajustes; `/dashboard/campaigns?tab=premios` y `/dashboard/campaign-rewards`
+ *   redirigen acá (S-1, 2026-10-13; docs/features/reward-grants.md).
  * · Redenciones — lo que el mesero entregó, con mesa y nombre. Antes era una
  *   página aparte; `/dashboard/redemptions` sigue funcionando y redirige acá.
  *
@@ -24,8 +28,9 @@ import { Gift } from 'lucide-react'
 import { RewardsLevelsPanel } from '@/components/dashboard/RewardsLevelsPanel'
 import { InviteCampaignsPanel } from '@/components/dashboard/InviteCampaignsPanel'
 import { RedemptionsPanel } from '@/components/dashboard/RedemptionsPanel'
+import { PremiosParaRegalarPanel } from '@/components/dashboard/PremiosParaRegalarPanel'
 
-const TABS = new Set(['niveles', 'invitaciones', 'redenciones'])
+const TABS = new Set(['niveles', 'invitaciones', 'premios', 'redenciones'])
 
 const noSubscribe = () => () => {}
 const leerTabDeUrl = () => {
@@ -54,6 +59,7 @@ export default function RewardsPage() {
         <TabsList>
           <TabsTrigger value="niveles">Niveles y premios</TabsTrigger>
           <TabsTrigger value="invitaciones">Invitaciones</TabsTrigger>
+          <TabsTrigger value="premios">Premios para regalar</TabsTrigger>
           <TabsTrigger value="redenciones">Redenciones</TabsTrigger>
         </TabsList>
 
@@ -61,7 +67,10 @@ export default function RewardsPage() {
           <RewardsLevelsPanel />
         </TabsContent>
         <TabsContent value="invitaciones" className="mt-4">
-          <InviteCampaignsPanel />
+          <InviteCampaignsPanel irAPremios={() => setTab('premios')} />
+        </TabsContent>
+        <TabsContent value="premios" className="mt-4">
+          <PremiosParaRegalarPanel />
         </TabsContent>
         <TabsContent value="redenciones" className="mt-4">
           <RedemptionsPanel />

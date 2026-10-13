@@ -22,10 +22,9 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import Link from 'next/link'
-import { Megaphone, Cake, UserX, Send, Zap, Clock, CheckCircle, AlertTriangle, Settings2, MessageSquareText, BarChart3, CalendarClock, Gift } from 'lucide-react'
+import { Megaphone, Cake, UserX, Send, Zap, Clock, CheckCircle, AlertTriangle, Settings2, MessageSquareText, BarChart3, CalendarClock } from 'lucide-react'
 import { ManualCampaigns } from '@/components/dashboard/ManualCampaigns'
 import { AtRiskBubbles } from '@/components/dashboard/AtRiskBubbles'
-import { CampaignRewardsCatalog } from '@/components/dashboard/CampaignRewardsCatalog'
 import { WalletCard } from '@/components/dashboard/WalletCard'
 import { CupoEnvioCard } from '@/components/dashboard/CupoEnvioCard'
 import { SegmentRadar } from '@/components/dashboard/SegmentRadar'
@@ -126,13 +125,15 @@ export default function CampaignsPage() {
   const [runError, setRunError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState('automaticas')
 
-  // Preselección de pestaña por query (?tab=premios) para los enlaces viejos a
-  // /dashboard/campaign-rewards, que ahora redirigen acá. Se lee del
-  // `window.location.search` en vez de `useSearchParams()`: ese hook fuerza el
-  // CSR bailout en esta versión de Next (ver CLAUDE.md).
+  // Preselección de pestaña por query (?tab=manuales). Se lee del `window.location.search` en
+  // vez de `useSearchParams()`: ese hook fuerza el CSR bailout en esta versión de Next (ver
+  // CLAUDE.md). `?tab=premios` era la pestaña «Premios», que desde 2026-10-13 vive en
+  // Recompensas (S-1): el enlace viejo sigue sirviendo y lleva allá.
   useEffect(() => {
     const tab = new URLSearchParams(window.location.search).get('tab')
-    if (tab === 'premios' || tab === 'manuales' || tab === 'historial' || tab === 'automaticas') {
+    if (tab === 'premios') {
+      window.location.replace('/dashboard/rewards?tab=premios')
+    } else if (tab === 'manuales' || tab === 'historial' || tab === 'automaticas') {
       setActiveTab(tab)
     }
   }, [])
@@ -316,10 +317,6 @@ export default function CampaignsPage() {
         <TabsList className="w-full">
           <TabsTrigger value="automaticas" className="flex-1">Automáticas</TabsTrigger>
           <TabsTrigger value="manuales" className="flex-1">Manuales</TabsTrigger>
-          <TabsTrigger value="premios" className="flex-1 gap-1.5">
-            <Gift className="h-3.5 w-3.5" />
-            Premios
-          </TabsTrigger>
           <TabsTrigger value="historial" className="flex-1">Historial</TabsTrigger>
         </TabsList>
 
@@ -480,10 +477,6 @@ export default function CampaignsPage() {
             aggressiveDays={aggressiveDaysNum}
           />
           <ManualCampaigns />
-        </TabsContent>
-
-        <TabsContent value="premios" className="pt-4">
-          <CampaignRewardsCatalog />
         </TabsContent>
 
         <TabsContent value="historial" className="pt-4">

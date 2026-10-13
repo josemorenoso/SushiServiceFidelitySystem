@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireTenantId } from '@/lib/tenant'
+import { exigirAlcanceDeMarca } from '@/lib/alcance-de-marca'
 import {
   getCampaignRewards,
   createCampaignReward,
@@ -14,10 +15,19 @@ import {
  * Los premios que las campañas otorgan como `reward_grants`: reactivación agresiva hoy;
  * referidos, promos y recompensa por reseña después.
  *
+ * Las escrituras (crear, editar, retirar) pasan por `exigirAlcanceDeMarca()`: el catálogo es de
+ * la MARCA, y hasta el 2026-10-13 las autenticaba `requireTenantId()`, que solo mira que el JWT
+ * traiga una marca — un administrador de UNA sede (`role='location'`) cambiaba el catálogo de
+ * toda la marca. Es el mismo agujero que se cerró en `reward-tiers` el 2026-09-09. El GET se
+ * queda como estaba, a propósito: leer no cruza marcas (cada consulta filtra por `tenant_id`) y
+ * la pantalla de Recompensas la abren los dos roles para ver el catálogo.
+ *
  * Ref: docs/features/reward-grants.md
  */
 
 export const dynamic = 'force-dynamic'
+
+const SOLO_LA_MARCA = 'El catálogo de premios es de la marca: solo un super usuario puede cambiarlo.'
 
 async function requireAdmin() {
   const supabase = await createClient()
@@ -44,9 +54,9 @@ export async function GET(request: NextRequest) {
 
 /** POST — Crea un premio. */
 export async function POST(request: NextRequest) {
-  if (!(await requireAdmin())) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  }
+  const guardia = await exigirAlcanceDeMarca(request, SOLO_LA_MARCA)
+  if (!guardia.ok) return guardia.res
+  const tenantId = guardia.tenantId
 
   try {
     const body = await request.json()
@@ -56,7 +66,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'El título es requerido' }, { status: 400 })
     }
 
-    const tenantId = await requireTenantId()
     const reward = await createCampaignReward(
       { title, description: body.description?.trim() || null },
       tenantId
@@ -70,9 +79,9 @@ export async function POST(request: NextRequest) {
 
 /** PATCH — Actualiza un premio (título, descripción o estado). */
 export async function PATCH(request: NextRequest) {
-  if (!(await requireAdmin())) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  }
+  const guardia = await exigirAlcanceDeMarca(request, SOLO_LA_MARCA)
+  if (!guardia.ok) return guardia.res
+  const tenantId = guardia.tenantId
 
   try {
     const body = await request.json()
@@ -89,7 +98,6 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Nada que actualizar' }, { status: 400 })
     }
 
-    const tenantId = await requireTenantId()
     const reward = await updateCampaignReward(body.id, patch, tenantId)
     return NextResponse.json(reward)
   } catch (error) {
@@ -106,9 +114,9 @@ export async function PATCH(request: NextRequest) {
  * lo siguen viendo y el mesero lo sigue pudiendo entregar.
  */
 export async function DELETE(request: NextRequest) {
-  if (!(await requireAdmin())) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  }
+  const guardia = await exigirAlcanceDeMarca(request, SOLO_LA_MARCA)
+  if (!guardia.ok) return guardia.res
+  const tenantId = guardia.tenantId
 
   try {
     const id = new URL(request.url).searchParams.get('id')
@@ -116,7 +124,6 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'id es requerido' }, { status: 400 })
     }
 
-    const tenantId = await requireTenantId()
     await deactivateCampaignReward(id, tenantId)
     return NextResponse.json({ ok: true })
   } catch (error) {

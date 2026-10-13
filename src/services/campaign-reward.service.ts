@@ -11,6 +11,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js'
+import { logDbFailure } from '@/lib/db-failure'
 import type { CampaignReward } from '@/types/database.types'
 
 function getServiceClient() {
@@ -20,6 +21,12 @@ function getServiceClient() {
   return createClient(url, key)
 }
 
+/**
+ * El catálogo de la marca. **Lanza si la base falla**: antes devolvía `[]`, y para la pantalla
+ * «Premios para regalar» un fallo era idéntico a «todavía no hay premios» (el selector quedaba
+ * vacío, como si la marca no hubiera elegido ninguno). El único llamador es el GET de
+ * `/api/dashboard/campaign-rewards`, que lo convierte en un 500 visible.
+ */
 export async function getCampaignRewards(
   tenantId: string,
   onlyActive = false
@@ -35,8 +42,13 @@ export async function getCampaignRewards(
 
   const { data, error } = await query
   if (error) {
-    console.error('[CampaignReward] Error listando catálogo:', error.message)
-    return []
+    logDbFailure({
+      scope: 'CampaignReward',
+      reason: 'list_catalog_error',
+      error,
+      context: { tenant_id: tenantId },
+    })
+    throw new Error(`No se pudo leer el catálogo de premios: ${error.message}`)
   }
   return (data ?? []) as CampaignReward[]
 }

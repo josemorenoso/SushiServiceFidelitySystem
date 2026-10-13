@@ -8,6 +8,20 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [feat] — 2026-10-13 — Recompensas en un solo lugar (S-1): catálogo y selectores de premio salen de Campañas y Ajustes
+
+- **Recompensas › «Premios para regalar»** (cuarta pestaña, `?tab=premios`): el catálogo (A7, sale de Campañas) y arriba
+  «Para qué se usa cada premio» (C1, sale de Ajustes): regalo fuerte (`aggressive_reward_id` + ventana + recordatorio de
+  vencimiento), regalo pequeño (`cycle_small_reward_ids`) y premio por reseña. El fuerte es también el del rescate del ciclo.
+- **C2:** cada selector dice cuánto dura («vence a los 7 días»; en el ciclo, «vence el domingo»). Un premio retirado o ajeno
+  se muestra con «ya no está activo: elige otro», nunca como selector vacío; si la lectura falla, se dice.
+- **Enlaces viejos** (`campaigns?tab=premios`, `/dashboard/campaign-rewards`) llevan a Recompensas; Ajustes deja una tarjeta.
+- **Permisos:** las escrituras de `campaign-rewards` pasan por `exigirAlcanceDeMarca()` (un `role='location'` cambiaba el
+  catálogo de TODA la marca, como `reward-tiers` el 09-09); el GET da 500 si la base falla (antes `[]`).
+- **C3:** las invitaciones eligen del catálogo o escriben libre. **Sin migración:** llena `reward_title`, que ya es el snapshot.
+- **Tests:** 63 nuevos (2 archivos); 20 caen contra `6f69ee7`. Suite: **85 archivos / 1.360 tests**.
+  Detalle: `docs/features/reward-grants.md` § «Dónde vive cada premio».
+
 ## [feat] — 2026-10-13 — Ciclo de recuperación, fase 1B: el cron decide y encola, el drenador envía y otorga (00071 sin aplicar)
 
 - **Migración 00071, SIN aplicar (va ANTES del push):** el toque gana `attempts`, `reason`, `reward_id`, `gift_size`,

@@ -1,6 +1,6 @@
 # Feature: Campañas — Control de Tráfico Centralizado
 
-**Última actualización:** 2026-10-13 (ciclo, fase 1B: **el cron decide y encola por marca** —ciclo apagado: el camino de siempre; encendido: los toques del ciclo—, migración 00071 sin aplicar, ciclo apagado en todas las marcas; § «El ciclo encendido»); antes 2026-10-11 (ciclo, fase 1A: la base del motor, migración 00070, **nada se envía**; § «Fase 1A»); antes 2026-10-10 (ciclo, fase 0.bis: tope de 3 intentos fallidos por toque, la causa real del fallo, lo que salió queda marcado aunque la corrida aborte); antes 2026-10-08 (fase 0: un fallo no calla, el insistente sale una vez, una sola escala de días)
+**Última actualización:** 2026-10-13 (S-1: la pestaña «Premios» **salió de Campañas** y vive en Recompensas, § «Novedades v2.10.0»); antes 2026-10-13 (ciclo, fase 1B: **el cron decide y encola por marca** —ciclo apagado: el camino de siempre; encendido: los toques del ciclo—, migración 00071 sin aplicar, ciclo apagado en todas las marcas; § «El ciclo encendido»); antes 2026-10-11 (ciclo, fase 1A: la base del motor, migración 00070, **nada se envía**; § «Fase 1A»); antes 2026-10-10 (ciclo, fase 0.bis: tope de 3 intentos fallidos por toque, la causa real del fallo, lo que salió queda marcado aunque la corrida aborte); antes 2026-10-08 (fase 0: un fallo no calla, el insistente sale una vez, una sola escala de días)
 
 > ⚠️ **El ciclo de recuperación, por marca (2026-10-13).** El cron de reactivación tiene DOS caminos y cada marca va por
 > uno: con `cycle_enabled` apagado (las 25 hoy) hace exactamente lo de siempre —el suave y el insistente que describe este
@@ -95,7 +95,21 @@ pantalla cambia todavía: `deriveCycleBands()` sigue siendo la escala de las pan
 
 ---
 
+## Novedades v2.10.0 (2026-10-13) — los premios ya no viven en Campañas (S-1)
+
+- **La pestaña «Premios» salió de Campañas** (decisión A7 del dueño) y es ahora **Recompensas › Premios para regalar**
+  (`/dashboard/rewards?tab=premios`). Campañas queda con Automáticas · Manuales · Historial. Los enlaces viejos siguen
+  sirviendo: `/dashboard/campaigns?tab=premios` y `/dashboard/campaign-rewards` llevan a la pestaña nueva.
+- **Qué premio regala cada campaña ya no se elige en Ajustes** (decisión C1): el regalo de la reactivación insistente (y
+  del rescate del ciclo), el regalo pequeño del ciclo y el premio de la reseña se eligen en esa misma pestaña, arriba del
+  catálogo. Ajustes deja una tarjeta que lleva allá. Detalle y claves: [`reward-grants.md`](reward-grants.md) § «Dónde vive
+  cada premio».
+- La tarjeta «Activa» de la reactivación en esta pantalla **sigue sin mirar** el premio de la insistente
+  (`aggressive_reward_id`): la reemplaza la fase 2 del ciclo, no se arregló acá.
+
 ## Novedades v2.9.0 (2026-09-08)
+
+> _Desde el 2026-10-13 la pestaña «Premios» vive en Recompensas (v2.10.0); lo que sigue es la historia._
 
 - **Pestaña "Premios"** en `/dashboard/campaigns`: el catálogo de premios de campaña (crear,
   listar, retirar/reactivar) que antes vivía en la página propia `/dashboard/campaign-rewards`
@@ -501,9 +515,9 @@ los defaults dicen lo mismo; con días propios, no.
 | `src/lib/cycle-touch.ts` | El ciclo, puro: qué toque le toca hoy a cada cliente, regalo, adaptador, hora, guardas del drenador |
 | `src/services/cycle.service.ts` | El ciclo con I/O: el cron de una marca encendida y lo que el drenador necesita |
 | `src/app/(dashboard)/dashboard/settings/page.tsx` | UI de configuración de días |
-| `src/app/(dashboard)/dashboard/campaigns/page.tsx` | UI rediseñada del módulo (incluye la pestaña Premios) |
-| `src/components/dashboard/CampaignRewardsCatalog.tsx` | Catálogo de premios de campaña (pestaña Premios) |
-| `src/app/(dashboard)/dashboard/campaign-rewards/page.tsx` | Ruta vieja: redirige a `campaigns?tab=premios` |
+| `src/app/(dashboard)/dashboard/campaigns/page.tsx` | UI rediseñada del módulo (Automáticas · Manuales · Historial; `?tab=premios` redirige a Recompensas) |
+| `src/components/dashboard/CampaignRewardsCatalog.tsx` | Catálogo de premios para regalar (vive en Recompensas › Premios para regalar desde 2026-10-13) |
+| `src/app/(dashboard)/dashboard/campaign-rewards/page.tsx` | Ruta vieja: redirige a `rewards?tab=premios` |
 | `src/app/api/cron/birthday/route.ts` | Cron cumpleaños |
 | `src/app/api/dashboard/campaigns/manual/route.ts` | Campañas manuales |
 | `src/app/api/dashboard/campaigns/estimate/route.ts` | Estimado de audiencia |

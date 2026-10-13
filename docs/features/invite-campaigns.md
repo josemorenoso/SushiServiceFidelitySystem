@@ -1,6 +1,6 @@
 # Feature: Invitaciones con premio (enlace o QR que regala algo)
 
-> **Versión:** v1.0.0 — 2026-09-11
+> **Versión:** v1.1.0 — 2026-10-13 (el premio se elige del catálogo; sin migración)
 > **Estado:** ✅ Implementado
 > **Migración:** `00063_invitaciones_con_premio.sql`
 > **Dónde vive:** `/dashboard/rewards` → pestaña **Invitaciones**
@@ -78,7 +78,11 @@ invitación. Y `source` gana el valor **`'invite'`**.
 ## El panel — pestaña «Invitaciones»
 
 - **Nueva invitación**: nombre (para vos), qué se regala, detalle, días para reclamarlo, cupo, fecha
-  límite. El slug se deriva del nombre y **no se edita después**: puede estar impreso en un QR o
+  límite. **«Qué se regala» se elige del catálogo de premios de la marca** (Recompensas › Premios para regalar,
+  solo los activos) **o se escribe libre**, como antes (S-1, decisión C3, 2026-10-13). Elegir del catálogo solo
+  LLENA el título: la invitación guarda el texto en `qr_campaigns.reward_title` y cada premio otorgado guarda su
+  título como snapshot, así que retirar o renombrar el premio del catálogo después no cambia lo que ya se
+  prometió. Si el catálogo está vacío o no se puede leer, el panel lo dice y el premio se escribe a mano. El slug se deriva del nombre y **no se edita después**: puede estar impreso en un QR o
   mandado por WhatsApp. Si hace falta otro, se crea otra.
 - Por cada una: el **enlace** (copiar), el **QR** (descarga SVG, vector: sirve para imprimir), y
   cuatro números — **se registraron / vinieron / pendientes / vencidos**. «Vinieron» es lo que
@@ -109,10 +113,21 @@ marca sale del dominio: un slug de la marca A no se lee desde el dominio de la m
 
 ## Recompensas ahora es una sola pantalla
 
-`/dashboard/rewards` tiene tres pestañas: **Niveles y premios** (lo de siempre), **Invitaciones**
-(esto) y **Redenciones** (antes era `/dashboard/redemptions`; esa ruta **redirige** para no romper
-ningún enlace guardado). La pestaña inicial se lee de `?tab=` con `useSyncExternalStore`, no con
+`/dashboard/rewards` tiene cuatro pestañas: **Niveles y premios** (lo de siempre), **Invitaciones**
+(esto), **Premios para regalar** (el catálogo y para qué se usa cada premio, desde 2026-10-13: ver
+[`reward-grants.md`](reward-grants.md) § «Dónde vive cada premio») y **Redenciones** (antes era
+`/dashboard/redemptions`; esa ruta **redirige** para no romper ningún enlace guardado). La pestaña inicial se lee de `?tab=` con `useSyncExternalStore`, no con
 `useSearchParams()` — ver la trampa del CSR bailout en `CLAUDE.md`.
+
+## Por qué NO se enlazó la invitación al catálogo por id (C3, 2026-10-13)
+
+Se evaluó guardar `campaign_reward_id` en `qr_campaigns` (una columna nullable con FK `ON DELETE SET NULL`) y **no hace
+falta**: `grantFromInvite()` otorga con `prizeTitle: reward_title`, y todo lo que lee ese premio después (la tarjeta, el
+aviso del mesero, las métricas por invitación) usa el título guardado en el grant o `qr_campaign_id`, nunca el id del
+catálogo. Enlazarla por id añadiría dos cosas que nadie pidió —que renombrar el premio del catálogo cambiara lo que ya
+prometió una invitación impresa, y que retirarlo la dejara sin premio— y una migración. Si algún día se quiere contar
+«cuántas invitaciones usan este premio», es una columna nueva, no una corrección. Los tres modelos de premio (niveles,
+catálogo de campaña, invitaciones) **siguen sin unificarse**.
 
 ## Lo que falta para que sea «referidos»
 
@@ -130,7 +145,7 @@ cuando el mesero valida al amigo. Estimación en ese doc.
 - `src/app/api/check-in/route.ts`, `src/components/features/check-in/CheckInForm.tsx` + `.types.ts`
 - `src/components/features/staff/{PendingRewardsList,RewardAlert}.tsx` (badge «INVITACIÓN»)
 - `src/app/(dashboard)/dashboard/rewards/page.tsx`, `redemptions/page.tsx` (redirect)
-- `src/components/dashboard/{RewardsLevelsPanel,RedemptionsPanel,InviteCampaignsPanel}.tsx`
+- `src/components/dashboard/{RewardsLevelsPanel,RedemptionsPanel,InviteCampaignsPanel,PremiosParaRegalarPanel}.tsx`
 - `src/components/layout/{DashboardSidebar,DashboardHeader}.tsx`
 - `src/services/club-optin.service.ts` (Golden Bullet → invitación)
-- `tests/unit/qr-campaigns.test.ts`
+- `tests/unit/qr-campaigns.test.ts`, `tests/unit/recompensas-un-solo-lugar.test.ts` (C3)

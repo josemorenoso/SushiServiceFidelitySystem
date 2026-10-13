@@ -30,8 +30,8 @@ modal vuelve, pero ahora ofrece algo y no se puede cerrar por reflejo.
 
 > *"Gánate {premio} por dejarnos una reseña en Google"*
 
-El premio sale del catálogo `campaign_rewards` (Dashboard → *Premios de campaña*) y se elige en
-Ajustes → *Reseñas de Google*. **Si no hay premio configurado, el modal igual aparece** pidiendo la
+El premio sale del catálogo `campaign_rewards` y se crea y se elige en
+Recompensas → *Premios para regalar* (el link de reseñas sigue en Ajustes → *Reseñas de Google*). **Si no hay premio configurado, el modal igual aparece** pidiendo la
 reseña sin prometer nada — el sistema no se apaga solo porque el dueño no haya tocado un selector.
 **Si no hay link de Google, no aparece nunca**: no hay a dónde mandar al cliente.
 

@@ -26,8 +26,8 @@ Dar al administrador visibilidad completa del programa de fidelidad: cuántos cl
 | `/dashboard` | Métricas gamificadas (analytics, rankings, gráficas) |
 | `/dashboard/customers` | Sección Black arriba + lista de clientes con búsqueda, filtros y paginación |
 | `/dashboard/rendimiento` | **Rendimiento del equipo** (2026-09-11): escaneos y premios por mesero, clientes nuevos vs frecuentes, mesas que más piden. → [`staff-activity.md`](staff-activity.md) |
-| `/dashboard/rewards` | Configuración de recompensas por visitas |
-| `/dashboard/campaigns` | Campañas automáticas (birthday/reactivation) + ejecución manual + historial |
+| `/dashboard/rewards` | **Recompensas, en un solo lugar** (S-1, 2026-10-13), cuatro pestañas: Niveles y premios · Invitaciones · **Premios para regalar** (el catálogo y «para qué se usa cada premio»: regalo fuerte, regalo pequeño, premio por reseña) · Redenciones. `/dashboard/campaigns?tab=premios` y `/dashboard/campaign-rewards` redirigen a la pestaña. → [`reward-grants.md`](reward-grants.md) § «Dónde vive cada premio» |
+| `/dashboard/campaigns` | Campañas automáticas (birthday/reactivation) + ejecución manual + historial (la pestaña «Premios» se mudó a Recompensas el 2026-10-13) |
 | `/dashboard/qr` | Generación y descarga de código QR para mesas |
 | `/dashboard/templates` | Plantillas Twilio Content API — crear, sincronizar, ver estado de aprobación |
 | `/dashboard/staff` | Gestión de meseros (PIN) y dispositivos de confianza |

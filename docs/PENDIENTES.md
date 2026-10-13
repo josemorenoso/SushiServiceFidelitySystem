@@ -38,7 +38,7 @@
 | 2 | ✅ **Campañas, fases 0 y 0.bis: HECHAS el 2026-10-08 y el 2026-10-10** (sin migración; **pusheadas juntas a `main` el 2026-10-11, `2746d49`**). Un envío fallido ya no bloquea 30 o 360 días, pero cada toque admite 3 fallidos y no más · la insistente sale una vez mientras el cliente no vuelva · `error_message` dice la causa real · el texto de Campañas dice la verdad · una sola escala de días, también en Clientes y en «Rescatar Perdidos» | Nada. Línea base del SQL en `ESTADO.md` 0.CICLO; repetir la consulta hacia el 2026-11-11 | no |
 | 3 | ✅ **Plantillas: un solo libro y una sola pantalla — HECHO el 2026-10-11** (sin migración, **desplegado el 2026-10-12**): el panel reconoce la WABA, las tres plantillas nuevas entraron juntas, una pantalla para Twilio y Zernio, Biblioteca para campañas (§3). Quedan B1 y B7 (AIOS, menos aprobaciones), en una sesión posterior | Por marca, «Enviar los N juntos a Meta» (§3.4) | no |
 | 4 | **Encender el ciclo** (la fase 1B, los envíos, está HECHA el 2026-10-13, `CHANGELOG.md`; el ciclo nace apagado en todas las marcas). En orden: aplicar la **00071** ANTES del push → push → encender `demo-ventas` un día (envío simulado) → Don Alirio dos semanas → medir | Elegir el regalo pequeño y el fuerte de Don Alirio (o ninguno: sale sin regalo) y mirar su `?dry=1`. Todo en `SQL-PARA-CORRER/ciclo-fase-1b/LEEME.md` | 1 (escrita) |
-| 5 | **Recompensas en un solo lugar** (S-1) — **prompt listo** (13-10): `docs/prompts/2026-10-13-recompensas-un-solo-lugar.md` (Sonnet). Incluye los selectores de los regalos del ciclo y el agujero de permisos del catálogo (`campaign-rewards` escribe con `requireTenantId()`) | Nada: C1–C3 ✅ decididas | 0 o 1 |
+| 5 | ✅ **Recompensas en un solo lugar (S-1) — HECHO el 2026-10-13** (sin migración, sin desplegar): el catálogo y los selectores de qué premio usa cada mensaje viven en Recompensas › Premios para regalar; salieron de Campañas y de Ajustes; las invitaciones eligen del catálogo; las escrituras del catálogo exigen alcance de marca (§4.1). Prompt: `docs/prompts/2026-10-13-recompensas-un-solo-lugar.md` | Nada | no |
 | 6 | **Campañas, fase 2: la pantalla** (dos o tres sesiones) | A8: mirar el prototipo (no frena la fase 1) | no |
 | 7 | **Optimizar: los arreglos chicos** (§5), repartidos en una o dos sesiones | Solo el texto de 18.c | no |
 | 8 | **La tarjeta, las reseñas y los referidos** (§4.2) | C4–C8 | 1–2 |
@@ -47,7 +47,7 @@
 
 **La 1A y las plantillas (fila 3) corrieron en paralelo el 11-10** sin cruzarse más que en `src/lib/settings-keys.ts` (quedó de la 1A). **2 y 3 pueden ir en paralelo** (no comparten archivos). **3 y 4 se cruzan** en `template-catalog.ts` y `template-texts.ts`:
 por eso la plantilla nueva del ciclo («Regalo que vence») entra en la sesión 3, junto con las otras tres, y la 4 ya la
-encuentra hecha. **5 y 6 se cruzan** en `campaigns/page.tsx` (la pestaña «Premios»): 5 va primero.
+encuentra hecha. **5 y 6 se cruzaban** en `campaigns/page.tsx` (la pestaña «Premios»): la 5 ya salió (13-10), así que la 6 parte de una pantalla de Campañas sin esa pestaña.
 
 ---
 
@@ -210,9 +210,13 @@ Crear el premio de la reactivación agresiva cuesta **cuatro pantallas**, y la t
 
 | ID | Qué | Estado |
 |---|---|---|
-| S-1.1 / S-1.3 | Sacar «Premios» de Campañas y llevarlo a Recompensas | ⬜ · micro/feature · decisión A7 y C1 |
-| S-1.2 | Que Recompensas maneje todo: fijos, temporales, cajas misteriosas | ⬜ · ola · decisiones C2 y C3 |
+| S-1.1 / S-1.3 | Sacar «Premios» de Campañas y llevarlo a Recompensas | ✅ 13-10 · A7 y C1. Pestaña «Premios para regalar» en Recompensas; Campañas y `/dashboard/campaign-rewards` redirigen; Ajustes deja una tarjeta que lleva allá |
+| S-1.2 | Que Recompensas maneje todo: fijos, temporales, cajas misteriosas | 🟡 13-10 · lo del catálogo y de «para qué se usa cada premio» está (C1: los premios de Ajustes se mudaron; C2: «temporal» = la ventana de reclamo, que se lee donde se elige; C3: las invitaciones eligen del catálogo, **sin migración** —se llena el título—, los tres modelos no se unifican). Queda: puntos y Black (C1, «después») y la caja misteriosa |
+| S-1.4 | Un administrador de sede cambiaba el catálogo de TODA la marca (`campaign-rewards` escribía con `requireTenantId()`) y un fallo de base se veía como «catálogo vacío» | ✅ 13-10 · las escrituras exigen alcance de marca (como `reward-tiers`); el GET da 500 si la base falla |
 | — | Los topes globales de la caja misteriosa no tienen pantalla | ⬜ |
+| S-1.5 | **El recordatorio de vencimiento se mudó con el regalo fuerte.** `reward_reminder_enabled` / `_days_before` vivían dentro del bloque «Premio de Reactivación Agresiva» de Ajustes y el prompt no los nombraba: se movieron con él, a la misma pestaña (si no, perdían su pantalla). Revísalo cuando mires la pantalla | 🟡 decisión tomada sin preguntar; revertible |
+| S-1.6 | Comentarios de `src/lib/settings-keys.ts` que todavía dicen «Ajustes › Premio de la reactivación…» y «Ajustes › Reseñas de Google» (el archivo estaba fuera del territorio de S-1) | ⬜ micro |
+| S-1.7 | Textos que todavía mandan a «Ajustes» para un premio: la descripción del recordatorio en `src/constants/template-catalog.ts:268` («encendido en Ajustes», hoy es en Recompensas › Premios para regalar; el catálogo de plantillas estaba fuera del territorio de S-1) y `PointsCalibrator.tsx:62,157` («Ajustes → Premios», ya era inexacto: los niveles viven en Recompensas › Niveles y premios). La tarjeta corta de Ajustes cubre al que llegue por ahí | ⬜ micro |
 | 0.ZETA | `rewards` y `campaign_rewards` recibieron sede y nadie la lee | ⬜ · decisión D5 |
 
 ### 4.2 La tarjeta, la pantalla posterior, las reseñas y los referidos (Tareas 3 a 6)

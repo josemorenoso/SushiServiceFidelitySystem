@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { findCustomerByPhone } from '@/services/customer.service'
-import { getNivelOfrecido, buildTiersRoadmap } from '@/services/reward-tiers.service'
+import { getNivelOfrecido, buildTiersRoadmap, NivelYaReclamadoError } from '@/services/reward-tiers.service'
 import { resolveMysteryBox, generateNearMissText } from '@/services/mystery-box.service'
 import { grantReward } from '@/services/reward-grant.service'
 import { sendTemplateMessage } from '@/services/whatsapp.service'
@@ -15,6 +15,19 @@ interface ResolveRequestBody {
   phone: string
   tier_id: string
   choice: MysteryBoxChoice
+}
+
+/**
+ * «Esa oferta no existe»: de otra marca, ya reclamada, no alcanzada, no la ofrecida,
+ * o perdida en la carrera contra otra llamada del mismo cliente (00072). Un solo
+ * mensaje a propósito: distinguirlos le contaría a quien prueba ids qué niveles tiene
+ * cada marca.
+ */
+function noDisponible() {
+  return NextResponse.json(
+    { error: 'Premio no disponible', message: 'Este premio ya fue reclamado o no está disponible.' },
+    { status: 409 }
+  )
 }
 
 function demasiadas(retryAfterSeconds: number) {
@@ -36,9 +49,12 @@ function demasiadas(retryAfterSeconds: number) {
  *
  * Que sea «sin reclamar» la hace idempotente por diseño: la fila de
  * `mystery_box_results` que escribe `resolveMysteryBox()` sella el reclamo (00059), y la
- * próxima llamada ya no encuentra oferta (409). Lo que esto NO cubre es la carrera de
- * dos llamadas simultáneas que leen antes de que la primera escriba; el límite de tasa
- * la acota, no la elimina (`docs/features/points-mystery-box.md` §7.4.ter).
+ * próxima llamada ya no encuentra oferta (409). Y la carrera de dos llamadas simultáneas
+ * —las dos leen la oferta antes de que la primera escriba— la cierra la BASE (00072, SEG-2):
+ * el segundo INSERT sale con 23505, `resolveMysteryBox()` lo lanza como
+ * `NivelYaReclamadoError` y acá es el mismo 409, ANTES de otorgar y de mandar WhatsApp. El
+ * límite de tasa sigue acotando cuántas entran; ya no es lo único que hay
+ * (`docs/features/points-mystery-box.md` §7.4.ter).
  */
 export async function POST(request: NextRequest) {
   try {
@@ -118,23 +134,25 @@ export async function POST(request: NextRequest) {
       )
     }
     // Un id de otra marca, un nivel ya reclamado, uno no alcanzado o uno que no es el
-    // que se ofrece: todos son «esa oferta no existe». Un solo mensaje a propósito —
-    // distinguirlos le contaría a quien prueba ids qué niveles tiene cada marca.
-    if (!ofrecido.nivel || ofrecido.nivel.id !== tier_id) {
-      return NextResponse.json(
-        { error: 'Premio no disponible', message: 'Este premio ya fue reclamado o no está disponible.' },
-        { status: 409 }
-      )
-    }
+    // que se ofrece: todos son «esa oferta no existe».
+    if (!ofrecido.nivel || ofrecido.nivel.id !== tier_id) return noDisponible()
     const tier = ofrecido.nivel
 
-    // Resolver mystery box
-    const result = await resolveMysteryBox({
-      customerId: customer.id,
-      tier,
-      choice,
-      tenantId: tenant.id,
-    })
+    // Resolver mystery box. Si otra llamada del mismo cliente ganó la carrera entre la
+    // lectura de arriba y este INSERT, la base lo rechaza (00072) y se corta ACÁ: sin
+    // `reward_grant` y sin WhatsApp.
+    let result: Awaited<ReturnType<typeof resolveMysteryBox>>
+    try {
+      result = await resolveMysteryBox({
+        customerId: customer.id,
+        tier,
+        choice,
+        tenantId: tenant.id,
+      })
+    } catch (err) {
+      if (err instanceof NivelYaReclamadoError) return noDisponible()
+      throw err
+    }
 
     // ─── Otorgar el premio (migración 00031) ───
     // Este es el arreglo de la condición de carrera: hasta ahora el premio elegido solo

@@ -9,6 +9,7 @@ import type {
 import { DEFAULT_PITY_TIMER_THRESHOLD } from '@/constants/rewards'
 import { getMultipleSettings } from '@/services/settings.service'
 import { isDbFailure, logDbFailure } from '@/lib/db-failure'
+import { NivelYaReclamadoError } from '@/services/reward-tiers.service'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -305,8 +306,27 @@ export interface MysteryBoxResolveResult {
 }
 
 /**
+ * El INSERT del reclamo salió con 23505: la base (00072) dice que este nivel ya
+ * estaba reclamado — casi siempre, otra llamada del mismo cliente que ganó la
+ * carrera. No es un fallo de base (no va a `logDbFailure`): es el candado
+ * haciendo su trabajo, y se deja una línea para poder contarlo.
+ */
+function reclamoRepetido(tenantId: string, customerId: string, tierId: string): NivelYaReclamadoError {
+  console.warn('[MysteryBox] Reclamo repetido rechazado por la base (00072)', {
+    tenant_id: tenantId,
+    customer_id: customerId,
+    tier_id: tierId,
+  })
+  return new NivelYaReclamadoError()
+}
+
+/**
  * Resuelve el resultado de la Mystery Box o del premio safe.
  * Registra el resultado en la DB, actualiza streaks y caps.
+ *
+ * Lanza `NivelYaReclamadoError` si la base rechaza el reclamo por repetido
+ * (00072): el que llama no otorga nada. Cualquier otro fallo del INSERT lanza un
+ * `Error` común, después de `logDbFailure`.
  */
 export async function resolveMysteryBox(params: {
   customerId: string
@@ -339,6 +359,7 @@ export async function resolveMysteryBox(params: {
       .single()
 
     if (insertError) {
+      if (insertError.code === '23505') throw reclamoRepetido(tenantId, customerId, tier.id)
       logDbFailure({
         scope: 'MysteryBox',
         reason: 'result_insert_error_safe',
@@ -400,6 +421,7 @@ export async function resolveMysteryBox(params: {
     .single()
 
   if (insertMysteryError) {
+    if (insertMysteryError.code === '23505') throw reclamoRepetido(tenantId, customerId, tier.id)
     logDbFailure({
       scope: 'MysteryBox',
       reason: 'result_insert_error_mystery',

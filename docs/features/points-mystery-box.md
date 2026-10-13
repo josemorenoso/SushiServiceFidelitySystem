@@ -578,7 +578,7 @@ lo reclamó; a partir de la 00059, no. Era un regalo silencioso.
 la regla vieja (por `tier_id`) con la nueva sobre las mismas filas, así que el verde distingue
 «lo arreglé» de «el escenario nunca falló».
 
-### 7.4.ter Solo se otorga lo que se ofrece (ola 0, AISLA-1, 2026-10-03)
+### 7.4.ter Solo se otorga lo que se ofrece, y una sola vez (ola 0, AISLA-1, 2026-10-03; SEG-2, 2026-10-13)
 
 **El agujero, vivo en producción hasta este cambio** (auditoría 2026-09-28,
 `docs/AUDITORIA-ESCALA-1000-2026-09-28.md` §1.1). La 00059 dejó bien la OFERTA, pero
@@ -608,17 +608,45 @@ y resolve responde **503** sin escribir.
 celular (se elige premio una vez por nivel; sobra para reintentos) y 30 por minuto por IP (el
 WiFi del local lo comparten todos). Pasado el límite: **429** con `Retry-After`.
 
-**Lo que esto NO tapa:** dos llamadas **simultáneas** del mismo cliente pueden leer la oferta
-antes de que la primera escriba su `mystery_box_results`, y entonces las dos otorgan. El
-límite de tasa acota cuántas entran (por instancia), pero no lo vuelve imposible. Cerrarlo del
-todo exige que la base rechace el segundo reclamo de forma atómica (un trigger con
-`pg_advisory_xact_lock` por cliente que aplique la misma regla OR). Eso sería un espejo SQL de
-`elegirNivelSinReclamar()`, con su propia prueba, y no se hizo en la ola 0.
+**La carrera de dos llamadas simultáneas la cierra la base (SEG-2, migración 00072,
+2026-10-13).** Hasta ahí era lo que la ola 0 no tapaba: dos llamadas del mismo cliente (dos
+toques seguidos al botón, o un script) leían la oferta antes de que la primera escribiera su
+`mystery_box_results`, y **las dos otorgaban** — dos `reward_grants` para el mesero y dos
+WhatsApp. El límite de tasa acotaba cuántas entraban, no lo volvía imposible. Ahora:
+
+- Un trigger AFTER INSERT de `mystery_box_results`
+  (`trg_mystery_box_results_un_reclamo_por_nivel` → `rechazar_nivel_ya_reclamado()`) toma un
+  `pg_advisory_xact_lock` **por cliente** y rechaza con **23505** el reclamo de un nivel que ese
+  cliente ya reclamó: misma `claimed_tier_key` **o** mismo `claimed_threshold`, sin mirar
+  `tenant_id`. Es **el espejo en SQL de `elegirNivelSinReclamar()`**: la regla sigue siendo una
+  sola, y la prueba de base la compara caso por caso con la función de TypeScript. La base no
+  elige la oferta (eso sigue en `getNivelOfrecido()`); solo impide reclamar dos veces el mismo nivel.
+- El segundo de dos reclamos simultáneos **espera** el candado del primero; cuando el primero
+  confirma, lo ve y lo rechaza. Si el primero se deshace, el segundo entra. Depende de READ
+  COMMITTED, el nivel de PostgREST.
+- `resolveMysteryBox()` traduce ese 23505 a `NivelYaReclamadoError` (sin `logDbFailure`: es el
+  candado haciendo su trabajo; deja `[MysteryBox] Reclamo repetido rechazado por la base (00072)`
+  en el log) y la ruta contesta el **mismo 409** de «ya reclamado», **antes** de `grantReward()` y
+  del WhatsApp. En mystery box, el INSERT va antes de mover la racha y los cupos, así que el
+  perdedor no toca nada.
+- **Trigger y no dos UNIQUE parciales** porque un UNIQUE no se crea si la historia tiene
+  duplicados, y los puede tener (antes de la ola 0 `resolve` no miraba la oferta; antes de la
+  00059 un nivel desactivado y vuelto a crear con el mismo umbral se volvía a ofrecer). El trigger
+  compara cada reclamo NUEVO contra la historia tal como esté y no toca ninguna fila vieja. La
+  consulta (solo lectura) que cuenta los premios de más ya regalados está en
+  `SQL-PARA-CORRER/seg-2-carrera-resolve/`; qué hacer con los que sigan sin entregar es
+  decisión del dueño.
 
 **Pruebas:** `tests/unit/mystery-box-resolve.test.ts`, con una base en memoria que respeta los
 `.eq()`. Fallan contra la ruta vieja y pasan con la nueva: el nivel de otra marca, el ya
 reclamado (por `tier_key` y por umbral), uno que no es el ofrecido, el fallo de base y el
-límite de tasa. El camino legítimo sigue otorgando.
+límite de tasa; y desde SEG-2, que el rechazo de la base da 409 sin otorgar ni WhatsApp. El
+camino legítimo sigue otorgando. La carrera, de punta a punta: `tests/db/mystery-box-carrera.test.ts`
+contra Postgres real — seis INSERT simultáneos entran uno; dos transacciones intercaladas a mano
+(la segunda espera y es rechazada; con ROLLBACK, entra); el espejo de la regla en 12 casos; y la
+**ruta real** con seis llamadas que leen la oferta antes de que ninguna escriba (3 «seguro» y 3
+mystery): un 200, cinco 409, un reclamo, un premio y un WhatsApp. Contra el código anterior caen
+10 de esos 17.
 
 ### 7.5 Nueva tabla: `mystery_box_global_caps`
 
@@ -681,7 +709,8 @@ tres en negrita son de la ola 0 (§7.4.ter).
 
 **Lógica:**
 1. Valida que `tier_id` es **el nivel que `check-in/status` le ofrece ahora**
-   (`getNivelOfrecido()`, §7.4.ter). Antes solo miraba si alcanzaba el umbral.
+   (`getNivelOfrecido()`, §7.4.ter). Antes solo miraba si alcanzaba el umbral. Si otra llamada
+   simultánea ganó, la base rechaza el reclamo (00072) y responde 409 sin otorgar.
 2. Si `choice === 'safe'` → registra resultado → envía plantilla WhatsApp
 3. Si `choice === 'mystery'`:
    a. Verifica pity timer → ¿Golden Box?

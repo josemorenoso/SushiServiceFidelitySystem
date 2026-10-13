@@ -218,7 +218,7 @@ con un `42501` que era del arnés, no del esquema. Se agregó el GRANT al bootst
 | `GET /api/public/customer-card` | 30 req/min por IP | `rateLimit()` en-memoria |
 | `GET /tarjeta` (SSR) | 30 req/min por IP | `rateLimit()` al inicio del Server Component |
 | `POST /api/webhook/delivery` | 60/min por IP | `rateLimit()` en-memoria |
-| `POST /api/mystery-box/resolve` | 5 cada 10 min por **teléfono** + 30/min por IP | `rateLimit()` en-memoria (ola 0, AISLA-1). El freno de verdad no es este: es que solo otorga el nivel que `check-in/status` ofrece (`docs/features/points-mystery-box.md` §7.4.ter) |
+| `POST /api/mystery-box/resolve` | 5 cada 10 min por **teléfono** + 30/min por IP | `rateLimit()` en-memoria (ola 0, AISLA-1). El freno de verdad no es este: es que solo otorga el nivel que `check-in/status` ofrece, y que la base rechaza el segundo reclamo del mismo nivel aunque lleguen dos a la vez (00072, SEG-2; `docs/features/points-mystery-box.md` §7.4.ter) |
 
 > **`/api/check-in/status` se limita por teléfono, no por IP**, a propósito: el celular del cliente hace polling cada 5s (~12/min) mientras espera al mesero, y varios clientes comparten el WiFi del local o el NAT del operador móvil. Limitar por IP rompería el polling legítimo; limitar por teléfono bloquea la enumeración de la base (probar números secuenciales para extraer nombre/puntos/visitas) sin afectar el uso real.
 

@@ -109,6 +109,24 @@ export function elegirNivelSinReclamar<T extends NivelReclamable>(
 }
 
 /**
+ * La base rechazó el reclamo: ese nivel ya estaba reclamado (00072, SEG-2).
+ *
+ * `getNivelOfrecido()` decide en TypeScript, pero dos `resolve` simultáneos del
+ * mismo cliente leían la oferta antes de que el primero escribiera, y los dos
+ * otorgaban. Desde la 00072 un trigger de `mystery_box_results` aplica ESTA
+ * MISMA regla —la de `elegirNivelSinReclamar()`, misma clave O mismo umbral— con
+ * un candado por cliente, y el segundo INSERT sale con 23505. Quien lo recibe no
+ * otorga ni manda WhatsApp: la ruta lo contesta como cualquier oferta que ya no
+ * existe (409). Vive acá, al lado de la regla, porque es su espejo en la base.
+ */
+export class NivelYaReclamadoError extends Error {
+  constructor() {
+    super('nivel_ya_reclamado')
+    this.name = 'NivelYaReclamadoError'
+  }
+}
+
+/**
  * Obtiene los reward tiers activos que gobiernan en una sede, ordenados por
  * sort_order.
  *

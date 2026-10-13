@@ -470,7 +470,7 @@ Endpoint para que la pantalla del cliente (mostrando el QR) detecte automáticam
 }
 ```
 
-> **`tier_unlocked`**: Es `null` salvo que el cliente haya superado el umbral de un tier y aún no lo haya reclamado (sin fila en `mystery_box_results` para ese `tier_id`). Devuelve el tier de mayor umbral pendiente. El cliente lo consume solo cuando `hasRecentVisit` es `true`, mostrando el flujo de elección de premio (safe vs Mystery Box) en su propio dispositivo.
+> **`tier_unlocked`**: Es `null` salvo que el cliente haya superado el umbral de un tier y aún no lo haya reclamado (ningún reclamo suyo en `mystery_box_results` con la misma `claimed_tier_key` ni el mismo `claimed_threshold`: `elegirNivelSinReclamar()`, 00059; desde la 00072 la base rechaza además el segundo reclamo del mismo nivel). Devuelve el tier de mayor umbral pendiente. El cliente lo consume solo cuando `hasRecentVisit` es `true`, mostrando el flujo de elección de premio (safe vs Mystery Box) en su propio dispositivo.
 >
 > **`active_grants[]`** (migración 00031, v2.3.0): premios ya otorgados (activos, no vencidos) que le pertenecen al cliente — de tier (`grant_type: 'tier_prize'`, no vencen, `expires_at: null`) o de campaña (`grant_type: 'campaign_prize'`, vencen). Alimenta el banner "Disponible: X premio — vence en N días" en la tarjeta del cliente y la alerta del mesero al escanear. Viaja en la misma llamada de polling que ya hace el cliente cada 5s, sin costo de red adicional. Ordenado por `granted_at` ascendente (el más antiguo primero).
 

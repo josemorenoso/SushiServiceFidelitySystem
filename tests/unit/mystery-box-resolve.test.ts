@@ -26,6 +26,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { NivelYaReclamadoError } from '@/services/reward-tiers.service'
 
 // ═══════════════════════════════════════════════════════════════
 // La base en memoria
@@ -280,5 +281,36 @@ describe('POST /api/mystery-box/resolve — solo el nivel que status ofrece (AIS
     for (let i = 0; i < 12; i++) estados.push((await resolver(PLATA.id as string)).status)
     expect(estados).toContain(429)
     nadaSeEscribio()
+  })
+})
+
+describe('POST /api/mystery-box/resolve — la carrera la cierra la base (SEG-2, 00072)', () => {
+  /**
+   * La oferta se leyó bien (Plata, sin reclamar) pero, entre esa lectura y el INSERT, otra
+   * llamada del mismo cliente ganó: la base rechaza el segundo reclamo con 23505 y
+   * `resolveMysteryBox()` lo lanza como `NivelYaReclamadoError`. La prueba de punta a punta,
+   * con el trigger de verdad, es `tests/db/mystery-box-carrera.test.ts`; acá se fija el
+   * contrato de la ruta con ese rechazo.
+   */
+  it('el rechazo de la base da 409 —el mismo de «ya reclamado»— sin otorgar ni mandar WhatsApp', async () => {
+    resolverCaja.mockRejectedValueOnce(new NivelYaReclamadoError())
+
+    const res = await resolver(PLATA.id as string)
+
+    expect(res.status).toBe(409)
+    expect((await res.json()).message).toBe('Este premio ya fue reclamado o no está disponible.')
+    expect(resolverCaja, 'se intentó el reclamo').toHaveBeenCalledTimes(1)
+    expect(otorgar, 'no se escribe reward_grants').not.toHaveBeenCalled()
+    expect(mandarWhatsapp, 'no sale WhatsApp').not.toHaveBeenCalled()
+  })
+
+  it('cualquier OTRO fallo del reclamo sigue siendo 500 y tampoco otorga', async () => {
+    resolverCaja.mockRejectedValueOnce(new Error('No se pudo registrar el premio elegido: conexión caída'))
+
+    const res = await resolver(PLATA.id as string)
+
+    expect(res.status).toBe(500)
+    expect(otorgar).not.toHaveBeenCalled()
+    expect(mandarWhatsapp).not.toHaveBeenCalled()
   })
 })

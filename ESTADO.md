@@ -33,6 +33,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Comandante: Tepuy conectado (ESTADO 0.AIOS) y prompts S-1, SEG-2/3 y AIOS (2026-10-13) | Opus 5.5 | `ESTADO.md`, `docs/PENDIENTES.md`, `docs/prompts/2026-10-13-*.md` (nuevos), `docs/prompts/2026-10-04-seg2-resolve-y-tenant-config.md` | — | en curso |
 
 ## 3. Siguiente, en orden
 

@@ -87,6 +87,13 @@ export interface EnqueueItem {
    * que seguirá mandando hasta que F6 arme la cascada de respaldo del §6.1.
    */
   locationId?: string | null
+  /**
+   * El toque del ciclo de recuperación que este item envía (`send_queue.cycle_touch_id`,
+   * 00071). Con él, el drenador sabe que tiene que mirar las guardas del ciclo, poner la fecha
+   * límite al enviar y otorgar el regalo después; y el trigger de la cola le lleva al toque
+   * cada desenlace (H6). `null` u omitido = cualquier otro envío, que no cambia.
+   */
+  cycleTouchId?: string | null
 }
 
 export interface QueueRow {
@@ -111,6 +118,8 @@ export interface QueueRow {
   sent_at: string | null
   message_log_id: string | null
   claimed_at: string | null
+  /** 00071. `undefined` antes de aplicarla; `null` en todo lo que no es del ciclo. */
+  cycle_touch_id?: string | null
 }
 
 /**
@@ -153,6 +162,10 @@ export async function enqueueSendBatch(items: EnqueueItem[]): Promise<{ enqueued
       // Multi-sede F4. La lee `enqueue_send_queue()` desde la 00044; antes de esa migración
       // la función ni siquiera tenía la columna en su INSERT y la sede se perdía en silencio.
       location_id: item.locationId ?? null,
+      // Ciclo de recuperación (00071). La lee `enqueue_send_queue()` desde esa migración; la
+      // de la 00044 ignora la clave, así que antes de aplicarla nadie pierde nada (el ciclo
+      // nace apagado y ningún otro emisor la manda).
+      cycle_touch_id: item.cycleTouchId ?? null,
     }
   })
 

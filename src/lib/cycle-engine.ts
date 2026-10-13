@@ -284,14 +284,38 @@ const DIA_INICIAL_SIMULADO = Math.floor(Date.UTC(2026, 0, 1) / DIA_MS)
 const FECHAS_SIMULADAS = 365
 
 /**
+ * Hora de Bogotá a la que corre el cron del recordatorio de premio (`vercel.json`:
+ * `0 16 * * *` UTC = 11:00). El regalo vence a las 23:59:59 de su domingo.
+ */
+export const REWARD_REMINDER_CRON_HOUR = 11
+
+/**
+ * El día en que SALE de verdad el recordatorio de un regalo que vence el día `diaQueVence`
+ * (fase 1B, 2026-10-13). `reward-reminder` toma lo que vence dentro de
+ * `reward_reminder_days_before` días (2) DESDE la hora de la corrida, y el vencimiento es a
+ * las 23:59:59: el viernes a las 11:00 el domingo a medianoche queda fuera del horizonte
+ * (vence 61 h después), y la primera corrida que lo toma es la del SÁBADO. La simulación
+ * suponía «2 días antes» (el viernes); con el día real los cuatro ritmos siguen pasando.
+ */
+export function diaDelRecordatorio(diaQueVence: number, diasAntes: number = DEFAULT_REWARD_REMINDER_DAYS_BEFORE): number {
+  const vence = diaQueVence * DIA_MS + (24 * 60 * 60 - 1) * 1000
+  for (let dia = diaQueVence - diasAntes - 1; dia <= diaQueVence; dia++) {
+    const corrida = dia * DIA_MS + REWARD_REMINDER_CRON_HOUR * 60 * 60 * 1000
+    if (vence > corrida && vence <= corrida + diasAntes * DIA_MS) return dia
+  }
+  return diaQueVence
+}
+
+/**
  * Valida unos días de ciclo SIMULANDO, no a mano (H1): 365 fechas de visita, con y sin
  * domicilio (con y sin `t3`), suponiendo que el cliente no vuelve. Cada caso exige:
  *   · `FREQUENCY_CAP_DAYS` (7) entre dos toques;
  *   · nunca más de `MONTHLY_MARKETING_CAP` (3) mensajes en un mes calendario
  *     (`getCustomersAtMonthlyCap()` cuenta así) ni en una ventana de 30 días,
  *     contando el recordatorio del rescate: el regalo fuerte vence el domingo
- *     (`expiresOnSunday()`, mínimo 5 días) y el aviso sale 2 días antes. El regalo
- *     pequeño de `t2` NO lleva recordatorio (decisión 15).
+ *     (`expiresOnSunday()`, mínimo 5 días) y el aviso sale el día REAL en que lo toma el
+ *     cron (`diaDelRecordatorio()`: el sábado). El regalo pequeño de `t2` NO lleva
+ *     recordatorio (decisión 15, `reward_grants.skip_reminder`).
  * El recordatorio está exento del cap de 7 días (D5 de `reward-grants.md`).
  */
 export function validateStageConfig(dias: readonly number[]): StageValidation {
@@ -312,7 +336,7 @@ export function validateStageConfig(dias: readonly number[]): StageValidation {
       casos++
       const toques = dias.filter((_, idx) => conDomicilio || CYCLE_STAGES[idx] !== 't3').map((d) => visita + d)
       const rescate = visita + dias[CYCLE_STAGES.indexOf('t4')]
-      const recordatorio = domingoDesde(rescate, GIFT_MIN_DAYS) - DEFAULT_REWARD_REMINDER_DAYS_BEFORE
+      const recordatorio = diaDelRecordatorio(domingoDesde(rescate, GIFT_MIN_DAYS))
       const mensajes = [...toques, recordatorio].sort((a, b) => a - b)
 
       const motivo = fallaDelCaso(toques, mensajes)

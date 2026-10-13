@@ -14,10 +14,13 @@
  * activaciones. Con el registro, agregar una comunicación es declarar una pieza y escribir
  * su audiencia, no rediseñar el motor ni los topes.
  *
- * EN LA FASE 1A NO REEMPLAZA NADA. Se armó leyendo esas constantes y
+ * EN LA FASE 1A NO REEMPLAZÓ NADA. Se armó leyendo esas constantes y
  * `tests/unit/communications-registry.test.ts` exige que diga lo MISMO que ellas y que la
  * base: si mañana alguien cambia una regla en un solo lado, el test se pone rojo. Los
- * emisores nuevos (el cron del ciclo, fase 1B) leen de acá en vez de copiar reglas.
+ * emisores nuevos leen de acá en vez de copiar reglas: desde la fase 1B (2026-10-13) el cron
+ * del ciclo (`src/services/cycle.service.ts`) y el drenador sacan de la pieza `cycle_touch`
+ * con qué tipo y fuente se graba el toque y qué topes le aplican, y de
+ * `piezasQuePausanElToque()` qué blackouts lo posponen.
  *
  * ── CÓMO SE AGREGA UNA PIEZA: «cumpleaños del restaurante» (`brand_anniversary`) ──────
  *
@@ -83,7 +86,8 @@ export const CADENCE_RULES = {
 /** Las comunicaciones que existen hoy. */
 export const COMMUNICATION_PIECES: readonly CommunicationPiece[] = [
   {
-    // El toque del ciclo (hoy: el suave y el insistente del cron de reactivación).
+    // El toque del ciclo (fase 1B). En las marcas con el ciclo APAGADO, el suave y el
+    // insistente del camino viejo del cron de reactivación, que se graban igual.
     key: 'cycle_touch',
     messageType: 'reactivation',
     campaignSource: 'reactivation',
@@ -159,4 +163,13 @@ export function getPiece(key: string): CommunicationPiece | undefined {
 /** Los `campaigns.source` que cansan: lo que filtra el trigger de fatiga de la 00070. */
 export function fatigueSources(): CampaignSource[] {
   return [...new Set(COMMUNICATION_PIECES.filter((p) => p.countsForFatigue).map((p) => p.campaignSource))]
+}
+
+/**
+ * Las piezas cuyo blackout pospone el toque del ciclo (spec §3.3 regla 5). Hoy solo el evento
+ * del calendario: el cron del ciclo lee los blackouts de `restaurant_events` si esta lista no
+ * está vacía. Una pieza nueva tipo evento (el cumpleaños del restaurante) hereda la regla.
+ */
+export function piezasQuePausanElToque(): CommunicationPiece[] {
+  return COMMUNICATION_PIECES.filter((p) => p.pausesCycleTouch)
 }

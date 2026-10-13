@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import type { Customer, Campaign, CampaignMessage, RestaurantEvent } from '@/types/database.types'
 import { isDbFailure, logDbFailure } from '@/lib/db-failure'
 import { leerTodo } from '@/lib/leer-todo'
+import { APP_UTC_OFFSET } from '@/lib/timezone'
 import {
   REACTIVATION_DAYS,
   FREQUENCY_CAP_DAYS,
@@ -608,10 +609,23 @@ export async function finalizeCampaign(
 // Cuenta solo campaigns.source IN ('manual','calendar','reactivation').
 // Cumpleaños queda fuera (prioridad absoluta) y utility tampoco entra.
 
-function getMonthBoundaries(refDate: Date = new Date()) {
-  const start = new Date(refDate.getFullYear(), refDate.getMonth(), 1, 0, 0, 0, 0)
-  const nextMonth = new Date(refDate.getFullYear(), refDate.getMonth() + 1, 1, 0, 0, 0, 0)
-  return { startISO: start.toISOString(), nextMonthISO: nextMonth.toISOString() }
+/**
+ * El mes calendario de `refDate` EN HORA DE BOGOTÁ: `[día 1 00:00, día 1 del siguiente 00:00)`.
+ *
+ * N-MES (2026-10-13, fase 1B del ciclo): cortaba con la hora del SERVIDOR (UTC en Vercel), así
+ * que un envío entre las 19:00 y las 23:59 del último día del mes contaba para el mes
+ * siguiente, y el día 1 entre 00:00 y 05:00 de Bogotá caía en el anterior. El tope de 3 al mes
+ * del ciclo y su validación por simulación (`validateStageConfig()`) cuentan por mes de Bogotá.
+ * Colombia no tiene horario de verano: el offset fijo de `timezone.ts` alcanza.
+ */
+export function getMonthBoundaries(refDate: Date = new Date()) {
+  // El día de Bogotá es el de UTC corrido el offset (−05:00).
+  const local = new Date(refDate.getTime() + Number(APP_UTC_OFFSET.slice(0, 3)) * 60 * 60 * 1000)
+  const year = local.getUTCFullYear()
+  const month = local.getUTCMonth()
+  const primero = (y: number, m: number) =>
+    new Date(`${new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10)}T00:00:00${APP_UTC_OFFSET}`)
+  return { startISO: primero(year, month).toISOString(), nextMonthISO: primero(year, month + 1).toISOString() }
 }
 
 /**

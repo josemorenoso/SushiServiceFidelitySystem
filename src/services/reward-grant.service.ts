@@ -47,6 +47,18 @@ export interface GrantRewardParams {
   /** Días de ventana desde ahora. Omitir (null/undefined) → el premio NO vence.
    *  Un número (incluido 0) SÍ define una ventana: 0 o negativo = vence de inmediato. */
   windowDays?: number | null
+  /**
+   * Vencimiento EXACTO (ciclo de recuperación, fase 1B): el «vence el domingo» que dice el
+   * mensaje que acaba de salir. Si viene, manda sobre `windowDays`; los demás llamadores no
+   * cambian.
+   */
+  expiresAt?: Date | string | null
+  /**
+   * El premio vence SIN recordatorio (H2: el regalo pequeño del ciclo). Se graba en
+   * `reward_grants.skip_reminder` (00071). NO se sella `reminder_sent_at`: diría que salió un
+   * recordatorio que nunca salió.
+   */
+  skipReminder?: boolean
 }
 
 export type GrantRewardResult =
@@ -70,9 +82,11 @@ export async function grantReward(
   // 0— SÍ es una ventana: NO se colapsa `0` con "omitido" (ese era el bug: `windowDays: 0`
   // producía un grant permanente en vez de uno vencido). 0 o negativo → vence de inmediato.
   const expiresAt =
-    params.windowDays == null
-      ? null
-      : new Date(Date.now() + Math.max(0, params.windowDays) * 24 * 60 * 60 * 1000).toISOString()
+    params.expiresAt != null
+      ? new Date(params.expiresAt).toISOString()
+      : params.windowDays == null
+        ? null
+        : new Date(Date.now() + Math.max(0, params.windowDays) * 24 * 60 * 60 * 1000).toISOString()
 
   const { data, error } = await supabase
     .from('reward_grants')
@@ -89,6 +103,8 @@ export async function grantReward(
       campaign_id: params.campaignId ?? null,
       status: 'active',
       expires_at: expiresAt,
+      // Solo cuando hace falta: un INSERT de los demás llamadores no nombra la columna nueva.
+      ...(params.skipReminder ? { skip_reminder: true } : {}),
     })
     .select()
     .single()
@@ -269,6 +285,9 @@ export interface ReminderCandidate {
  *
  * Al que ya volvió no se le manda nada: o bien reclamó el premio, o bien lo tiene
  * pendiente en la lista del mesero. En cualquier caso, la urgencia ya no aplica.
+ *
+ * Los `skip_reminder` no salen (H2, 00071): el regalo PEQUEÑO del ciclo vence sin aviso. Con
+ * los dos recordatorios ni el ritmo mensual cabía en 3 mensajes al mes (spec §13).
  */
 export async function findGrantsDueForReminder(
   tenantId: string,
@@ -285,6 +304,7 @@ export async function findGrantsDueForReminder(
     .eq('tenant_id', tenantId)
     .eq('status', 'active')
     .is('reminder_sent_at', null)
+    .eq('skip_reminder', false)
     .not('expires_at', 'is', null)
     .gt('expires_at', nowIso)
     .lte('expires_at', horizonIso)

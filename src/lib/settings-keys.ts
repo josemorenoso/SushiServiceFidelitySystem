@@ -87,12 +87,26 @@ const AJUSTES = [
 ] as const
 
 /**
+ * Claves de `admin_settings` que escribe SOLO el sistema: viven en la misma tabla, pero el
+ * `PUT` no las acepta (no están en `CLAVES_ESCRIBIBLES`).
+ *
+ *   · `cycle_enabled_at` (fase 1B del ciclo, 2026-10-13): cuándo vio el cron la marca
+ *     encendida por primera vez. La anota el cron de reactivación y la borra al ver la marca
+ *     apagada. Es la regla (1) del encendido —un toque solo sale si su día es igual o
+ *     posterior a esta fecha—, así que escribirla a mano con una fecha vieja haría salir de
+ *     golpe todos los toques atrasados: la ráfaga que la regla existe para evitar.
+ */
+export const CLAVES_DEL_SISTEMA: ReadonlySet<string> = new Set<string>(['cycle_enabled_at'])
+
+/**
  * Punteros que el código consume y que el catálogo NO cubre: la reactivación «con premio»
  * del sistema anterior, que una marca Twilio elige en Plantillas (bloque «Sistema
  * antiguo»). Es excepción de `p1a-plantillas-paridad.test.ts` (como la legacy
- * `reactivation_template_sid`, que se lee pero ya no se escribe) y la retira la fase 1B del
- * ciclo. `tier_unlocked_template_sid` y `reward_reminder_template_sid` estaban acá hasta el
- * 2026-10-11, cuando entraron al catálogo (decisión B3).
+ * `reactivation_template_sid`, que se lee pero ya no se escribe). La lee SOLO el camino
+ * viejo del cron de reactivación (marcas con el ciclo apagado); el ciclo no la lee nunca, y
+ * sale cuando todas las marcas estén en el ciclo. `tier_unlocked_template_sid` y
+ * `reward_reminder_template_sid` estaban acá hasta el 2026-10-11, cuando entraron al
+ * catálogo (decisión B3).
  */
 const PUNTEROS_FUERA_DEL_CATALOGO = ['reactivation_with_reward_template_sid'] as const
 
@@ -125,6 +139,14 @@ export function decidirEscrituraDeAjuste(input: {
   valorActual: string | null
 }): DecisionDeAjuste {
   const { key, valor, proveedor, valorActual } = input
+
+  if (CLAVES_DEL_SISTEMA.has(key)) {
+    return {
+      ok: false,
+      status: 400,
+      error: `«${key}» la anota el sistema, no se cambia desde el panel.`,
+    }
+  }
 
   if (!CLAVES_ESCRIBIBLES.has(key)) {
     return {

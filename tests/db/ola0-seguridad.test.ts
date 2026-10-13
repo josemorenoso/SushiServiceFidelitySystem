@@ -177,6 +177,10 @@ describe('ola 0 — las políticas de la 00015 no existen (OPUS-4)', () => {
     }
     try {
       await cliente.query('BEGIN')
+      // TEST-deadlock (2026-10-13): la 00015 hace DDL sobre `customers` y después `visits`; un
+      // INSERT en `visits` de otro archivo toma `visits` y pide `customers` por la FK, y
+      // Postgres mata a uno. Tomar las dos en el MISMO orden, al empezar, lo evita.
+      await cliente.query('LOCK TABLE customers, visits IN ACCESS EXCLUSIVE MODE')
       const {
         rows: [t],
       } = await cliente.query<{ id: string }>(

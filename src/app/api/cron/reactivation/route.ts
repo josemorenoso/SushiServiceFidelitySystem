@@ -23,7 +23,28 @@ import { grantReward } from '@/services/reward-grant.service'
 import { DEFAULT_AGGRESSIVE_REWARD_WINDOW_DAYS } from '@/constants/rewards'
 import { APP_TIMEZONE } from '@/lib/timezone'
 import { getTenantBySlug, getActiveTenants } from '@/lib/tenant'
+import { normalizeCycleSettings } from '@/lib/cycle-engine'
+import {
+  ejecutarCicloDeLaMarca,
+  olvidarEncendido,
+  CLAVES_DEL_ENCENDIDO,
+  type ResultadoDelCiclo,
+} from '@/services/cycle.service'
 import type { Tenant } from '@/types/tenant.types'
+
+/**
+ * EL CICLO DE RECUPERACIÓN (fase 1B, 2026-10-13). Por marca, con `normalizeCycleSettings()`:
+ *   · Ciclo APAGADO (las 24 que no están en el piloto) → `processTenant()`, el código de
+ *     siempre, sin cambiar una línea de su comportamiento. Si quedó anotada una fecha de
+ *     encendido, se borra (el próximo encendido la vuelve a anotar).
+ *   · Ciclo ENCENDIDO → `ejecutarCicloDeLaMarca()` (`src/services/cycle.service.ts`): decide
+ *     qué toque le toca a cada cliente y lo ENCOLA a la hora de la marca; el drenador lo envía.
+ *     El camino viejo NO corre: si corrieran los dos, el cliente recibiría la suave de siempre
+ *     y el toque del ciclo.
+ *   · `?dry=1` → el camino nuevo en TODAS las marcas (o en `?tenant=`), encendidas o no, como
+ *     si se encendieran hoy: las mismas decisiones, cero escrituras y cero envíos. Es lo que
+ *     se mira antes de encender una marca.
+ */
 
 interface TenantCronResult {
   tenant_slug: string
@@ -399,9 +420,22 @@ async function processTenant(tenant: Tenant): Promise<TenantCronResult> {
     }
 }
 
+/** El ciclo o el camino de siempre, por marca. */
+async function procesarMarca(tenant: Tenant, dry: boolean): Promise<TenantCronResult | ResultadoDelCiclo> {
+  if (dry) return ejecutarCicloDeLaMarca(tenant, { dry: true })
+  const crudos = await getMultipleSettings([...CLAVES_DEL_ENCENDIDO], tenant.id)
+  if (normalizeCycleSettings(crudos, { totalClientes: 0 }).enabled) {
+    return ejecutarCicloDeLaMarca(tenant, { dry: false })
+  }
+  if (crudos.cycle_enabled_at) await olvidarEncendido(tenant.id)
+  return processTenant(tenant)
+}
+
 async function handleCron(request: NextRequest) {
   try {
-    const slug = new URL(request.url).searchParams.get('tenant')
+    const params = new URL(request.url).searchParams
+    const slug = params.get('tenant')
+    const dry = params.get('dry') === '1'
 
     // Con ?tenant= → un solo tenant (compat con llamadas existentes de n8n).
     if (slug) {
@@ -409,14 +443,14 @@ async function handleCron(request: NextRequest) {
       if (!tenant) {
         return NextResponse.json({ error: 'Tenant no encontrado' }, { status: 400 })
       }
-      return NextResponse.json(await processTenant(tenant))
+      return NextResponse.json(await procesarMarca(tenant, dry))
     }
 
     // Sin ?tenant= → recorre todos los tenants activos (onboarding sin tocar n8n).
     // allSettled: un tenant que falle no debe tumbar el procesamiento de los demás.
     const tenants = await getActiveTenants()
-    const settled = await Promise.allSettled(tenants.map(processTenant))
-    const results: TenantCronResult[] = settled.map((r, i) =>
+    const settled = await Promise.allSettled(tenants.map((t) => procesarMarca(t, dry)))
+    const results: Array<TenantCronResult | ResultadoDelCiclo> = settled.map((r, i) =>
       r.status === 'fulfilled'
         ? r.value
         : {
@@ -434,11 +468,14 @@ async function handleCron(request: NextRequest) {
 
     return NextResponse.json({
       ok: true,
+      ...(dry ? { dry: true } : {}),
       tenants_processed: results.length,
       sent: results.reduce((acc, r) => acc + r.sent, 0),
       failed: results.reduce((acc, r) => acc + r.failed, 0),
       aggressive_sent: results.reduce((acc, r) => acc + r.aggressive_sent, 0),
       rewards_granted: results.reduce((acc, r) => acc + r.rewards_granted, 0),
+      // Del ciclo: lo que quedó en la cola para la hora de cada marca (el drenador lo envía).
+      cycle_queued: results.reduce((acc, r) => acc + ('ciclo' in r ? r.encolados_en_la_cola : 0), 0),
       results,
     })
   } catch (error) {

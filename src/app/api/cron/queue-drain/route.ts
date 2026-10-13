@@ -34,6 +34,16 @@
  * LA REGLA CENTRAL: encolar NO es un permiso permanente. Entre el encolado y el
  * turno del item pueden pasar días. Por eso el opt-out, el frequency cap y el
  * cap mensual se vuelven a mirar aquí.
+ *
+ * LOS TOQUES DEL CICLO (fase 1B, 2026-10-13: items con `cycle_touch_id`). Los demás items no
+ * cambian. Para estos, además: (a) guardas nuevas antes de enviar —la marca apagó el ciclo, el
+ * cliente volvió o ya no está en el estado que el toque supone → cancelado; ya tiene un regalo
+ * de reactivación vivo → el toque se pospone hasta el día siguiente a que ese venza—; (b) la
+ * fecha límite del regalo («vence el domingo») se calcula AL ENVIAR; (c) solo si el mensaje
+ * salió, se otorga el regalo con ESE vencimiento y se escribe el toque (`sent`, el mensaje, el
+ * regalo) y lo que le cambia al cliente. Todo desenlace escribe el toque (H6): lo que solo el
+ * drenador sabe (el cap de 7 días y el tope del mes posponen con su fecha) se escribe ANTES de
+ * cancelar el item; lo demás lo lleva el trigger de la cola (00071). `src/services/cycle.service.ts`.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -63,6 +73,17 @@ import {
   pruneSendGovernance,
   type QueueRow,
 } from '@/services/send-queue.service'
+import {
+  cargarContextoDelCiclo,
+  guardaDelItem,
+  posponerToque,
+  inicioDelMesSiguiente,
+  finDelCapDeFrecuencia,
+  prepararEnvioDelToque,
+  completarToquesEnviados,
+  type ContextoDelCicloEnLaTanda,
+  type ToqueEnviado,
+} from '@/services/cycle.service'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { isDbFailure, logDbFailure } from '@/lib/db-failure'
 
@@ -272,8 +293,12 @@ async function drenarTenant(tenantId: string, res: Resultado): Promise<Resultado
   // tope de intentos— y el tenant sale de esta vuelta. Las demás marcas siguen drenando:
   // un `throw` acá tumbaba la corrida entera.
   let permitidos: QueueRow[]
+  // Los toques del ciclo de la tanda (solo si hay alguno): sus guardas se leen acá, dentro del
+  // mismo try, así que una lectura que falla devuelve la tanda a la cola como cualquier guarda.
+  let ciclo: ContextoDelCicloEnLaTanda | null = null
   try {
-    permitidos = await filtrarPorGuardas(tenantId, items, res)
+    if (items.some((i) => i.cycle_touch_id)) ciclo = await cargarContextoDelCiclo(tenantId, items)
+    permitidos = await filtrarPorGuardas(tenantId, items, res, ciclo)
   } catch (err) {
     const motivo = `No se pudieron verificar las guardas de envío: ${err instanceof Error ? err.message : 'error desconocido'}`
     console.error(`[QueueDrain][FALLO] reason=guardas_error tenant=${tenantId} detalle="${motivo}"`)
@@ -303,6 +328,14 @@ async function drenarTenant(tenantId: string, res: Resultado): Promise<Resultado
     ? await resolveGoldenBulletProvider(tenant)
     : null
 
+  // Un toque del ciclo sale con la fecha límite de su regalo calculada AHORA, no al encolar.
+  const alEnviar = new Date()
+  const envioDelCiclo = new Map<string, { variables: Record<string, string>; vence: Date | null }>()
+  for (const item of permitidos) {
+    const toque = item.cycle_touch_id ? ciclo?.toques.get(item.cycle_touch_id) : undefined
+    if (toque) envioDelCiclo.set(item.id, prepararEnvioDelToque(item, toque, alEnviar))
+  }
+
   // Lotes concurrentes, igual que las campañas.
   const resultados = await Promise.all(
     permitidos.map(async (item) => {
@@ -316,7 +349,7 @@ async function drenarTenant(tenantId: string, res: Resultado): Promise<Resultado
         const enviado = await sendTemplateMessage(
           item.phone,
           item.template_sid,
-          item.variables ?? {},
+          envioDelCiclo.get(item.id)?.variables ?? item.variables ?? {},
           tenant,
           { customerId: item.customer_id, messageType: item.message_type },
           { ...construirOpciones(item, proveedor), provider: proveedor }
@@ -407,8 +440,16 @@ async function drenarTenant(tenantId: string, res: Resultado): Promise<Resultado
       })
     }
   }
+  // Los ids de vuelta: el toque del ciclo guarda qué fila de `campaign_messages` es su envío.
+  const mensajeDe = new Map<string, string>()
   if (registrosCampana.length > 0) {
-    const { error: registroError } = await db.from('campaign_messages').insert(registrosCampana)
+    const { data: grabados, error: registroError } = await db
+      .from('campaign_messages')
+      .insert(registrosCampana)
+      .select('id, campaign_id, customer_id, status')
+    for (const g of (grabados ?? []) as Array<{ id: string; campaign_id: string; customer_id: string; status: string }>) {
+      if (g.status === 'sent') mensajeDe.set(`${g.campaign_id}|${g.customer_id}`, g.id)
+    }
     if (isDbFailure(registroError)) {
       logDbFailure({
         scope: 'QueueDrain',
@@ -424,6 +465,25 @@ async function drenarTenant(tenantId: string, res: Resultado): Promise<Resultado
   }
   await markImportedContactsResult(importadosEnviados, importadosRebotados)
 
+  // ── Los toques del ciclo que SALIERON: el regalo, el libro de toques y el cliente ──
+  if (ciclo) {
+    const enviadosDelCiclo: ToqueEnviado[] = []
+    for (const { item, enviado } of resultados) {
+      const toque = item.cycle_touch_id ? ciclo.toques.get(item.cycle_touch_id) : undefined
+      const envio = envioDelCiclo.get(item.id)
+      if (!enviado || !toque || !envio) continue
+      enviadosDelCiclo.push({
+        item,
+        toque,
+        variables: envio.variables,
+        vence: envio.vence,
+        campaignMessageId: mensajeDe.get(`${item.campaign_id}|${item.customer_id}`) ?? null,
+        heartbeatsSent: ciclo.clientes.get(item.customer_id!)?.heartbeats_sent ?? 0,
+      })
+    }
+    if (enviadosDelCiclo.length > 0) await completarToquesEnviados(tenantId, enviadosDelCiclo)
+  }
+
   await cerrarCampanasVacias(campanasTocadas)
 
   return { procesados: items.length, agotado: false, quedaCola: true }
@@ -432,11 +492,15 @@ async function drenarTenant(tenantId: string, res: Resultado): Promise<Resultado
 /**
  * Re-evalúa las guardas de demanda sobre una tanda ya reclamada.
  * Lo que no pasa se CANCELA (no es un fallo: no se reintenta ni gasta intentos).
+ *
+ * Un toque del ciclo que no pasa el cap de 7 días o el tope del mes no se pierde: su toque se
+ * pospone (`deferred`, con la fecha en que vuelve a poder) ANTES de cancelar el item.
  */
 async function filtrarPorGuardas(
   tenantId: string,
   items: QueueRow[],
-  res: Resultado
+  res: Resultado,
+  ciclo: ContextoDelCicloEnLaTanda | null
 ): Promise<QueueRow[]> {
   const db = getServiceClient()
 
@@ -499,10 +563,30 @@ async function filtrarPorGuardas(
       res.skipped++
       continue
     }
+
+    // ── Las guardas del ciclo (solo items con `cycle_touch_id`) ──
+    if (item.cycle_touch_id && ciclo) {
+      const guarda = guardaDelItem(item, ciclo, new Date())
+      if (guarda.tipo !== 'enviar') {
+        if (guarda.tipo === 'posponer') await posponerToque(tenantId, item.cycle_touch_id, guarda.dueAt, guarda.motivo)
+        await cancelQueueItem(item.id, guarda.motivo)
+        res.skipped++
+        continue
+      }
+    }
+
     if (
       !EXENTOS_DEL_CAP.has(item.message_type) &&
       !passesFrequencyCap(cliente.last_campaign_at as string | null)
     ) {
+      if (item.cycle_touch_id) {
+        await posponerToque(
+          tenantId,
+          item.cycle_touch_id,
+          finDelCapDeFrecuencia(cliente.last_campaign_at as string | null, new Date()),
+          'Recibió otra campaña mientras esperaba en la cola'
+        )
+      }
       await cancelQueueItem(item.id, 'Recibió otra campaña mientras esperaba en la cola')
       res.skipped++
       continue
@@ -540,6 +624,14 @@ async function filtrarPorGuardas(
   const finales: QueueRow[] = []
   for (const item of trasCap) {
     if (excluidos.has(item.id)) {
+      if (item.cycle_touch_id) {
+        await posponerToque(
+          tenantId,
+          item.cycle_touch_id,
+          inicioDelMesSiguiente(new Date()),
+          'Llegó a su cap mensual mientras esperaba en la cola'
+        )
+      }
       await cancelQueueItem(item.id, 'Llegó a su cap mensual mientras esperaba en la cola')
       res.skipped++
     } else {

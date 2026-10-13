@@ -20,9 +20,13 @@
  *
  * 2026-10-11 (plantillas: un solo libro): `tier_unlocked_template_sid` y
  * `reward_reminder_template_sid` ENTRARON al catálogo (decisión B3 del dueño) y salieron de
- * las excepciones. Quedan las dos legacy de reactivación, que no entran: las retira la fase
- * 1B del ciclo. Y entró `gift_expiring_template_sid` («Regalo que vence»), que todavía no
- * manda nadie: es la otra lista de abajo.
+ * las excepciones. Quedan las dos legacy de reactivación, que no entran. Y entró
+ * `gift_expiring_template_sid` («Regalo que vence»), que todavía no mandaba nadie.
+ *
+ * 2026-10-13 (ciclo, fase 1B): «Regalo que vence» ya tiene emisor (el ciclo de recuperación,
+ * `src/lib/cycle-touch.ts`) y salió de `SIN_EMISOR_TODAVIA`. Las dos legacy siguen siendo
+ * excepción: el ciclo no las lee nunca, pero el camino VIEJO del cron de reactivación (las
+ * marcas con el ciclo apagado) sí, y ese camino no se toca hasta que todas estén en el ciclo.
  */
 
 import { describe, it, expect } from 'vitest'
@@ -35,11 +39,14 @@ import { TEMPLATE_CATALOG } from '@/constants/template-catalog'
  * fuera del catálogo hace fallar este test: o entra al catálogo, o se anota acá.
  */
 const EXCEPCIONES_CONOCIDAS: Record<string, string> = {
-  // El cron de reactivación todavía la lee (6b, con premio). No entra al catálogo: la fase 1B
-  // del ciclo reemplaza la reactivación por el ciclo y la retira (prompt del 11-10, punto 2).
-  reactivation_with_reward_template_sid: 'legacy: reactivación con premio — la retira la fase 1B del ciclo',
-  // La clave anterior a la 00031; el cron la usa de último respaldo. Mismo destino.
-  reactivation_template_sid: 'legacy: reactivación de antes de la 00031 — la retira la fase 1B del ciclo',
+  // La lee SOLO el camino viejo del cron de reactivación (6b, con premio), el de las marcas con
+  // el ciclo apagado. El ciclo no la lee nunca (fase 1B, 2026-10-13). No entra al catálogo: se
+  // retira con el camino viejo, cuando todas las marcas estén en el ciclo.
+  reactivation_with_reward_template_sid:
+    'legacy: reactivación con premio — solo el camino viejo (ciclo apagado); sale cuando todas las marcas estén en el ciclo',
+  // La clave anterior a la 00031; el camino viejo la usa de último respaldo. Mismo destino.
+  reactivation_template_sid:
+    'legacy: reactivación de antes de la 00031 — solo el camino viejo (ciclo apagado); sale cuando todas las marcas estén en el ciclo',
 }
 
 /**
@@ -48,7 +55,7 @@ const EXCEPCIONES_CONOCIDAS: Record<string, string> = {
  * emisor llegue, la prueba de abajo obliga a sacarlo de acá.
  */
 const SIN_EMISOR_TODAVIA: Record<string, string> = {
-  gift_expiring_template_sid: '«Regalo que vence» — la empieza a mandar la fase 1B del ciclo de recuperación',
+  // Vacía desde el 2026-10-13: «Regalo que vence» la manda el ciclo de recuperación (fase 1B).
 }
 
 const RAIZ = path.resolve(import.meta.dirname, '../..')

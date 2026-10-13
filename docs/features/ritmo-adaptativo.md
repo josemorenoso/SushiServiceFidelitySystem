@@ -1,12 +1,14 @@
 # Feature: «Se adapta a tu clientela» — el ritmo adaptativo del ciclo de recuperación
 
-> **Estado:** 🟨 **BASE CONSTRUIDA, SIN ENVÍOS** (fase 1A, 2026-10-11: migración **00070, sin aplicar**; tests en
-> verde). El sistema ya sabe calcular el ritmo de cada cliente y el de la marca, pero **nada se envía**: el cron, el
-> drenador y los regalos son la fase 1B, y el ciclo nace apagado en todas las marcas (`cycle_enabled = false`).
+> **Estado:** 🟨 **ENVÍA, APAGADO POR MARCA** (fase 1B, 2026-10-13: migración **00071, sin aplicar**; la 00070 de la
+> fase 1A, aplicada el 12-10). El cron decide y encola los toques del ciclo y el drenador los envía y otorga el regalo,
+> **solo en las marcas con `cycle_enabled = true`**: ninguna todavía. Se enciende primero `demo-ventas` (envío simulado)
+> y después el piloto (`SQL-PARA-CORRER/ciclo-fase-1b/LEEME.md`). Detalle: §7.
 > Diseñado el 2026-10-11 con datos reales de producción. Piloto: **Don Alirio**, dos semanas. **No se promete en ventas
 > hasta que el piloto esté corriendo** (ver §6).
 > **Diseño completo:** `docs/superpowers/specs/2026-10-04-ciclo-de-recuperacion-design.md` §3.2.bis y §14.
-> **Prompt de construcción:** `docs/prompts/2026-10-11-ciclo-fase-1a-motor-base.md`.
+> **Prompts de construcción:** `docs/prompts/2026-10-11-ciclo-fase-1a-motor-base.md` (1A) y
+> `docs/prompts/2026-10-12-ciclo-fase-1b-envios.md` (1B).
 > **Decisión del dueño (2026-10-11, textual):** *«un software que se adapta a tu clientela es un ángulo de comunicación
 > completo, no quiero que tengamos esta feature y no hablemos de ella»*.
 
@@ -132,6 +134,12 @@ completas; tiene menos de 30 regresos) · Planeta Wings → Restaurante por defe
 | El canal de cada mensaje (hoy solo WhatsApp) | `customer_cycle_touches.channel` |
 | Las reglas de cada comunicación (motor de piezas) | `src/lib/communications/registry.ts`, con paridad en `tests/unit/communications-registry.test.ts` |
 | Las consultas del dueño (Sushi Fun y la foto del ciclo) | `SQL-PARA-CORRER/ciclo-fase-1a/LEEME.md` |
+| Qué le toca HOY a cada cliente: el toque, el regalo, la plantilla (adaptador), la hora de la marca, las reglas del encendido, las guardas al enviar | `src/lib/cycle-touch.ts` (puro): `decidirCliente()`, `resolverToque()`, `elegirRegalo()`, `elegirPlantilla()`, `nextSendSlot()`, `variablesAlEnviar()`, `guardaDelCicloAlEnviar()` |
+| El cron que decide y encola (marcas con el ciclo encendido) y lo que el drenador necesita | `src/services/cycle.service.ts`, desde `/api/cron/reactivation` y `/api/cron/queue-drain` |
+| El libro de toques al día con la cola (H6) | `supabase/migrations/00071_ciclo_envios.sql`: el trigger de `send_queue` y `cycle_reconcile_touches()` |
+| Encender, revisar, apagar y medir el piloto | `SQL-PARA-CORRER/ciclo-fase-1b/LEEME.md` |
 
-**Lo que todavía no existe (fase 1B):** el cron que decide qué toque le toca a cada cliente y lo encola, el drenador
-que lo envía y otorga el regalo, y el encendido del piloto. Hasta entonces ningún código lee `cycle_rhythm`.
+**Estado (2026-10-13, fase 1B): envía, apagado por marca.** El cron decide y encola los toques del ciclo SOLO en las
+marcas con `cycle_enabled = true` (ninguna todavía: primero `demo-ventas`, después el piloto en Don Alirio) y lee
+`cycle_rhythm` ahí; en las demás sigue el camino de siempre. La migración 00071 está escrita y sin aplicar. Falta la
+pantalla (fase 2).

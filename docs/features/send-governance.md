@@ -5,6 +5,8 @@
 **Spec:** [`docs/superpowers/specs/2026-08-30-gobernanza-de-envio-design.md`](../superpowers/specs/2026-08-30-gobernanza-de-envio-design.md)
 **Ver también:** `docs/features/campaigns.md`, `docs/features/zernio-messaging.md`,
 `docs/features/wallet-billing.md`, `docs/features/golden-bullet.md`
+**Última actualización:** 2026-10-13 — los toques del ciclo de recuperación pasan por la cola y el drenador
+(fase 1B, migración `00071`): § «Los toques del ciclo en el drenador» y § «Qué encola hoy».
 
 ---
 
@@ -263,8 +265,10 @@ cap mensual. Por eso las guardas se re-evalúan **al enviar**:
 |---|---|
 | Opt-out (`whatsapp_opt_out_at`) | `cancelled` |
 | El cliente ya no existe | `cancelled` |
-| Frequency cap (recibió otra campaña) | `cancelled` — salvo `birthday` y `reward_reminder`, exentos por diseño |
-| Cap mensual | `cancelled` |
+| Solo toques del ciclo: la marca apagó el ciclo, el cliente volvió (otro `cycle_no`) o ya no está en el estado del toque | `cancelled` (el toque también) |
+| Solo toques del ciclo con regalo: ya tiene un regalo de reactivación vivo | `cancelled`; el toque queda `deferred` hasta el día siguiente a que ese venza |
+| Frequency cap (recibió otra campaña) | `cancelled` — salvo `birthday` y `reward_reminder`, exentos por diseño. Un toque del ciclo queda `deferred` a `last_campaign_at + 7` |
+| Cap mensual | `cancelled`. Un toque del ciclo queda `deferred` al día 1 del mes siguiente |
 
 `cancelled` **no es un fallo**: no consume intentos ni vuelve a la cola. Un fallo de envío sí:
 vuelve con backoff (15 min → 1 h → 4 h) y se rinde como `failed` al tercer intento.
@@ -286,6 +290,47 @@ permite corregirlo a mano.
 > (sin credenciales, opt-out, cupo agotado, rechazo del proveedor). El drenador no puede
 > distinguirlos, así que trata cualquier `null` como reintentable. Es conservador a propósito:
 > reintentar tres veces cuesta milisegundos; cancelar por error pierde el mensaje para siempre.
+
+### Los toques del ciclo en el drenador (fase 1B, 2026-10-13)
+
+Un item con `cycle_touch_id` es un toque del ciclo de recuperación (lo encola el cron de reactivación de una marca con el
+ciclo encendido: `campaigns.md` § «El ciclo encendido»). **Los demás items no cambian.** Para estos, además de las
+guardas de siempre:
+
+1. **Antes de enviar** (`cargarContextoDelCiclo()` + `guardaDelItem()`, `src/services/cycle.service.ts`; la regla,
+   `guardaDelCicloAlEnviar()` en `src/lib/cycle-touch.ts`): la marca sigue con el ciclo encendido, el cliente sigue en
+   el MISMO ciclo (si volvió, su `cycle_no` cambió) y en el estado que el toque supone (`t1`–`t5` exigen `activo`; el
+   trimestral, `dormido`); un toque con regalo no sale si el cliente ya tiene un regalo de reactivación vivo (spec §5:
+   uno por cliente). Esas lecturas van en el mismo `try` que las demás guardas: si fallan, la tanda vuelve a la cola.
+2. **La fecha límite se calcula AL ENVIAR** (`variablesAlEnviar()`): `expiresOnSunday(ahora)`, escrita «domingo 18 de
+   octubre» en hora de Bogotá, en `{{3}}` de «Regalo que vence» o en `{{5}}` de la insistente. Lo encolado no la trae.
+3. **Solo si el mensaje salió** (`completarToquesEnviados()`): `grantReward()` con ESE vencimiento exacto
+   (`expiresAt`) y `skip_reminder` si es el pequeño; el toque queda `sent` con su `campaign_message_id` (el `INSERT` de
+   `campaign_messages` devuelve los ids) y su `grant_id`; el fuerte mueve `customers.strong_offer_last_at`; la
+   despedida (`t5`) duerme al cliente si sigue activo en ese ciclo; el trimestral suma `heartbeats_sent`. Un
+   `duplicate_active` a pesar de la guarda (carrera) deja el toque `sent` sin regalo y un `console.warn`: no se
+   reintenta. Nada de esto lanza (el mensaje ya salió): un fallo queda en el log (`[QueueDrain][FALLO]`).
+
+**H6, todo desenlace escribe el toque.** Dos mecanismos, a propósito:
+
+- **Un trigger sobre `send_queue`** (00071: `on_send_queue_insert_cycle` y `on_send_queue_status_cycle`). Al encolarse,
+  el toque pasa a `queued` con `due_at` = la hora real del envío. Cuando el item sale de `queued` **por cualquier
+  camino** —el drenador, `expire_send_queue()` o la cancelación desde el panel (`DELETE /api/dashboard/send-queue/[id]`)—
+  el toque pasa a `sent`, `failed` con `attempts + 1` (se rindió tras sus 3 intentos de la cola, o venció sin cupo) o
+  `cancelled` (con el `last_error` del item como motivo: opt-out, volvió, la marca apagó el ciclo, el panel). Un fallo
+  reintentable no cambia el estado del item: el toque sigue `queued`. Se eligió el trigger porque esos dos caminos no
+  pasan por TypeScript (uno es SQL; el otro es una ruta del panel que no sabe nada del ciclo), y porque así ningún emisor
+  futuro que mueva la cola puede olvidarse del toque.
+- **Lo que solo el drenador sabe lo escribe ANTES de cancelar el item** (`posponerToque()`): el cap de 7 días, el tope
+  del mes y el regalo vivo posponen (`deferred` con su fecha). El trigger solo toca toques que siguen `queued`, así que
+  esa escritura manda.
+- **La red:** `cycle_reconcile_touches()` la corre el cron del ciclo cada día antes de decidir. Recoge los toques
+  `queued` cuyo último item ya no está `queued` (si el trigger falló: su `EXCEPTION` solo deja un WARNING) o no existe
+  (vuelven a `pending`). Ningún toque queda `queued` ni `pending` para siempre: un `pending` lo retoma el cron al día
+  siguiente.
+
+Los tres caminos tienen su prueba en `tests/db/cycle-envios.test.ts` (el vencimiento, con el UPDATE de
+`expire_send_queue()` acotado a la marca de la prueba: la base de pruebas es compartida).
 
 ### Anti-duplicado
 
@@ -310,7 +355,8 @@ cumpleaños y una campaña manual.
 |---|---|---|
 | Campaña manual | ✅ Sí | Es el escenario del spec §3.4. |
 | `birthday` | ❌ Todavía no | Ver la pregunta abierta al final. |
-| `reactivation` | ❌ Todavía no | Variables volátiles (fecha límite del premio) y un efecto posterior: `grantReward()`. Si el envío se difiere, **¿cuándo se otorga el premio?** No está decidido. |
+| `reactivation` — camino viejo (ciclo apagado) | ❌ No | Envía dentro del cron, como siempre. |
+| `reactivation` — toques del ciclo (ciclo encendido) | ✅ Sí (2026-10-13) | **Todo** sale por la cola, a la hora de la marca (`not_before` = la próxima `cycle_send_slot`, `expires_at` = el cierre del día siguiente). Las dos preguntas de abajo quedan respondidas para el ciclo: la fecha límite se calcula al enviar y el regalo se otorga al enviar, solo si salió (§ «Los toques del ciclo en el drenador»). |
 | `reward_reminder` | ❌ Todavía no | `days_left` caduca: encolar hoy y enviar en dos días manda un número mentiroso. Y `markReminderSent()` tendría que moverse al drenaje. |
 | `calendar_event` | ✅ Sí (2026-09-06) | Envía lo que cabe en el presupuesto del día y encola el resto. La media provider-aware se resuelve al encolar: `media_url` guarda la URL pública COMPLETA (la que Zernio necesita como `headerMediaUrl`) y `{{6}}` viaja en `variables` solo para Twilio. `expiresAt` = fin del día del evento (P1). |
 | Golden Bullet (`import`) | ✅ Sí (2026-09-10) | Es el Bloque 5. **Ya NO envía nada dentro del request**: encola la base entera repartida en bloques diarios (D-7) y el drenador la saca al ritmo del cupo. El reparto es un `not_before` escalonado, así que este bucle no cambió. Ya registra `messageType: 'import'` (P4). Ver [`golden-bullet.md`](golden-bullet.md). |
@@ -394,7 +440,8 @@ Corregido en el bloque 13 de `00037` (la migración **no estaba aplicada** todav
 - `src/services/whatsapp.service.ts` (guarda en ambas ramas + release en fallo)
 - `src/services/campaign.service.ts` (`passesFrequencyCap`, `isInRecoveryZone`)
 - `src/services/wallet.service.ts` (exención Zernio en `canSendBulk`)
-- `src/app/api/cron/queue-drain/route.ts` (+ marcado de contactos importados)
+- `src/app/api/cron/queue-drain/route.ts` (+ marcado de contactos importados y los toques del ciclo)
+- `src/services/cycle.service.ts`, `src/lib/cycle-touch.ts`, `supabase/migrations/00071_ciclo_envios.sql` (el ciclo)
 - `src/services/line-health.service.ts`, `src/app/api/cron/line-health/route.ts` (Bloque 3)
 - `src/services/club-optin.service.ts` (los botones de la plantilla de Golden Bullet)
 - `src/app/api/dashboard/line-budget/route.ts`, `send-queue/route.ts`, `send-queue/[id]/route.ts`
@@ -461,8 +508,10 @@ Corregido en el bloque 13 de `00037` (la migración **no estaba aplicada** todav
 
 ### Pregunta abierta que este bloque deja sobre la mesa
 
-**¿Cómo se difieren los mensajes con datos que caducan y con efectos posteriores?** Sigue abierta
-para `reactivation` y `reward_reminder`. Concretamente:
+**¿Cómo se difieren los mensajes con datos que caducan y con efectos posteriores?** Respondida para los toques del
+ciclo de recuperación el 2026-10-13 (spec del ciclo §5: la fecha se recalcula al drenar y el regalo se otorga al enviar,
+no al encolar; § «Los toques del ciclo en el drenador»). Sigue abierta para el camino viejo de `reactivation` —que no
+encola— y para `reward_reminder`. Concretamente:
 
 1. ¿Qué variables se congelan al encolar y cuáles se recalculan al drenar? (`days_left` y las fechas
    límite tendrían que recalcularse siempre.)

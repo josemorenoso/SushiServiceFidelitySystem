@@ -1,6 +1,8 @@
 # Feature — Premios Otorgados (Reward Grants)
 
-> **Estado:** ✅ COMPLETO — pendiente de aplicar la migración 00031 en producción
+> **Estado:** ✅ COMPLETO (00031 aplicada). **2026-10-13 (ciclo, fase 1B, migración 00071 sin aplicar):** `grantReward()`
+> acepta un vencimiento exacto (`expiresAt`) y `skipReminder`; el recordatorio no sale para los `skip_reminder` (§ «El
+> regalo del ciclo de recuperación»).
 > **Versión:** v2.3.0
 > **Fecha:** 2026-07-11
 > **Spec:** [`docs/superpowers/specs/2026-07-11-reward-grants-design.md`](../superpowers/specs/2026-07-11-reward-grants-design.md)
@@ -64,7 +66,28 @@ El schema completo se refleja en [`DB_SCHEMA.md`](../DB_SCHEMA.md).
 **El paso 3 es el arreglo.** Antes, la única ventana para registrar la entrega eran los 3 segundos
 posteriores al escaneo — cuando el cliente todavía no había elegido su premio.
 
-### Premio de campaña (reactivación agresiva)
+### El regalo del ciclo de recuperación (fase 1B, 2026-10-13)
+
+En las marcas con el ciclo ENCENDIDO el regalo no lo otorga el cron sino el **drenador de la cola, al enviar**, y solo si
+el mensaje salió (`campaigns.md` § «El ciclo encendido», `send-governance.md` § «Los toques del ciclo en el drenador»):
+
+- **Vencimiento exacto.** `grantReward({ expiresAt })`: el «vence el domingo» que dice el mensaje que acaba de salir
+  (`expiresOnSunday()` del día del envío, cierre del domingo en Bogotá, mínimo 5 días). `expiresAt` manda sobre
+  `windowDays`; los demás llamadores no cambian (`windowDays` sigue igual).
+- **El pequeño vence sin recordatorio** (H2, decisión A3): `grantReward({ skipReminder: true })` graba
+  `reward_grants.skip_reminder = true` (00071) y `findGrantsDueForReminder()` no lo devuelve. **No** se sella
+  `reminder_sent_at`: diría que salió un recordatorio que nunca salió. El fuerte (rescate y segundo trimestral) sí lleva
+  su recordatorio. Con los dos recordatorios, ni el ritmo mensual cabía en 3 mensajes al mes (spec §13).
+- `source = 'reactivation'`, `grant_type = 'campaign_prize'`, `campaign_reward_id` = el premio elegido al decidir el
+  toque, `campaign_id` = la campaña del día. El índice de un premio de reactivación activo por cliente sigue valiendo: el
+  drenador no manda un toque con regalo a quien ya tiene uno vivo (lo pospone hasta el día siguiente a que venza), y un
+  `duplicate_active` por carrera deja el toque enviado sin regalo nuevo.
+- **El día real del recordatorio del fuerte:** el cron corre a las 11:00 de Bogotá y toma lo que vence dentro de
+  `reward_reminder_days_before` (2) días desde esa hora; con vencimiento el domingo a las 23:59:59, la primera corrida
+  que lo toma es la del **sábado** (`diaDelRecordatorio()`, `cycle-engine.ts`). La validación de los ritmos simula ese
+  día.
+
+### Premio de campaña (reactivación agresiva, camino viejo: marcas con el ciclo apagado)
 
 1. El cron agresivo envía el WhatsApp y **otorga el premio** con `expires_at = hoy + N días`.
 2. El cliente ve *"Disponible: 1/2 sushi gratis — vence en 3 días"* en su tarjeta, cada vez que la abre.
@@ -104,7 +127,7 @@ Detalle completo en [`API_DOCS.md`](../API_DOCS.md).
 | `aggressive_reward_id` | — | Premio del catálogo para la reactivación agresiva |
 | `aggressive_reward_window_days` | `7` | Días de ventana desde el envío |
 | `reward_reminder_enabled` | `false` | Encender/apagar el recordatorio |
-| `reward_reminder_days_before` | `2` | Cuántos días antes de vencer |
+| `reward_reminder_days_before` | `2` | Cuántos días antes de vencer (desde la hora del cron, 11:00: con un vencimiento a las 23:59 el aviso sale el día anterior a ese plazo) |
 | `reward_reminder_template_sid` | — | Plantilla de Twilio del recordatorio |
 
 **Reemplaza** a `reactivation_aggressive_reward_id`, que apuntaba a la tabla `rewards` legacy y **no tenía
@@ -126,6 +149,7 @@ plantilla agresiva de 4 variables sigue funcionando sin cambios.
 - **Los dos relojes son independientes.** La ventana del premio (`aggressive_reward_window_days`) no se
   deriva de los días de reactivación (`reactivation_aggressive_days`). Subir la reactivación agresiva de
   25 a 45 días no toca la ventana del premio.
+- **Un premio con `skip_reminder` no lleva recordatorio** (00071): es el regalo pequeño del ciclo.
 - **El recordatorio es exento del cap de frecuencia de 7 días, pero sujeto al cap mensual de 3.** Sin la
   excepción del cap de 7 días nunca se enviaría con ventanas cortas; sin el cap mensual sería spam.
 - **Con la plantilla sin aprobar, no se intenta (PL-2-a, 2026-10-12).** En Twilio el puntero

@@ -1,7 +1,7 @@
 # Esquema de Base de Datos
 
 **Base de datos:** Supabase (PostgreSQL)
-**Última actualización:** 2026-09-12 (Golden Bullet por tandas: `imported_contacts` al día con la 00060 y las bases)
+**Última actualización:** 2026-10-13 (ciclo de recuperación, fase 1B: `customer_cycle_touches`, `send_queue.cycle_touch_id` y `reward_grants.skip_reminder` al día con la 00071, sin aplicar); antes 2026-09-12 (Golden Bullet por tandas: `imported_contacts` al día con la 00060 y las bases)
 
 ---
 
@@ -941,6 +941,7 @@ CREATE POLICY "service_update_message_logs" ON message_logs
 | `reminder_sent_at` | `timestamptz` | SI | `NULL` | Cuándo se envió el recordatorio de vencimiento (cron `reward-reminder`) |
 | `granted_at` | `timestamptz` | NO | `now()` | Momento en que se otorgó el premio |
 | `redeemed_at` | `timestamptz` | SI | `NULL` | Lo llena el trigger `mark_grant_redeemed()` al entregarse |
+| `skip_reminder` | `boolean` | NO | `false` | **(00071, H2)** `true` = vence SIN recordatorio: el regalo PEQUEÑO del ciclo de recuperación. `findGrantsDueForReminder()` no lo devuelve. No se sella `reminder_sent_at` para lograrlo (diría que salió un recordatorio que no salió) |
 | `granted_location_id` | `uuid` | SI | `NULL` | **Nueva (00043).** Sede donde se **GANÓ** el premio (D12). Cruzada con `reward_redemptions.redeemed_location_id` da la **matriz origen → destino** que convierte D3 (*"el premio ganado en una sede se reclama en otra"*) de política invisible en número. NULL = sede desconocida. FK compuesta RESTRICT |
 | `created_at` | `timestamptz` | NO | `now()` | Fecha de creación del registro |
 
@@ -1173,6 +1174,7 @@ CREATE POLICY "tenant_all_template_versions" ON template_versions FOR ALL
 | `enqueued_at` / `sent_at` | `timestamptz` | | | - |
 | `message_log_id` | `uuid` | SI | `NULL` | FK → message_logs(id) ON DELETE SET NULL |
 | `location_id` | `uuid` | SI | `NULL` | **Nueva (00043).** Sede del envío encolado, para que el goteo **no pierda la sede** entre encolar y drenar. Se copiará a `message_logs.location_id` al enviar (F6). NULL = sede desconocida |
+| `cycle_touch_id` | `uuid` | SI | `NULL` | **Nueva (00071).** El toque del ciclo de recuperación que este item envía. Con él el drenador mira las guardas del ciclo, pone la fecha límite al enviar y otorga el regalo después. NULL = cualquier otro envío. `enqueue_send_queue()` lo copia (clave opcional `cycle_touch_id` de cada item) |
 
 **Foreign Keys:**
 
@@ -1183,6 +1185,12 @@ CREATE POLICY "tenant_all_template_versions" ON template_versions FOR ALL
 | `campaign_id` | `campaigns(id)` | CASCADE |
 | `message_log_id` | `message_logs(id)` | SET NULL |
 | `(location_id, tenant_id)` | `restaurant_locations(id, tenant_id)` | **RESTRICT** |
+| `cycle_touch_id` | `customer_cycle_touches(id)` | SET NULL |
+
+**Triggers (00071):** `on_send_queue_insert_cycle` (AFTER INSERT, solo con `cycle_touch_id` y `status = 'queued'`) y
+`on_send_queue_status_cycle` (AFTER UPDATE OF status, de `queued` a otro estado) → `cycle_on_send_queue_change()`, que
+lleva el desenlace al toque (ver `customer_cycle_touches`). Con `EXCEPTION WHEN OTHERS` → WARNING: el ciclo no tumba
+un envío, una cancelación ni un vencimiento. Índice parcial `idx_send_queue_cycle_touch (cycle_touch_id)`.
 
 **Índices:** el único parcial anti-duplicado `(tenant_id, phone, COALESCE(campaign_id, centinela), message_type) WHERE status='queued'` (00038 — el de la 00037 dejaba sin proteger los items sin `campaign_id`, porque en Postgres dos NULL nunca colisionan), `idx_send_queue_drain`, `idx_send_queue_drain_tenant`, `idx_send_queue_campaign`, `idx_send_queue_expires`, `idx_send_queue_location_id (tenant_id, location_id) WHERE location_id IS NOT NULL` (00043).
 
@@ -1289,11 +1297,13 @@ columna a mano.
 
 ### customer_cycle_touches
 
-> El libro de toques del **ciclo de recuperación** (migración 00070, fase 1A). Un toque por cliente,
-> ciclo, etapa y repetición: es la idempotencia del cron (fase 1B), la **atribución** del regreso a 14
-> días y el **grupo de control**. En la fase 1A nadie escribe en ella. Diseño:
+> El libro de toques del **ciclo de recuperación** (migración 00070, fase 1A; lo que el cron y el
+> drenador necesitan, 00071, fase 1B). Un toque por cliente, ciclo, etapa y repetición: es la
+> idempotencia del cron, la **atribución** del regreso a 14 días y el **grupo de control**. Lo escribe
+> el cron de reactivación de las marcas con el ciclo ENCENDIDO (al decidir) y, desde ahí, sigue a su
+> item de `send_queue` (trigger de la 00071) hasta su desenlace. Diseño:
 > `docs/superpowers/specs/2026-10-04-ciclo-de-recuperacion-design.md` §7.1 y §13;
-> `docs/features/ritmo-adaptativo.md`.
+> `docs/features/ritmo-adaptativo.md` §7; `docs/features/campaigns.md` § «El ciclo encendido».
 
 | Columna | Tipo | Nullable | Default | Descripción |
 |---------|------|----------|---------|-------------|
@@ -1303,7 +1313,7 @@ columna a mano.
 | `cycle_no` | `integer` | NO | - | El `customers.cycle_no` del ciclo en que tocaba |
 | `stage` | `text` | NO | - | `t1`…`t5` \| `heartbeat` (CHECK) |
 | `seq` | `integer` | NO | `1` | Repetición: el trimestral sale `1` y `2` |
-| `status` | `text` | NO | `'pending'` | `pending` \| `queued` \| `sent` \| `failed` \| `holdout` \| `deferred` (pospuesto por el blackout de un evento) |
+| `status` | `text` | NO | `'pending'` | `pending` (decidido, sin encolar: si el encolado falló, el cron lo retoma al día siguiente) \| `queued` \| `sent` \| `failed` (con `attempts` < 3 se reintenta al día siguiente) \| `holdout` \| `deferred` (pospuesto: evento, cap de 7 días, tope del mes o un regalo vivo; `due_at` = cuándo se reevalúa) \| **`cancelled`** (00071: volvió, la etapa ya pasó, la marca apagó el ciclo, opt-out, el panel) |
 | `holdout` | `boolean` | NO | `false` | Grupo de control: NO se envía, SÍ se atribuye. CHECK: un `holdout` solo puede estar `pending`/`holdout`/`deferred`, y `status='holdout'` exige `holdout = true` |
 | `channel` | `text` | NO | `'whatsapp'` | Canal (decisión 21). CHECK: hoy solo `whatsapp` |
 | `due_at` | `timestamptz` | NO | `now()` | Cuándo le tocaba, enviado o no (H5): **la atribución mira esto** |
@@ -1311,12 +1321,24 @@ columna a mano.
 | `campaign_message_id` | `uuid` | SI | `NULL` | FK → campaign_messages(id) ON DELETE SET NULL |
 | `grant_id` | `uuid` | SI | `NULL` | FK → reward_grants(id) ON DELETE SET NULL |
 | `returned_at` | `timestamptz` | SI | `NULL` | Lo escribe el trigger de visita si este fue el último toque `sent`/`holdout` del ciclo con `due_at` en los 14 días previos |
-| `location_id` | `uuid` | SI | `NULL` | Sede. NULL = desconocida o de marca; se muestra, no se backfillea. **FK COMPUESTA** `(location_id, tenant_id)` → `restaurant_locations(id, tenant_id)` ON DELETE RESTRICT |
+| `location_id` | `uuid` | SI | `NULL` | Sede. NULL = desconocida o de marca; se muestra, no se backfillea. **FK COMPUESTA** `(location_id, tenant_id)` → `restaurant_locations(id, tenant_id)` ON DELETE RESTRICT. El cron del ciclo la deja NULL (D12: la sede de una campaña masiva es F6) |
 | `created_at` | `timestamptz` | NO | `now()` | - |
+| `attempts` | `integer` | NO | `0` | **(00071)** Veces que el envío falló del todo (la cola se rindió o el item venció). Con 3 (`MAX_INTENTOS_FALLIDOS_POR_TOQUE`) no se reintenta más. CHECK ≥ 0 |
+| `reason` | `text` | SI | `NULL` | **(00071)** Por qué se pospuso, se canceló o falló, en palabras |
+| `reward_id` | `uuid` | SI | `NULL` | **(00071)** FK → campaign_rewards(id) ON DELETE SET NULL. El regalo elegido al decidir (de la MISMA marca); se otorga al ENVIAR |
+| `gift_size` | `text` | SI | `NULL` | **(00071)** `small` \| `strong` (CHECK). El pequeño no lleva recordatorio; el fuerte mueve `customers.strong_offer_last_at` |
+| `template_key` | `text` | SI | `NULL` | **(00071)** Qué plantilla salió (o habría salido, en control): `gift_expiring` \| `reactivation_aggressive` \| `reactivation_no_reward` \| `campaign_presencial_to_domicilio` \| `campaign_domicilio_to_presencial` (CHECK; espejo de `TOUCH_TEMPLATES`, `src/lib/cycle-touch.ts`) |
 
 **Restricciones:** `customer_cycle_touches_once UNIQUE (customer_id, cycle_no, stage, seq)` — las cuatro NOT NULL, así
 que protege de verdad: es el anti doble disparo (8 inserciones concurrentes, gana una:
-`tests/db/cycle-triggers.test.ts`).
+`tests/db/cycle-triggers.test.ts`; el cron corriendo dos veces a la vez, un toque: `tests/db/cycle-envios.test.ts`).
+
+**El toque sigue a su item de la cola (00071, H6):** `on_send_queue_insert_cycle` y `on_send_queue_status_cycle`
+(sobre `send_queue`, ver allí) lo pasan a `queued` al encolarse (con `due_at` = la hora real del envío) y, cuando el
+item sale de `queued` por cualquier camino —el drenador, `expire_send_queue()` o la cancelación desde el panel—, a
+`sent`, `failed` (`attempts + 1`; también si el item venció) o `cancelled` (con el `last_error` del item como
+`reason`). Solo tocan un toque de la MISMA marca que el item y que siga `queued`: lo que el drenador escribió antes (un
+`deferred` con su fecha) manda. `cycle_reconcile_touches(tenant)` es la red: la corre el cron cada día antes de decidir.
 
 **Índices:** el UNIQUE (sirve también para buscar por `(customer_id, cycle_no)`) ·
 `idx_customer_cycle_touches_tenant_due (tenant_id, due_at)` · `idx_customer_cycle_touches_location` parcial.
@@ -1426,7 +1448,8 @@ RESTRICTIVE `TO authenticated` (patrón 00045).
 
 | 65 | `00065_staff_activity_report.sql` | 2026-09-11 | **Rendimiento del equipo** (`docs/features/staff-activity.md`). NO crea tablas, NO agrega columnas y NO toca una sola fila. Función **`staff_activity_report(tenant, from, to, location_ids uuid[], include_unassigned)`** → `jsonb` con `totals`, `by_staff` y `by_table`: escaneos (`visits.source='staff_scan'`) y premios entregados (`reward_redemptions`) por mesero y por mesa, y **nuevo vs frecuente decidido por la HISTORIA** (nueva = no existe `visits` anterior de ese cliente; ni `total_visits` ni `created_at`). El alcance de sede calca `applyLocationFilter()` rama por rama (NULL = marca entera · `[]`+true = solo el cubo NULL · ids = esas sedes · `[]`+false = nada). Un escaneo sin mesero o sin mesa es una FILA propia del resultado: no se esconde. `SECURITY INVOKER`, `REVOKE` a `anon`/`authenticated`, solo `service_role`. Índice `idx_visits_customer_created`. Sin ella `/api/dashboard/staff-activity` responde 503 nombrándola. | **Aplicada** 2026-09-11 |
 | 67 | `00067_aios_attach_zernio_account.sql` | 2026-09-12 | **Zernio en paralelo a Twilio** — función `aios_attach_zernio_account(slug, profile, account, phone)` → `jsonb`, SECURITY DEFINER, solo `aios_constelarys`. Escribe los tres `tenants.zernio_*` y **nunca** `messaging_provider` (se niega con `ya_es_zernio` si la marca ya manda por Zernio; valida E.164 como la 00036). Es la excepción del Golden Bullet: la difusión por la línea de coexistencia con la marca todavía en Twilio (`docs/features/golden-bullet.md`). No es sobrecarga de `aios_activate_whatsapp` (una sobrecarga deja ambigua la llamada vieja, 42725). Sin tablas ni columnas nuevas. Test: `tests/db/aios-attach-zernio.test.ts`. | Escrita, sin aplicar |
-| 70 | `00070_ciclo_motor_base.sql` | 2026-10-11 | **Ciclo de recuperación, fase 1A: la base del motor** (nada se envía). `customers` gana `cycle_no`, `cycle_started_at`, `cycle_touches`, `cycle_state` (CHECK activo\|dormido\|archivado), `dormant_since`, `heartbeats_sent`, `strong_offer_last_at` y `cycle_rhythm` (ritmo PERSONAL, CHECK de los cuatro). Tabla nueva **`customer_cycle_touches`** (UNIQUE por cliente+ciclo+etapa+seq, FK compuesta de sede, `tenant_id` sin default, RLS de marca y de sede, CHECK que impide enviar un `holdout`). Funciones: `cycle_rhythm_from_median(double)` (cortes < 9 · < 19 · ≤ 35), `cycle_customer_median_gap(uuid, timestamptz)` (mediana de días entre DÍAS DISTINTOS con visita, hora de Bogotá) y `cycle_brand_rhythm_stats(uuid)` (mediana y regresos de la marca), espejo de `src/lib/cycle-engine.ts`. Triggers: `on_customer_insert_cycle`, **`on_customer_visit`** (BEFORE UPDATE: reinicio + atribución a 14 días + ritmo personal) y **`on_campaign_message_sent`** (fatiga por `campaigns.source`); los dos últimos con `EXCEPTION WHEN OTHERS` → WARNING: el ciclo no tumba una visita ni el registro de un mensaje. Todo cerrado a `anon`/`authenticated` (regla de la 00069). **Backfill sin ráfaga**: `cycle_started_at = COALESCE(last_visit_at, created_at)`, > 90 días sin venir → `dormido` desde hoy, ritmo personal con 3+ días, `cycle_touches` intacto; solo filas con `cycle_started_at IS NULL` (idempotente). Termina con una verificación que FALLA si falta algo. Nadie lee las columnas nuevas todavía. Tests: `tests/db/cycle-triggers.test.ts`. Consultas del dueño: `SQL-PARA-CORRER/ciclo-fase-1a/`. | Escrita, **sin aplicar**: va ANTES del push que la lleve |
+| 70 | `00070_ciclo_motor_base.sql` | 2026-10-11 | **Ciclo de recuperación, fase 1A: la base del motor** (nada se envía). `customers` gana `cycle_no`, `cycle_started_at`, `cycle_touches`, `cycle_state` (CHECK activo\|dormido\|archivado), `dormant_since`, `heartbeats_sent`, `strong_offer_last_at` y `cycle_rhythm` (ritmo PERSONAL, CHECK de los cuatro). Tabla nueva **`customer_cycle_touches`** (UNIQUE por cliente+ciclo+etapa+seq, FK compuesta de sede, `tenant_id` sin default, RLS de marca y de sede, CHECK que impide enviar un `holdout`). Funciones: `cycle_rhythm_from_median(double)` (cortes < 9 · < 19 · ≤ 35), `cycle_customer_median_gap(uuid, timestamptz)` (mediana de días entre DÍAS DISTINTOS con visita, hora de Bogotá) y `cycle_brand_rhythm_stats(uuid)` (mediana y regresos de la marca), espejo de `src/lib/cycle-engine.ts`. Triggers: `on_customer_insert_cycle`, **`on_customer_visit`** (BEFORE UPDATE: reinicio + atribución a 14 días + ritmo personal) y **`on_campaign_message_sent`** (fatiga por `campaigns.source`); los dos últimos con `EXCEPTION WHEN OTHERS` → WARNING: el ciclo no tumba una visita ni el registro de un mensaje. Todo cerrado a `anon`/`authenticated` (regla de la 00069). **Backfill sin ráfaga**: `cycle_started_at = COALESCE(last_visit_at, created_at)`, > 90 días sin venir → `dormido` desde hoy, ritmo personal con 3+ días, `cycle_touches` intacto; solo filas con `cycle_started_at IS NULL` (idempotente). Termina con una verificación que FALLA si falta algo. Nadie lee las columnas nuevas todavía. Tests: `tests/db/cycle-triggers.test.ts`. Consultas del dueño: `SQL-PARA-CORRER/ciclo-fase-1a/`. | **Aplicada** por el dueño el 2026-10-12, antes del push |
+| 71 | `00071_ciclo_envios.sql` | 2026-10-13 | **Ciclo de recuperación, fase 1B: los envíos** (el ciclo sigue apagado en todas las marcas). `customer_cycle_touches` gana `attempts` (tope de 3), `reason`, `reward_id` (FK → campaign_rewards, SET NULL), `gift_size` (CHECK small\|strong), `template_key` (CHECK de las cinco plantillas del toque) y el estado **`cancelled`**; los dos CHECK del grupo de control de la 00070 intactos. **`send_queue.cycle_touch_id`** (FK SET NULL, índice parcial) y **`enqueue_send_queue(jsonb)`** que lo copia (cuerpo de la 00044 + una línea, misma firma, sin sobrecarga). **`reward_grants.skip_reminder`** (H2: el regalo pequeño vence sin recordatorio). H6: el toque **sigue a su item de la cola** (`on_send_queue_insert_cycle`, `on_send_queue_status_cycle` → `cycle_on_send_queue_change()` → `cycle_touch_follow_queue_item()`; solo la misma marca, `EXCEPTION` → WARNING) y `cycle_reconcile_touches(uuid)` recoge lo que el trigger no escribió. Todo cerrado a `anon`/`authenticated`. Verificación final que FALLA si falta algo. ⚠️ Va ANTES del push: el código de la 1B le pide `skip_reminder` al recordatorio de premio (sin ella, 42703 y el recordatorio deja de salir en todas las marcas). Tests: `tests/db/cycle-envios.test.ts`. Pasos del dueño: `SQL-PARA-CORRER/ciclo-fase-1b/`. | Escrita, **sin aplicar**: va ANTES del push que la lleve |
 
 ### `tenant_id` en las 18 tablas de negocio
 
@@ -1479,6 +1502,17 @@ $$ LANGUAGE plpgsql;
 Las tres: `SECURITY INVOKER`, solo `service_role` (REVOKE a `PUBLIC`, `anon`, `authenticated`). Que SQL y TS digan lo
 mismo lo verifica `tests/db/cycle-triggers.test.ts` con los mismos historiales. Los triggers del ciclo están en
 `customers` y `campaign_messages`, arriba.
+
+### El toque sigue a la cola (00071)
+
+| Función | Qué hace |
+|---|---|
+| `cycle_touch_follow_queue_item(touch, tenant, status, last_error, sent_at, not_before)` | La regla única: `queued` (desde `pending`/`deferred`/`failed`, con `due_at = not_before`) · `sent` · `failed` (+1, también `expired`) · `cancelled`. Solo el toque de esa marca y en el estado que corresponde. INVOKER |
+| `cycle_on_send_queue_change()` | El trigger de `send_queue` que la llama. SECURITY DEFINER |
+| `cycle_reconcile_touches(uuid)` → `integer` | Los toques `queued` de la marca cuyo último item ya no está `queued` (le aplica la misma regla) o no existe (vuelve a `pending`). La corre el cron del ciclo antes de decidir. SECURITY DEFINER, solo `service_role` |
+
+Las tres cerradas a `PUBLIC`, `anon` y `authenticated` (regla de la 00069). `enqueue_send_queue(jsonb)` se rehízo con la
+misma firma (CREATE OR REPLACE, sin sobrecarga) para copiar `cycle_touch_id`.
 
 ---
 

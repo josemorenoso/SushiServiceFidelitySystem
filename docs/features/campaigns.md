@@ -1,8 +1,11 @@
 # Feature: Campañas — Control de Tráfico Centralizado
 
-**Última actualización:** 2026-10-11 (ciclo, fase 1A: la base del motor, migración 00070 sin aplicar, **nada se envía**; § «Fase 1A»); antes 2026-10-10 (ciclo, fase 0.bis: tope de 3 intentos fallidos por toque, la causa real del fallo, lo que salió queda marcado aunque la corrida aborte); antes 2026-10-08 (fase 0: un fallo no calla, el insistente sale una vez, una sola escala de días)
+**Última actualización:** 2026-10-13 (ciclo, fase 1B: **el cron decide y encola por marca** —ciclo apagado: el camino de siempre; encendido: los toques del ciclo—, migración 00071 sin aplicar, ciclo apagado en todas las marcas; § «El ciclo encendido»); antes 2026-10-11 (ciclo, fase 1A: la base del motor, migración 00070, **nada se envía**; § «Fase 1A»); antes 2026-10-10 (ciclo, fase 0.bis: tope de 3 intentos fallidos por toque, la causa real del fallo, lo que salió queda marcado aunque la corrida aborte); antes 2026-10-08 (fase 0: un fallo no calla, el insistente sale una vez, una sola escala de días)
 
-> ⚠️ **Rediseño en diseño (2026-10-04, sin código todavía):** el recorrido de reactivación, las burbujas de riesgo y el
+> ⚠️ **El ciclo de recuperación, por marca (2026-10-13).** El cron de reactivación tiene DOS caminos y cada marca va por
+> uno: con `cycle_enabled` apagado (las 25 hoy) hace exactamente lo de siempre —el suave y el insistente que describe este
+> documento desde § «Objetivo»—; con el ciclo encendido (primero `demo-ventas`, después Don Alirio) decide los toques del
+> ciclo y los encola: § «El ciclo encendido». Historia del rediseño: el recorrido de reactivación, las burbujas de riesgo y el
 > calendario se reemplazan por **el ciclo de recuperación** (pipeline de 90 días con cinco toques, fatiga a las 6
 > comunicaciones, dormido con un toque trimestral, «regalos que vencen», y campañas + calendario en una sola pantalla). El diseño,
 > el diagnóstico y las fases están en `docs/superpowers/specs/2026-10-04-ciclo-de-recuperacion-design.md`. **La fase 0 ya
@@ -10,8 +13,64 @@
 > cliente no vuelva (antes se repetía cada ~30 días sin tope) y la pantalla usa una sola escala de días. La medición está en
 > `SQL-PARA-CORRER/ciclo-fase-0/`. **La fase 0.bis (2026-10-10, sin migración)** le pone techo al reintento: un toque que
 > falla 3 veces no se intenta más (§ «Tope de reintentos»). **La fase 1A (2026-10-11, migración 00070) construyó la
-> base del motor sin enviar nada** (§ «Fase 1A»). **Lo que sigue abajo describe lo que el código hace HOY** y sigue
-> siendo cierto hasta la fase 1B (el cron y el drenador del ciclo).
+> base del motor sin enviar nada** (§ «Fase 1A»). **La fase 1B (2026-10-13, migración 00071) le dio los envíos**
+> (§ «El ciclo encendido»). La pantalla de Campañas sigue mostrando los días del camino viejo también en una marca con el
+> ciclo encendido: la reemplaza la fase 2.
+
+### El ciclo encendido (fase 1B, 2026-10-13): el cron decide y encola, el drenador envía
+
+El mismo cron (`/api/cron/reactivation`, 15:00 de Bogotá, `vercel.json` intacto) decide marca por marca con
+`normalizeCycleSettings()`:
+
+| La marca tiene… | Qué hace el cron |
+|---|---|
+| `cycle_enabled` apagado (default) | El camino de siempre (`processTenant()`), sin cambiar una línea de su comportamiento. Si quedó una fecha de encendido (`cycle_enabled_at`), la borra |
+| `cycle_enabled = true` | El camino nuevo (`ejecutarCicloDeLaMarca()`, `src/services/cycle.service.ts`). **El viejo NO corre**: si corrieran los dos, el cliente recibiría la suave de siempre y el toque del ciclo |
+| `?dry=1` (cualquier marca) | El camino nuevo como si se encendiera hoy: las mismas decisiones, **cero escrituras y cero envíos**. Es lo que se mira antes de encender |
+
+**El camino nuevo, por marca, en este orden:**
+
+1. **El encendido se anota solo.** La primera corrida que ve la marca encendida guarda `cycle_enabled_at` (clave del
+   SISTEMA: el `PUT` del panel no la acepta, `settings-keys.ts`). Dos reglas desde esa fecha: **(1) nada atrasado** —un
+   toque solo sale si su día (`cycle_started_at` + el día de la etapa, en días de Bogotá) es igual o posterior al
+   encendido; el que ya está entre dos etapas espera la siguiente— y **(2) quien ya pasó la despedida** de su ritmo se
+   duerme (`dormido`, `dormant_since = now()`), sin mensaje.
+2. **Antes de decidir:** `expireGrants()` (un regalo vencido que sigue `active` bloquearía uno nuevo) y la reconciliación
+   de toques (`cycle_reconcile_touches()`, H6).
+3. **El ritmo:** el de la marca (`cycle_brand_rhythm_stats()` + `brandRhythm()`) y el de cada cliente
+   (`effectiveRhythm(customers.cycle_rhythm, marca)`); la etapa la dice `resolveStage()`. Toda la regla del día vive en
+   `src/lib/cycle-touch.ts` (puro): `decidirCliente()` y `resolverToque()`.
+4. **Por cliente activo** (`accepts_marketing`, sin opt-out, paginado de a 1.000): se crea el toque de su etapa si no
+   tiene fila en este ciclo y pasa la regla (1); `t1` se salta con 5 visitas o más; los toques de etapas anteriores que
+   seguían abiertos quedan `cancelled` («la etapa ya pasó»); un `deferred` cuya fecha llegó, un `pending` (encolado que
+   falló a medias) y un `failed` con menos de 3 intentos se retoman. **Dormidos:** el trimestral a los `dormant_since` +
+   90 × n días (máximo 2, con `cycle_heartbeat_enabled`); con los dos y 90 días desde el segundo, `archivado`, sin
+   mensaje. Una despedida que no va a salir (grupo de control, cancelada, 3 fallos) también duerme al cliente.
+5. **El regalo:** `t2` el pequeño (el primero válido de `cycle_small_reward_ids`) · `t4` el fuerte
+   (`cycle_strong_reward_id`, que cae a `aggressive_reward_id`), o el pequeño si el cooldown de 180 días no lo deja · el
+   trimestral, el 1 pequeño y el 2 fuerte. Solo premios activos de ESA marca. Sin regalo configurado, el toque sale igual.
+6. **La plantilla (el adaptador):** con regalo, «Regalo que vence» si está APROBADA en esa marca (Zernio y la marca demo:
+   el puntero alcanza; Twilio: `isTwilioTemplateApproved()`, una vez por corrida); si no, la insistente con el regalo en
+   `{{4}}` y la fecha en `{{5}}`. `t1` → la suave sin oferta · `t3` → la cruzada según `source_channels` · `t5` y un toque
+   sin regalo → la insistente sin `{{4}}`/`{{5}}`. **Nunca** las legacy (`reactivation_with_reward_template_sid`,
+   `reactivation_template_sid`): esas solo las lee el camino viejo. Etapa sin plantilla → no se crea el toque y la
+   respuesta lo cuenta (`saltados.sin_plantilla`).
+7. **Por cada toque, en este orden:** blackout de un evento de su audiencia (`getActiveBlackouts()` +
+   `findCustomersForEvent()`, la MISMA audiencia que recibirá la invitación) → `deferred` hasta el día siguiente al
+   evento · grupo de control (`isHoldout()`, 10 % desde 200 clientes) → `holdout`, sin envío, con su `due_at` · cap de 7
+   días a la hora real del envío → `deferred` a `last_campaign_at + 7` · tope de 3 al mes → `deferred` al día 1 del mes
+   siguiente · el resto: `INSERT … ON CONFLICT DO NOTHING` y, **solo si insertó**, a la cola con su `cycle_touch_id`,
+   `not_before` = la PRÓXIMA hora de la marca (`cycle_send_slot`: la cena, 16:30, sale hoy; el almuerzo, 10:30, ya pasó a
+   las 15:00 y sale mañana, H3) y `expires_at` = el cierre del día siguiente. Sede NULL (D12). La campaña del día
+   (`source = 'reactivation'`, la pieza `cycle_touch` del motor de piezas) se crea solo si hay algo que encolar.
+8. **Nada se envía desde el cron.** La respuesta trae por marca: `por_etapa`, `en_control`, `pospuestos` (evento, siete
+   días, tope del mes), `saltados`, `dormidos_por_encendido`, `dormidos_tras_la_despedida`, `archivados`,
+   `cancelados_etapa_pasada`, `reconciliados`, `encolados_en_la_cola`; con `?dry=1`, además, hasta 10 `ejemplos`.
+
+**El drenador** envía a la hora de la marca, pone «vence el domingo» en ese momento y otorga el regalo solo si el mensaje
+salió: `send-governance.md` § «Los toques del ciclo en el drenador». **El tope de 3 al mes** se corta ahora por mes de
+Bogotá (`getMonthBoundaries()`, N-MES). Paso a paso del dueño: `SQL-PARA-CORRER/ciclo-fase-1b/LEEME.md`. Tests:
+`tests/unit/cycle-gift.test.ts` y `tests/db/cycle-envios.test.ts` (el cron y el drenador reales contra Postgres).
 
 ### Fase 1A (2026-10-11): la base del motor, sin envíos
 
@@ -21,15 +80,18 @@ Lo que agrega (detalle en `docs/features/ritmo-adaptativo.md` §7 y `docs/DB_SCH
   cuántos mensajes de marketing lleva sin volver. **Todo `campaign_messages` que se inserta como `sent`/`delivered`
   pasa por el trigger `on_campaign_message_sent`**: si la campaña es `manual`, `calendar` o `reactivation` (por
   `campaigns.source`, nunca por `type`), suma uno; al sexto el cliente pasa a `dormido`. El recordatorio de premio y el
-  cumpleaños no cuentan. **Hoy nada lee ese estado**: los crons de este documento siguen decidiendo exactamente igual.
+  cumpleaños no cuentan. Desde la 1B lo lee el cron del ciclo en las marcas encendidas; en las apagadas, los crons de
+  este documento siguen decidiendo exactamente igual.
 - **El motor de piezas** (`src/lib/communications/registry.ts`): cada comunicación de este documento (reactivación,
   cumpleaños, recordatorio, evento, manual, Golden Bullet) declarada con sus reglas: si cansa, si cuenta para el tope de
-  3, si está exenta de los 7 días, si pausa el toque. **No reemplaza nada todavía**: un test exige que diga lo mismo que
-  `MONTHLY_CAP_SOURCES`, los exentos del drenador, `message_class_map` y el trigger.
+  3, si está exenta de los 7 días, si pausa el toque. Un test exige que diga lo mismo que `MONTHLY_CAP_SOURCES`, los
+  exentos del drenador, `message_class_map` y el trigger. Desde la 1B el cron del ciclo y el drenador le leen a la pieza
+  `cycle_touch` con qué tipo y fuente se graba y qué topes le aplican.
 - **Los ajustes** `cycle_*` en la lista cerrada del PUT, con el ciclo **apagado** en todas las marcas.
 
-Lo que NO cambia: ningún cron, el drenador, las plantillas ni ninguna pantalla. `deriveCycleBands()` sigue siendo la
-escala de las pantallas hasta la fase 2 (la reemplazará `bandsFromConfig()`).
+Lo que la 1A no cambió (y la 1B solo para las marcas encendidas): los crons, el drenador, las plantillas. Ninguna
+pantalla cambia todavía: `deriveCycleBands()` sigue siendo la escala de las pantallas hasta la fase 2 (la reemplazará
+`bandsFromConfig()`).
 
 ---
 
@@ -160,10 +222,11 @@ Con los defaults (21 / 25) da exactamente **18-25**, los mismos valores fijos de
 
 ## Flujo de Toma de Decisiones (por tipo de campaña)
 
-### Cron Reactivación (`/api/cron/reactivation`)
+### Cron Reactivación (`/api/cron/reactivation`) — el camino de las marcas con el ciclo APAGADO
 
 Corre todos los días a las **20:00 UTC = 15:00 Bogotá** (`vercel.json`). «Ejecutar ahora» llama a esta
-misma ruta (`/api/dashboard/campaigns/run-auto`), así que obedece las mismas reglas.
+misma ruta (`/api/dashboard/campaigns/run-auto`), así que obedece las mismas reglas. Lo que sigue es lo que hace con una
+marca **con el ciclo apagado**; con el ciclo encendido, § «El ciclo encendido».
 
 ```
 getReactivationDaysConfig()            → { suave, insistente }   (21 / 25 por defecto)
@@ -434,7 +497,9 @@ los defaults dicen lo mismo; con días propios, no.
 | `src/services/campaign.service.ts` | `findInactiveCustomers()`, `updateCustomerLastCampaignAt()`, las dedups (`hasRecentCampaignMessage()`, `yaRecibioElInsistente()`) |
 | `src/constants/rankings.ts` | `deriveCycleBands()` / `deriveRiskLevels()` — la escala única de días |
 | `src/services/settings.service.ts` | `getReactivationDaysConfig()` — días configurables |
-| `src/app/api/cron/reactivation/route.ts` | Cron reactivación (días configurables) |
+| `src/app/api/cron/reactivation/route.ts` | Cron reactivación: por marca, el camino viejo (días configurables) o el ciclo |
+| `src/lib/cycle-touch.ts` | El ciclo, puro: qué toque le toca hoy a cada cliente, regalo, adaptador, hora, guardas del drenador |
+| `src/services/cycle.service.ts` | El ciclo con I/O: el cron de una marca encendida y lo que el drenador necesita |
 | `src/app/(dashboard)/dashboard/settings/page.tsx` | UI de configuración de días |
 | `src/app/(dashboard)/dashboard/campaigns/page.tsx` | UI rediseñada del módulo (incluye la pestaña Premios) |
 | `src/components/dashboard/CampaignRewardsCatalog.tsx` | Catálogo de premios de campaña (pestaña Premios) |

@@ -8,6 +8,21 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [feat] — 2026-10-13 — Ciclo de recuperación, fase 1B: el cron decide y encola, el drenador envía y otorga (00071 sin aplicar)
+
+- **Migración 00071, SIN aplicar (va ANTES del push):** el toque gana `attempts`, `reason`, `reward_id`, `gift_size`,
+  `template_key` y `cancelled`; `send_queue.cycle_touch_id` (`enqueue_send_queue()` lo copia, misma firma);
+  `reward_grants.skip_reminder` (H2). H6: el toque **sigue a su item de la cola** por un trigger (drenador,
+  `expire_send_queue()` y panel) y `cycle_reconcile_touches()` es la red. Sin ella, el recordatorio de premio da 42703.
+- **Cron:** ciclo apagado = el código de hoy; encendido = decide y encola a la próxima hora de la marca (H3) con nada
+  atrasado, despedida pasada → dormido sin mensaje, blackout, control, cap de 7 y tope del mes con su fecha, trimestral
+  y archivado; adaptador «Regalo que vence» / insistente. `?dry=1`: cero escrituras, también en marcas apagadas.
+- **Drenador:** guardas del ciclo, «vence el domingo» al enviar, regalo solo tras un envío exitoso (el pequeño sin
+  recordatorio), la despedida duerme. **N-MES**, **TEST-deadlock**, día real del recordatorio (sábado: los 4 ritmos pasan).
+- **Tests:** `cycle-gift` (42) y `cycle-envios` (33, el cron y el drenador REALES sobre Postgres vía
+  `tests/setup/supabase-sobre-pg.ts`). Contra `9f6f093`: no cargan; con solo el módulo puro presente, 38 de 75 caen.
+  Suite: **82 archivos / 1.277 tests**. Del dueño: `SQL-PARA-CORRER/ciclo-fase-1b/LEEME.md`.
+
 ## [deploy] — 2026-10-12 — Push a `main`: ciclo 1A + plantillas «un solo libro» + PL-2-a; consultas de la 1A leídas
 
 - **Push** por orden del dueño: `origin/main` = la rama (16 commits sobre `56544f6`). La 00070 ya estaba aplicada (12-10).

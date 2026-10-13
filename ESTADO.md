@@ -34,7 +34,6 @@
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
 | SEG-2 (carrera de dos `resolve`) y SEG-3 (`PUT tenant-config` con alcance de marca) — prompt `docs/prompts/2026-10-04-seg2-resolve-y-tenant-config.md`, 2026-10-13 | Opus 5.5 | `src/app/api/mystery-box/resolve/route.ts` · `src/services/mystery-box.service.ts` · `src/services/reward-tiers.service.ts` (solo la clase del rechazo de la 00072) · `supabase/migrations/00072_un_reclamo_por_nivel.sql` · `SQL-PARA-CORRER/seg-2-carrera-resolve/` · `src/app/api/dashboard/tenant-config/route.ts` · las pantallas que llaman su `PUT` (`src/app/(dashboard)/dashboard/marca/**`, `src/app/(dashboard)/dashboard/settings/page.tsx` —solo las llamadas al `PUT tenant-config` y su aviso de 403; los bloques de premio son de S-1—, `brand-logo`, `meta-conversions`) · `tests/db/mystery-box-carrera.test.ts` · `tests/unit/mystery-box-resolve*.test.ts` · `tests/unit/tenant-config-permisos.test.ts` · docs: `points-mystery-box.md`, `meta-pixel.md`, `multi-sede.md`, `DB_SCHEMA.md`, `API_DOCS.md`, auditoría §9, `CHANGELOG.md`, `ESTADO.md` | **00072** | en curso |
-| AIOS: nombre visible en el link de conexión — prompt `docs/prompts/2026-10-13-aios-link-nombre-visible.md`, 2026-10-13 | Opus 5.5 | Solo el repo del AIOS (`Level 2.0/aios-constelarys`): `src/app/conectar/**` · `src/lib/zernio/client.ts` (solo si la spec lo permite) · el componente del paso 3 (solo si 2.3 existe) · `docs/features/whatsapp-connect-link.md` · `docs/zernio-api-contract.md` · `CHANGELOG.md` · `package.json`. Del producto: esta fila y, al cerrar, 0.AIOS en §3 | — | en curso |
 | Recompensas en un solo lugar (S-1), 2026-10-13 | Sonnet 5.5 | `dashboard/rewards/page.tsx` · `dashboard/campaigns/page.tsx` (solo la pestaña «Premios») · `dashboard/campaign-rewards/page.tsx` · `dashboard/settings/page.tsx` (solo los dos bloques de premio) · `components/dashboard/CampaignRewardsCatalog.tsx` · `InviteCampaignsPanel.tsx` · componentes nuevos en `components/dashboard/` · `api/dashboard/campaign-rewards/route.ts` · ruta de invitaciones si 2.4 lo pide · `tests/**` nuevos · `docs/features/{reward-grants,invite-campaigns,campaigns,dashboard}.md` · `docs/PENDIENTES.md` · `CHANGELOG.md` | por decidir en 2.4 (si hace falta, el número sale de `proxima-migracion.mjs` y se anota acá) | en curso |
 
 ## 3. Siguiente, en orden
@@ -194,9 +193,17 @@
    2. **El nombre visible quedó «Yenifer Yohana Calle Morera»** (Meta lo llenó con el nombre del portafolio y lo aprobó al
       instante): cambiarlo a «Tepuy» en WhatsApp Manager ANTES del primer mensaje (revisión 1-3 días; puede pedir pruebas).
    3. **Verificación del negocio** (RUT o Cámara de Comercio).
-   Después: Plantillas → «Enviar los N juntos a Meta» en su panel. Para que no se repita en las otras marcas:
-   `docs/prompts/2026-10-13-aios-link-nombre-visible.md` (prompt listo). La `ZERNIO_API_KEY` del `.env.local` del AIOS está
+   Después: Plantillas → «Enviar los N juntos a Meta» en su panel. La `ZERNIO_API_KEY` del `.env.local` del AIOS está
    muerta (401); la del producto funciona.
+   **Para que no se repita: AIOS v1.15.2 CONSTRUIDA (2026-10-13, `4b88ab5` del AIOS), SIN pushear** (tsc · lint · build
+   limpios; push del dueño, Vercel `cada1_aios` lo despliega solo; sin migración ni variables nuevas). La página del link
+   pide «Nombre visible: {marca}, no tu nombre» y va en tú; el paso 3, ya conectado, lee en vivo `GET
+   /v1/whatsapp/number-info` y dice si puede escribir primero y qué le falta al dueño (pago, verificación, nombre).
+   **Al desplegar, abrir el paso 3 de Tepuy**: tiene que decir «Todavía no puede escribirle primero a nadie» con esas tres
+   tareas (es la única verificación que falta: la lectura no se probó contra la cuenta real). El spec 1.274.0 **no deja
+   pre-llenar** el Embedded Signup: el mensaje para el soporte de Zernio, listo para copiar, está en
+   `Level 2.0/aios-constelarys/docs/features/whatsapp-connect-link.md` § Pendiente. Ahí también: `/conexion/whatsapp` (la
+   página de retorno) sigue en vos.
    ⚠️ `clubtepuy.constelarys.com` (raíz) con DOS sedes activas **no debe llevar a Envigado**: por D21
    responde 409 con la lista de sedes. Si lleva a Envigado, o Laureles está inactiva en el producto, o
    Envigado tiene el dominio raíz como propio. Se mira en `/dashboard/sedes` de Tepuy.

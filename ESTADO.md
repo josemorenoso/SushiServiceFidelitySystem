@@ -33,6 +33,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Ciclo fase 2, parte C: la vista por fecha y los creadores (2026-10-14) | Opus 5.5 | `src/app/(dashboard)/dashboard/campaigns/page.tsx`, `src/app/(dashboard)/dashboard/calendar/**`, `src/components/dashboard/cycle/**`, componentes del calendario que se reemplacen, `src/app/api/dashboard/cycle/gift/**` (nuevo), `src/app/api/dashboard/settings/route.ts` y `src/lib/settings-keys.ts` (solo `cycle_enabled`), `src/services/calendar.service.ts`, `getActiveBlackouts()` de `src/services/campaign.service.ts`, lo mínimo del drenador si el regalo manual lo pide, `supabase/migrations/00073_*.sql`, `tests/**` nuevos, `docs/features/calendar.md`, `docs/features/campaigns.md`, `docs/PENDIENTES.md`, `ESTADO.md`, `CHANGELOG.md` | **00073** | en curso |
 
 ## 3. Siguiente, en orden
 

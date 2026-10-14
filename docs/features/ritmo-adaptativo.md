@@ -4,7 +4,8 @@
 > fase 1A, aplicada el 12-10). El cron decide y encola los toques del ciclo y el drenador los envía y otorga el regalo,
 > **solo en las marcas con `cycle_enabled = true`**. Se enciende primero `demo-ventas` (envío simulado) y después el
 > piloto (`SQL-PARA-CORRER/ciclo-fase-1b/LEEME.md`). **Fase 2, parte A (2026-10-14): los datos de la pantalla**
-> (portada, proyección, lista y «Hoy no»), sin migración y sin pushear. Detalle: §7.
+> (portada, proyección, lista y «Hoy no») y **parte B (2026-10-14): la pantalla «Ciclo»** que los dibuja, sin migración y
+> sin pushear. Detalle: §7.
 > Diseñado el 2026-10-11 con datos reales de producción. Piloto: **Don Alirio**, dos semanas. **No se promete en ventas
 > hasta que el piloto esté corriendo** (ver §6).
 > **Diseño completo:** `docs/superpowers/specs/2026-10-04-ciclo-de-recuperacion-design.md` §3.2.bis y §14.
@@ -147,8 +148,6 @@ completas; tiene menos de 30 regresos) · Planeta Wings → Restaurante por defe
 | «Para hoy»: las cinco tarjetas y su orden (clientes ÷ días, máx. 3) | El servicio. La del trimestral corre `decidirCliente()` + `resolverToque()` para la PRÓXIMA corrida del cron (`proximaCorrida()`, 15:00 Bogotá) |
 | «Hoy no» (A6) | `HOY_NO_CLAVES` / `diaQuePospone()` / `pospuestoHoy()` en `cycle-touch.ts`; lo escribe `anotarHoyNo()` y lo lee `ejecutarCicloDeLaMarca()` (`cycle.service.ts`). Clave del sistema `cycle_hoy_no_trimestral` (`settings-keys.ts`) |
 | Las fechas especiales de Colombia | `src/constants/fechas-especiales.ts` (por `business_type` y rubro: el Día del Sushi solo a una marca de sushi) |
+| **La pantalla «Ciclo»** (fase 2, parte B, 2026-10-14) | `src/components/dashboard/cycle/` + `src/lib/cycle-screen.ts` (lo puro: qué se muestra y qué no), en `/dashboard/campaigns`; el mini-ciclo, en `/dashboard`. Lee los endpoints de arriba y NO calcula etapas, ritmos ni días (un test lo exige). El histograma de «Ver por día» usa `por_dia` de la portada (`contarPorDia()`). `docs/features/campaigns.md` § «La pantalla «Ciclo»» |
 
-**Estado (2026-10-14, fase 2 parte A): los datos de la pantalla están; la pantalla no.** El cron decide y encola los
-toques SOLO en las marcas con `cycle_enabled = true` (primero `demo-ventas`, después el piloto en Don Alirio); las 00071
-y 00072 están aplicadas. Los cuatro endpoints de la pantalla leen todo con el motor de arriba, en las marcas apagadas
-también (las cajas salen con el ritmo de la marca y `ciclo.encendido: false`). Falta dibujarla (partes B y C).
+**Estado (2026-10-14, fase 2 parte B): la pantalla «Ciclo» está dibujada** (partes A y B); faltan la vista por fecha y los creadores (parte C). El cron decide y encola los toques SOLO en las marcas con `cycle_enabled = true` (primero `demo-ventas`, después el piloto en Don Alirio); las 00071 y 00072 están aplicadas. Los cuatro endpoints leen todo con el motor de arriba, en las marcas apagadas también (las cajas salen con el ritmo de la marca y `ciclo.encendido: false`), y la pantalla lo dice en una línea; el interruptor lo ve solo el operador de Cada1.

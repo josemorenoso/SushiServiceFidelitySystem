@@ -1142,8 +1142,9 @@ Crea y ejecuta campaña manual con filtros.
 
 - `filters.minDays` / `filters.maxDays` — días sin venir, mismo criterio que el estimador.
 - La query excluye clientes con `whatsapp_opt_out_at` (antes se contaban como fallidos al enviar).
-- Las burbujas de riesgo del dashboard (`AtRiskBubbles`) usan este mismo endpoint con el rango de
-  días del nivel como filtro.
+- Las burbujas de riesgo (`AtRiskBubbles`) usaban este mismo endpoint con el rango de días del nivel como
+  filtro; **salieron de Campañas el 2026-10-14** (las reemplazan las cajas del ciclo) y ya solo viven en la
+  demo pública, que no llama a la API.
 
 ---
 
@@ -1151,7 +1152,8 @@ Crea y ejecuta campaña manual con filtros.
 
 **`POST /api/dashboard/campaigns/run-auto`** — Admin JWT
 
-Puente autenticado para el botón "Ejecutar Ahora" del dashboard: valida la sesión del admin y llama al
+Puente autenticado para el botón "Ejecutar Ahora" del dashboard (**el botón salió de la pantalla el
+2026-10-14 con las tarjetas «Automáticas»; la ruta sigue y ya no tiene quién la llame desde el panel**): valida la sesión del admin y llama al
 cron correspondiente (`/api/cron/birthday` o `/api/cron/reactivation`) del tenant actual con el
 `CRON_SECRET` desde el servidor. El navegador nunca ve el secret.
 
@@ -1692,10 +1694,16 @@ tarjetas ni primer uso, y **sin preguntarle nada al proveedor**.
       "clientes": 31, "dias": 0, "acciones": ["ok", "cambiar_regalo", "hoy_no"], "sale": "2026-10-04T21:30:00.000Z",
       "regalo": "Postre del chef", "pospuesto": false }
   ],
+  "por_dia": { "conteo": [3, 1, 0, 2, 5], "mas_alla": 4 },
   "permisos": { "aprobar": true, "interruptor": false }
 }
 ```
 
+- **`por_dia`** (parte B, 2026-10-14; `null` con `?mini=1`): el histograma de «Ver por día». `conteo[n]` = clientes
+  del ciclo que llevan exactamente `n` días sin venir (los mismos `daysWithoutVisit()` de las cajas; dormidos
+  y los que no reciben mensajes no cuentan); el largo es el día de la Despedida del ritmo de la marca + 10 + 1.
+  `mas_alla` = los que llevan más días que eso (un cliente con ritmo propio más lento que el de la marca).
+  `sum(conteo) + mas_alla = numeros.en_el_ciclo`.
 - **Cajas:** «Recién vino» + las etapas que existen para la marca (sin domicilio no hay «Le mostramos
   lo otro») con el rango del ritmo de la MARCA; cada cliente cae por SU ritmo (`boxOf()`). Cuentan
   los que aceptan mensajes y no pidieron SALIR (los mismos que lee el cron); el resto va en

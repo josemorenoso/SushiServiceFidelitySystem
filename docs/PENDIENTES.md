@@ -57,7 +57,7 @@ encuentra hecha. **5 y 6 se cruzaban** en `campaigns/page.tsx` (la pestaña «Pr
 0.bis están DESPLEGADAS** (`2746d49`, 11-10). **La 1A, la base del motor, está construida y desplegada** (00070 aplicada
 el 12-10). **La 1B, los envíos, está construida y pusheada** (13-10, con la 00071 aplicada antes; el ciclo apagado en
 todas las marcas): el cron decide y encola, el drenador envía y otorga. Falta encenderla (§1, fila 4). **De la fase 2
-(la pantalla) está la parte A, los datos** (14-10, sin pushear); faltan B y C.
+(la pantalla) están las partes A (los datos) y B (la pantalla «Ciclo»)** (14-10, sin pushear); falta la C.
 
 ### 2.1 Qué hace el diseño, en cinco líneas
 
@@ -119,7 +119,7 @@ Y dos cosas que el spec dejó abiertas:
 
 | Fase | Qué | Estado |
 |---|---|---|
-| **2 · La pantalla** | Primer uso · «Para hoy» · seis cajas · vista por fecha con proyección y fechas especiales · mandar un regalo en tres campos · evento con texto sugerido · el calendario redirige · mini-ciclo en el panel · se retiran las burbujas y las cuatro tarjetas | 🟨 **Parte A (los datos) HECHA el 14-10** (abajo). Faltan B (la pantalla) y C (fecha y creadores): prompt `docs/prompts/2026-10-14-ciclo-fase-2-pantalla.md` |
+| **2 · La pantalla** | Primer uso · «Para hoy» · seis cajas · vista por fecha con proyección y fechas especiales · mandar un regalo en tres campos · evento con texto sugerido · el calendario redirige · mini-ciclo en el panel · se retiran las burbujas y las cuatro tarjetas | 🟨 **Partes A (los datos) y B (la pantalla «Ciclo») HECHAS el 14-10** (abajo). Falta la C (vista por fecha y creadores, con el calendario que redirige y el mini-ciclo ya hecho): prompt `docs/prompts/2026-10-14-ciclo-fase-2-pantalla.md` |
 | **3 · Afinar** | El calibrador que sugiere el ritmo · regalos pequeños que rotan · reporte «con mensaje contra sin mensaje» por toque · texto del evento con el LLM | ⬜ Un mes después de la fase 1 |
 | **4 · Futuro** | Fechas especiales completas por rubro · ruleta · sorteos y rifas · cliente del mes · Instagram · «cumpleaños del restaurante» y «datos curiosos». **Cada una es una pieza nueva del motor de 1A** | ⬜ Decidido: después de las fases 1 y 2 |
 
@@ -142,14 +142,8 @@ marcas estén en el ciclo.
 
 **La parte A de la fase 2 está construida** (14-10; `CHANGELOG.md`, `docs/API_DOCS.md` § «Ciclo de recuperación: la
 pantalla», `ritmo-adaptativo.md` §7): `/api/dashboard/cycle/overview` (con `?mini=1`), `/projection`, `/customers` y
-`POST /hoy-no`, con el MISMO motor que el cron. **Lo que les deja a B y C:**
+`POST /hoy-no`, con el MISMO motor que el cron. **Lo que le deja a la C** (lo de la B ya está hecho, abajo):
 
-- **Para B:** la portada es `overview`; el mini-ciclo del panel principal, `overview?mini=1` (sin tocar al proveedor).
-  Botones de «Para hoy»: **OK** no escribe nada (lo automático sale solo, A6: se marca hecho en pantalla) · **Hoy no** →
-  `POST hoy-no` (mostrarlo solo con `permisos.aprobar`) · **Cambiar regalo / Elegir regalo** → Recompensas › Premios para
-  regalar · **Crear evento** trae `fecha` y `nombre` (hasta que exista el creador de C, al calendario de hoy) · **Subir
-  foto** trae `evento_id`. El interruptor del ciclo, solo con `permisos.interruptor`. La lista de una caja es
-  `customers?stage=…` / `?state=dormido`; el «Ver por día», `?day=N`.
 - **Para C:** la vista por fecha es `projection` (máx. 93 días; `reservado_para` es la sombra del blackout); «tocar un
   día» es `customers?fecha=AAAA-MM-DD`. N-BLACKOUT y N-AUDIENCIA (§5) siguen vivos: `projection` no los arregla.
 - **Decidido sin preguntar** (técnico; reversible): «Hoy no» es una clave del sistema en `admin_settings` con el día de la
@@ -164,6 +158,31 @@ pantalla», `ritmo-adaptativo.md` §7): `/api/dashboard/cycle/overview` (con `?m
   blackout (es «a lo sumo») · el próximo evento se busca en 60 días · en una marca APAGADA la Despedida junta a todos los
   que pasaron el día 80 (nadie los duerme hasta encender: es el dato real) · el retorno solo cuenta ventanas de 14 días ya
   cerradas · un «Hoy no» apretado después de las 15:00 con el cron atrasado pospone la corrida de mañana, no la de hoy.
+
+**La parte B de la fase 2 está construida** (14-10; `CHANGELOG.md`, `docs/features/campaigns.md` § «La pantalla «Ciclo»»):
+`/dashboard/campaigns` es «Ciclo y campañas» (pestañas Ciclo e Historial; «Mensaje libre (avanzado)» es un enlace) y el panel
+principal trae el mini-ciclo. **Lo que le deja a la C:**
+
+- **Para C:** «Crear evento» y «Subir foto» de «Para hoy» ya llevan al calendario con `?fecha=…&nombre=…` / `?evento=<id>`, pero
+  **el calendario de hoy NO lee esos parámetros**: el creador de la C tiene que leerlos (o el redirect, pasarlos). El cupo de la
+  línea vive hoy en «Mensaje libre (avanzado)», encima de `ManualCampaigns`: la C lo lleva al creador de «Mandar un regalo» y
+  lo saca de ahí. La vista por fecha entra como `?vista=fecha` (`vistaDeUrl()` ya la deja pasar al ciclo sin romperse).
+  «Mandarles un regalo» desde la lista de una caja no se construyó (no hay creador): es de la C.
+- **Decidido sin preguntar** (técnico; reversible): `overview` ganó `por_dia` (el conteo por día sin venir) porque el
+  histograma de «Ver por día» no se podía dibujar con `?day=N` (una llamada por barra) — es el único cambio a la parte A ·
+  `AtRiskBubbles.tsx` se queda en `/demo` (pública, sin sesión: ni el endpoint ni un ciclo que leer) y `RISK_LEVELS` /
+  `deriveCycleBands()` / `deriveRiskLevels()` se quedan (los usan `getFullAnalytics()`, la demo, `ManualCampaigns` y su test) ·
+  `SegmentRadar` y el cupo se mudaron al «Mensaje libre» · en modo demostración del panel el ciclo no se lee (es de la marca
+  real) · el ritmo se puede cambiar con «cambiar» (cuatro ritmos o «que lo calcule el sistema») solo con permiso de marca ·
+  **no se construyeron** los interruptores por caja ni el del toque trimestral que dibuja el prototipo (no hay clave que los
+  respalde) ni el «Este año no» de la fecha especial · el menú lateral sigue diciendo «Campañas» (el spec §6.7 dice «Ciclo y
+  campañas»; el layout no era de la B) · `run-auto` sigue existiendo sin botón.
+- **Abierto, para el comandante:** (1) **el interruptor lo esconde la pantalla, no el servidor**: `PUT /api/dashboard/settings`
+  acepta `cycle_enabled` de cualquier super usuario de marca (`exigirAlcanceDeMarca()`, no `isSuperAdmin()`), así que un dueño
+  con `role='brand'` que llame a la ruta a mano lo enciende. Cerrarlo es una regla en `decidirEscrituraDeAjuste()` (solo el
+  operador escribe `cycle_enabled`): decisión H7, no lo hice porque el archivo no era de la B. (2) `getFullAnalytics()` todavía
+  arma `atRiskGroups` en cada carga del panel y nadie lo lee desde que salieron las burbujas (solo la demo, que usa su propia
+  versión local): quitarlo es una limpieza aparte.
 
 ### 2.5 Lo que el diseño mide para saber si funciona
 
@@ -278,6 +297,7 @@ Cada uno es menos de una hora. Juntos protegen todo lo que viene.
 | N-CATALOGO-1B | `template-catalog.ts`, «Regalo que vence»: el `whenSent` dice «Todavía no se envía: la usará el ciclo de recuperación cuando se encienda en tu marca» (sigue siendo cierto en cada marca apagada) y el comentario de arriba dice «Hasta entonces nadie la envía», que dejó de ser verdad con la 1B. Fuera del territorio de la 1B (el catálogo no se tocaba) | Un comentario que miente |
 | PL-2-ciclo | El ciclo le pregunta a Twilio si «Regalo que vence» está aprobada, pero no las otras cuatro que usa (suave, insistente y las dos cruzadas): si una marca Twilio las creó desde el panel y siguen en revisión, el toque falla 3 veces y se rinde. Es el mismo hueco de PL-2 (§3.2), un emisor más | Un toque perdido por una plantilla en revisión |
 | N-PORTADA-TWILIO | La portada del ciclo (`GET /api/dashboard/cycle/overview`, sin `?mini=1`) le pregunta a Twilio si «Regalo que vence» está aprobada **en cada carga** (`regaloQueVenceAprobada()` → `isTwilioTemplateApproved()`, `cache: 'no-store'`). El cron lo hace una vez por corrida; la pantalla, cada vez que el dueño la abre. Es una lectura gratis y sin efectos, pero suma latencia a la portada y llamadas a Twilio. Un caché de 60 s por marca (como el de la WABA de P1-a) lo resuelve. Lo vio el comandante al verificar la parte A (14-10) | Latencia; no rompe nada |
+| N-RADAR | `SegmentRadar` (ahora dentro de «Mensaje libre (avanzado)») no mira `res.ok`: ante un 500 del endpoint pinta «NaN clientes con marketing activo» y ceros — el mismo antipatrón del 04-10, y ya estaba en la pantalla vieja. Además su copy sigue con la escala de antes («visitaron en los últimos 17 días», «el sistema los contacta solo al día 21», «18-25 días»), que con el ciclo encendido es mentira, igual que los presets de `ManualCampaigns`. Lo vio la B (14-10); fuera de su territorio. Arreglo: leer `res.ok` y mostrar «—» + un aviso; después alinear el copy o retirar el radar | Una pantalla que miente ante un fallo y con días que ya no son los del ciclo |
 | N6 | Los botones sí/no del webhook de Zernio esperan 10 s antes de contestar | El mismo riesgo de apagón que se cerró en ESCALA-3 |
 | N13 | El PIN del supervisor no tiene límite de intentos | Seguridad |
 | N18 | Un test de la analítica contra el Postgres real (el 500 del 04-10 lo habría cazado) + CI (PROC-1) | Cada push a `main` despliega |

@@ -1,6 +1,6 @@
 # Feature: Campañas — Control de Tráfico Centralizado
 
-**Última actualización:** 2026-10-13 (S-1: la pestaña «Premios» **salió de Campañas** y vive en Recompensas, § «Novedades v2.10.0»); antes 2026-10-13 (ciclo, fase 1B: **el cron decide y encola por marca** —ciclo apagado: el camino de siempre; encendido: los toques del ciclo—, migración 00071 sin aplicar, ciclo apagado en todas las marcas; § «El ciclo encendido»); antes 2026-10-11 (ciclo, fase 1A: la base del motor, migración 00070, **nada se envía**; § «Fase 1A»); antes 2026-10-10 (ciclo, fase 0.bis: tope de 3 intentos fallidos por toque, la causa real del fallo, lo que salió queda marcado aunque la corrida aborte); antes 2026-10-08 (fase 0: un fallo no calla, el insistente sale una vez, una sola escala de días)
+**Última actualización:** 2026-10-14 (ciclo, fase 2 parte B: **la pantalla «Ciclo» reemplaza a Automáticas, la tira y las burbujas**, § «La pantalla «Ciclo»»); antes 2026-10-13 (S-1: la pestaña «Premios» **salió de Campañas** y vive en Recompensas, § «Novedades v2.10.0»); antes 2026-10-13 (ciclo, fase 1B: **el cron decide y encola por marca** —ciclo apagado: el camino de siempre; encendido: los toques del ciclo—, migración 00071 sin aplicar, ciclo apagado en todas las marcas; § «El ciclo encendido»); antes 2026-10-11 (ciclo, fase 1A: la base del motor, migración 00070, **nada se envía**; § «Fase 1A»); antes 2026-10-10 (ciclo, fase 0.bis: tope de 3 intentos fallidos por toque, la causa real del fallo, lo que salió queda marcado aunque la corrida aborte); antes 2026-10-08 (fase 0: un fallo no calla, el insistente sale una vez, una sola escala de días)
 
 > ⚠️ **El ciclo de recuperación, por marca (2026-10-13).** El cron de reactivación tiene DOS caminos y cada marca va por
 > uno: con `cycle_enabled` apagado (las 25 hoy) hace exactamente lo de siempre —el suave y el insistente que describe este
@@ -14,8 +14,63 @@
 > `SQL-PARA-CORRER/ciclo-fase-0/`. **La fase 0.bis (2026-10-10, sin migración)** le pone techo al reintento: un toque que
 > falla 3 veces no se intenta más (§ «Tope de reintentos»). **La fase 1A (2026-10-11, migración 00070) construyó la
 > base del motor sin enviar nada** (§ «Fase 1A»). **La fase 1B (2026-10-13, migración 00071) le dio los envíos**
-> (§ «El ciclo encendido»). La pantalla de Campañas sigue mostrando los días del camino viejo también en una marca con el
-> ciclo encendido: la reemplaza la fase 2.
+> (§ «El ciclo encendido»). **La fase 2, parte B (2026-10-14) dibujó la pantalla** (§ «La pantalla «Ciclo»»): ya no
+> muestra los días del camino viejo, sino las cajas del motor.
+
+### La pantalla «Ciclo» (fase 2, parte B, 2026-10-14)
+
+`/dashboard/campaigns` es ahora **«Ciclo y campañas»**: dos pestañas, **Ciclo** (la que abre) e **Historial**.
+«Mensaje libre (avanzado)» NO es una pestaña: es un botón de arriba que lleva al asistente manual de siempre
+(`ManualCampaigns`) con su «Volver al ciclo»; ahí viven también el cupo de la línea (`CupoEnvioCard`, que salió de la
+portada: la parte C lo lleva al creador de «Mandar un regalo») y el radar de segmentos (`SegmentRadar`). La vista se lee
+de `?vista=` o del viejo `?tab=` con `window.location` + `useSyncExternalStore` (nunca `useSearchParams()`): `?tab=manuales`
+abre el mensaje libre, `?tab=historial` el historial, `?tab=automaticas` y lo desconocido el ciclo, `?tab=premios`
+redirige a Recompensas (S-1).
+
+**Qué dibuja, de arriba abajo** (todo sale de `GET /api/dashboard/cycle/overview`, el MISMO motor que el cron;
+componentes en `src/components/dashboard/cycle/`, lo puro —qué se muestra y qué no— en `src/lib/cycle-screen.ts`):
+
+1. **El estado del ciclo y el ritmo** (`EstadoDelCiclo`). Con el ciclo APAGADO (la mayoría de las marcas) la pantalla
+   igual muestra las cajas y lo dice en una línea. **El botón de encender/apagar lo ve y lo usa SOLO el operador de
+   Cada1** (`permisos.interruptor`; pide confirmación y escribe `cycle_enabled` por el `PUT` de Ajustes). «Tus clientes
+   vuelven cada mes · Calculado con 135 regresos» con «cambiar» (cuatro ritmos o «que lo calcule el sistema») solo con
+   permiso de marca (`permisos.aprobar`). ⚠️ El interruptor lo esconde la pantalla; el `PUT` de Ajustes acepta
+   `cycle_enabled` de cualquier super usuario de marca (`docs/PENDIENTES.md` §2.4).
+2. **Primer uso** (`PrimerUso`, spec §6.0): regalo pequeño · regalo fuerte · «Regalo que vence», con barra, hasta que
+   estén los tres. Ninguno bloquea el ciclo; los regalos llevan a Recompensas › Premios para regalar y la plantilla a
+   Plantillas.
+3. **«Para hoy»** (`ParaHoy`, §6.1): máximo tres tarjetas. OK no escribe nada (lo automático sale solo, A6; el navegador
+   recuerda el OK solo por hoy) · Hoy no → `POST /api/dashboard/cycle/hoy-no` (solo con permiso de marca; si falla, la
+   tarjeta no dice «listo») · Cambiar/Elegir regalo → Recompensas · Crear evento / Subir foto → el calendario de hoy, con
+   `fecha`, `nombre` o `evento` en la URL para que la parte C los lea.
+4. **Tres números** (`NumerosDeArriba`, §6.3): volvieron por un mensaje (con «con mensaje X % · sin mensaje Y %» cuando
+   hay grupo de control), en el ciclo · dormidos, próximo evento; debajo, la segunda visita (A12). **Ninguno es
+   «enviados».**
+5. **Las cajas** (`CajasDelCiclo`, §6.2): Recién vino, las etapas que existan para la marca y Dormidos, cada una partida en
+   nuevos / ya volvieron, con «hoy entran», el regalo y el retorno con y sin mensaje. Tocar una abre la lista
+   (`ListaDeCaja` → `GET …/cycle/customers`, de a 20 con «Ver más»). Debajo, **«Ver por día»** plegado: el histograma
+   (`VerPorDia`, con `por_dia` de la portada), cuyo color de barra es la caja según los rangos que mandó el servidor.
+   Los colores salen solo de `--brand-*` (`COLOR_DE_CAJA`): ningún hex.
+6. **«¿Cómo decide el sistema?»** con el porcentaje REAL del grupo de control (con 0 % no afirma uno).
+
+**Un fallo nunca es un cero.** Si la lectura falla (500, red caída o un 200 con otra forma) la pantalla dice «No pudimos
+leer tu ciclo» con «Reintentar» y no dibuja un solo número; una relectura fallida conserva lo que ya se veía y avisa. Los
+números que no se pudieron medir son «—» (`cantidad()`, `porcentaje()`), no «0». En modo demostración del panel no se lee
+nada: el ciclo es de la marca real.
+
+**Lo que se retiró** (spec §6.7, §7.6): las tarjetas «Automáticas» (cumpleaños y reactivación, con su «Ejecutar Ahora» y la
+insignia «Activa», que no miraba la plantilla insistente), la tira «Ciclo de recuperación del cliente», los KPIs del mes
+(«mensajes enviados» incluido) y `AtRiskBubbles` de Campañas. `POST /api/dashboard/campaigns/run-auto` sigue existiendo
+pero ya no tiene botón. **Se conservan a propósito:** `AtRiskBubbles.tsx` en `/demo` (pública, sin sesión: no hay ciclo
+que leer) y `RISK_LEVELS` / `deriveCycleBands()` / `deriveRiskLevels()`, que siguen en uso (`getFullAnalytics()`, la demo,
+`ManualCampaigns` y su test). El panel principal (`/dashboard`) trae el **mini-ciclo** (`MiniCiclo`: las mismas cajas sin
+detalle, `overview?mini=1`, con enlace a esta pantalla; es de la marca entera).
+
+**Pendiente de la parte C:** la vista «por fecha», «Mandar un regalo» en tres campos y el creador de eventos (con eso,
+`/dashboard/calendar` redirige acá). **Deuda anotada:** `SegmentRadar` y `ManualCampaigns` siguen con la escala vieja
+(17 · 21 · 25 días) y `SegmentRadar` ante un fallo del endpoint muestra «NaN clientes» y ceros (`docs/PENDIENTES.md` §5).
+Tests: `tests/unit/cycle-pantalla-b.test.ts` (lo puro) y `tests/unit/cycle-pantalla-b-render.test.ts` (los componentes a
+HTML, «error ⇒ ningún número», quién ve qué, lo retirado).
 
 ### El ciclo encendido (fase 1B, 2026-10-13): el cron decide y encola, el drenador envía
 
@@ -475,31 +530,25 @@ mismas que el cron (`normalizeReactivationDays()` → `deriveRecoveryZone()`):
 | Recuperación | la zona del cron | 18-25 | 12-20 |
 | Perdido | fin de la zona + 1 … | 26+ | 21+ |
 
-La leen la tira de Campañas, el panel (`getFullAnalytics()` arma `atRiskGroups` con los días de la
-marca, que lee de `admin_settings` en la misma consulta que `avg_ticket`), el demo (`RISK_LEVELS` = las
-bandas con los defaults) y la burbuja (su estimador y su envío filtran por el rango de la banda, que la
-página le pasa con los días de la marca). Las burbujas son las bandas **sin «Reciente»**. Si el suave
-es muy temprano (≤ 10) la Ventana queda vacía y no se muestra. Test:
-`tests/unit/ciclo-fase-0-una-escala.test.ts`.
+La leen el panel (`getFullAnalytics()` arma `atRiskGroups` con los días de la marca, que lee de
+`admin_settings` en la misma consulta que `avg_ticket`), el demo (`RISK_LEVELS` = las bandas con los
+defaults) y `ManualCampaigns`. **Desde el 2026-10-14 ya no la leen la tira ni las burbujas de Campañas**: la pantalla
+«Ciclo» dibuja las cajas del motor del ciclo (`boxOf()`, los días del ritmo de la marca) y no esta escala; la escala
+vieja queda solo donde se sigue usando (las burbujas ya solo viven en `/demo`). Si el suave es muy temprano (≤ 10)
+la Ventana queda vacía y no se muestra. Test: `tests/unit/ciclo-fase-0-una-escala.test.ts`.
 
 **Lo que todavía NO lee esta escala** (fuera del alcance de la fase 0): el preset «Rescatar Perdidos»
 de `ManualCampaigns.tsx` (`minDays: '26'` fijo), el filtro Activo / Inactivo / Perdido de Clientes
 (`getCustomers()`, 18 y 25 fijos) y el contador de inactivos de `getDashboardMetrics()` (21 fijo). Con
 los defaults dicen lo mismo; con días propios, no.
 
-### Rediseño UI del Módulo de Campañas (v1.4.0 — Req 5)
+### Rediseño UI del Módulo de Campañas (v1.4.0 — Req 5): reemplazado el 2026-10-14
 
-`src/app/(dashboard)/dashboard/campaigns/page.tsx`:
-- **KPIs del mes**: campañas ejecutadas, mensajes enviados, última ejecución.
-- **Badge de estado real** por campaña automática: `Activa` (verde, plantilla configurada) o `Sin plantilla` (rojo) según `admin_settings`.
-- **Preview real del mensaje**: muestra el body de la plantilla Twilio configurada (fetch a `/api/dashboard/templates`), también en el dialog de confirmación antes de ejecutar.
-- **Días dinámicos**: la descripción de Reactivación muestra los días configurados (no hardcoded).
-  Desde el 2026-09-06 también las bandas del "Ciclo de recuperación del cliente": antes salían de
-  `RECOVERY_ZONE_START_DAYS`/`END_DAYS` fijas y no se movían al cambiar las fechas en Ajustes.
-- **Botón "Ejecutar Ahora" deshabilitado** si no hay plantilla configurada.
-- **Historial traducido**: estados en español (Finalizada/En curso/Borrador/Fallida).
-- Separación explícita Automáticas / Manuales / Historial vía tabs (ya existía, se mantiene).
-- Link directo a Ajustes para configurar plantillas y días.
+Los KPIs del mes, la insignia `Activa`/`Sin plantilla`, la vista previa de la plantilla, los días dinámicos de las tarjetas,
+«Ejecutar Ahora» y la separación Automáticas / Manuales / Historial **ya no existen**: los reemplaza la pantalla «Ciclo»
+(§ «La pantalla «Ciclo»», arriba). Lo que se conserva es el **historial traducido** (Finalizada / En curso / Borrador /
+Fallida), ahora en `HistorialDeCampanas.tsx`, que se monta solo al abrir la pestaña y ante un fallo de lectura dice «no
+pudimos leer el historial» en vez de «no hay campañas».
 
 ---
 
@@ -515,7 +564,10 @@ los defaults dicen lo mismo; con días propios, no.
 | `src/lib/cycle-touch.ts` | El ciclo, puro: qué toque le toca hoy a cada cliente, regalo, adaptador, hora, guardas del drenador |
 | `src/services/cycle.service.ts` | El ciclo con I/O: el cron de una marca encendida y lo que el drenador necesita |
 | `src/app/(dashboard)/dashboard/settings/page.tsx` | UI de configuración de días |
-| `src/app/(dashboard)/dashboard/campaigns/page.tsx` | UI rediseñada del módulo (Automáticas · Manuales · Historial; `?tab=premios` redirige a Recompensas) |
+| `src/app/(dashboard)/dashboard/campaigns/page.tsx` | «Ciclo y campañas»: pestañas Ciclo · Historial, y el enlace «Mensaje libre (avanzado)» (`?tab=premios` redirige a Recompensas) |
+| `src/components/dashboard/cycle/` | La pantalla «Ciclo» (`CicloPantalla`, `EstadoDelCiclo`, `PrimerUso`, `ParaHoy`, `NumerosDeArriba`, `CajasDelCiclo`, `ListaDeCaja`, `VerPorDia`, `ComoDecide`), el mini-ciclo del panel (`MiniCiclo`) y `HistorialDeCampanas` |
+| `src/lib/cycle-screen.ts` | Lo puro de la pantalla: qué se muestra y qué no (formatos, «un fallo no es un cero», quién ve qué, rutas, colores `--brand-*`) |
+| `src/services/cycle-overview.service.ts` + `src/app/api/dashboard/cycle/*` | Los datos de la pantalla (parte A): `docs/API_DOCS.md` § «Ciclo de recuperación: la pantalla» |
 | `src/components/dashboard/CampaignRewardsCatalog.tsx` | Catálogo de premios para regalar (vive en Recompensas › Premios para regalar desde 2026-10-13) |
 | `src/app/(dashboard)/dashboard/campaign-rewards/page.tsx` | Ruta vieja: redirige a `rewards?tab=premios` |
 | `src/app/api/cron/birthday/route.ts` | Cron cumpleaños |

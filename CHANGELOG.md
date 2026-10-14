@@ -8,6 +8,22 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [feat] — 2026-10-14 — Ciclo, fase 2 parte B: la pantalla «Ciclo» de Campañas y el mini-ciclo del panel (sin migración)
+
+- **`/dashboard/campaigns` = «Ciclo y campañas»:** pestañas Ciclo e Historial; «Mensaje libre (avanzado)» es un enlace al
+  asistente de siempre (con el cupo y el radar). Ciclo: estado (el interruptor lo ve solo el operador de Cada1) y ritmo
+  de la marca, primer uso (3 pasos), «Para hoy» (OK · Hoy no · regalo · evento · foto), tres números (ninguno «enviados»),
+  las cajas (nuevos / ya volvieron, «hoy entran», retorno con y sin mensaje), la lista al tocar una y «Ver por día».
+- **Un fallo nunca es un cero:** 500, red caída o un 200 de otra forma → «No pudimos leer tu ciclo» + Reintentar, sin un
+  solo número; lo que no se pudo medir es «—». Colores solo `--brand-*`, ningún hex. Celular primero (2 columnas).
+- **`MiniCiclo`** en `/dashboard` (`overview?mini=1`). **Se retiran** de Campañas: las tarjetas «Automáticas» (y su
+  «Ejecutar Ahora» y la insignia «Activa»), la tira «Ciclo de recuperación del cliente», los KPIs del mes y `AtRiskBubbles`.
+  Se quedan `AtRiskBubbles` en `/demo` y `RISK_LEVELS`/`deriveCycleBands()` (siguen en uso).
+- **`overview` ganó `por_dia`** (histograma de «Ver por día»): único cambio a la parte A. Lo puro vive en `src/lib/cycle-screen.ts`.
+- **Tests:** 97 nuevos (2 archivos de `tests/unit/` + 1 contra Postgres); con los 3 archivos modificados en su versión de
+  `HEAD` caen 10 de 130, y sin los módulos nuevos los dos archivos no cargan. Suite: **91 / 1.550**.
+  Abierto: el interruptor lo esconde la pantalla, no el servidor; `SegmentRadar` (`PENDIENTES.md` §2.4 y §5).
+
 ## [feat] — 2026-10-14 — Ciclo, fase 2 parte A: los datos de la pantalla y «Hoy no» (sin migración)
 
 - **`GET /api/dashboard/cycle/overview`** (`?mini=1` para el panel principal): ritmo de la marca con su origen, cajas por

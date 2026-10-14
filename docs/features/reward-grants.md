@@ -4,7 +4,9 @@
 > regala cada mensaje» viven juntos en **Recompensas › Premios para regalar** (§ «Dónde vive cada premio»); salieron de
 > Campañas y de Ajustes, y las escrituras del catálogo exigen alcance de marca. **2026-10-13 (ciclo, fase 1B, migración 00071 sin aplicar):** `grantReward()`
 > acepta un vencimiento exacto (`expiresAt`) y `skipReminder`; el recordatorio no sale para los `skip_reminder` (§ «El
-> regalo del ciclo de recuperación»).
+> regalo del ciclo de recuperación»). **2026-10-15 (referidos, migración 00075 sin aplicar):** fuente `referral` con
+> `referral_id`, el freno «un premio por referido y por persona» y el índice de un premio de campaña activo que deja de
+> aplicar a `referral` (§ «Los premios de los referidos»).
 > **Versión:** v2.3.0
 > **Fecha:** 2026-07-11
 > **Spec:** [`docs/superpowers/specs/2026-07-11-reward-grants-design.md`](../superpowers/specs/2026-07-11-reward-grants-design.md)
@@ -38,7 +40,7 @@ Dos tipos:
 | Tipo | Origen | Vence |
 |------|--------|-------|
 | `tier_prize` | El cliente cruzó el umbral de puntos y eligió Mystery Box o "a la segura". | No |
-| `campaign_prize` | Se lo otorgó una campaña: reactivación agresiva, o una **invitación con premio** (`source='invite'`, 00063, [`invite-campaigns.md`](invite-campaigns.md)). | Sí, `expires_at` (la invitación puede no vencer: `window_days` NULL) |
+| `campaign_prize` | Se lo otorgó una campaña: reactivación agresiva, una **invitación con premio** (`source='invite'`, 00063, [`invite-campaigns.md`](invite-campaigns.md)) o un **referido** (`source='referral'`, 00075, [`referral-program.md`](referral-program.md)). | Sí, `expires_at` (la invitación puede no vencer: `window_days` NULL; el referido, a los días del programa) |
 
 ## Modelo de datos
 
@@ -89,6 +91,23 @@ el mensaje salió (`campaigns.md` § «El ciclo encendido», `send-governance.md
   que lo toma es la del **sábado** (`diaDelRecordatorio()`, `cycle-engine.ts`). La validación de los ritmos simula ese
   día.
 
+### Los premios de los referidos (2026-10-15, 00075)
+
+Un referido da DOS premios, cada uno una fila con `source = 'referral'` y `referral_id`
+([`referral-program.md`](referral-program.md)):
+
+- **El regalo del amigo** (`customer_id` = el amigo): se otorga AL REGISTRARSE por `/r/{código}`, con
+  `granted_location_id` = la sede del registro, y se entrega en su visita #1, como una invitación.
+- **El premio de quien lo trajo** (`customer_id` = quien invitó): se otorga cuando el MESERO valida la primera visita del
+  amigo (`completar_referido()` decide una vez), con `granted_location_id` = la sede de ESA visita.
+- `grantReward({ referralId, grantedLocationId })`: las dos columnas solo se nombran cuando vienen; los demás llamadores no
+  cambian (siguen dejando `granted_location_id` en NULL: deuda #13).
+- **`idx_reward_grants_referral_once UNIQUE (referral_id, customer_id)`**: un premio por referido y por persona, para siempre.
+  Un segundo intento vuelve como `duplicate_active` (la misma condición esperada de siempre).
+- **El índice de un premio de campaña ACTIVO por cliente y fuente ya no aplica a `referral`**: quien trae a tres amigos que
+  vienen antes de que reclame el primero tiene tres premios. Para las demás fuentes, la misma regla.
+- Si el premio elegido para el referido se retiró del catálogo (o no es de la marca), no se otorga nada y queda en el log.
+
 ### Premio de campaña (reactivación agresiva, camino viejo: marcas con el ciclo apagado)
 
 1. El cron agresivo envía el WhatsApp y **otorga el premio** con `expires_at = hoy + N días`.
@@ -135,6 +154,7 @@ Antes eran cuatro lugares; ahora el dueño tiene uno para crear el premio y eleg
 | **Premio por reseña** | Recompensas › Premios para regalar | `review_reward_id` + `review_reward_window_days` |
 | **Recordatorio antes de que venza** | Recompensas › Premios para regalar (dentro del regalo fuerte) | `reward_reminder_enabled` + `reward_reminder_days_before` (el mensaje, en Plantillas) |
 | Premio de una invitación | Recompensas › Invitaciones: se **elige del catálogo** o se escribe libre | `qr_campaigns.reward_title` (texto; ver [`invite-campaigns.md`](invite-campaigns.md)) |
+| **Referidos**: el premio de quien invita y el regalo del amigo | Recompensas › **Referidos**: un premio del catálogo (el mismo selector), puntos o nada | `referral_referrer_reward_*`, `referral_referred_reward_*` (los escribe solo `PUT /api/dashboard/referrals`; [`referral-program.md`](referral-program.md)) |
 
 - **C2 — «temporal» no es un tipo nuevo**: es la ventana de reclamo que ya existía. La pantalla lo dice donde se elige un premio
   que vence («vence a los 7 días»; con el ciclo encendido, «vence el domingo»).
@@ -190,7 +210,7 @@ plantilla agresiva de 4 variables sigue funcionando sin cambios.
   campaña de clientes que aún no han venido existen, pero solo saltan a la pantalla del mesero cuando el
   cliente llega.
 - **Un cliente no puede tener dos premios de reactivación activos a la vez** (índice único parcial). Sí
-  puede tener varios premios de tier pendientes.
+  puede tener varios premios de tier pendientes, y varios de referidos (uno por amigo que vino; 00075).
 - **La defensa contra la doble entrega está en la base de datos**, no en la UI: índice único parcial sobre
   `reward_redemptions(grant_id)`.
 - **Aislamiento por tenant:** toda query filtra `tenant_id` explícitamente. El proyecto usa service-role,
@@ -228,7 +248,8 @@ plantilla agresiva de 4 variables sigue funcionando sin cambios.
 
 El catálogo y el motor de grants **son la infraestructura de los referidos, las promos y la recompensa por
 reseña**. Ninguno tendrá que tocar la entrega, la atribución al mesero, el vencimiento ni las métricas:
-solo otorgar un grant con otro `source`.
+solo otorgar un grant con otro `source`. Se cumplió con las invitaciones (`invite`, 00063) y con los referidos
+(`referral`, 00075): la entrega, el mesero y las métricas no cambiaron (solo ganaron su etiqueta).
 
 ---
 

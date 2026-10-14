@@ -376,6 +376,12 @@ en el body** — ver la deuda #9.
 Con **0 o 1** sedes activas este 409 **no se dispara nunca**: es el interruptor de
 compatibilidad del §8.3 del spec.
 
+**El selector conserva la ruta (2026-10-15, referidos):** «¿En cuál estás?» (`CheckInForm`) manda a
+`https://{sede}{misma ruta}?phone=…` (`urlDeLaSede()`). Antes iba a la raíz de la sede, y quien había llegado
+por `/r/{código}` o `/c/{slug}` perdía su código o su invitación justo en las marcas de 2+ sedes. Y el enlace
+de referido que se comparte ya sale con el dominio de la sede donde quien invita vino por última vez
+(`docs/features/referral-program.md` §3), así que casi nunca se llega a preguntar.
+
 ### Qué columna llena cada camino
 
 | Escritor | Columnas que llena | Procedencia |
@@ -384,6 +390,7 @@ compatibilidad del §8.3 del spec.
 | `POST /api/check-in` · `checkin` | las mismas + `visits.location_conflict` | `host` / `host_single` (y `staff_user`/`staff_device` cuando llegue F4) |
 | `POST /api/webhook/delivery` | las mismas (sin conflicto) | `authorized_number` |
 | `POST /api/check-in/review-action` | `review_events.location_id` | la del host |
+| Referidos (`register` con código / `checkin` del mesero, 00075) | `reward_grants.granted_location_id` del regalo del amigo (la sede del registro) y del premio de quien invita (la sede de la visita que lo ganó) | la misma precedencia de cada camino |
 
 `visits.location_source` y `location_id` **van juntos o no van** — lo impone el CHECK, y el
 resolver lo cumple por construcción: nunca asigna uno sin el otro.

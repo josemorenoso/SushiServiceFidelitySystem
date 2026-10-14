@@ -8,6 +8,21 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [feat] — 2026-10-15 — Referidos: el cliente trae a un amigo y los dos ganan (migración 00075, va ANTES del push)
+
+- **Pedido** (dueño, S-6): *«necesito que creemos ya el apartado de referidos»*. Apagado en todas las marcas.
+- **El cliente:** «🎁 Gánate {X} por traer a un amigo» en la tarjeta, la pantalla de éxito y `/tarjeta`: su enlace `/r/{código}`,
+  «Compartir por WhatsApp» (su WhatsApp personal, sin plantillas ni cupo de la línea) y «Tus invitados» con su estado.
+- **El amigo:** «{Nombre} te regaló {beneficio} 🎁» y el registro de siempre; queda pendiente del mesero con su regalo en la
+  tarjeta. Código de otra marca, apagado o inexistente: la landing normal, sin error.
+- **Los dos ganan cuando el mesero valida la primera visita del amigo**, una sola vez aunque lleguen escaneos a la vez
+  (`completar_referido()`: FOR UPDATE + candado por referidor), con la sede de esa visita. Tope 10 al mes y 30 días (ajustes);
+  un teléfono una vez por marca; ya cliente o auto-referencia no cuentan. Premio del catálogo, puntos o nada, por marca.
+- **Panel:** Recompensas › Referidos (ajustes; números: registrados, vinieron, premios, los que más traen; nunca pesos). Un
+  premio de otra marca → 400; administrador de sede → 403; fallo de base → 500. Mesero: badge **REFERIDO**.
+- 2+ sedes: el enlace sale con la sede de la última visita y el selector del 409 conserva la ruta (arregla también `/c/{slug}`).
+- 00075: `referral_codes`, `referrals`, fuente `referral` + `referral_id`, `customers_id_tenant_key`. 4 archivos / 84 tests.
+
 ## [fix] — 2026-10-15 — Arreglos chicos: permisos, lo que falla callado, mensajes y textos (15 IDs, sin migración)
 
 - **Permisos:** un administrador de sede ve y toca solo los meseros y aparatos de SU sede (+ los rotativos, que solo ve:

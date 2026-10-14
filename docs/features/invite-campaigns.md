@@ -4,7 +4,7 @@
 > **Estado:** ✅ Implementado
 > **Migración:** `00063_invitaciones_con_premio.sql`
 > **Dónde vive:** `/dashboard/rewards` → pestaña **Invitaciones**
-> **Ver también:** [`reward-grants.md`](reward-grants.md) · [`referral-program.md`](referral-program.md) §3 · [`golden-bullet.md`](golden-bullet.md)
+> **Ver también:** [`reward-grants.md`](reward-grants.md) · [`referral-program.md`](referral-program.md) (referidos, construido encima de esto el 2026-10-15) · [`golden-bullet.md`](golden-bullet.md)
 
 ## Qué es
 
@@ -12,9 +12,9 @@ El dueño crea «2x1 en sushi rolls», le queda un enlace `https://{marca}/c/pro
 QR. Lo manda por WhatsApp, lo pone en redes, lo imprime. Quien lo abre se registra; **el premio le
 aparece en la tarjeta desde ese momento**; y lo reclama cuando viene y **el mesero lo escanea**.
 
-Es la parte «QR dinámicos de campaña» del diseño de referidos ([`referral-program.md`](referral-program.md) §3),
-construida sola. **El programa de referidos propiamente dicho no se tocó** — pero cuando se
-construya, se para encima de esto.
+Es la parte «QR dinámicos de campaña» del diseño de referidos, construida sola. **El programa de
+referidos se construyó el 2026-10-15 encima de esto** ([`referral-program.md`](referral-program.md)):
+la misma regla de la visita #1, el mismo `reward_grant` que el mesero entrega, con la fuente `referral`.
 
 ## Por qué NO hay «tarjeta provisional»
 
@@ -98,6 +98,11 @@ El premio como héroe (con los colores de la marca, ningún hex horneado), la vi
 quedan si hay cupo, y el **mismo `CheckInForm` de siempre** con `campaignSlug`. Si la invitación
 está pausada, vencida o agotada, lo dice y no muestra el formulario.
 
+**En una marca de 2+ sedes** el registro en el dominio raíz pide la sede (el 409 de D21). Hasta el
+2026-10-15 el selector mandaba a la RAÍZ de la sede elegida y el slug se perdía (la persona se
+registraba sin premio); desde los referidos manda a la misma ruta en la sede
+(`https://{sede}/c/{slug}?phone=…`, `urlDeLaSede()`).
+
 `GET /api/invite/{slug}` es público y devuelve solo lo que ya estaba en el mensaje compartido. La
 marca sale del dominio: un slug de la marca A no se lee desde el dominio de la marca B.
 
@@ -129,11 +134,13 @@ prometió una invitación impresa, y que retirarlo la dejara sin premio— y una
 «cuántas invitaciones usan este premio», es una columna nueva, no una corrección. Los tres modelos de premio (niveles,
 catálogo de campaña, invitaciones) **siguen sin unificarse**.
 
-## Lo que falta para que sea «referidos»
+## Referidos, encima de esto (2026-10-15)
 
-Está diseñado en [`referral-program.md`](referral-program.md) y comparte todo esto: el código por
-cliente (`referral_codes`), la landing `/r/{código}`, el botón en la tarjeta, y que **ambos** ganen
-cuando el mesero valida al amigo. Estimación en ese doc.
+Construido: [`referral-program.md`](referral-program.md). Comparte la regla de la visita #1 (el amigo
+que llega por `/r/{código}` también queda pendiente del mesero), el `reward_grant` que el mesero
+entrega (fuente `referral`, badge **REFERIDO**) y el formulario (`CheckInForm` con `referralCode`).
+Lo nuevo: el código por cliente, la relación referidor → referido y que **los dos** ganen cuando el
+mesero valida al amigo (`completar_referido()`, 00075).
 
 ## Archivos
 

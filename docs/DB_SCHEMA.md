@@ -1,7 +1,7 @@
 # Esquema de Base de Datos
 
 **Base de datos:** Supabase (PostgreSQL)
-**Última actualización:** 2026-10-14 (ciclo, fase 2 parte C: `restaurant_events.include_dormant`, 00073, sin aplicar); antes 2026-10-13 (SEG-2: `mystery_box_results` rechaza el segundo reclamo del mismo nivel, trigger de la 00072, sin aplicar); antes 2026-10-13 (ciclo de recuperación, fase 1B: `customer_cycle_touches`, `send_queue.cycle_touch_id` y `reward_grants.skip_reminder` al día con la 00071, sin aplicar); antes 2026-09-12 (Golden Bullet por tandas: `imported_contacts` al día con la 00060 y las bases)
+**Última actualización:** 2026-10-15 (referidos: `referral_codes`, `referrals`, `completar_referido()`, `reward_grants.referral_id` y la fuente `referral`, `customers_id_tenant_key`, 00075, sin aplicar); antes 2026-10-14 (ciclo, fase 2 parte C: `restaurant_events.include_dormant`, 00073, sin aplicar); antes 2026-10-13 (SEG-2: `mystery_box_results` rechaza el segundo reclamo del mismo nivel, trigger de la 00072, sin aplicar); antes 2026-10-13 (ciclo de recuperación, fase 1B: `customer_cycle_touches`, `send_queue.cycle_touch_id` y `reward_grants.skip_reminder` al día con la 00071, sin aplicar); antes 2026-09-12 (Golden Bullet por tandas: `imported_contacts` al día con la 00060 y las bases)
 
 ---
 
@@ -161,6 +161,8 @@ erDiagram
 | 24 | [delivery_intake_failures](#delivery_intake_failures) | El domicilio que NO llegó a la base, con su motivo real (00053, §24-B) | SI | SELECT por marca; UPDATE/DELETE revocados |
 | 25 | [tenant_integration_secrets](#tenant_integration_secrets) | Credenciales de terceros por marca: hoy el token de la API de Conversiones de Meta (00061) | SI | **Ninguna**: solo service role. `anon`/`authenticated` revocados |
 | 26 | [customer_cycle_touches](#customer_cycle_touches) | El libro de toques del ciclo de recuperación: uno por cliente, ciclo, etapa y repetición (00070) | SI | Tenant: ALL + RESTRICTIVE de sede (`sede_visible_*`) |
+| 27 | [referral_codes](#referral_codes) | El código de referido de cada cliente (00075) | SI | Tenant: ALL |
+| 28 | [referrals](#referrals) | Referidos: quién trajo a quién, pendiente · completado · vencido (00075) | SI | Tenant: ALL |
 
 ---
 
@@ -202,6 +204,10 @@ erDiagram
 | `created_at` | `timestamptz` | NO | `now()` | Fecha de creación |
 | `updated_at` | `timestamptz` | NO | `now()` | Última actualización |
 
+> **Referidos (00075):** `customers_id_tenant_key UNIQUE (id, tenant_id)` — el soporte de las FK COMPUESTAS hacia un
+> cliente (`referral_codes`, `referrals`): una fila de la marca A no puede nombrar a un cliente de la marca B. Se cumple
+> solo (`id` ya es PK).
+>
 > **Multi-sede (00043):** `customers_phone_tenant_key UNIQUE (phone, tenant_id)` **NO se toca**. Un tenant
 > es una MARCA, así que sigue habiendo **una fila por persona y marca** — y por eso los puntos, el tier y
 > las visitas quedan unificados entre sedes sin escribir una línea de código. Las dos columnas de sede
@@ -931,7 +937,7 @@ CREATE POLICY "service_update_message_logs" ON message_logs
 | `tenant_id` | `uuid` | NO | - | FK → tenants(id) ON DELETE CASCADE |
 | `customer_id` | `uuid` | NO | - | FK → customers(id) ON DELETE CASCADE |
 | `grant_type` | `text` | NO | - | `tier_prize` \| `campaign_prize` (CHECK) |
-| `source` | `text` | NO | - | `mystery_box` \| `safe_choice` \| `reactivation` \| `review` \| `manual` (CHECK) |
+| `source` | `text` | NO | - | `mystery_box` \| `safe_choice` \| `reactivation` \| `review` \| `manual` \| `invite` (00063) \| `referral` (00075) (CHECK) |
 | `prize_title` | `text` | NO | - | Snapshot del título del premio. Si el dueño renombra el premio del catálogo después, lo ya otorgado no cambia |
 | `tier_id` | `uuid` | SI | `NULL` | FK → reward_tiers(id) ON DELETE SET NULL. Solo para `tier_prize` |
 | `mystery_box_result_id` | `uuid` | SI | `NULL` | FK → mystery_box_results(id) ON DELETE SET NULL. Solo para `tier_prize` |
@@ -943,7 +949,8 @@ CREATE POLICY "service_update_message_logs" ON message_logs
 | `granted_at` | `timestamptz` | NO | `now()` | Momento en que se otorgó el premio |
 | `redeemed_at` | `timestamptz` | SI | `NULL` | Lo llena el trigger `mark_grant_redeemed()` al entregarse |
 | `skip_reminder` | `boolean` | NO | `false` | **(00071, H2)** `true` = vence SIN recordatorio: el regalo PEQUEÑO del ciclo de recuperación. `findGrantsDueForReminder()` no lo devuelve. No se sella `reminder_sent_at` para lograrlo (diría que salió un recordatorio que no salió) |
-| `granted_location_id` | `uuid` | SI | `NULL` | **Nueva (00043).** Sede donde se **GANÓ** el premio (D12). Cruzada con `reward_redemptions.redeemed_location_id` da la **matriz origen → destino** que convierte D3 (*"el premio ganado en una sede se reclama en otra"*) de política invisible en número. NULL = sede desconocida. FK compuesta RESTRICT |
+| `referral_id` | `uuid` | SI | `NULL` | **Nueva (00075).** FK → referrals(id) ON DELETE SET NULL. El referido que otorgó el premio (`source='referral'`): el regalo del amigo o el premio de quien lo trajo |
+| `granted_location_id` | `uuid` | SI | `NULL` | **Nueva (00043).** Sede donde se **GANÓ** el premio (D12). Hoy la escriben solo los premios de referidos (00075: la sede del registro del amigo o la de su visita); los demás siguen en NULL. Cruzada con `reward_redemptions.redeemed_location_id` da la **matriz origen → destino** que convierte D3 (*"el premio ganado en una sede se reclama en otra"*) de política invisible en número. NULL = sede desconocida. FK compuesta RESTRICT |
 | `created_at` | `timestamptz` | NO | `now()` | Fecha de creación del registro |
 
 **Índices:**
@@ -953,13 +960,60 @@ CREATE POLICY "service_update_message_logs" ON message_logs
 | `reward_grants_pkey` | `id` | PRIMARY KEY | - |
 | `idx_reward_grants_customer` | `(tenant_id, customer_id, status)` | BTREE | Consulta caliente: premios activos de un cliente (tarjeta + escaneo del mesero) |
 | `idx_reward_grants_expiry` | `(tenant_id, status, expires_at)` | BTREE | Cron de recordatorio y barrido de vencidos |
-| `idx_reward_grants_unique_active_campaign` | `(customer_id, source)` | UNIQUE (parcial: `WHERE status = 'active' AND grant_type = 'campaign_prize'`) | Anti-duplicado: un cliente no puede tener dos premios de campaña activos a la vez del mismo `source` (ni dos de reactivación, ni dos de reseña). Deliberadamente NO aplica a `tier_prize`: un cliente sí puede desbloquear dos tiers antes de que le entreguen el primero |
+| `idx_reward_grants_unique_active_campaign` | `(customer_id, source)` | UNIQUE (parcial: `WHERE status = 'active' AND grant_type = 'campaign_prize' AND source <> 'referral'`; el `<> 'referral'` es de la 00075) | Anti-duplicado: un cliente no puede tener dos premios de campaña activos a la vez del mismo `source` (ni dos de reactivación, ni dos de reseña). Deliberadamente NO aplica a `tier_prize`: un cliente sí puede desbloquear dos tiers antes de que le entreguen el primero. Desde la 00075 tampoco a `referral`: quien trae a tres amigos tiene tres premios |
+| `idx_reward_grants_referral_once` | `(referral_id, customer_id)` | UNIQUE (parcial: `WHERE referral_id IS NOT NULL`) | **00075.** Un premio por referido y por persona, sin importar el estado: ni dos escaneos ni un reintento le dan dos premios a nadie |
 
 **Trigger:** `trg_reward_redemptions_grant` AFTER INSERT ON `reward_redemptions` → `mark_grant_redeemed()`: si la redención trae `grant_id`, marca ese `reward_grants.status = 'redeemed'` y `redeemed_at = NEW.redeemed_at` (solo si seguía `active`). Mismo patrón que `mark_mystery_box_redeemed()` (00022), que se conserva intacto.
 
 **RLS:** `tenant_all_reward_grants` FOR ALL — `USING/WITH CHECK (tenant_id = current_tenant_id() OR is_super_admin())`. El service role bypasa RLS; el aislamiento real lo hace el código.
 
 **Backfill (00031):** los premios que los clientes ya habían elegido en `mystery_box_results` (`redeemed=false`) y nadie había entregado se migran a `reward_grants` activos, para que aparezcan en `/mesero/rewards` desde el primer día.
+
+---
+
+### referral_codes
+
+> El código de referido de cada cliente (00075, `docs/features/referral-program.md`). Uno por cliente y marca; se crea la
+> primera vez que la tarjeta lo pide (`GET /api/referral/me`). El enlace es `/r/{code}` bajo el dominio de la marca.
+
+| Columna | Tipo | Nullable | Default | Descripción |
+|---------|------|----------|---------|-------------|
+| `id` | `uuid` | NO | `gen_random_uuid()` | PK |
+| `tenant_id` | `uuid` | NO | - | FK → tenants(id) ON DELETE CASCADE |
+| `customer_id` | `uuid` | NO | - | FK COMPUESTA `(customer_id, tenant_id)` → customers(id, tenant_id) ON DELETE CASCADE |
+| `code` | `text` | NO | - | 6-8 caracteres sin `0/O/1/I/L` (CHECK) |
+| `created_at` | `timestamptz` | NO | `now()` | - |
+
+**Únicos:** `(tenant_id, customer_id)` (un código por cliente) y `(tenant_id, code)` (único POR MARCA: el de la marca A no
+existe en la B). **RLS:** `tenant_all_referral_codes` FOR ALL (`tenant_id = current_tenant_id() OR is_super_admin()`).
+
+---
+
+### referrals
+
+> Referidos: quién trajo a quién (00075). `pending` al registrarse el amigo por `/r/{código}`; `completed` cuando el mesero
+> valida su primera visita (`completar_referido()`, la única puerta); `expired` si pasa `expires_at` sin venir.
+
+| Columna | Tipo | Nullable | Default | Descripción |
+|---------|------|----------|---------|-------------|
+| `id` | `uuid` | NO | `gen_random_uuid()` | PK |
+| `tenant_id` | `uuid` | NO | - | FK → tenants(id) ON DELETE CASCADE |
+| `referrer_customer_id` | `uuid` | NO | - | Quien invita. FK COMPUESTA → customers(id, tenant_id) ON DELETE CASCADE |
+| `referred_customer_id` | `uuid` | NO | - | El amigo. FK COMPUESTA → customers(id, tenant_id) ON DELETE CASCADE |
+| `referred_phone` | `text` | NO | - | El celular del amigo (10 dígitos, como `customers.phone`) |
+| `code` | `text` | NO | - | El código con el que llegó (copia) |
+| `status` | `text` | NO | `'pending'` | `pending` \| `completed` \| `expired` (CHECK) |
+| `referrer_rewarded` | `boolean` | NO | `false` | Si quien invitó ganó con este amigo. `false` en un completado = tope del mes lleno o la marca sin premio para quien invita. El tope cuenta SOLO estos |
+| `created_at` | `timestamptz` | NO | `now()` | - |
+| `expires_at` | `timestamptz` | NO | - | Se fija al registrarse con los días del programa de ese momento |
+| `completed_at` | `timestamptz` | SI | `NULL` | - |
+| `expired_at` | `timestamptz` | SI | `NULL` | - |
+
+**Reglas en la base:** `UNIQUE (tenant_id, referred_phone)` (un teléfono se refiere una vez por marca) · `UNIQUE (tenant_id,
+referred_customer_id)` · `CHECK referred <> referrer` (nadie se refiere a sí mismo) · `completed ⇔ completed_at` ·
+`expired ⇔ expired_at` · `referrer_rewarded ⇒ completed` · `expires_at > created_at`.
+**Índices:** `idx_referrals_referrer (tenant_id, referrer_customer_id, status)`, `idx_referrals_pending_expiry (tenant_id,
+expires_at) WHERE status = 'pending'`. **RLS:** `tenant_all_referrals` FOR ALL (como `qr_campaigns`).
 
 ---
 
@@ -1081,7 +1135,7 @@ CREATE POLICY "tenant_all_template_versions" ON template_versions FOR ALL
 | `tenant_id` | `uuid` | NO | - | FK → tenants(id). Añadida por 00025/00028 |
 | `customer_id` | `uuid` | NO | - | FK → customers(id) ON DELETE CASCADE |
 | `points` | `integer` | NO | - | Movimiento (los puntos nunca se descuentan: `awardPoints()` es el único escritor) |
-| `source` | `text` | NO | - | Origen del movimiento (`checkin`, `admin_adjustment`, …) |
+| `source` | `text` | NO | - | Origen del movimiento (`visit_qr`, `visit_staff`, `welcome_bonus`, `admin_adjustment`, `referral` (00075: los puntos de un referido, con `reference_id` = el referido), …). Sin CHECK |
 | `reference_id` | `uuid` | SI | `NULL` | Referencia libre al hecho que lo originó |
 | `balance_after` | `integer` | NO | - | Snapshot del saldo resultante |
 | `location_id` | `uuid` | SI | `NULL` | **Nueva (00043).** Sede donde se generó el punto. NULL = sede desconocida. Los puntos siguen siendo **de la MARCA**: esta columna atribuye, no separa saldos |
@@ -1452,6 +1506,7 @@ RESTRICTIVE `TO authenticated` (patrón 00045).
 | 70 | `00070_ciclo_motor_base.sql` | 2026-10-11 | **Ciclo de recuperación, fase 1A: la base del motor** (nada se envía). `customers` gana `cycle_no`, `cycle_started_at`, `cycle_touches`, `cycle_state` (CHECK activo\|dormido\|archivado), `dormant_since`, `heartbeats_sent`, `strong_offer_last_at` y `cycle_rhythm` (ritmo PERSONAL, CHECK de los cuatro). Tabla nueva **`customer_cycle_touches`** (UNIQUE por cliente+ciclo+etapa+seq, FK compuesta de sede, `tenant_id` sin default, RLS de marca y de sede, CHECK que impide enviar un `holdout`). Funciones: `cycle_rhythm_from_median(double)` (cortes < 9 · < 19 · ≤ 35), `cycle_customer_median_gap(uuid, timestamptz)` (mediana de días entre DÍAS DISTINTOS con visita, hora de Bogotá) y `cycle_brand_rhythm_stats(uuid)` (mediana y regresos de la marca), espejo de `src/lib/cycle-engine.ts`. Triggers: `on_customer_insert_cycle`, **`on_customer_visit`** (BEFORE UPDATE: reinicio + atribución a 14 días + ritmo personal) y **`on_campaign_message_sent`** (fatiga por `campaigns.source`); los dos últimos con `EXCEPTION WHEN OTHERS` → WARNING: el ciclo no tumba una visita ni el registro de un mensaje. Todo cerrado a `anon`/`authenticated` (regla de la 00069). **Backfill sin ráfaga**: `cycle_started_at = COALESCE(last_visit_at, created_at)`, > 90 días sin venir → `dormido` desde hoy, ritmo personal con 3+ días, `cycle_touches` intacto; solo filas con `cycle_started_at IS NULL` (idempotente). Termina con una verificación que FALLA si falta algo. Nadie lee las columnas nuevas todavía. Tests: `tests/db/cycle-triggers.test.ts`. Consultas del dueño: `SQL-PARA-CORRER/ciclo-fase-1a/`. | **Aplicada** por el dueño el 2026-10-12, antes del push |
 | 71 | `00071_ciclo_envios.sql` | 2026-10-13 | **Ciclo de recuperación, fase 1B: los envíos** (el ciclo sigue apagado en todas las marcas). `customer_cycle_touches` gana `attempts` (tope de 3), `reason`, `reward_id` (FK → campaign_rewards, SET NULL), `gift_size` (CHECK small\|strong), `template_key` (CHECK de las cinco plantillas del toque) y el estado **`cancelled`**; los dos CHECK del grupo de control de la 00070 intactos. **`send_queue.cycle_touch_id`** (FK SET NULL, índice parcial) y **`enqueue_send_queue(jsonb)`** que lo copia (cuerpo de la 00044 + una línea, misma firma, sin sobrecarga). **`reward_grants.skip_reminder`** (H2: el regalo pequeño vence sin recordatorio). H6: el toque **sigue a su item de la cola** (`on_send_queue_insert_cycle`, `on_send_queue_status_cycle` → `cycle_on_send_queue_change()` → `cycle_touch_follow_queue_item()`; solo la misma marca, `EXCEPTION` → WARNING) y `cycle_reconcile_touches(uuid)` recoge lo que el trigger no escribió. Todo cerrado a `anon`/`authenticated`. Verificación final que FALLA si falta algo. ⚠️ Va ANTES del push: el código de la 1B le pide `skip_reminder` al recordatorio de premio (sin ella, 42703 y el recordatorio deja de salir en todas las marcas). Tests: `tests/db/cycle-envios.test.ts`. Pasos del dueño: `SQL-PARA-CORRER/ciclo-fase-1b/`. | Escrita, **sin aplicar**: va ANTES del push que la lleve |
 | 72 | `00072_un_reclamo_por_nivel.sql` | 2026-10-13 | **SEG-2: un premio por nivel aunque lleguen dos `resolve` a la vez.** Función `rechazar_nivel_ya_reclamado()` (SECURITY INVOKER) y trigger **`trg_mystery_box_results_un_reclamo_por_nivel`** (AFTER INSERT en `mystery_box_results`): con un `pg_advisory_xact_lock` por cliente, rechaza con **23505** el reclamo cuya `claimed_tier_key` O `claimed_threshold` ya tenga ese cliente — la regla de `elegirNivelSinReclamar()`, por cliente y sin mirar `tenant_id`; una clave en NULL no coincide. AFTER para ver la fila ya sellada por el trigger BEFORE de la 00059. Trigger y no dos UNIQUE parciales: la historia puede tener duplicados (antes de la ola 0 y de la 00059) y la 00072 no toca ninguna fila. Depende de READ COMMITTED (PostgREST). La ruta traduce el 23505 a 409 sin otorgar ni mandar WhatsApp. Tests: `tests/db/mystery-box-carrera.test.ts` (el espejo contra TS caso por caso). Consulta del dueño: `SQL-PARA-CORRER/seg-2-carrera-resolve/`. | Escrita, **sin aplicar**: conviene ANTES del push (ningún orden rompe nada) |
+| 75 | `00075_referidos.sql` | 2026-10-15 | **Referidos: el cliente trae a un amigo y los dos ganan** (apagado por defecto en todas las marcas). `customers_id_tenant_key UNIQUE (id, tenant_id)` (soporte de las FK compuestas hacia un cliente). Tablas nuevas **`referral_codes`** (un código por cliente y marca, único por marca, alfabeto sin ambiguos) y **`referrals`** (pendiente · completado · vencido; un teléfono una vez por marca, nadie se refiere a sí mismo, `expires_at` fijado al registrarse). `reward_grants`: fuente **`referral`** (CHECK), **`referral_id`** (FK SET NULL), **`idx_reward_grants_referral_once UNIQUE (referral_id, customer_id)`**, e `idx_reward_grants_unique_active_campaign` rehecho con `AND source <> 'referral'` (predicado más estrecho: lo que cumplía, cumple). Función **`completar_referido()`** (FOR UPDATE + candado por referidor para el tope del mes en Bogotá), cerrada a `anon`/`authenticated`. RLS de marca en las dos tablas. Sin backfill, ninguna fila tocada. Tests: `tests/db/referidos-base.test.ts`, `referidos-flujo.test.ts`, `referidos-panel.test.ts`. | Escrita, **sin aplicar**: va ANTES del push (sin ella, la pestaña Referidos da 500 y el registro por `/r/` cae al normal; con el programa apagado el check-in no la toca) |
 
 ### `tenant_id` en las 18 tablas de negocio
 
@@ -1505,6 +1560,16 @@ Las tres: `SECURITY INVOKER`, solo `service_role` (REVOKE a `PUBLIC`, `anon`, `a
 mismo lo verifica `tests/db/cycle-triggers.test.ts` con los mismos historiales. Los triggers del ciclo están en
 `customers` y `campaign_messages`, arriba.
 
+### completar_referido(uuid, uuid, integer, boolean) → jsonb (00075)
+
+`completar_referido(p_tenant_id, p_referred_customer_id, p_monthly_cap, p_reward_referrer)`: la ÚNICA puerta pendiente →
+completado de `referrals`. `SELECT … FOR UPDATE` de la fila del amigo (dos escaneos simultáneos: el segundo espera y sale
+`ya_resuelto`); si pasó `expires_at`, la marca `expired`; si hay premio para quien invita, toma un
+`pg_advisory_xact_lock` por **quien invita** y cuenta sus premiados desde el día 1 del mes **en Bogotá** contra el tope.
+Devuelve `{ resultado: sin_referido | ya_resuelto | vencido | completado | tope, referral_id, referrer_customer_id,
+referrer_rewarded }`. El premio lo otorga el código SOLO con `completado` + `referrer_rewarded`. SECURITY INVOKER, solo
+`service_role` (REVOKE a `PUBLIC`, `anon`, `authenticated`). Tests: `tests/db/referidos-base.test.ts`.
+
 ### El toque sigue a la cola (00071)
 
 | Función | Qué hace |
@@ -1540,3 +1605,5 @@ misma firma (CREATE OR REPLACE, sin sobrecarga) para copiar `cycle_touch_id`.
 | reward_grants | Admin + Service | Service | Service | NO |
 | review_events | Admin + Service | Service | Service | NO |
 | customer_cycle_touches | Tenant (+ sede) + Service | Tenant + Service | Tenant + Service | Tenant + Service |
+| referral_codes | Tenant + Service | Tenant + Service | Tenant + Service | Tenant + Service |
+| referrals | Tenant + Service | Tenant + Service | Tenant + Service | Tenant + Service |

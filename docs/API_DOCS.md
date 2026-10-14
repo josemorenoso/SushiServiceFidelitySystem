@@ -70,6 +70,8 @@ impide al rol `aios_constelarys` tocar `auth.users` — ver `docs/features/alta-
 | GET | /api/check-in/review-prompt | ¿Se le muestra el pop-up de reseña? Sella el evento `shown` (dedupe 12h) | NO (público) |
 | POST | /api/check-in/review-action | `clicked` (sella + **otorga el premio**) o `postponed` | NO (público, rate-limited) |
 | GET | /api/public/customer-card | Datos de tarjeta del cliente (puntos, tiers) por teléfono | NO (público) |
+| GET | /api/referral/me?phone= | Referidos: el botón de la tarjeta (código, enlace, texto para WhatsApp, invitados) o `{ activo: false }` | NO (público, por celular) |
+| GET | /api/referral/{código} | Referidos: lo que la landing `/r/{código}` muestra (primer nombre + regalo + días); 404 = la landing normal | NO (público, límite por IP) |
 | POST | /api/reward-redeem | Registrar entrega física de un premio (acepta `grant_id`, `tier_id` opcional) | Staff (Bearer/X-Device-Token) |
 | POST | /api/webhook/delivery | Recibir datos de domicilio (n8n/Twilio) | x-webhook-secret |
 | POST | /api/webhook/twilio-incoming | Auto-responder mensajes entrantes al número | Twilio Signature |
@@ -112,6 +114,8 @@ impide al rol `aios_constelarys` tocar `auth.users` — ver `docs/features/alta-
 | POST | /api/dashboard/campaign-rewards | Crear premio de campaña | Admin Cookie |
 | PATCH | /api/dashboard/campaign-rewards | Actualizar premio (título, descripción, `is_active`) | Admin Cookie |
 | DELETE | /api/dashboard/campaign-rewards?id=X | Baja lógica del premio (`is_active=false`, no borra) | Admin Cookie |
+| GET | /api/dashboard/referrals | Referidos: los ajustes y los números (conteos, nunca pesos). Fallo de base = 500 | Admin Cookie |
+| PUT | /api/dashboard/referrals | Referidos: guardar el programa entero (premio de OTRA marca → 400) | Admin Cookie · **alcance de marca** |
 | GET | /api/dashboard/review-metrics | Funnel de reseñas: mostrado → click → premio redimido **(sede — `shown` sí filtra, grants no-op por deuda #13)** | Admin Cookie |
 | GET | /api/dashboard/tenant-config | Rutas editables de `tenants.config` (link de Google, `branding.*`, `qr_studio.*`) | Admin Cookie |
 | PUT | /api/dashboard/tenant-config | Escribe `tenants.config` con **whitelist por ruta** (merge profundo, no reemplazo). Incluye `card.mode` (`shared` / `per_location`: «una tarjeta para cada sede», 2026-10-14). **Alcance de marca** | Admin Cookie |
@@ -269,6 +273,13 @@ Endpoint unificado con 3 acciones: `lookup`, `register`, `checkin`.
 ```json
 { "phone": "3001234567", "action": "register", "name": "Juan Pérez", "birthday": "1990-05-15", "city": "Bogotá" }
 ```
+
+> **Referidos (2026-10-15, 00075):** `lookup` y `register` aceptan `referral_code` (el de `/r/{código}`). En `register`, si
+> el referido CUENTA (programa encendido, código de esta marca, no es el suyo, su teléfono no fue referido antes) la visita
+> #1 queda pendiente del mesero (`registered_pending_scan`) y la respuesta trae `referral_gift: { tipo: "reward" | "points",
+> texto } | null`; si no cuenta, el registro es el de siempre, sin campos nuevos. En `lookup`, un cliente que ya existe recibe
+> `referral_status: "ya_cliente"` y nada más. En `checkin` (mesero), si el cliente llegó por un referido pendiente, se
+> completa (una vez) y la respuesta trae `referral_completed: true`. Ver `docs/features/referral-program.md`.
 **Response 201:**
 ```json
 { "message": "welcome", "customer": { "name": "Juan Pérez", "total_visits": 1, "total_points": 75 }, "points_awarded": 75, "tiers": [...] }
@@ -1660,6 +1671,77 @@ administrador de sede).
 
 **Response 200:** `{ "ok": true }`
 **Response 400:** `{ "error": "id es requerido" }`
+
+---
+
+## Referidos (2026-10-15, migración 00075)
+
+> Doc: `docs/features/referral-program.md`. Las claves `referral_*` de `admin_settings` las escribe SOLO `PUT
+> /api/dashboard/referrals`; `PUT /api/dashboard/settings` las rechaza con 400.
+
+### `GET /api/referral/me?phone=3001234567` — Pública (por celular, 20/min por celular)
+
+El botón «🎁 Gánate {X} por traer a un amigo» de la tarjeta. La marca sale del host.
+
+**Response 200 (programa apagado, sin premio para quien invita, o el celular no es cliente):** `{ "activo": false }`
+
+**Response 200 (activo):**
+```json
+{
+  "activo": true,
+  "codigo": "AB3K9Q",
+  "enlace": "https://clubtepuylaureles.constelarys.com/r/AB3K9Q",
+  "gana": "Rollo gratis",
+  "regalo_del_amigo": "Postre de bienvenida",
+  "dias": 30,
+  "tope_al_mes": 10,
+  "mensaje": "¡Hola! Soy Ana y te regalo Postre de bienvenida en Tepuy 🎁 … https://…/r/AB3K9Q",
+  "whatsapp_url": "https://wa.me/?text=…",
+  "invitados": [{ "nombre": "Beto", "estado": "completed", "etiqueta": "Vino", "registrado": "…", "gano": true }],
+  "resumen": { "registrados": 1, "vinieron": 1, "ganados": 1 }
+}
+```
+El código se crea la primera vez. De cada invitado viaja solo el primer nombre. En una marca de 2+ sedes, desde el dominio
+raíz el enlace sale con el dominio de la sede donde el cliente vino por última vez. **500** si la base falla (no
+`activo: false`).
+
+### `GET /api/referral/{código}` — Pública (30/min por IP)
+
+**Response 200:** `{ "codigo": "AB3K9Q", "nombre": "Ana", "beneficio": "Postre de bienvenida", "dias": 30 }` (`beneficio`
+`null` si la marca no le regala nada al amigo).
+**Response 404:** el código no existe en ESTA marca (o es de otra) o el programa está apagado: la landing muestra la de
+siempre. **500** si la base falla.
+
+### `GET /api/dashboard/referrals` — Admin Cookie (cualquier sesión de la marca)
+
+**Response 200:**
+```json
+{
+  "ajustes": {
+    "enabled": true,
+    "premioDeQuienInvita": { "tipo": "reward", "rewardId": "uuid", "puntos": null },
+    "premioDelAmigo": { "tipo": "points", "rewardId": null, "puntos": 50 },
+    "topeAlMes": 10, "diasDeVencimiento": 30, "mensaje": "…"
+  },
+  "numeros": {
+    "registrados": 23, "vinieron": 14, "pendientes": 6, "vencidos": 3,
+    "premiosGanados": 12, "premiosEntregados": 9, "regalosEntregados": 13,
+    "top": [{ "nombre": "Ana María Ruiz", "vinieron": 5, "registrados": 6 }]
+  },
+  "puntos_encendidos": true
+}
+```
+Conteos, nunca pesos. Los pendientes pasados de fecha se marcan vencidos al leer. **500** con el porqué si la base falla.
+
+### `PUT /api/dashboard/referrals` — Admin Cookie · **alcance de marca** (`exigirAlcanceDeMarca()`)
+
+**Request:** `{ "enabled": true, "premioDeQuienInvita": { "tipo": "reward", "rewardId": "uuid" }, "premioDelAmigo": { "tipo": "points", "puntos": 50 }, "topeAlMes": 10, "diasDeVencimiento": 30, "mensaje": "…{enlace}" }`
+(`tipo`: `reward` · `points` · `none`).
+
+**Response 200:** `{ "ajustes": { … } }` — se guardan las diez claves de una vez.
+**Response 400:** un premio que no está en el catálogo ACTIVO de esta marca (de otra marca, retirado), puntos fuera de 1–10.000,
+tope fuera de 1–1.000, días fuera de 1–365, mensaje de más de 600, o encender sin premio para quien invita.
+**Response 403:** un administrador de sede. **500:** la base falló (no escribe nada a medias: un solo `upsert`).
 
 ---
 

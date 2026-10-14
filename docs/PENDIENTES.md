@@ -42,7 +42,7 @@
 | 6 | ✅ **Campañas, fase 2: la pantalla — HECHA el 2026-10-14** (partes A, B y C; prompt `docs/prompts/2026-10-14-ciclo-fase-2-pantalla.md`; sin pushear; §2.4). La C trae la **00073** («incluir dormidos»): se aplica ANTES del push | Aplicar la 00073 antes del push | 00073 (sin aplicar) |
 | 6-bis | **Las sedes bien separadas en el panel** (dueño, 14-10, mirando Tepuy: «parece un trabajo mediocre… cada cosa en su lugar»). Prompt `docs/prompts/2026-10-14-sedes-separadas.md`, Opus: **parte 1** el panel: **HECHA el 14-10, sin migración, sin pushear** (selector «Toda la marca (N sedes)» + las sedes, cada número de la sede elegida o con la etiqueta «Toda la marca», «Tus sedes» con el gráfico de visitas por sede, premios entregados por sede, el número compartido dicho, la auditoría pantalla por pantalla en `docs/features/multi-sede.md` §3.octies; lo que encontró, en §5 `SEDE-*`) → **parte 2** la tarjeta de cada sede: **HECHA el 14-10, migración 00074 sin aplicar (va antes del push)** («La misma tarjeta para todas las sedes» / «Una tarjeta para cada sede»: sello, decoración, descripción y políticas por sede; el nombre, el logo y los colores siguen de la marca y la dirección, el horario y los teléfonos siguen de cada sede; la cambia un super usuario; `docs/features/multi-sede.md` §3.nonies; de paso, «Tarjeta principal» ya guarda con el sello de siempre) · **parte 3** (diseño, en paralelo) un número por sede y las franquicias: **HECHA el 14-10**, `docs/superpowers/specs/2026-10-14-numero-por-sede-design.md` (cinco fases, F9.1 —el entrante, que hoy pierde los «SALIR» de una segunda línea— primero; las preguntas son D5-a a D5-e de §8) | ~~Correr el diagnóstico de Tepuy~~ — corrido el 14-10 (Envigado 23 · Laureles 17 · sin sede 0; uno va a las dos; 0 canjes) | 1: no · 2: quizá |
 | 7 | **Optimizar: los arreglos chicos** (§5), repartidos en una o dos sesiones | Solo el texto de 18.c | no |
-| 8 | **La tarjeta, las reseñas y los referidos** (§4.2) | C4–C8 | 1–2 |
+| 8 | **La tarjeta, las reseñas y los referidos** (§4.2; referidos CONSTRUIDOS el 15-10, falta su aviso por WhatsApp) | C4–C8 | 1–2 |
 | 9 | Campañas, fase 3: afinar con datos (un mes después de la fase 1) | Leer el reporte | no |
 | 10 | Lo demás, por olas (§7) | §8, bloque D | varias |
 
@@ -274,7 +274,7 @@ Crear el premio de la reactivación agresiva cuesta **cuatro pantallas**, y la t
 | S-1.4 | Un administrador de sede cambiaba el catálogo de TODA la marca (`campaign-rewards` escribía con `requireTenantId()`) y un fallo de base se veía como «catálogo vacío» | ✅ 13-10 · las escrituras exigen alcance de marca (como `reward-tiers`); el GET da 500 si la base falla |
 | — | Los topes globales de la caja misteriosa no tienen pantalla | ⬜ |
 | S-1.5 | **El recordatorio de vencimiento se mudó con el regalo fuerte.** `reward_reminder_enabled` / `_days_before` vivían dentro del bloque «Premio de Reactivación Agresiva» de Ajustes y el prompt no los nombraba: se movieron con él, a la misma pestaña (si no, perdían su pantalla). Revísalo cuando mires la pantalla | 🟡 decisión tomada sin preguntar; revertible |
-| S-1.6 | Comentarios de `src/lib/settings-keys.ts` que todavía dicen «Ajustes › Premio de la reactivación…» y «Ajustes › Reseñas de Google» (el archivo estaba fuera del territorio de S-1) | ⬜ micro |
+| S-1.6 | Comentarios de `src/lib/settings-keys.ts` que todavía dicen «Ajustes › Premio de la reactivación…» y «Ajustes › Reseñas de Google» (el archivo estaba fuera del territorio de S-1) | ✅ 15-10 (sesión de referidos) |
 | 0.ZETA | `rewards` y `campaign_rewards` recibieron sede y nadie la lee | ⬜ · decisión D5 |
 
 ### 4.2 La tarjeta, la pantalla posterior, las reseñas y los referidos (Tareas 3 a 6)
@@ -286,8 +286,11 @@ Crear el premio de la reactivación agresiva cuesta **cuatro pantallas**, y la t
 | S-5.2 | Reseñas: no hay interruptor «dar recompensa sí/no»; es un desplegable vacío | ⬜ micro · decisión C6 |
 | S-5.3 | El paso 2 del pop-up dice «Redime tu regalo» aunque no haya premio, y el texto de Ajustes también | ⬜ micro |
 | N19 | Si el premio de la reseña falla, el cliente queda sin premio y sin pop-up para siempre (se sella antes de otorgar) | ⬜ micro |
-| S-6 | Referidos: el apartado, «trae a tu amigo» en el flujo mensual, la recompensa y su validación | ⬜ ola · decisión C7 |
-| S-6.4 | Aviso de «recompensa faltante» (reseña, agresiva, referidos) | ⬜ micro |
+| S-6 | Referidos: el apartado, la recompensa y su validación | ✅ 15-10 · **migración 00075 ANTES del push** · apagado en todas las marcas: se enciende en Recompensas › Referidos. Botón «🎁 Gánate … por traer a un amigo» en la tarjeta, landing `/r/{código}`, los dos ganan cuando el mesero valida la primera visita del amigo (una vez), tope al mes, vencimiento, badge REFERIDO del mesero, números en el panel (`docs/features/referral-program.md`) |
+| S-6.1 | El aviso «¡Tu amigo vino, ganaste X!» por WhatsApp a quien invita (hoy lo ve en su tarjeta: «✓ Vino · ganaste») | ⬜ · necesita una plantilla nueva (Meta) y cruza con B1 (menos aprobaciones por marca) |
+| S-6.2 | «Trae a un amigo» dentro del flujo mensual: una pieza más del motor del ciclo (`src/lib/communications/registry.ts`) | ⬜ · necesita plantilla y la decisión de en qué etapa del ciclo va; no se tocó el ciclo |
+| S-6.3 | Lo que el plan de referidos traía y no se hizo: confeti en la tarjeta de quien invita cuando su amigo es validado, y el QR del enlace para mostrarlo en persona | ⬜ micro · el enlace, «Copiar» y WhatsApp cubren lo de hoy |
+| S-6.4 | Aviso de «recompensa faltante» (reseña, agresiva, referidos) | ⬜ micro · en referidos el panel ya avisa si el premio elegido se retiró (y no se otorga nada: queda en el log); falta el aviso por fuera del panel |
 | S-6.6 | El mesero solo ve clientes que vinieron en las últimas 6 horas | 🟡 |
 | N20 | La tarjeta roja muestra los puntos de antes del escaneo | ⬜ micro |
 | N21 | La tarjeta Black vive en `/tarjeta`, a la que nada enlaza | ⬜ micro |
@@ -430,7 +433,9 @@ que el cron corre a las 10:00 de Bogotá (corre a las 15:00); ya está corregido
 | C4 | «10 visitas»: ¿llenar los 10 sellos o llegar a Black? ¿Qué cuentan las estrellas y dónde se ven? ¿El 10 es igual para todas las marcas? (dato: en Don Alirio hay clientes con 27 visitas) | ⏳ |
 | C5 | La elección de premio o caja misteriosa pasa a la tarjeta roja cuando se elimine la pantalla posterior | ✅ |
 | C6 | Reseñas: interruptor explícito, sin paso 2 cuando no hay premio, premio al tocar el enlace, uno por cliente de por vida, por marca | ✅ |
-| C7 | Referidos: ¿gana el que refiere, el referido o ambos? ¿Premio del catálogo o puntos? ¿Al registrarse o cuando el mesero valida la primera visita? | ⏳ |
+| C7 | Referidos: ¿gana el que refiere, el referido o ambos? ¿Premio del catálogo o puntos? ¿Al registrarse o cuando el mesero valida la primera visita? | ✅ decidido por el comandante (prompt del 15-10) y construido: **ganan los dos**; cada uno, por marca, un premio del catálogo, puntos o nada; quien invita gana **cuando el mesero valida la primera visita del amigo**; tope 10 al mes y 30 días (ajustes). Son ajustes: el dueño los cambia en Recompensas › Referidos sin código |
+| C7-a | Referidos: ¿qué pasa con los pendientes si una marca APAGA el programa? | 🟡 default tomado (el conservador, lo paga la marca): **apagar congela**. El regalo que el amigo ya tiene en su tarjeta se entrega igual (es un premio como cualquier otro); quien lo invitó no gana por los que vengan con el programa apagado, y el pendiente vence a su fecha. Cambiarlo es una línea (`programaActivo()` en el escaneo) |
+| C7-b | Referidos: ¿qué ve quien invita de sus invitados? | 🟡 default tomado: **el primer nombre y el estado** («Registrado: falta que venga» · «Vino» · «Venció»), en su tarjeta, que se abre con el celular como la de siempre. El amigo ve solo el primer nombre de quien lo invitó |
 | C8 | Los «pop-ups» son WhatsApp con botones (sin Wallet, A11) | ✅ |
 | C9 | Black: ¿por visitas o por puntos? ¿Se pierde? ¿Hay algo encima? (deuda 17.b) | ⏳ |
 | C10 | ¿Qué pasa al superar el último nivel de premios? | ⏳ |

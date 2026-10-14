@@ -32,6 +32,7 @@
 
 import { TEMPLATE_CATALOG } from '@/constants/template-catalog'
 import { HOY_NO_CLAVES } from '@/lib/cycle-touch'
+import { REFERRAL_SETTING_KEYS } from '@/lib/referidos'
 
 /** Ajustes que NO son punteros de plantilla. Agrupados por la pantalla que los escribe. */
 const AJUSTES = [
@@ -55,12 +56,14 @@ const AJUSTES = [
   'reactivation_soft_days',
   'reactivation_aggressive_days',
   'reactivation_reward_id',
-  // Ajustes › Premio de la reactivación insistente y recordatorio de vencimiento
+  // Recompensas › Premios para regalar › Regalo fuerte (la reactivación insistente) y el
+  // recordatorio de vencimiento (S-1, 2026-10-13: antes era un bloque de Ajustes)
   'aggressive_reward_id',
   'aggressive_reward_window_days',
   'reward_reminder_enabled',
   'reward_reminder_days_before',
-  // Ajustes › Reseñas de Google
+  // Recompensas › Premios para regalar › Premio por reseña (S-1; antes en Ajustes › Reseñas de
+  // Google, donde sigue el link de reseñas)
   'review_reward_id',
   'review_reward_window_days',
   // Golden Bullet (`imported-contacts`, `ImportedContactsTemplate`, `InviteCampaignsPanel`)
@@ -105,6 +108,15 @@ export const CLAVES_DEL_SISTEMA: ReadonlySet<string> = new Set<string>([
   'cycle_enabled_at',
   ...Object.values(HOY_NO_CLAVES),
 ])
+
+/**
+ * Las claves del programa de referidos (2026-10-15, `src/lib/referidos.ts`). Son de la lista
+ * cerrada, pero NO las escribe esta ruta: las escribe `PUT /api/dashboard/referrals`, que valida
+ * el conjunto entero (encender exige un premio para quien invita) y que cada premio elegido sea
+ * del catálogo activo de ESTA marca. Por la ruta genérica un premio de otra marca entraría sin
+ * que nadie lo mire, así que acá se rechazan con 400 y el lugar correcto.
+ */
+export const CLAVES_DE_REFERIDOS: ReadonlySet<string> = new Set<string>(REFERRAL_SETTING_KEYS)
 
 /**
  * Claves que el panel acepta, pero SOLO del operador de Cada1 (`isSuperAdmin()`), nunca de un
@@ -170,6 +182,14 @@ export function decidirEscrituraDeAjuste(input: {
       ok: false,
       status: 400,
       error: `«${key}» la anota el sistema, no se cambia desde el panel.`,
+    }
+  }
+
+  if (CLAVES_DE_REFERIDOS.has(key)) {
+    return {
+      ok: false,
+      status: 400,
+      error: `«${key}» se cambia en Recompensas › Referidos, que revisa el programa entero.`,
     }
   }
 

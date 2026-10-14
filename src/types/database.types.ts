@@ -193,6 +193,8 @@ export type PointTransactionSource =
   | 'campaign_bonus'
   | 'welcome_bonus'
   | 'admin_adjustment'
+  /** Referidos (00075): los puntos de quien invita o del amigo, con `reference_id` = el referido. */
+  | 'referral'
 
 export interface PointTransaction {
   id: string
@@ -291,9 +293,10 @@ export type GrantType = 'tier_prize' | 'campaign_prize'
 
 /**
  * De dónde salió el premio. `invite` = una invitación con premio (enlace/QR, 00063).
- * `manual` queda reservado para referidos.
+ * `referral` = un referido (00075): el regalo del amigo o el premio de quien lo trajo, con
+ * `referral_id`. `manual` está en el CHECK desde la 00031 y hoy no la escribe nadie.
  */
-export type GrantSource = 'mystery_box' | 'safe_choice' | 'reactivation' | 'review' | 'manual' | 'invite'
+export type GrantSource = 'mystery_box' | 'safe_choice' | 'reactivation' | 'review' | 'manual' | 'invite' | 'referral'
 
 export type GrantStatus = 'active' | 'redeemed' | 'expired'
 
@@ -309,6 +312,8 @@ export interface RewardGrant {
   mystery_box_result_id: string | null
   campaign_reward_id: string | null
   campaign_id: string | null
+  /** Referido que lo otorgó (source = 'referral', 00075). */
+  referral_id?: string | null
   status: GrantStatus
   /** NULL = no vence. Los premios de tier no vencen; los de campaña sí. */
   expires_at: string | null

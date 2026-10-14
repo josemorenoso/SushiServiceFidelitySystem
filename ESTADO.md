@@ -33,6 +33,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Comandante: prompt de la fase 2 del ciclo (la pantalla) y traspaso al día (2026-10-14) | Opus 5.5 | `docs/prompts/2026-10-14-ciclo-fase-2-pantalla.md` (nuevo), `docs/prompts/2026-10-12-comandante-traspaso.md`, `docs/PENDIENTES.md`, `ESTADO.md` | — | en curso |
 
 ## 3. Siguiente, en orden
 

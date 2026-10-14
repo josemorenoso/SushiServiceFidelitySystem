@@ -9,6 +9,7 @@ import { awardVisitPoints } from '@/services/points.service'
 import { evaluateNewTier, getNextTier, buildTiersRoadmap, updateCustomerTier } from '@/services/reward-tiers.service'
 import { getMultipleSettings } from '@/services/settings.service'
 import { sendTemplateMessage } from '@/services/whatsapp.service'
+import { punteroAprobado } from '@/services/plantilla-aprobada.service'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -106,11 +107,27 @@ export async function POST(request: NextRequest) {
       'tier_unlocked_template_sid',
     ], tenantId)
 
+    // N-OVERRIDE-LOG (2026-10-15): el envío deja fila en `message_logs` con su tipo REAL. Sin
+    // `logContext` no quedaba rastro y `classifyMessageType()` lo tomaba como `manual`: un
+    // mensaje transaccional gastaba cupo de campañas. Sede NULL a propósito (ver arriba).
+    const registro = (messageType: string) => ({ customerId: customer.id, messageType, locationId: null })
+
     try {
-      if (newTier && settings.tier_unlocked_template_sid) {
+      // PL-2 (2026-10-15): «Nivel desbloqueado» solo si Meta ya la aprobó (en Twilio el puntero
+      // se escribe al crearla). Si no, cae al mensaje de puntos, como el check-in desde PL-2-a.
+      const nivelSid = settings.tier_unlocked_template_sid
+      const nivelSinAprobar = !!newTier && !!nivelSid && !(await punteroAprobado(tenant, nivelSid))
+      if (nivelSinAprobar) {
+        console.warn(
+          `[CheckIn Override] (${tenant.slug}) «Nivel desbloqueado» (${nivelSid}) no figura aprobada por Meta: ` +
+            `se manda el mensaje de puntos en su lugar.`
+        )
+      }
+
+      if (newTier && nivelSid && !nivelSinAprobar) {
         await sendTemplateMessage(
           cleaned,
-          settings.tier_unlocked_template_sid,
+          nivelSid,
           {
             '1': updated.name,
             '2': newTier.tier_name,
@@ -118,6 +135,7 @@ export async function POST(request: NextRequest) {
             '4': tiersRoadmapText,
           },
           tenant,
+          registro('tier_unlocked'),
         )
       } else {
         const isNearTier = nextTierInfo && nextTierInfo.pointsRemaining <= 30
@@ -135,6 +153,7 @@ export async function POST(request: NextRequest) {
               '4': isNearTier ? nextTierInfo!.tier.safe_reward_title : tiersRoadmapText,
             },
             tenant,
+            registro(isNearTier ? 'points_earned_near' : 'points_earned_far'),
           )
         } else {
           console.warn('[CheckIn Override] No hay plantilla de puntos configurada. Mensaje WhatsApp NO enviado.')

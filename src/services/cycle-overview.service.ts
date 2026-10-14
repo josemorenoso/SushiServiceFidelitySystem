@@ -8,11 +8,12 @@
  * `src/lib/cycle-touch.ts` (`decidirCliente()`, `resolverToque()`, `proximaCorrida()`), las
  * MISMAS funciones que usa el cron. Si la pantalla calculara por su cuenta, anunciaría días
  * distintos de los que se envían (spec §7.2). Lo que el cron también lee —los regalos
- * válidos y si «Regalo que vence» está aprobada— sale de `cycle.service.ts`.
+ * válidos— sale de `cycle.service.ts`; si «Regalo que vence» está aprobada, de la misma
+ * pregunta que el cron (`plantilla-aprobada.service.ts`), con 60 s de caché por marca.
  *
  * EL CICLO ES DE LA MARCA. Los toques tienen sede NULL (D12) y el reloj de reactivación es de
  * la marca (multi-sede §8.2): las cajas, la proyección y las listas leen la marca entera,
- * igual que hoy las burbujas del panel, el estimador y los segmentos. Lo único de sede es
+ * igual que hoy las burbujas del panel y el estimador. Lo único de sede es
  * quién puede ESCRIBIR («Hoy no»: alcance de marca), y eso vive en la ruta.
  *
  * Un fallo de base LANZA (y la ruta contesta 500): la pantalla dice «no pudimos leer», nunca
@@ -77,7 +78,8 @@ import {
   type TouchTemplateKey,
 } from '@/lib/cycle-touch'
 import { getMultipleSettings } from '@/services/settings.service'
-import { premiosDelCiclo, regaloQueVenceAprobada } from '@/services/cycle.service'
+import { premiosDelCiclo } from '@/services/cycle.service'
+import { punteroAprobadoEnPantalla } from '@/services/plantilla-aprobada.service'
 import { audienciaDelEvento, listEvents } from '@/services/calendar.service'
 import { getLineBudget } from '@/services/line-budget.service'
 import { fechasEspecialesEntre, rubroDeLaMarca, type FechaEspecial } from '@/constants/fechas-especiales'
@@ -532,11 +534,13 @@ export async function getCycleOverview(
     medido = medirRetorno(toques, ahora)
     premios = premiosLeidos
 
-    // La MISMA pregunta que el cron: Zernio y demo con el puntero; Twilio, a Twilio.
+    // La MISMA pregunta que el cron (`punteroAprobado()`): Zernio y demo con el puntero; Twilio,
+    // a Twilio — pero con 60 s de caché por marca (N-PORTADA-TWILIO, 2026-10-15): antes se le
+    // preguntaba en CADA carga de la portada, y el cron lo hace una vez por corrida.
     const sids = Object.fromEntries(
       (Object.entries(TOUCH_TEMPLATES) as Array<[TouchTemplateKey, string]>).map(([k, setting]) => [k, crudos[setting] ?? null])
     ) as Record<TouchTemplateKey, string | null>
-    const aprobada = await regaloQueVenceAprobada(tenant, sids.gift_expiring)
+    const aprobada = await punteroAprobadoEnPantalla(tenant, sids.gift_expiring)
     const estadoPlantilla: PrimerUso['plantilla_regalo']['estado'] = !sids.gift_expiring?.trim()
       ? 'sin_plantilla'
       : aprobada

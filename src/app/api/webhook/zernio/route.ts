@@ -257,6 +257,13 @@ async function handleMessageReceived(payload: ZernioWebhookPayloadMessage): Prom
   // el acto. Best-effort: si el acuse falla, el consentimiento ya quedó escrito
   // y se responde 200 igual — Zernio reintentaría el evento y el dedup de
   // arriba lo frenaría, así que un fallo acá no se repite solo.
+  //
+  // N6 (2026-10-15): el acuse va DESPUÉS de contestar, con `after()`, como el domicilio de
+  // ESCALA-3. Es una llamada de salida a Zernio con 10 s de timeout (`zernio/client.ts`), y
+  // esperarla dentro del request pasaba los 5 s que Zernio da antes de contar un fallo (diez
+  // seguidos le apagan el webhook a TODAS las marcas). El consentimiento —el efecto de negocio,
+  // escrituras en NUESTRA base— se queda ANTES de contestar: con el dedup ya escrito, un
+  // reintento de Zernio no lo volvería a intentar, así que diferirlo podría perderlo.
   const etiquetas = await getMultipleSettings([CLUB_SETTING_KEYS.botonSi, CLUB_SETTING_KEYS.botonNo], tenant.id)
     .then((a) => ({ si: a[CLUB_SETTING_KEYS.botonSi], no: a[CLUB_SETTING_KEYS.botonNo] }))
     .catch(() => undefined)
@@ -264,12 +271,15 @@ async function handleMessageReceived(payload: ZernioWebhookPayloadMessage): Prom
   if (boton && phone.length === 10) {
     const respuesta: ClubReply =
       boton === 'opt_in' ? await handleClubOptIn(phone, tenant, text) : await handleClubOptOut(phone, tenant, text)
-    const acuse = await contestarEnConversacion(tenant, message.conversationId, respuesta, eventId)
-    console.warn(
-      `[webhook/zernio] ${boton === 'opt_in' ? 'opt-in' : 'opt-out'} por botón de ${phone} en ${tenant.slug} — ` +
-        (acuse.ok ? `acuse enviado (${acuse.messageId ?? 'sin id'})` : `acuse NO enviado: ${acuse.error}`)
-    )
-    return NextResponse.json({ received: true, club_button: boton, reply_sent: acuse.ok }, { status: 200 })
+    const conversationId = message.conversationId
+    after(async () => {
+      const acuse = await contestarEnConversacion(tenant, conversationId, respuesta, eventId)
+      console.warn(
+        `[webhook/zernio] ${boton === 'opt_in' ? 'opt-in' : 'opt-out'} por botón de ${phone} en ${tenant.slug} — ` +
+          (acuse.ok ? `acuse enviado (${acuse.messageId ?? 'sin id'})` : `acuse NO enviado: ${acuse.error}`)
+      )
+    })
+    return NextResponse.json({ received: true, club_button: boton, reply: 'after_response' }, { status: 200 })
   }
 
   // Opt-out / opt-in: réplica exacta del criterio de twilio-incoming — persistimos

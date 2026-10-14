@@ -43,7 +43,9 @@ const h = vi.hoisted(() => ({
   marca: null as null | { id: string; slug: string; config: Record<string, unknown> },
   /** Se espera acá después de leer la oferta; `null` = sin barrera. */
   barrera: null as null | (() => Promise<void>),
-  whatsapps: [] as Array<{ telefono: string; plantilla: string }>,
+  whatsapps: [] as Array<{ telefono: string; plantilla: string; locationId?: string | null }>,
+  /** La sede que resuelve el host (N-SEDE-ENVIO). `null` = el dominio de la marca. */
+  sedeDelHost: null as null | string,
 }))
 
 vi.mock('@supabase/supabase-js', async () => {
@@ -54,7 +56,7 @@ vi.mock('@supabase/supabase-js', async () => {
 vi.mock('@/lib/supabase/server', () => ({ createClient: async () => ({}) }))
 vi.mock('@/lib/tenant', async (original) => ({
   ...(await original<typeof import('@/lib/tenant')>()),
-  resolveHostContext: async () => ({ tenant: h.marca, locationId: null }),
+  resolveHostContext: async () => ({ tenant: h.marca, locationId: h.sedeDelHost }),
 }))
 // Que el límite de tasa NO sea lo que frena: lo que se prueba es la base.
 vi.mock('@/lib/rate-limit', () => ({
@@ -70,8 +72,9 @@ vi.mock('@/services/settings.service', async (original) => ({
   }),
 }))
 vi.mock('@/services/whatsapp.service', () => ({
-  sendTemplateMessage: vi.fn(async (telefono: string, plantilla: string) => {
-    h.whatsapps.push({ telefono, plantilla })
+  sendTemplateMessage: vi.fn(
+    async (telefono: string, plantilla: string, _v: unknown, _t: unknown, registro?: { locationId?: string | null }) => {
+    h.whatsapps.push({ telefono, plantilla, locationId: registro?.locationId })
     return { sid: `SM${h.whatsapps.length}`, status: 'sent' }
   }),
 }))
@@ -164,6 +167,7 @@ afterAll(async () => {
   await db().query('DELETE FROM mystery_box_results WHERE tier_id IN (SELECT id FROM reward_tiers WHERE tenant_id = $1)', [marca.id])
   for (const t of [marca, otraMarca]) {
     await db().query('DELETE FROM reward_tiers WHERE tenant_id = $1', [t.id])
+    await db().query('DELETE FROM restaurant_locations WHERE tenant_id = $1', [t.id])
     await dropTestTenant(t.id)
   }
   vi.unstubAllEnvs()
@@ -174,6 +178,7 @@ afterAll(async () => {
 beforeEach(() => {
   h.barrera = null
   h.whatsapps.length = 0
+  h.sedeDelHost = null
 })
 
 // ═══════════════════════════════════════════════════════════════
@@ -433,5 +438,24 @@ describe('SEG-2 — la ruta: de seis reclamos simultáneos, otorga UNO', () => {
     expect(await contar('mystery_box_results', cliente.id)).toBe(2)
     expect(await contar('reward_grants', cliente.id)).toBe(2)
     expect(h.whatsapps.filter((w) => w.telefono === cliente.phone)).toHaveLength(2)
+  })
+})
+
+describe('N-SEDE-ENVIO (2026-10-15): el WhatsApp del premio lleva la sede del host', () => {
+  it('desde el enlace de una sede, `message_logs` recibe esa sede; desde el de la marca, NULL', async () => {
+    const { rows } = await db().query<{ id: string }>(
+      `INSERT INTO restaurant_locations (tenant_id, name, slug, is_primary, sort_order, is_active)
+       VALUES ($1, 'Laureles', $2, true, 0, true) RETURNING id`,
+      [marca.id, `lau-${marca.id.slice(0, 8)}`]
+    )
+    const conSede = await nuevoCliente(250)
+    h.sedeDelHost = rows[0].id
+    expect((await resolver(conSede.phone, plata.id, 'safe')).status).toBe(200)
+    expect(h.whatsapps.find((w) => w.telefono === conSede.phone)).toMatchObject({ locationId: rows[0].id })
+
+    const sinSede = await nuevoCliente(250)
+    h.sedeDelHost = null
+    expect((await resolver(sinSede.phone, plata.id, 'safe')).status).toBe(200)
+    expect(h.whatsapps.find((w) => w.telefono === sinSede.phone)).toMatchObject({ locationId: null })
   })
 })

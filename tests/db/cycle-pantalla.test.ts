@@ -25,6 +25,7 @@ import { bogotaDay } from '@/lib/cycle-engine'
 import { diaQuePospone, instanteEnBogota, isoDeDia, HOY_NO_CLAVES } from '@/lib/cycle-touch'
 import { fechasEspecialesEntre } from '@/constants/fechas-especiales'
 import type { CycleOverview, CycleProjection, ListaDelCiclo } from '@/services/cycle-overview.service'
+import { olvidarAprobacionesEnPantalla } from '@/services/plantilla-aprobada.service'
 
 const h = vi.hoisted(() => ({
   usuario: null as null | { id: string; app_metadata: Record<string, unknown> },
@@ -62,9 +63,11 @@ vi.mock('@/lib/supabase/server', () => ({
   createClient: async () => ({ auth: { getUser: async () => ({ data: { user: h.usuario }, error: null }) } }),
 }))
 vi.mock('@/services/twilio-catalog.service', () => ({
+  // `aprobadaEnTwilio` es la de «Regalo que vence»; las otras cuatro del ciclo, aprobadas (desde
+  // PL-2-ciclo, 2026-10-15, el cron también pregunta por ellas).
   isTwilioTemplateApproved: async (_tenant: unknown, sid: string) => {
     h.preguntasATwilio.push(sid)
-    return h.aprobadaEnTwilio
+    return sid === 'HX_REGALO' ? h.aprobadaEnTwilio : true
   },
 }))
 vi.mock('@/services/whatsapp.service', () => ({ sendTemplateMessage: vi.fn(async () => ({ sid: 'SM1', status: 'sent' })) }))
@@ -429,9 +432,18 @@ describe('las cajas: un ciclo armado a mano, contado con el motor', () => {
     })
     expect(h.preguntasATwilio).toEqual(['HX_REGALO'])
 
+    // N-PORTADA-TWILIO (2026-10-15): otra carga dentro de los 60 s no le vuelve a preguntar a
+    // Twilio —antes preguntaba en CADA carga— y dice lo mismo aunque Meta acabe de aprobar.
     h.aprobadaEnTwilio = true
+    ;({ body } = await overview())
+    expect(h.preguntasATwilio).toEqual(['HX_REGALO'])
+    expect(body.primer_uso!.plantilla_regalo.estado).toBe('pendiente')
+
+    // Pasado el minuto (acá: olvidado a mano), vuelve a preguntar y ya figura aprobada.
+    olvidarAprobacionesEnPantalla()
     await db().query('UPDATE campaign_rewards SET is_active = false WHERE id = $1', [t.pequeno])
     ;({ body } = await overview())
+    expect(h.preguntasATwilio).toEqual(['HX_REGALO', 'HX_REGALO'])
     expect(body.primer_uso).toMatchObject({
       regalo_pequeno: { listo: false, elegido_inactivo: true },
       plantilla_regalo: { estado: 'aprobada' },

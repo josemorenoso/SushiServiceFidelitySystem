@@ -173,10 +173,10 @@ impide al rol `aios_constelarys` tocar `auth.users` — ver `docs/features/alta-
 | POST | /api/dashboard/cycle/gift | Programa un regalo (se otorga y se fecha AL ENVIAR). **Alcance de marca** | Admin Cookie |
 | GET | /api/dashboard/location | Ubicación de la **sede principal** (F4: ya no revienta con 2 sedes) | Admin Cookie |
 | PUT | /api/dashboard/location | Actualizar la **sede principal** (F4: ya no inserta una tercera fila) | Admin Cookie |
-| GET | /api/dashboard/staff | Listar meseros y dispositivos | Admin Cookie |
-| POST | /api/dashboard/staff | Crear mesero (admin) — acepta `location_id` (D11) | Admin Cookie |
-| PATCH | /api/dashboard/staff | Actualizar mesero (toggle, reset PIN, **sede**) | Admin Cookie |
-| DELETE | /api/dashboard/staff | Eliminar mesero | Admin Cookie |
+| GET | /api/dashboard/staff | Listar meseros y dispositivos. Desde el 2026-10-15 (SEDE-MESEROS) con `requireLocationScope()`: un administrador de sede recibe los de SUS sedes + los rotativos y los aparatos de sus sedes; la marca y el operador, todo | Admin Cookie |
+| POST | /api/dashboard/staff | Crear mesero (admin) — acepta `location_id` (D11). Un administrador de sede solo en sus sedes (403 si no; rotativo, 403) | Admin Cookie |
+| PATCH | /api/dashboard/staff | Actualizar mesero (toggle, reset PIN, **sede**). Un administrador de sede: solo los de su sede (404 el de otra; 403 un rotativo) y solo hacia su sede | Admin Cookie |
+| DELETE | /api/dashboard/staff | Eliminar mesero (mismo alcance que el PATCH; un fallo de base es 500, no «eliminado») | Admin Cookie |
 | POST | /api/staff/login | Login mesero (phone + PIN) — **403 si es el enlace de otra sede** (D11) | NO |
 | GET | /api/staff/me | Validar sesión mesero | Staff JWT / Device |
 | GET | /api/staff/stats | Visitas registradas hoy | Staff JWT / Device |
@@ -1729,8 +1729,10 @@ tarjetas ni primer uso, y **sin preguntarle nada al proveedor**.
 - **Segunda visita (A12):** de los que vinieron por primera vez en los 90 días que terminan hace 60,
   cuántos volvieron OTRO día dentro de 60. Días distintos con visita, no `cycle_no`.
 - **Primer uso:** los regalos con la misma validación que el cron (activos y de la marca) y «Regalo
-  que vence» con la misma pregunta de aprobación (`regaloQueVenceAprobada()`: Zernio y demo por el
-  puntero, Twilio preguntándole a Twilio). `pendiente` = hay plantilla pero no aprobada.
+  que vence» con la misma pregunta de aprobación que el cron (`punteroAprobado()`: Zernio y demo por el
+  puntero, Twilio preguntándole a Twilio), con 60 s de caché por marca desde el 2026-10-15
+  (`punteroAprobadoEnPantalla()`, N-PORTADA-TWILIO: antes preguntaba en cada carga). `pendiente` = hay
+  plantilla pero no aprobada.
 - **Para hoy:** máximo tres, por `clientes ÷ días` (lo que mueven por día que queda). Tipos:
   `trimestral` (solo con el ciclo encendido; lo que decide la PRÓXIMA corrida con `decidirCliente()`,
   `pospuesto` tras «Hoy no») · `fecha_especial` (la más cercana a ≤ 30 días sin evento esa semana) ·
@@ -2137,7 +2139,14 @@ X-Device-Token: {device_fingerprint}
   a nombre del supervisor. Si el celular no corresponde a un mesero activo → 404.
 
 **Response 200:** `{ "success": true, "message": "Dispositivo activado a nombre de <mesero>", "assigned_to": "<mesero>" }`
-**Response 403:** `{ "error": "No autorizado", "message": "Solo supervisores o admins pueden registrar dispositivos." }`
+**Response 401** (desde el 2026-10-15, N13, UN solo texto para «no existe», «inactivo», «sin PIN» y «PIN incorrecto»):
+`{ "error": "No autorizado", "message": "El celular o el PIN no son correctos." }`
+**Response 403** (solo después de un PIN correcto): `{ "error": "No autorizado", "message": "Solo un supervisor o un administrador puede activar este celular." }`
+**Response 429** (N13: 5 intentos cada 15 min por celular de la marca, 20 por IP; en memoria de cada instancia):
+`{ "error": "Demasiados intentos", "message": "Demasiados intentos con este celular. Espera N minutos y vuelve a intentarlo.", "retryAfter": <segundos> }` + `Retry-After`.
+
+> ⚠️ Esta sección describe todavía `assign_staff_phone` (v2.8.1), que §19 retiró: hoy el aparato no tiene dueño y
+> el cuerpo lleva `location_id` (la sede del aparato). Ver `docs/features/staff-qr-scan.md`.
 
 ---
 

@@ -790,7 +790,9 @@ export async function executeAutoEvent(eventId: string): Promise<ExecuteAutoEven
         templateSid,
         variablesPara(customer),
         tenant,
-        { customerId: customer.id, messageType: 'calendar_event' },
+        // N-SEDE-ENVIO (2026-10-15): la sede del evento, igual que lo que gotea por la cola
+        // (abajo): un evento de sede deja su sede en `message_logs`; uno de marca, NULL.
+        { customerId: customer.id, messageType: 'calendar_event', locationId: event.location_id ?? null },
         isZernio
           ? { headerMediaUrl: zernioHeaderMediaUrl, headerMediaType: event.media_type ?? 'image' }
           : { keepAllVariables: true }

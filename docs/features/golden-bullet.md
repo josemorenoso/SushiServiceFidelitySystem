@@ -163,6 +163,12 @@ Una plantilla con tres variables **no sirve**, y el asistente ya no la ofrece.
 > sobre —que en Zernio es el TEXTO del botón, no un payload propio— y lo reconoce por la
 > etiqueta guardada en `admin_settings` (`golden_bullet_button_*`). Lo que sigue sin acuse en
 > Zernio es el opt-out por palabra clave (SALIR), que no es de este flujo.
+>
+> **Desde el 2026-10-15 (N6) el acuse sale DESPUÉS de contestarle a Zernio** (`after()`, como el
+> domicilio de ESCALA-3): la llamada de salida tiene 10 s de timeout y Zernio da 5 s antes de contar
+> un fallo (diez seguidos apagan el webhook de todas las marcas). El consentimiento sí se escribe
+> antes de contestar. La respuesta del webhook dice `reply: 'after_response'`; si el acuse se
+> manda o falla queda en el log de Vercel (`[webhook/zernio] opt-in por botón… acuse enviado / NO enviado`).
 
 ### Por qué línea sale la difusión — `golden_bullet_provider` (2026-09-12)
 

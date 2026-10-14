@@ -28,8 +28,20 @@ import { bogotaDay, expiresOnSunday } from '@/lib/cycle-engine'
 import { instanteEnBogota, nextSendSlot, queueExpiry, formatGiftDeadline } from '@/lib/cycle-touch'
 
 const h = vi.hoisted(() => ({
-  envios: [] as Array<{ telefono: string; plantilla: string; variables: Record<string, string>; tenantId: string }>,
-  estado: { fallaElEnvio: false, aprobadaEnTwilio: true },
+  envios: [] as Array<{
+    telefono: string
+    plantilla: string
+    variables: Record<string, string>
+    tenantId: string
+    /** El `logContext` (desde N-SEDE-ENVIO, 2026-10-15: la sede llega a `message_logs`). */
+    registro?: { customerId?: string | null; messageType: string; locationId?: string | null }
+  }>,
+  /**
+   * `aprobadaEnTwilio` es la respuesta para «Regalo que vence» (`HX_REGALO`). Las otras cuatro
+   * plantillas del ciclo están aprobadas salvo las de `enRevision` (PL-2-ciclo, 2026-10-15:
+   * desde ahí el cron pregunta por cada una).
+   */
+  estado: { fallaElEnvio: false, aprobadaEnTwilio: true, enRevision: new Set<string>() },
   preguntasATwilio: [] as string[],
   misMarcas: new Set<string>(),
 }))
@@ -43,8 +55,14 @@ vi.mock('@/lib/supabase/server', () => ({ createClient: async () => ({}) }))
 vi.mock('@/lib/validators/cron', () => ({ validateCronSecret: () => true }))
 vi.mock('@/services/whatsapp.service', () => ({
   sendTemplateMessage: vi.fn(
-    async (telefono: string, plantilla: string, variables: Record<string, string>, tenant: { id: string }) => {
-      h.envios.push({ telefono, plantilla, variables, tenantId: tenant.id })
+    async (
+      telefono: string,
+      plantilla: string,
+      variables: Record<string, string>,
+      tenant: { id: string },
+      registro?: { customerId?: string | null; messageType: string; locationId?: string | null }
+    ) => {
+      h.envios.push({ telefono, plantilla, variables, tenantId: tenant.id, registro })
       return h.estado.fallaElEnvio ? null : { sid: `SM${h.envios.length}`, status: 'sent' }
     }
   ),
@@ -52,7 +70,7 @@ vi.mock('@/services/whatsapp.service', () => ({
 vi.mock('@/services/twilio-catalog.service', () => ({
   isTwilioTemplateApproved: async (_tenant: unknown, sid: string) => {
     h.preguntasATwilio.push(sid)
-    return h.estado.aprobadaEnTwilio
+    return sid === 'HX_REGALO' ? h.estado.aprobadaEnTwilio : !h.estado.enRevision.has(sid)
   },
 }))
 vi.mock('@/services/send-queue.service', async (original) => {
@@ -271,6 +289,8 @@ async function limpiar(t: TestTenant): Promise<void> {
   await db().query('DELETE FROM send_queue WHERE tenant_id = $1', [t.id])
   await db().query('DELETE FROM customer_cycle_touches WHERE tenant_id = $1', [t.id])
   await db().query('DELETE FROM reward_grants WHERE tenant_id = $1', [t.id])
+  await db().query('DELETE FROM message_logs WHERE tenant_id = $1', [t.id])
+  await db().query('DELETE FROM restaurant_locations WHERE tenant_id = $1', [t.id])
   await dropTestTenant(t.id)
   h.misMarcas.delete(t.id)
 }
@@ -285,6 +305,7 @@ beforeEach(() => {
   h.preguntasATwilio.length = 0
   h.estado.fallaElEnvio = false
   h.estado.aprobadaEnTwilio = true
+  h.estado.enRevision.clear()
 })
 
 afterAll(async () => {
@@ -345,7 +366,9 @@ describe('con el ciclo ENCENDIDO el cron decide y encola (no envía)', () => {
 
     expect(h.envios).toEqual([]) // nada sale desde el cron
     for (const r of [a, b]) expect(r).toMatchObject({ ok: true, ciclo: true, sent: 0 })
-    expect(h.preguntasATwilio.length).toBeLessThanOrEqual(1) // una vez por corrida, a lo sumo
+    // Una vez por plantilla y por corrida, a lo sumo (desde PL-2-ciclo pregunta por las cinco).
+    expect(h.preguntasATwilio.length).toBeLessThanOrEqual(5)
+    expect(new Set(h.preguntasATwilio).size).toBe(h.preguntasATwilio.length)
     expect(c).toMatchObject({ saltados: { en_curso: 5 } })
 
     const filas = await toques(t)
@@ -475,7 +498,7 @@ describe('el adaptador: «Regalo que vence» solo si está aprobada en esa marca
 
     await correrCron(t)
 
-    expect(h.preguntasATwilio).toEqual(['HX_REGALO'])
+    expect(h.preguntasATwilio.filter((s) => s === 'HX_REGALO')).toEqual(['HX_REGALO'])
     const item = (await cola(t)).find((i) => i.customer_id === c)!
     expect(item.template_sid).toBe('HX_INSISTENTE')
     expect(item.variables).toMatchObject({ '4': '½ rollo gratis' })
@@ -1021,5 +1044,94 @@ describe('la migración 00071', () => {
       )
       expect(rows[0], fn).toEqual({ anon: false, auth: false })
     }
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════
+// PL-2-ciclo (2026-10-15): las otras cuatro plantillas también se preguntan
+// ═══════════════════════════════════════════════════════════════
+
+describe('PL-2-ciclo: una plantilla del ciclo en revisión no se usa hoy (y no cuenta como fallida)', () => {
+  it('la suave en revisión: el t1 no se crea hoy, se dice cuál falta, y mañana —aprobada— sale', async () => {
+    h.estado.enRevision.add('HX_SUAVE')
+    const t = await nuevaMarca()
+    const c = await nuevoCliente(t, { dias: 14 })
+
+    const r = await correrCron(t)
+    expect(r).toMatchObject({ plantillas_sin_aprobar: ['reactivation_no_reward'], saltados: { sin_plantilla: { t1: 1 } } })
+    expect(await toques(t, c)).toEqual([])
+    expect(await cola(t)).toEqual([])
+
+    h.estado.enRevision.clear()
+    const r2 = await correrCron(t)
+    expect(r2).toMatchObject({ plantillas_sin_aprobar: [], por_etapa: { t1: 1 } })
+    expect((await cola(t))[0]).toMatchObject({ customer_id: c, template_sid: 'HX_SUAVE' })
+  })
+
+  it('la insistente en revisión: un t2 con regalo y «Regalo que vence» sin aprobar no sale por la insistente', async () => {
+    h.estado.aprobadaEnTwilio = false
+    h.estado.enRevision.add('HX_INSISTENTE')
+    const t = await nuevaMarca()
+    await nuevoCliente(t, { dias: 28 })
+    const r = await correrCron(t)
+    expect(r).toMatchObject({ plantillas_sin_aprobar: ['reactivation_aggressive'], plantilla_del_regalo: 'sin_plantilla' })
+    expect(await cola(t)).toEqual([])
+  })
+
+  it('con «Regalo que vence» aprobada, la insistente en revisión no frena el t2 (sale la de regalo)', async () => {
+    h.estado.enRevision.add('HX_INSISTENTE')
+    const t = await nuevaMarca()
+    const c = await nuevoCliente(t, { dias: 28 })
+    await correrCron(t)
+    expect((await cola(t)).find((i) => i.customer_id === c)).toMatchObject({ template_sid: 'HX_REGALO' })
+  })
+
+  it('las cruzadas también se preguntan: la de «a casa» en revisión deja el t3 para mañana', async () => {
+    h.estado.enRevision.add('HX_A_CASA')
+    const t = await nuevaMarca()
+    const c = await nuevoCliente(t, { dias: 42, canales: 'qr' })
+    const r = await correrCron(t)
+    expect(r).toMatchObject({ plantillas_sin_aprobar: ['campaign_presencial_to_domicilio'] })
+    expect(await toques(t, c)).toEqual([])
+  })
+
+  it('Zernio y la marca demo no le preguntan nada a Twilio', async () => {
+    h.estado.enRevision.add('HX_SUAVE')
+    const zernio = await nuevaMarca({ proveedor: 'zernio' })
+    const demo = await nuevaMarca({ demo: true })
+    await nuevoCliente(zernio, { dias: 14 })
+    await nuevoCliente(demo, { dias: 14 })
+    expect(await correrCron(zernio)).toMatchObject({ plantillas_sin_aprobar: [] })
+    expect(await correrCron(demo)).toMatchObject({ plantillas_sin_aprobar: [] })
+    expect(h.preguntasATwilio).toEqual([])
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════
+// N-SEDE-ENVIO (2026-10-15): el drenador pasa la sede a `message_logs`
+// ═══════════════════════════════════════════════════════════════
+
+describe('N-SEDE-ENVIO: lo que se encoló con sede sale con esa sede', () => {
+  it('un item con sede lleva su sede al envío; uno sin sede, NULL (sede desconocida, sin adivinar)', async () => {
+    const t = await nuevaMarca({ encendido: false })
+    const { rows } = await db().query<{ id: string }>(
+      `INSERT INTO restaurant_locations (tenant_id, name, slug, is_primary, sort_order, is_active)
+       VALUES ($1, 'Laureles', $2, true, 0, true) RETURNING id`,
+      [t.id, `lau-${t.id.slice(0, 8)}`]
+    )
+    const LAU = rows[0].id
+    const conSede = nuevoTelefono()
+    const sinSede = nuevoTelefono()
+    const { enqueueSendBatch } = await import('@/services/send-queue.service')
+    await enqueueSendBatch([
+      { tenantId: t.id, phone: conSede, messageType: 'calendar_event', templateSid: 'HX_EVENTO', locationId: LAU },
+      { tenantId: t.id, phone: sinSede, messageType: 'calendar_event', templateSid: 'HX_EVENTO' },
+    ])
+
+    await drenar(t)
+
+    const por = (tel: string) => h.envios.find((e) => e.telefono === tel)
+    expect(por(conSede)?.registro).toMatchObject({ messageType: 'calendar_event', locationId: LAU })
+    expect(por(sinSede)?.registro).toMatchObject({ messageType: 'calendar_event', locationId: null })
   })
 })

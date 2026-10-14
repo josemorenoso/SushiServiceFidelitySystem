@@ -210,6 +210,10 @@ export async function POST(request: NextRequest) {
     // message_logs por sendTemplateMessage vía logContext.
     let whatsappSent = false
     let whatsappReason: string | undefined
+    // N-SEDE-ENVIO (2026-10-15): la sede del host —la misma con la que se ofreció y se otorgó el
+    // nivel— va a `message_logs.location_id`. Antes quedaba NULL aunque se conocía. Un host de
+    // marca deja `null`: sede desconocida, sin adivinarla.
+    const registro = (messageType: string) => ({ customerId: customer.id, messageType, locationId: locationId ?? null })
 
     try {
       if (choice === 'safe') {
@@ -219,7 +223,7 @@ export async function POST(request: NextRequest) {
             settings.reward_safe_template_sid,
             { '1': customer.name, '2': tier.tier_name, '3': result.prizeTitle, '4': roadmap },
             tenant,
-            { customerId: customer.id, messageType: 'safe_reward' }
+            registro('safe_reward')
           )
           whatsappSent = res !== null
           if (!whatsappSent) whatsappReason = 'twilio_error_or_unconfigured'
@@ -241,7 +245,7 @@ export async function POST(request: NextRequest) {
             templateSid,
             vars,
             tenant,
-            { customerId: customer.id, messageType: result.wasGolden ? 'golden_box' : 'mystery_box' }
+            registro(result.wasGolden ? 'golden_box' : 'mystery_box')
           )
           whatsappSent = res !== null
           if (!whatsappSent) whatsappReason = 'twilio_error_or_unconfigured'

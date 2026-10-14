@@ -376,7 +376,9 @@ async function drenarTenant(tenantId: string, res: Resultado): Promise<Resultado
           item.template_sid,
           envioDelCiclo.get(item.id)?.variables ?? envioDelRegalo.get(item.id)?.variables ?? item.variables ?? {},
           tenant,
-          { customerId: item.customer_id, messageType: item.message_type },
+          // N-SEDE-ENVIO (2026-10-15): la sede con la que se encoló pasa a `message_logs`
+          // (la promesa del comentario de la 00043). NULL sigue siendo «sede desconocida».
+          { customerId: item.customer_id, messageType: item.message_type, locationId: item.location_id ?? null },
           { ...construirOpciones(item, proveedor), provider: proveedor }
         )
         return { item, enviado, error: null as string | null }

@@ -72,7 +72,7 @@ import {
 import { audienciaDelEvento } from '@/services/calendar.service'
 import { enqueueSendBatch, type EnqueueItem, type QueueRow } from '@/services/send-queue.service'
 import { getNextTier, buildTiersRoadmap } from '@/services/reward-tiers.service'
-import { isTwilioTemplateApproved } from '@/services/twilio-catalog.service'
+import { punteroAprobado } from '@/services/plantilla-aprobada.service'
 import type { Tenant } from '@/types/tenant.types'
 
 function getServiceClient() {
@@ -207,6 +207,12 @@ export interface ResultadoDelCiclo {
     hoy_no: number
     sin_plantilla: Partial<Record<TouchStage, number>>
   }
+  /**
+   * PL-2-ciclo: las plantillas configuradas que Twilio no da por aprobadas HOY (suave,
+   * insistente, cruzadas). Sus toques cuentan en `saltados.sin_plantilla` y mañana se vuelve a
+   * mirar. «Regalo que vence» va aparte: sin aprobar, el adaptador usa la insistente.
+   */
+  plantillas_sin_aprobar: TouchTemplateKey[]
   dormidos_por_encendido: number
   dormidos_tras_la_despedida: number
   archivados: number
@@ -260,12 +266,28 @@ export async function premiosDelCiclo(ajustes: CycleSettings, tenantId: string):
  * ¿«Regalo que vence» está aprobada en esta marca? Zernio: el puntero solo existe aprobado.
  * Demo: el envío es simulado. Twilio: el puntero se escribe al CREAR la plantilla, así que se
  * le pregunta a Twilio, una vez por corrida (como `reward-reminder` desde PL-2-a); ante la
- * duda, no (sale la insistente, y el regalo igual llega a la tarjeta).
+ * duda, no (sale la insistente, y el regalo igual llega a la tarjeta). La pregunta es
+ * `punteroAprobado()`; la portada usa la versión con caché (`punteroAprobadoEnPantalla()`).
  */
 export async function regaloQueVenceAprobada(tenant: Tenant, sid: string | null | undefined): Promise<boolean> {
-  if (!sid?.trim()) return false
-  if (tenant.is_demo || tenant.messaging_provider === 'zernio') return true
-  return isTwilioTemplateApproved(tenant, sid.trim())
+  return punteroAprobado(tenant, sid)
+}
+
+/**
+ * PL-2-ciclo (2026-10-15): las OTRAS cuatro plantillas del ciclo —la suave, la insistente y las
+ * dos cruzadas— también se escriben al crear en Twilio. Antes solo se preguntaba por «Regalo que
+ * vence», y un toque con una plantilla en revisión fallaba en Meta tres días seguidos y se
+ * rendía. Una pregunta por plantilla configurada y por corrida; las que no figuran aprobadas
+ * quedan fuera HOY (el toque no se crea, `saltados.sin_plantilla`, y mañana se vuelve a mirar
+ * en la misma etapa), igual que el recordatorio de premio desde PL-2-a.
+ */
+async function plantillasSinAprobar(
+  tenant: Tenant,
+  sids: Readonly<Record<TouchTemplateKey, string | null>>
+): Promise<TouchTemplateKey[]> {
+  const claves = (Object.keys(sids) as TouchTemplateKey[]).filter((k) => k !== 'gift_expiring' && sids[k]?.trim())
+  const respuestas = await Promise.all(claves.map((k) => punteroAprobado(tenant, sids[k])))
+  return claves.filter((_, i) => !respuestas[i])
 }
 
 /** Cliente → desde cuándo se reevalúa su toque si está en la audiencia de un evento en blackout. */
@@ -409,6 +431,16 @@ export async function ejecutarCicloDeLaMarca(
   ) as Record<TouchTemplateKey, string | null>
   const hayRegalo = premios.small !== null || premios.strong !== null
   const aprobada = hayRegalo ? await regaloQueVenceAprobada(tenant, sids.gift_expiring) : false
+  // PL-2-ciclo: una plantilla en revisión es, por hoy, una plantilla que no está.
+  const sinAprobar = await plantillasSinAprobar(tenant, sids)
+  const sidsUsables = { ...sids }
+  for (const k of sinAprobar) sidsUsables[k] = null
+  if (sinAprobar.length > 0) {
+    console.warn(
+      `[Cycle] (${tenant.slug}) Plantillas que Meta todavía no aprueba: ${sinAprobar.join(', ')}. ` +
+        `Sus toques no salen hoy (no cuentan como fallidos) y se vuelven a mirar mañana.`
+    )
+  }
 
   // ── Quién está en la audiencia de un evento en su blackout ──
   const blackout = await blackoutsDeLaMarca(tenant.id, ahora)
@@ -423,7 +455,7 @@ export async function ejecutarCicloDeLaMarca(
     tieneDomicilio: tenant.config?.has_delivery_webhook === true,
     heartbeatEnabled: ajustes.heartbeatEnabled,
     strongCooldownDays: ajustes.strongCooldownDays,
-    plantillas: { sids, regaloQueVenceAprobada: aprobada },
+    plantillas: { sids: sidsUsables, regaloQueVenceAprobada: aprobada },
     premios,
   }
 
@@ -539,7 +571,9 @@ export async function ejecutarCicloDeLaMarca(
     ritmo_de_la_marca: ritmoDeLaMarca,
     hora: SEND_SLOTS[ajustes.sendSlot],
     grupo_de_control_pct: ajustes.holdoutPct,
-    plantilla_del_regalo: aprobada && sids.gift_expiring ? 'gift_expiring' : sids.reactivation_aggressive ? 'reactivation_aggressive' : 'sin_plantilla',
+    plantilla_del_regalo:
+      aprobada && sids.gift_expiring ? 'gift_expiring' : sidsUsables.reactivation_aggressive ? 'reactivation_aggressive' : 'sin_plantilla',
+    plantillas_sin_aprobar: sinAprobar,
     regalos: { pequeno: premios.small?.title ?? null, fuerte: premios.strong?.title ?? null },
     evaluados: { activos, dormidos },
     por_etapa: r.por_etapa,

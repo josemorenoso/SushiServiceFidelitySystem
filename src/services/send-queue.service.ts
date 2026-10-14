@@ -120,6 +120,12 @@ export interface QueueRow {
   claimed_at: string | null
   /** 00071. `undefined` antes de aplicarla; `null` en todo lo que no es del ciclo. */
   cycle_touch_id?: string | null
+  /**
+   * 00043: la sede del envío (`item.locationId` al encolar). `claim_send_queue()` devuelve la fila
+   * entera (`SETOF send_queue`), así que viene. NULL = sede desconocida. El drenador la pasa a
+   * `message_logs.location_id` (N-SEDE-ENVIO, 2026-10-15).
+   */
+  location_id?: string | null
 }
 
 /**

@@ -149,7 +149,11 @@ El mismo cron (`/api/cron/reactivation`, 15:00 de Bogotá, `vercel.json` intacto
    `{{4}}` y la fecha en `{{5}}`. `t1` → la suave sin oferta · `t3` → la cruzada según `source_channels` · `t5` y un toque
    sin regalo → la insistente sin `{{4}}`/`{{5}}`. **Nunca** las legacy (`reactivation_with_reward_template_sid`,
    `reactivation_template_sid`): esas solo las lee el camino viejo. Etapa sin plantilla → no se crea el toque y la
-   respuesta lo cuenta (`saltados.sin_plantilla`).
+   respuesta lo cuenta (`saltados.sin_plantilla`). **Desde el 2026-10-15 (PL-2-ciclo) una plantilla en revisión cuenta
+   como una que no está:** en Twilio el cron le pregunta también por la suave, la insistente y las dos cruzadas (una vez
+   por plantilla y por corrida, `punteroAprobado()`); las que no figuran aprobadas salen en `plantillas_sin_aprobar` de
+   la respuesta y sus toques no se crean HOY —no cuentan como fallidos— y se vuelven a mirar mañana en la misma etapa.
+   Antes el toque salía, Meta lo rechazaba tres días seguidos y se rendía.
 7. **Por cada toque, en este orden:** blackout de un evento de su audiencia (`getActiveBlackouts()` +
    `findCustomersForEvent()`, la MISMA audiencia que recibirá la invitación) → `deferred` hasta el día siguiente al
    evento · grupo de control (`isHoldout()`, 10 % desde 200 clientes) → `holdout`, sin envío, con su `due_at` · cap de 7

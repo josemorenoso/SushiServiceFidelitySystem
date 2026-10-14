@@ -40,6 +40,7 @@ import {
   updateCustomerTier,
 } from '@/services/reward-tiers.service'
 import { sendTemplateMessage } from '@/services/whatsapp.service'
+import { punteroAprobado } from '@/services/plantilla-aprobada.service'
 import { getMultipleSettings } from '@/services/settings.service'
 import { syncGoogleContact } from '@/services/google-contacts-sync.service'
 import { resolveDirectLocation, type LocationResolution } from '@/lib/location-resolver'
@@ -412,6 +413,22 @@ export async function registerDeliveryOrder({
     console.error('[Delivery] Error generando tiers roadmap:', err)
   }
 
+  // PL-2 (2026-10-15): «Nivel desbloqueado» solo si Meta ya la aprobó. En Twilio el puntero se
+  // escribe al CREAR la plantilla (`fillEmptyPointer()`): con la plantilla en revisión el envío
+  // fallaba en Meta y el cliente se quedaba sin mensaje, sin reintento. Si no está aprobada
+  // cae al mensaje de puntos, como el check-in desde PL-2-a. Solo se pregunta al cruzar de nivel.
+  const nivelSinAprobar =
+    !isNew &&
+    !!newTier &&
+    !!settings.tier_unlocked_template_sid &&
+    !(await punteroAprobado(tenant, settings.tier_unlocked_template_sid))
+  if (nivelSinAprobar) {
+    console.warn(
+      `[Delivery] (${tenant.slug}) «Nivel desbloqueado» (${settings.tier_unlocked_template_sid}) no figura aprobada ` +
+        `por Meta: se manda el mensaje de puntos en su lugar.`
+    )
+  }
+
   if (isNew) {
     await sendDeliveryTemplate(
       settings.welcome_template_sid,
@@ -426,7 +443,7 @@ export async function registerDeliveryOrder({
       tenant,
       deliveryLocation.locationId
     )
-  } else if (newTier) {
+  } else if (newTier && !nivelSinAprobar) {
     await sendDeliveryTemplate(
       settings.tier_unlocked_template_sid,
       'tier_unlocked',

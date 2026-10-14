@@ -231,6 +231,9 @@ describe('A7 — «Premios» sale de Campañas y va a Recompensas', () => {
 
 describe('C1 — Recompensas absorbe los premios que estaban en Ajustes', () => {
   const ajustes = () => fuente('src/app/(dashboard)/dashboard/settings/page.tsx')
+  // Ajustes escribe una clave de dos maneras: `saveSetting('clave', …)` o, desde OPER-4-mudo
+  // (2026-10-15), como un par `['clave', …]` de `guardarAjustes()`. Las dos cuentan.
+  const escribe = (clave: string) => new RegExp(`(saveSetting\\(\\s*|\\[\\s*)'${clave}'`)
 
   it('Ajustes ya no escribe el premio de la reactivación, el de la reseña ni el recordatorio', () => {
     const src = ajustes()
@@ -242,7 +245,7 @@ describe('C1 — Recompensas absorbe los premios que estaban en Ajustes', () => 
       'reward_reminder_enabled',
       'reward_reminder_days_before',
     ]) {
-      expect(src, clave).not.toMatch(new RegExp(`saveSetting\\(\\s*'${clave}'`))
+      expect(src, clave).not.toMatch(escribe(clave))
     }
   })
 
@@ -259,7 +262,7 @@ describe('C1 — Recompensas absorbe los premios que estaban en Ajustes', () => 
   it('lo que C1 dice «después» NO se movió: puntos, Black, ticket promedio, check-in y el link de reseñas siguen en Ajustes', () => {
     const src = ajustes()
     for (const clave of ['avg_ticket', 'black_benefits', 'points_system_enabled', 'checkin_mode', 'reactivation_soft_days']) {
-      expect(src, clave).toMatch(new RegExp(`saveSetting\\(\\s*'${clave}'`))
+      expect(src, clave).toMatch(escribe(clave))
     }
     expect(src).toContain("google_maps_url")
   })

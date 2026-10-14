@@ -479,7 +479,9 @@ algo que asignaba en Ajustes. **No hay editor en Twilio**: sus textos aprobados 
 reemplaza, reescribe ni re-somete una existente. `fillEmptyPointer()` escribe el puntero al CREAR (antes de
 la aprobación) y se niega si ya hay valor; los presets de Campañas exigen además que la plantilla esté
 aprobada (`isPresetSendable()`), y el cron de cumpleaños, el cron `reward-reminder` y el check-in (al cruzar de
-nivel) lo preguntan (`isTwilioTemplateApproved()`; los dos últimos desde PL-2-a, 2026-10-12).
+nivel) lo preguntan (`isTwilioTemplateApproved()`; los dos últimos desde PL-2-a, 2026-10-12). Desde el 2026-10-15
+también el check-in manual del panel, el registro de un domicilio y el ciclo (sus cinco plantillas), por
+`punteroAprobado()` (PL-2 y PL-2-ciclo).
 
 **Ajustes › Plantillas WhatsApp** perdió los 15 desplegables y su «Guardar». Queda una tarjeta que lleva a
 Plantillas, porque varios avisos del sistema (calendario, crons) todavía dicen «configúrala en Ajustes».
@@ -560,10 +562,13 @@ software, no en las del AIOS, y el bucket tiene que ser el del proyecto `bredfyu
   la aprobación: los presets, el cron de cumpleaños, el cron `reward-reminder` (si no está aprobada ese día no
   se intenta y no cuenta como fallido) y el check-in al cruzar de nivel (cae a «puntos sumados»). Los dos
   últimos son de PL-2-a (2026-10-12), que cerró el caso caro: antes cada día de revisión del recordatorio
-  contaba como un fallido y al tercero ese premio se quedaba sin recordatorio para siempre. **Siguen sin
-  preguntar** el check-in manual del panel (`check-in-override`) y el registro de un domicilio
-  (`delivery.service.ts`), que mandan «Nivel desbloqueado» tal cual: en una marca Twilio con la plantilla en
-  revisión es un mensaje perdido (sin reintento ni tope). Cerrarlo de raíz es `docs/PENDIENTES.md` PL-2.
+  contaba como un fallido y al tercero ese premio se quedaba sin recordatorio para siempre. **Desde el
+  2026-10-15 (PL-2) preguntan también** el check-in manual del panel (`check-in-override`) y el registro de un
+  domicilio (`delivery.service.ts`): sin aprobar, caen al mensaje de puntos, como el check-in. Y el ciclo
+  pregunta por sus CINCO plantillas, no solo por «Regalo que vence» (PL-2-ciclo; `campaigns.md` § «El ciclo
+  encendido», punto 6). La pregunta común es `punteroAprobado()` (`src/services/plantilla-aprobada.service.ts`;
+  la portada del ciclo la usa con 60 s de caché por marca, N-PORTADA-TWILIO). Cerrarlo de raíz —que el puntero
+  Twilio se escriba al aprobarse— sigue siendo una decisión (`docs/PENDIENTES.md` §3.2).
 - **Reemplazar una plantilla Twilio rechazada** no tiene botón propio: se crea una corregida en la
   Biblioteca y, aprobada, se elige con «Elegir otra».
 - **No se agregó botón de opt-out a las plantillas MARKETING.** Meta lo pide para marketing desde

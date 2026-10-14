@@ -392,6 +392,32 @@ export interface SegundaVisita {
   pct: number | null
 }
 
+/**
+ * El detalle plegado de la pantalla, «Ver por día» (parte B, 2026-10-14): cuántos clientes del
+ * ciclo llevan exactamente N días sin venir. El mismo `daysWithoutVisit()` que ponen las cajas,
+ * contado una vez más: la pantalla no calcula ningún día.
+ */
+export interface PorDia {
+  /** `conteo[n]` = clientes del ciclo con exactamente `n` días sin venir. */
+  conteo: number[]
+  /** Los que llevan más días que el largo de `conteo` (un cliente con ritmo propio más lento que el de la marca). */
+  mas_alla: number
+}
+
+/** Días que el detalle muestra después de la Despedida de la marca. */
+export const DIAS_DESPUES_DE_LA_DESPEDIDA = 10
+
+/** Cuenta cuántos clientes hay en cada día sin venir (0 … `largo - 1`); los demás van a `mas_alla`. */
+export function contarPorDia(dias: Iterable<number>, largo: number): PorDia {
+  const conteo = new Array<number>(Math.max(0, largo)).fill(0)
+  let masAlla = 0
+  for (const d of dias) {
+    if (d >= 0 && d < conteo.length) conteo[d]++
+    else if (d >= conteo.length) masAlla++
+  }
+  return { conteo, mas_alla: masAlla }
+}
+
 export interface CycleOverview {
   /** `true` = la versión del panel principal (el mini-ciclo): solo cajas y estado. */
   mini: boolean
@@ -431,6 +457,8 @@ export interface CycleOverview {
   primer_uso: PrimerUso | null
   /** Máximo tres, ordenadas por lo que mueven por día que queda. */
   para_hoy: TarjetaParaHoy[] | null
+  /** El histograma de «Ver por día». `null` en la versión mini. */
+  por_dia: PorDia | null
 }
 
 /** Con cuántas tarjetas abre «Para hoy» como mucho (spec §6.1). */
@@ -456,6 +484,7 @@ export async function getCycleOverview(
   )
   const dorm = { total: 0, nuevos: 0, archivados: 0, hoy: 0 }
   const activos: ClienteDeLaPantalla[] = []
+  const diasDeLosActivos: number[] = []
   let conRitmoPropio = 0
 
   for (const c of base.alcanzables) {
@@ -470,6 +499,7 @@ export async function getCycleOverview(
     activos.push(c)
     if (isCycleRhythm(c.cycle_rhythm)) conRitmoPropio++
     const lugar = lugarDelActivo(c, base)
+    if (lugar.dias !== null) diasDeLosActivos.push(lugar.dias)
     // Una etapa que no existe para la marca (sin domicilio no hay «Le mostramos lo otro») no
     // llega: `boxOf()` usa las etapas del cliente, que son un subconjunto de las de la marca.
     const fila = cuenta.get(lugar.caja) ?? { total: 0, nuevos: 0, hoy: 0 }
@@ -640,6 +670,9 @@ export async function getCycleOverview(
     segunda_visita: segundaVisita,
     primer_uso: primerUso,
     para_hoy: paraHoy,
+    por_dia: mini
+      ? null
+      : contarPorDia(diasDeLosActivos, daysForRhythm(base.ritmo.marca)[4] + DIAS_DESPUES_DE_LA_DESPEDIDA + 1),
   }
 }
 

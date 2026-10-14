@@ -387,6 +387,34 @@ describe('las cajas: un ciclo armado a mano, contado con el motor', () => {
     expect(h.preguntasATwilio).toEqual([])
   })
 
+  it('«Ver por día» (parte B): cuántos llevan exactamente N días, el total cuadra con las cajas y la versión mini no lo trae', async () => {
+    const t = await nuevaMarca() // restaurante 14·28·42·60·80: el conteo llega al día 80 + 10 → 91 posiciones
+    await nuevoCliente(t, { dias: 0 })
+    await nuevoCliente(t, { dias: 0 })
+    await nuevoCliente(t, { dias: 14 })
+    await nuevoCliente(t, { dias: 61, visitas: 4 })
+    await nuevoCliente(t, { dias: 90 }) // la última posición
+    await nuevoCliente(t, { dias: 200 }) // más allá del conteo
+    await nuevoCliente(t, { dias: 20, acepta: false }) // fuera del ciclo: no cuenta
+    await nuevoCliente(t, { estado: 'dormido', dormidoHace: 3 }) // los dormidos no tienen días
+    comoDueno(t)
+
+    const { body } = await overview()
+    const porDia = body.por_dia!
+    expect(porDia.conteo).toHaveLength(91)
+    expect([porDia.conteo[0], porDia.conteo[14], porDia.conteo[61], porDia.conteo[90]]).toEqual([2, 1, 1, 1])
+    expect(porDia.mas_alla).toBe(1)
+    // Nadie se pierde ni se cuenta dos veces: es el mismo conjunto que las cajas.
+    expect(porDia.conteo.reduce((a, b) => a + b, 0) + porDia.mas_alla).toBe(body.numeros.en_el_ciclo)
+    for (const c of body.cajas) {
+      const enElRango = porDia.conteo.slice(c.desde, c.hasta === null ? undefined : c.hasta + 1).reduce((a, b) => a + b, 0)
+      expect(enElRango + (c.hasta === null ? porDia.mas_alla : 0), c.key).toBe(c.total)
+    }
+
+    const mini = await overview('?mini=1')
+    expect(mini.body.por_dia).toBeNull()
+  })
+
   it('el primer uso: los dos regalos y «Regalo que vence» con la MISMA pregunta que el cron', async () => {
     const t = await nuevaMarca({ fuerte: false })
     comoDueno(t)

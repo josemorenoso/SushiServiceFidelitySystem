@@ -17,6 +17,7 @@ import { CampaignEfficiencyChart } from '@/components/dashboard/CampaignEfficien
 import { OptOutPanel } from '@/components/dashboard/OptOutPanel'
 import { TwilioMessagesPanel } from '@/components/dashboard/TwilioMessagesPanel'
 import { CustomerDetailDialog } from '@/components/dashboard/CustomerDetailDialog'
+import { MiniCiclo } from '@/components/dashboard/cycle/MiniCiclo'
 import type { Customer } from '@/types/database.types'
 
 /**
@@ -25,10 +26,14 @@ import type { Customer } from '@/types/database.types'
  * REQUERIMIENTOS_AGOSTO_2026.md §14.1 y §15.3 — dos secciones SALIERON de aquí
  * (no se borraron, se mudaron al apartado donde se actúa sobre ellas):
  *   - `BlackTierSection`  → `/dashboard/customers`  (§14.1 la saca, §17.1 la pone)
- *   - `AtRiskBubbles`     → `/dashboard/campaigns`, pestaña Manuales (§15.3)
+ *   - `AtRiskBubbles`     → `/dashboard/campaigns` (§15.3). Desde la fase 2 del ciclo
+ *                           (2026-10-14) ya no está ni ahí: las reemplazan las cajas del ciclo.
  * Textual del dueño sobre las burbujas: *"considerando el día a día del cliente
  * deberíamos eliminar las burbujas flotantes catalogadas por días en el dashboard
  * y meterla en el área de campañas"*.
+ *
+ * `MiniCiclo` (spec del ciclo §6.7) es lo que el panel principal muestra del ciclo de
+ * recuperación: las mismas cajas que Campañas, sin detalle, con un enlace a la pantalla completa.
  */
 export default function DashboardPage() {
   const { isDemo, demoError } = useDemo()
@@ -76,6 +81,8 @@ export default function DashboardPage() {
         <CustomerTiers tiers={data?.brand.customerTiers ?? []} loading={loading} />
         <ROICard />
       </div>
+
+      <MiniCiclo />
 
       <VisitsChart data={data?.location.visitsPerDay ?? []} loading={loading} />
 

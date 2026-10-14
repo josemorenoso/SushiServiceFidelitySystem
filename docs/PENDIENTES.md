@@ -39,7 +39,7 @@
 | 3 | ✅ **Plantillas: un solo libro y una sola pantalla — HECHO el 2026-10-11** (sin migración, **desplegado el 2026-10-12**): el panel reconoce la WABA, las tres plantillas nuevas entraron juntas, una pantalla para Twilio y Zernio, Biblioteca para campañas (§3). Quedan B1 y B7 (AIOS, menos aprobaciones), en una sesión posterior | Por marca, «Enviar los N juntos a Meta» (§3.4) | no |
 | 4 | **Encender el ciclo** (la fase 1B, los envíos, está HECHA el 2026-10-13, `CHANGELOG.md`; el ciclo nace apagado en todas las marcas). En orden: aplicar la **00071** ANTES del push → push → encender `demo-ventas` un día (envío simulado) → Don Alirio dos semanas → medir | Elegir el regalo pequeño y el fuerte de Don Alirio (o ninguno: sale sin regalo) y mirar su `?dry=1`. Todo en `SQL-PARA-CORRER/ciclo-fase-1b/LEEME.md` | 1 (escrita) |
 | 5 | ✅ **Recompensas en un solo lugar (S-1) — HECHO el 2026-10-13** (sin migración, sin desplegar): el catálogo y los selectores de qué premio usa cada mensaje viven en Recompensas › Premios para regalar; salieron de Campañas y de Ajustes; las invitaciones eligen del catálogo; las escrituras del catálogo exigen alcance de marca (§4.1). Prompt: `docs/prompts/2026-10-13-recompensas-un-solo-lugar.md` | Nada | no |
-| 6 | **Campañas, fase 2: la pantalla** (dos o tres sesiones) | A8: mirar el prototipo (no frena la fase 1) | no |
+| 6 | **Campañas, fase 2: la pantalla** — **prototipo APROBADO (14-10), prompt listo**: `docs/prompts/2026-10-14-ciclo-fase-2-pantalla.md`, tres partes en orden (A datos → B pantalla → C fecha y creadores) | Nada | 0 o 1 (parte C: «incluir dormidos») |
 | 7 | **Optimizar: los arreglos chicos** (§5), repartidos en una o dos sesiones | Solo el texto de 18.c | no |
 | 8 | **La tarjeta, las reseñas y los referidos** (§4.2) | C4–C8 | 1–2 |
 | 9 | Campañas, fase 3: afinar con datos (un mes después de la fase 1) | Leer el reporte | no |
@@ -343,7 +343,7 @@ que el cron corre a las 10:00 de Bogotá (corre a las 15:00); ya está corregido
 | A5 | Piloto de dos semanas en **Don Alirio** (no Sushi Service: su línea Twilio muere) | ✅ |
 | A6 | Lo automático de «Para hoy» sale solo; «Hoy no» lo pospone | ✅ |
 | A7 | «Premios» sale de Campañas y va a Recompensas | ✅ |
-| A8 | Abrir el prototipo y decir qué sobra | 👀 no frena la fase 1 |
+| A8 | Abrir el prototipo y decir qué sobra | ✅ aprobado el 14-10 («me encanta») |
 | A9 | Cumpleaños del restaurante y datos curiosos: piezas tipo evento | ✅ |
 | A10 | Fechas especiales, ruleta, sorteos e Instagram: después de las fases 1 y 2, sobre el mismo motor | ✅ |
 | A11 | **Sin Wallet** de Google ni Apple, ni para avisos ni para la tarjeta. El diferencial es WhatsApp | ✅ |

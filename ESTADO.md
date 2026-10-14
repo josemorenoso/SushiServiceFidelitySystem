@@ -33,7 +33,6 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
-| Comandante: prompt de la fase 2 del ciclo (la pantalla) y traspaso al día (2026-10-14) | Opus 5.5 | `docs/prompts/2026-10-14-ciclo-fase-2-pantalla.md` (nuevo), `docs/prompts/2026-10-12-comandante-traspaso.md`, `docs/PENDIENTES.md`, `ESTADO.md` | — | en curso |
 
 ## 3. Siguiente, en orden
 
@@ -440,6 +439,9 @@ automatizaciones dentro del restaurante y **Google** para reseñas.
 
 ## 5. Hecho reciente
 
+- **Push del 14-10 (comandante)**: S-1, SEG-2/SEG-3 (00072 **aplicada**; la consulta de duplicados dio 0 filas) y AIOS
+  v1.15.2, verificados contra el código (tsc, 86 archivos / 1.373 tests, la función del AIOS con los datos reales de Tepuy).
+  Antes, el 13-10: 1B pusheada con la 00071 aplicada. Prompt de la fase 2: `docs/prompts/2026-10-14-ciclo-fase-2-pantalla.md`.
 - **SEG-2 y SEG-3** (2026-10-13, `526f4a0` + `87ebac9`, migración **00072 sin aplicar**, sin pushear): la carrera de dos
   `resolve` simultáneos la cierra la BASE (trigger AFTER INSERT con `pg_advisory_xact_lock` por cliente, espejo SQL de
   `elegirNivelSinReclamar()` probado caso por caso; `NivelYaReclamadoError` → 409 antes de otorgar y del WhatsApp;

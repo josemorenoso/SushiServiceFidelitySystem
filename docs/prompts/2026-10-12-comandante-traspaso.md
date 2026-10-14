@@ -60,57 +60,54 @@ contexto; esto es todo lo que necesitas para seguir sin que el dueño repita nad
 - **«Se adapta a tu clientela»** es un ángulo de venta y hay que hablar de él (`docs/features/ritmo-adaptativo.md` §6),
   pero **no se promete hasta que el piloto de Don Alirio esté corriendo**.
 
-## 4. Dónde vamos (2026-10-12)
+## 4. Dónde vamos (actualizado 2026-10-14)
 
-### En producción (push del 12-10, orden del dueño: `origin/main` = la rama)
-- **Fases 0 y 0.bis del ciclo:** un envío fallido ya no calla al cliente; máximo 3 intentos fallidos por toque; el
-  insistente sale una vez por ciclo; `campaign_messages.error_message` guarda la causa real; una sola escala de días.
-- **P1-a:** el tope de 3 al mes ya no se apaga ante un error de base; plantillas Twilio paginadas; lista cerrada de
-  ajustes; alcance de marca en las rutas de plantillas Zernio; caché de la WABA.
-- **Fase 1A del ciclo:** la base del motor (00070, el ritmo personal y el de la marca, el motor de piezas, 9 ajustes
-  `cycle_*`). **Nada se envía todavía.**
-- **Plantillas, un solo libro:** el panel reconoce lo que ya está en la WABA; «Nivel desbloqueado», «Recordatorio de
-  premio» y «Regalo que vence» en el catálogo (16); una sola pantalla para Twilio y Zernio; biblioteca para campañas.
-- **PL-2-a:** en Twilio, el recordatorio de premio y el «Nivel desbloqueado» del check-in no usan una plantilla sin
-  aprobar. Quedan sin esa pregunta el check-in manual y el registro de un domicilio (`docs/PENDIENTES.md` PL-2).
-- Verificado antes del push: tsc limpio · **80 archivos / 1.202 tests**. Vercel READY: `dpl_Fh1gLUgZJ7rMXSXBXuoYiELY9U7F`
-  (`feef4e6`). Con Hobby los builds van de a uno: el de producción puede tardar 2-3 min en APARECER en la lista si la
-  vista previa de la rama entró primero. No es que falte.
+### En producción (todo pusheado: producto `main` = rama = `f1641d2` + docs; AIOS `main` = `4b88ab5` v1.15.2)
+- **Ciclo de recuperación, fases 0, 0.bis, 1A y 1B**: el motor decide (cron 15:00 Bogotá), encola a la hora de la marca
+  (16:30 cena / 10:30 almuerzo, H3) y el drenador envía y otorga «vence el domingo». **Apagado en todas las marcas** hasta
+  que el dueño corra el SQL de encendido. Migraciones **00070 y 00071 aplicadas**.
+- **Plantillas un solo libro** + **PL-2-a** (12-10). **Recompensas en un solo lugar (S-1)**: Recompensas → «Premios para
+  regalar» con los selectores de regalo pequeño (ciclo), fuerte (`aggressive_reward_id`, también del ciclo) y reseña; el
+  catálogo exige alcance de marca. **SEG-2** (la base rechaza el segundo reclamo del mismo nivel, **00072 aplicada**; la
+  consulta de duplicados dio **0 filas**: nunca se regaló de más) y **SEG-3** (`tenant-config`, `brand-logo` y
+  `meta-conversions` solo los escribe el super usuario de la marca).
+- **AIOS v1.15.2**: el link pide «Nombre visible» = la marca y habla de tú; el paso 3 muestra qué le falta a la marca para
+  escribir primero (`GET /v1/whatsapp/number-info`; verificado por el comandante con los datos reales de Tepuy: 3 tareas).
+- Última verificación completa (comandante, 14-10): tsc limpio · **86 archivos / 1.373 tests** · AIOS tsc limpio.
 
-### Base de datos de producción
-- **00069 aplicada** (11-10): cerró los dos agujeros entre marcas (AISLA-2, OPUS-4).
-- **00070 aplicada** (12-10) y **sus dos consultas leídas** (12-10): ninguna marca tiene visitas perdidas (el 2,4 % de
-  Sushi Fun es real) y la foto del ciclo salió como se esperaba. Resultados en `SQL-PARA-CORRER/ciclo-fase-1a/LEEME.md`
-  § Resultados. Destapó **N-DOBLE** (`docs/PENDIENTES.md` §5): dos escaneos el mismo día cuentan como dos visitas.
-- **00030 NO aplicada** (confirmado el 11-10): 18 tablas conservan el DEFAULT puente a Sushi Service. Todo INSERT con
-  `tenant_id` explícito. Aplicarla exige antes barrer los INSERT sin `tenant_id`.
+### Lo del dueño, abierto
+1. **Encender el ciclo en Don Alirio y Sushi Fun** (decidido el 14-10: sin pasar por la demo; Sushi Service espera a
+   Zernio, Planeta Wings a que se aclaren sus fallos del 5-6/10, Tepuy no tiene tarjeta, Frangal no tiene WhatsApp).
+   Primero elige los regalos en Recompensas → «Premios para regalar» (o ninguno), después el SQL:
+   `INSERT INTO admin_settings (key, value, tenant_id) SELECT 'cycle_enabled','true',id FROM tenants WHERE slug IN
+   ('don-alirio','sushi-fun') ON CONFLICT (key, tenant_id) DO UPDATE SET value = EXCLUDED.value;`
+   Al día siguiente: revisar con las consultas de `SQL-PARA-CORRER/ciclo-fase-1b/LEEME.md` §2.c (toques por etapa y
+   estado, cola). El `?dry=1` no se pudo correr: el `CRON_SECRET` del `.env.local` NO es el de producción (401).
+2. **Tepuy** (conectado el 13-10, `ESTADO.md` 0.AIOS): la dueña tiene que poner tarjeta en Meta, cambiar el nombre visible
+   («Yenifer Yohana Calle Morera» → «Tepuy») y verificar el negocio. Después, «Enviar los N juntos a Meta».
+3. **Por marca, «Enviar los N juntos a Meta»** en Plantillas (no se sabe si ya lo hizo en alguna).
+4. Lo de siempre: logs de Vercel del 5-6/10 de Planeta Wings, sign-ups del Supabase del AIOS (N2), repetir el SQL de
+   `ciclo-fase-0/` hacia el 11-11, decisiones C4, C7, C9, C10, D1–D8.
 
-### Lo siguiente, en orden
-1. **El gesto del dueño por marca (ya se puede):** Plantillas → Mensajes automáticos → leer los textos →
-   «Enviar los N juntos a Meta» (un solo viaje a Meta por marca, incluye «Cumpleaños — dos días antes»).
-2. **Fase 1B: el prompt YA está escrito** (12-10, `docs/prompts/2026-10-12-ciclo-fase-1b-envios.md`; el dueño lo pega en
-   una sesión Opus y el comandante VERIFICA su respuesta contra el código, migración línea por línea). Lo que cubre (los envíos): el cron que decide y encola, el drenador que otorga el regalo al
-   enviar, «vence el domingo», el adaptador a la insistente mientras «Regalo que vence» no esté aprobada, encender el
-   piloto en **Don Alirio**. Tiene que incluir todo lo anotado para la 1B en `docs/PENDIENTES.md` §2.4 y en el spec
-   §13–§14: H2 (sin recordatorio para el regalo pequeño), H3 (la hora de la marca: el cron corre a las 15:00 Bogotá, el
-   almuerzo sale al día siguiente), H6 (todo desenlace del drenador escribe el toque), **no mandar nada atrasado al
-   encender**, **quien pasó su último toque pasa a dormido sin mensaje**, `resolveStage()` dice la etapa y no si hay que
-   mandar hoy, el paso a dormido tras la despedida lo hace el drenador, un toque en cola cuyo cliente volvió se
-   descarta, y retirar `reactivation_with_reward_template_sid` y `reactivation_template_sid` (legacy).
-3. Después: **fase 2, la pantalla** (espera que el dueño mire el prototipo, A8) · **Recompensas en un solo lugar**
-   (S-1, decidido) · **plantillas B1 y B7** (13 → 8 aprobaciones y el AIOS deja de crear plantillas) · los arreglos
-   chicos que quedan en `docs/PENDIENTES.md` §3.3 y §5 (PL-2, y entre ellos TEST-deadlock, N-MES, N1, N6, N13, N18 + CI, N-DOBLE, SEG-2/SEG-3
-   con prompt listo en `docs/prompts/2026-10-04-seg2-resolve-y-tenant-config.md`).
+### Lo siguiente del comandante, en orden
+1. **Fase 2 del ciclo, la pantalla** (prototipo APROBADO el 14-10): prompt listo
+   `docs/prompts/2026-10-14-ciclo-fase-2-pantalla.md`, **tres partes EN ORDEN** (A datos → B pantalla «Ciclo» → C vista
+   por fecha y creadores). El dueño pega «Lee entero docs/prompts/2026-10-14-ciclo-fase-2-pantalla.md y ejecuta la PARTE
+   A, empezando por su sección 1». Verificar cada parte antes de dar la siguiente.
+2. Verificar el encendido del ciclo al día siguiente (toques, cola, fallidos, dormidos por encendido).
+3. Después: plantillas **B1/B7** (menos aprobaciones; el AIOS deja de crear plantillas) · arreglos chicos de
+   `docs/PENDIENTES.md` §3.3 y §5 (PL-2, PL-2-ciclo, N-DOBLE, N6, N13, N18 + CI, OPER-4-mudo, 0.ETA, S-1.6/S-1.7…) ·
+   §4.2 (tarjeta, reseñas, referidos; esperan C4–C8).
+4. Pendiente de docs: la página `/conexion/whatsapp` del AIOS sigue en «vos»; el mensaje para el soporte de Zernio sobre
+   pre-llenar el nombre visible está en `Level 2.0/aios-constelarys/docs/features/whatsapp-connect-link.md` § Pendiente.
 
-### Pendientes del dueño que no son código
-- Mirar en los logs de Vercel del 5 y 6 de octubre por qué fallaron los envíos de Planeta Wings (`PENDIENTES.md` §6.1).
-- Confirmar que en el Supabase del **AIOS** está apagado «Allow new users to sign up» (N2). No se confirmó.
-- **El AIOS v1.15.1 ya está en su `main`** (`b3b4a1b`, comprobado el 12-10): su Vercel necesita `AIOS_CONNECT_LINK_SECRET`
-  (nueva) para que el link «conectar WhatsApp» funcione (`ESTADO.md` 0.AIOS, Tepuy).
-- Hacia el **2026-11-11**, repetir el SQL de `SQL-PARA-CORRER/ciclo-fase-0/` y comparar con la línea base de
-  `ESTADO.md` 0.CICLO (sushi-service: 270 clientes con el insistente repetido, 418 mensajes de más).
-- Decisiones abiertas (solo suyas): C4 (las 10 visitas), C7 (referidos), C9 (Black), C10 (último nivel), D1–D8
-  (`docs/PENDIENTES.md` §8). A8: mirar el prototipo.
+### Trampas aprendidas en esta sesión
+- **Vercel Hobby construye de a uno:** el deploy de producción puede tardar 2-3 min en APARECER en `list_deployments` si la
+  vista previa de la rama entró primero. No falta: espera.
+- **Zernio:** la `ZERNIO_API_KEY` del `.env.local` del producto funciona; la del AIOS está muerta. Para revisar un link del
+  AIOS sin el secreto: decodificar (base64url) la parte antes del primer punto (`p`, `n`, `i`, `k=0`).
+- Para correr código del AIOS que importa `server-only` con tsx: `NODE_OPTIONS="--conditions=react-server"`.
+- `.env.local` del producto no tiene la URL de Supabase: el comandante no puede consultar la base; el dueño corre el SQL.
 
 ## 5. Datos que no hay que volver a pedir
 

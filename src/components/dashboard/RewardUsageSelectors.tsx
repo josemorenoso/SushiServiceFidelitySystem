@@ -61,8 +61,11 @@ async function saveSetting(key: string, value: string) {
 const SELECT_CLASS =
   'h-9 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm transition-colors outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/50 disabled:opacity-60'
 
-/** El desplegable de un premio, con el aviso cuando lo guardado ya no sirve. */
-function SelectorDePremio(props: {
+/**
+ * El desplegable de un premio, con el aviso cuando lo guardado ya no sirve. Exportado: lo reusa
+ * Recompensas › Referidos (2026-10-15) para el premio de quien invita y el del amigo.
+ */
+export function SelectorDePremio(props: {
   id: string
   etiqueta: string
   value: string

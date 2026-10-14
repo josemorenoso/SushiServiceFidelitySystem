@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * Recompensas — una sola pantalla con cuatro pestañas.
+ * Recompensas — una sola pantalla con cinco pestañas.
  *
  * · Niveles y premios — lo que ganan por puntos (lo que siempre estuvo acá).
  * · Invitaciones — un enlace o QR que regala algo a quien se registre
@@ -10,6 +10,8 @@
  *   cada uno (regalo fuerte, regalo pequeño, reseña). Era la pestaña «Premios» de Campañas y dos
  *   bloques de Ajustes; `/dashboard/campaigns?tab=premios` y `/dashboard/campaign-rewards`
  *   redirigen acá (S-1, 2026-10-13; docs/features/reward-grants.md).
+ * · Referidos — el cliente trae a un amigo y los dos ganan: encender, qué gana cada uno, el tope,
+ *   los días y el mensaje, y los números (2026-10-15; docs/features/referral-program.md).
  * · Redenciones — lo que el mesero entregó, con mesa y nombre. Antes era una
  *   página aparte; `/dashboard/redemptions` sigue funcionando y redirige acá.
  *
@@ -29,8 +31,9 @@ import { RewardsLevelsPanel } from '@/components/dashboard/RewardsLevelsPanel'
 import { InviteCampaignsPanel } from '@/components/dashboard/InviteCampaignsPanel'
 import { RedemptionsPanel } from '@/components/dashboard/RedemptionsPanel'
 import { PremiosParaRegalarPanel } from '@/components/dashboard/PremiosParaRegalarPanel'
+import { ReferidosPanel } from '@/components/dashboard/rewards/ReferidosPanel'
 
-const TABS = new Set(['niveles', 'invitaciones', 'premios', 'redenciones'])
+const TABS = new Set(['niveles', 'invitaciones', 'premios', 'referidos', 'redenciones'])
 
 const noSubscribe = () => () => {}
 const leerTabDeUrl = () => {
@@ -56,12 +59,16 @@ export default function RewardsPage() {
       </h1>
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList>
-          <TabsTrigger value="niveles">Niveles y premios</TabsTrigger>
-          <TabsTrigger value="invitaciones">Invitaciones</TabsTrigger>
-          <TabsTrigger value="premios">Premios para regalar</TabsTrigger>
-          <TabsTrigger value="redenciones">Redenciones</TabsTrigger>
-        </TabsList>
+        {/* Cinco pestañas no caben en un celular: la fila se desliza de lado (sin desbordar la página). */}
+        <div className="-mx-1 max-w-full overflow-x-auto px-1">
+          <TabsList>
+            <TabsTrigger value="niveles">Niveles y premios</TabsTrigger>
+            <TabsTrigger value="invitaciones">Invitaciones</TabsTrigger>
+            <TabsTrigger value="premios">Premios para regalar</TabsTrigger>
+            <TabsTrigger value="referidos">Referidos</TabsTrigger>
+            <TabsTrigger value="redenciones">Redenciones</TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="niveles" className="mt-4">
           <RewardsLevelsPanel />
@@ -71,6 +78,9 @@ export default function RewardsPage() {
         </TabsContent>
         <TabsContent value="premios" className="mt-4">
           <PremiosParaRegalarPanel />
+        </TabsContent>
+        <TabsContent value="referidos" className="mt-4">
+          <ReferidosPanel irAPremios={() => setTab('premios')} />
         </TabsContent>
         <TabsContent value="redenciones" className="mt-4">
           <RedemptionsPanel />

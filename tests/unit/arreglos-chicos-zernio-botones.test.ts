@@ -52,7 +52,7 @@ vi.mock('@/services/club-optin.service', async (importOriginal) => ({
 
 /** El acuse: una promesa que el test resuelve cuando quiere (Zernio lento = no la resuelve). */
 let soltarAcuse: (() => void) | null = null
-const acuse = vi.fn(async (_args: Record<string, unknown>) => {
+const acuse = vi.fn<(args: Record<string, unknown>) => Promise<{ data: { messageId: string } }>>(async () => {
   orden.push('acuse')
   await new Promise<void>((r) => {
     soltarAcuse = r

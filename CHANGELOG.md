@@ -8,6 +8,21 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [fix] — 2026-10-15 — Arreglos chicos: permisos, lo que falla callado, mensajes y textos (15 IDs, sin migración)
+
+- **Permisos:** un administrador de sede ve y toca solo los meseros y aparatos de SU sede (+ los rotativos, que solo ve:
+  §8 D10) — SEDE-MESEROS · el PIN del supervisor tiene tope (5 por celular / 20 por IP cada 15 min) y un solo 401 que no
+  delata celulares — N13 · con la base caída el operador ya no escribe lo de la marca (500) — OPERADOR-BASE-CAIDA.
+- **Lo que falla callado:** Black, puntos y check-in de Ajustes dicen por qué no guardaron (y la carga fallida se dice) —
+  OPER-4-mudo · el CSV de Clientes solo cuenta lo que la base aceptó — 0.ETA · `SegmentRadar` y su endpoint se RETIRAN
+  (otra escala de días y «NaN clientes»; lo cubren las cajas del ciclo) — N-RADAR.
+- **Mensajes:** el check-in manual y el domicilio preguntan si «Nivel desbloqueado» está aprobada — PL-2 · el ciclo, por sus
+  cinco plantillas — PL-2-ciclo · el override deja fila en `message_logs` — N-OVERRIDE-LOG · los botones de Zernio contestan
+  y el acuse va con `after()` — N6 · la portada guarda la aprobación 60 s — N-PORTADA-TWILIO · drenador, caja misteriosa y
+  calendario pasan la sede — N-SEDE-ENVIO.
+- **Textos:** S-1.7, N-CATALOGO-1B, SEDE-AJUSTES (2+ sedes → Mis sedes) y el aviso amarillo de Plantillas (Tepuy).
+- 5 archivos de test nuevos (56 tests) + 7 casos en `cycle-envios` y `mystery-box-carrera`. Suite: 110 / 1.858. → `PENDIENTES.md`.
+
 ## [feat] — 2026-10-15 — Sedes separadas, parte 2: la tarjeta de cada sede (migración 00074, va ANTES del push)
 
 - **Antes** (dueño, mirando Tepuy): *«Si escojo una sede u otra, cuando voy a modificar la tarjeta sale la misma para las

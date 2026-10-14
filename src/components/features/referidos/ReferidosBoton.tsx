@@ -117,7 +117,7 @@ export function ReferidosBoton({ phone, tono = 'oscuro' }: { phone: string; tono
           <div className={`space-y-1 text-sm ${texto}`} style={estiloTexto}>
             {datos.regalo_del_amigo && (
               <p>
-                Tu amigo recibe <strong>{datos.regalo_del_amigo}</strong> de bienvenida.
+                Tu amigo recibe de regalo: <strong>{datos.regalo_del_amigo}</strong>.
               </p>
             )}
             <p>

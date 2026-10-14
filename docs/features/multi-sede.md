@@ -906,6 +906,10 @@ en Laureles y abre su tarjeta en Envigado tiene que ver el mismo nombre y el mis
 porque sus 8 sellos siguen ahí. Si la identidad cambiara con la sede, **la tarjeta
 mentiría**. Lo de la derecha es literalmente *"dónde estoy y cómo me contactás"*.
 
+> **Refinado el 2026-10-14 (§3.nonies, la tarjeta de cada sede):** el nombre, el logo y los colores
+> siguen de la marca, pero con «Una tarjeta para cada sede» el sello, la decoración, la descripción y
+> las políticas también pueden ser de la sede (otra lista, `LOCATION_CARD_PATH_NAMES`, y la 00074).
+
 La whitelist de TypeScript (`src/lib/location-config-paths.ts`) **no es una lista nueva**:
 es un SUBCONJUNTO de `EDITABLE_PATHS`, elegido por nombre, así que las validaciones son las
 mismas funciones. `tests/unit/location-config-paths.test.ts` compara la lista contra el SQL
@@ -1255,7 +1259,7 @@ sede» = la página manda `?location_id=` y la ruta filtra con `requireLocationS
 | **Golden Bullet** | Bases, plantilla, tandas, ROI | No | De la marca | Franja + selector quieto |
 | **Calendario** | Eventos (desde la parte C, redirige a Campañas) | No (`audience_scope` sin usar) | Mixta (eventos de marca o de sede, D8) | **No se tocó** (parte C): PENDIENTES `SEDE-CAMPANAS` |
 | **QR Studio** | Un QR por sede | Selector propio | De la sede | El selector de arriba no se dibuja |
-| **Tarjeta principal** | Logo, colores, tarjeta | No | De la marca hasta la parte 2 («una tarjeta por sede») | Franja + selector quieto |
+| **Tarjeta principal** | Logo, colores, tarjeta | No | De la marca, o de cada sede si la marca elige «Una tarjeta para cada sede» | Parte 1: franja + selector quieto. **Parte 2 (§3.nonies):** con la tarjeta compartida, igual; con una por sede, el selector elige qué tarjeta se edita y la franja no sale |
 | **Mis sedes** | La lista y la ficha de cada sede | Lista propia | Es la lista de sedes | Selector de arriba fuera + la línea del número compartido |
 | **Plantillas** | Plantillas de WhatsApp | No | De la marca | Franja + selector quieto |
 | **Meseros QR** | Meseros y aparatos, cada uno con su sede | No: la lista es la de la marca | De la sede, con «sin sede asignada» visible | Franja + selector quieto. Un administrador de sede ve y edita los de la otra sede: PENDIENTES `SEDE-MESEROS` |
@@ -1272,6 +1276,87 @@ con los puntos sumando igual) y `tests/unit/sedes-separadas-panel.test.ts` (el s
 Métricas en sus tres modos y ante un fallo, `MetricsCards`, «Tus sedes», la franja, el número).
 `tests/unit/dashboard-analytics-paginacion.test.ts` fija las dos lecturas nuevas y que una marca de una
 sede no las hace.
+
+---
+
+## 3.nonies — La tarjeta de cada sede (parte 2, 2026-10-14, migración `00074`)
+
+> **El dueño, mirando Tepuy:** *«Si escojo una sede u otra, cuando voy a modificar la tarjeta sale la
+> misma para las dos, incoherente, a menos que haya un botón que diga "tarjetas separadas"»*.
+> Prompt: `docs/prompts/2026-10-14-sedes-separadas.md` §4.
+
+**La elección.** «Tarjeta principal» con 2+ sedes abre con una pregunta: **«La misma tarjeta para todas
+las sedes»** (lo de siempre, el default) o **«Una tarjeta para cada sede»**. Se guarda en
+`tenants.config.card.mode` (`shared` / `per_location`; ausente = `shared`) por el `PUT` de
+`tenant-config`, que exige alcance de marca desde SEG-3. Con 0 o 1 sede la pregunta no aparece y la
+pantalla es la de antes.
+
+| Con… | Qué edita la pantalla | El selector de arriba | Qué ve el cliente |
+|---|---|---|---|
+| **La misma tarjeta** | La de la marca. Arriba: «Las N sedes muestran esta tarjeta» | Etiqueta quieta + franja «toda la marca» (parte 1) | La de la marca, con la dirección, el horario, los teléfonos y las redes de SU sede |
+| **Una por sede** y «Toda la marca» | La de la marca: la del enlace general y la base de cada sede; la lista de sedes con «Tiene la suya» / «Usa la de la marca» y «Editar la de…» | Vivo (sin franja) | — |
+| **Una por sede** y una sede elegida | La de esa sede: sello, decoración, descripción y políticas, con **«Copiar la de {otra sede}»** y «Usar la de la marca» | Vivo | En su subdominio: lo suyo, y lo de la marca donde no puso nada |
+
+**Qué es de la sede y qué no.** La tarjeta de la sede son **cuatro claves**: `card.stamp_icon`,
+`card.motif`, `card.description`, `card.policies` (`LOCATION_CARD_PATH_NAMES`). **El nombre, el logo y
+los colores siguen de la marca** con las dos opciones: los puntos y los sellos del cliente son de la
+marca, y otra identidad en la sede de al lado haría mentir la tarjeta (el argumento de §3.septies, que
+sigue entero para la identidad). **Lo que ya era de cada sede no se duplica:** dirección, horario,
+teléfonos, redes y ficha de Google viven en «Mis sedes» (00058) y la tarjeta de un cliente en Laureles
+muestra los de Laureles **aunque la tarjeta sea compartida** — se verificó antes de tocar nada y ya era
+así: el layout raíz arma la marca con `getBrandingForHost()` → `resolveHostContext()`, que trae el
+`config` de la sede del host, y `CustomerCard`/`WalletCard` la leen con `useBranding()`. Con una sede
+elegida, la pantalla los muestra de solo lectura con un enlace a Mis sedes.
+
+**La regla del resolver** (`mergeLocationOverConfig()`, `src/lib/branding.ts`): la ficha de la sede
+pisa siempre; las cuatro claves de su tarjeta pisan **solo si la marca eligió `per_location`**; con la
+tarjeta compartida se guardan pero no se muestran, así que volver a separar no obliga a rehacerlas. Una
+sede no puede decidir el modo (su `card.mode` se ignora y su CHECK ni lo deja guardar). Vacío en la
+sede = lo toma de la marca. **La tarjeta pública toma la sede del QR** (`resolveHostContext()`); el
+dominio general de una marca de 2+ sedes no sabe dónde está el cliente y muestra la de la marca.
+`getTenantByDomain()` no se tocó.
+
+**Dos listas, dos puertas.** La ficha (`LOCATION_EDITABLE_PATH_NAMES`) la escribe «Mis sedes» por
+`PATCH /api/dashboard/locations/[id]`, que también abre un administrador de su sede. La tarjeta
+(`LOCATION_CARD_PATH_NAMES`) la escribe «Tarjeta principal» por **`PUT
+/api/dashboard/locations/[id]/card`**, solo con alcance de marca. Si las dos estuvieran en la misma
+lista, la ficha dejaría escribir la tarjeta por la puerta de al lado. Las dos pasan por
+`merge_location_config_deep()` (filtra por `tenant_id`: una sede de otra marca → 403, nada escrito).
+`GET /api/dashboard/locations` trae `card` aparte de `config` (la ficha), para que Mis sedes no la
+reenvíe sin querer.
+
+**Quién cambia la tarjeta de una sede: un super usuario de la marca (o el operador de Cada1), no el
+administrador de esa sede.** Decidido en la parte 2 con el mismo criterio que SEG-3: la tarjeta muestra
+los puntos y los premios de la marca, y separarla por sede es una decisión de la marca. El
+administrador de sede ve su tarjeta (y prueba la vista previa) con el aviso «La tarjeta de tu sede la
+cambia un super usuario»; lo que sí es suyo sigue en Mis sedes. Si el dueño quiere delegarlo, es una
+línea en la ruta (`exigirAlcanceDeMarca()` → el alcance de esa sede).
+
+**La base (`00074`).** `location_config_es_valida()` (el CHECK de la 00058) acepta además esas cuatro
+claves dentro de `card`. Misma firma: es un reemplazo, no una sobrecarga, y la migración lo comprueba.
+Solo mira NOMBRES, como antes; los valores (las listas cerradas de dibujos) los valida la whitelist de
+TypeScript con las mismas funciones que la marca. **Va antes del código:** sin ella, guardar la tarjeta
+de una sede responde 503 «Falta aplicar la migración 00074» y el resto del panel no cambia.
+
+**El encabezado.** El selector y la franja viven fuera de la página; la página les avisa el modo por un
+store de módulo (`useTarjetaPorSede`, `useSyncExternalStore`, nunca la URL) y
+`esPantallaDeTodaLaMarca(ruta, { tarjetaPorSede })` deja de contar «Tarjeta principal» como de toda la
+marca cuando la tarjeta es por sede. Las demás pantallas de toda la marca no cambian.
+
+**De paso, un arreglo:** «Tarjeta principal» **no podía guardar nada** mientras el sello fuera el de
+siempre (el chulo) o la decoración «sin decoración»: el panel manda todas las rutas juntas, esas dos
+iban vacías y `oneOf()` rechazaba `''` con 400. Ahora el vacío es «volver al de siempre», como en los
+colores (`oneOfOrEmpty()`).
+
+**Pruebas:** `tests/db/tarjeta-por-sede.test.ts` (Postgres real, 14: la 00074 acepta la tarjeta de la
+sede y rechaza el modo, el logo, los colores y el nombre; `getBrandingForHost()` con el host de cada
+sede —compartida, una por sede, el enlace general, la marca de una sede—; la ruta nueva con super
+usuario, administrador de sede, sede de otra marca, dibujo inválido, base caída y sin sesión; la ficha
+que no escribe la tarjeta; el modo y el sello vacío por `tenant-config`; el `GET` de sedes) y
+`tests/unit/tarjeta-por-sede.test.ts` (21: la whitelist, el resolver, qué se edita, «Copiar la de…», el
+selector y la franja en «Tarjeta principal», la elección dibujada). Contra el código anterior el
+archivo unitario no carga; con solo los módulos nuevos presentes caen 8 de 21, y de la base caen 11
+de 14 (los 3 que pasan son lo que no debía cambiar).
 
 ---
 
@@ -1383,4 +1468,8 @@ sede de la marca B**.
 | `src/lib/panel-sedes.ts` | **Sedes separadas, parte 1.** Puro: las opciones del selector, el modo del panel, las pantallas de toda la marca, las frases («van a las dos», «sin sede», el número compartido) y las series del gráfico por sede. |
 | `src/components/dashboard/sedes/*` | **Parte 1.** «Tus sedes» (`TusSedes`), las etiquetas y títulos de sección (`Alcance`), la franja de toda la marca y la línea del número compartido. |
 | `tests/db/sedes-separadas.test.ts` · `tests/unit/sedes-separadas-panel.test.ts` | **Parte 1.** Ver §3.octies, «Pruebas». |
+| `supabase/migrations/00074_tarjeta_por_sede.sql` | **Parte 2.** `location_config_es_valida()` acepta la tarjeta de la sede (sello, decoración, descripción, políticas). Misma firma. **Va antes del push.** |
+| `src/lib/tarjeta-de-sede.ts` · `src/components/dashboard/sedes/EleccionDeTarjeta.tsx` · `src/hooks/useTarjetaPorSede.ts` | **Parte 2.** Qué tarjeta se edita y sus frases (puro); la elección «una para todas» / «una para cada sede»; el aviso al encabezado. Ver §3.nonies |
+| `src/app/api/dashboard/locations/[id]/card/route.ts` | **Parte 2.** Guarda la tarjeta de UNA sede. Solo alcance de marca |
+| `tests/db/tarjeta-por-sede.test.ts` · `tests/unit/tarjeta-por-sede.test.ts` | **Parte 2.** Ver §3.nonies, «Pruebas». |
 | `src/app/(dashboard)/dashboard/staff/page.tsx` | **F7 — deuda #16 CERRADA.** El `<select>` de sede en Crear/Editar mesero, y el badge de sede en la tabla (`location_id` NULL → "Sin sede"). Reutiliza `LocationScopeProvider`, cero fetch nuevo. |

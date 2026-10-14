@@ -114,7 +114,8 @@ impide al rol `aios_constelarys` tocar `auth.users` — ver `docs/features/alta-
 | DELETE | /api/dashboard/campaign-rewards?id=X | Baja lógica del premio (`is_active=false`, no borra) | Admin Cookie |
 | GET | /api/dashboard/review-metrics | Funnel de reseñas: mostrado → click → premio redimido **(sede — `shown` sí filtra, grants no-op por deuda #13)** | Admin Cookie |
 | GET | /api/dashboard/tenant-config | Rutas editables de `tenants.config` (link de Google, `branding.*`, `qr_studio.*`) | Admin Cookie |
-| PUT | /api/dashboard/tenant-config | Escribe `tenants.config` con **whitelist por ruta** (merge profundo, no reemplazo) | Admin Cookie |
+| PUT | /api/dashboard/tenant-config | Escribe `tenants.config` con **whitelist por ruta** (merge profundo, no reemplazo). Incluye `card.mode` (`shared` / `per_location`: «una tarjeta para cada sede», 2026-10-14). **Alcance de marca** | Admin Cookie |
+| PUT | /api/dashboard/locations/[id]/card | La tarjeta de UNA sede: `card.stamp_icon`, `card.motif`, `card.description`, `card.policies` (cuerpo plano, misma whitelist que la marca; lo demás se ignora). Se MUESTRA solo con `card.mode = per_location`. **Alcance de marca** (un administrador de sede: 403); sede de otra marca: 403; sin la 00074: 503. → `multi-sede.md` §3.nonies | Admin Cookie |
 | POST | /api/dashboard/brand-logo | Sube el logo de la marca al bucket `brand-assets` | Admin Cookie |
 | DELETE | /api/dashboard/brand-logo | Borra el logo de la marca | Admin Cookie |
 | GET | /api/dashboard/imported-contacts/template | Lo que la pestaña Plantilla necesita: textos, límites, respuestas, y por qué línea sale la difusión (`provider`, `brand_provider`, `provider_switchable`, `zernio_phone`) | Admin Cookie |
@@ -673,7 +674,9 @@ Escribe sobre `tenants.config` (jsonb) con **merge atómico y PROFUNDO** en la b
 
 Una ruta fuera de la whitelist se **ignora en silencio**; un valor mal formado corta con 400. El
 vacío siempre es válido: significa "volver al valor del sistema de diseño" (o, en el link de Google,
-apagar el pop-up de reseñas).
+apagar el pop-up de reseñas). También en `card.stamp_icon` y `card.motif` desde el 2026-10-14 (antes
+`''` daba 400 y «Tarjeta principal» no podía guardar con el sello de siempre). La excepción es
+`card.mode`: solo `shared` o `per_location`.
 
 **Response 400:** `{ "error": "branding.primary: debe ser un color hex (#RRGGBB)" }` · el link de
 Google que no empieza por `http(s)://` · un gradiente que no sea `linear-gradient(...)` /

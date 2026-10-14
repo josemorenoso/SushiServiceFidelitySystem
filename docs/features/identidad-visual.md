@@ -258,6 +258,23 @@ bloque, y la vista previa del panel (`BrandPreview`) lo arma con el mismo `resol
 lo que se está editando. El perfil de Google usa `card.google_profile_url` y, si no hay, el link de
 reseñas `google_maps_url`.
 
+### La tarjeta de cada sede (sedes separadas, parte 2, 2026-10-14)
+
+Con 2+ sedes, la pantalla abre con una elección: **«La misma tarjeta para todas las sedes»** (lo de
+siempre) o **«Una tarjeta para cada sede»** (`config.card.mode = 'per_location'`). Con la segunda, cada
+sede puede tener su **sello, su decoración, su descripción y sus políticas** (en su
+`restaurant_locations.config.card`, migración **00074**); el selector de sede de arriba elige qué
+tarjeta se edita y hay «Copiar la de {otra sede}». **El nombre, el logo y los colores siguen siendo de
+la marca** con las dos opciones, y la dirección, el horario, los teléfonos y las redes siguen siendo de
+cada sede («Mis sedes»): la tarjeta de un cliente en Laureles muestra los de Laureles aunque sea la
+compartida. Solo un super usuario cambia la elección y la tarjeta de una sede. Todo el detalle:
+`docs/features/multi-sede.md` §3.nonies.
+
+**Un arreglo que vino con esto:** la pantalla no podía guardar NADA mientras el sello fuera el chulo o
+la decoración «sin decoración» —el panel manda todas las rutas juntas, esas dos iban vacías y la
+whitelist rechazaba `''` con 400—. Ahora el vacío en `card.stamp_icon` y `card.motif` es «volver al de
+siempre», como en los colores.
+
 ---
 
 ## Lo que NO se hizo, y por qué
@@ -268,7 +285,7 @@ reseñas `google_maps_url`.
 | Selector del largo del ciclo de sellos (`STAMPS_COUNT = 10`) | **No.** Exige reconciliar con los umbrales de `reward_tiers`, que hoy son independientes del conteo de sellos. Es la oportunidad nº 8, no es trivial y no es §5/§6 |
 | Los 7 hex sueltos de la competencia | **No.** Un color y derivaciones — ver arriba |
 | Pases reales de Apple/Google Wallet | **No.** Fuera de alcance; exige certificados PassKit |
-| `branding` por SEDE | **No.** La marca es de la marca. Ninguna columna de esta feature lleva `location_id` |
+| `branding` por SEDE | **No.** La marca es de la marca: el logo, los colores y el nombre son los mismos en todas las sedes. Lo que sí puede ser de cada sede, desde el 2026-10-14 y solo si la marca lo elige, es el sello, la decoración, la descripción y las políticas (arriba) |
 
 ---
 
@@ -279,6 +296,7 @@ reseñas `google_maps_url`.
 | `tests/unit/brand-palette.test.ts` | Que un tenant sin color no cambie · que un color claro no rompa el CTA ni el QR · que basura en `config` caiga al default |
 | `tests/unit/tenant-config-paths.test.ts` | Que la whitelist no deje pasar `brand_name` ni `integrations.*` · las validaciones por tipo · el espejo de ids con `qr-poster.ts` · que `card.stamp_icon` y `card.motif` sean listas cerradas y las redes URLs http(s) |
 | `tests/db/identidad-visual.test.ts` | El merge profundo · que guardar un color no borre el logo ni las integraciones · que escribir la marca de un tenant no toque la del otro · que el bucket exista y sea público |
+| `tests/unit/tarjeta-por-sede.test.ts` · `tests/db/tarjeta-por-sede.test.ts` | La tarjeta de cada sede: la whitelist (y el sello vacío), qué ve el cliente en cada host con una tarjeta compartida o una por sede, quién la guarda (`multi-sede.md` §3.nonies) |
 
 ---
 

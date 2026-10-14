@@ -8,6 +8,21 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [feat] — 2026-10-15 — Sedes separadas, parte 2: la tarjeta de cada sede (migración 00074, va ANTES del push)
+
+- **Antes** (dueño, mirando Tepuy): *«Si escojo una sede u otra, cuando voy a modificar la tarjeta sale la misma para las
+  dos, incoherente, a menos que haya un botón que diga "tarjetas separadas"»*.
+- **Ahora**, con 2+ sedes, «Tarjeta principal» elige: **«La misma tarjeta para todas las sedes»** (lo de siempre; el
+  selector queda quieto y la pantalla lo dice) o **«Una tarjeta para cada sede»** (`tenants.config.card.mode`): el selector
+  elige qué tarjeta se edita, cada sede con su sello, su decoración, su descripción y sus políticas, y «Copiar la de…».
+- El nombre, el logo y los colores siguen de la marca. La dirección, el horario, los teléfonos y las redes de cada sede ya
+  salían en su tarjeta (verificado): no se duplican, se ven de solo lectura con un enlace a Mis sedes.
+- **00074**: `location_config_es_valida()` acepta esas cuatro claves (misma firma). Se escriben solo por
+  `PUT /api/dashboard/locations/[id]/card`, con alcance de marca (un administrador de sede: 403); se MUESTRAN solo con
+  «una por sede». Marcas de 0 o 1 sede: nada cambia.
+- **De paso:** «Tarjeta principal» daba 400 al guardar con el sello o la decoración de siempre (`''` fuera de la lista).
+- `tests/db/tarjeta-por-sede.test.ts` (14) y `tests/unit/tarjeta-por-sede.test.ts` (21). → `multi-sede.md` §3.nonies.
+
 ## [fix] — 2026-10-14 — SEDE-OPERADOR: el operador de Cada1 ve el panel de una marca con 2+ sedes (sin migración)
 
 - **Antes:** el operador (`app_metadata.role = 'super_admin'`) no tiene fila en `dashboard_user_locations` de sus clientes,

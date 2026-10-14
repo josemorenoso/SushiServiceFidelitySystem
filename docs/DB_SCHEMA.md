@@ -529,7 +529,7 @@ CREATE POLICY "service_update_restaurant_events" ON restaurant_events FOR UPDATE
 | `address` | `text` | SI | `NULL` | Dirección del local |
 | `slug` | `text` | SI | `NULL` | **00041.** Identificador estable dentro de la marca (`sede-principal`, `laureles`). Kebab-case, 1..63 |
 | `domain` | `text` | SI | `NULL` | **00041.** Subdominio propio de la sede. Único **GLOBAL** |
-| `config` | `jsonb` | NO | `'{}'` | **00041.** Override por sede de `tenants.config`. **Vacío = hereda la marca** |
+| `config` | `jsonb` | NO | `'{}'` | **00041.** Override por sede de `tenants.config`. **Vacío = hereda la marca**. Whitelist en la base: `chk_restaurant_locations_config_whitelist` → `location_config_es_valida()` (00058: la ficha de la sede; **00074**: además `card.stamp_icon`, `card.motif`, `card.description`, `card.policies`, la tarjeta de la sede, que se muestra solo con `tenants.config.card.mode = 'per_location'`). Único escritor: `merge_location_config_deep()` |
 | `is_primary` | `boolean` | NO | `false` | **00041.** La sede que hereda el dominio y el material impreso |
 | `sort_order` | `integer` | NO | `0` | **00041.** Orden de presentación |
 | `lat` | `numeric(10,8)` | **SI** | `NULL` | **00041: era NOT NULL.** Latitud — **opcional** |

@@ -102,6 +102,12 @@ contexto; esto es todo lo que necesitas para seguir sin que el dueño repita nad
    X, empezando por su sección 1». Verificar cada parte antes de dar la siguiente. **A y B: hechas y verificadas
    (14-10). C, con Opus (lo eligió el dueño).** Lo que A y B le dejan a C está en `docs/PENDIENTES.md` §2.4 y en los
    puntos 5 y 6 de la parte C del prompt.
+1-ter. **Estado al cierre del 14-10 (noche):** la parte C del ciclo y las partes 1 y 3 de sedes están HECHAS y
+   **verificadas por el comandante** (tsc limpio, 98 / 1.658). Sigue: el dueño aplica la **00073** → «pushea» (A, B, C, sedes 1
+   y 3 juntas) → mirar el deploy → en paralelo, **sedes parte 2** (tarjeta por sede) y **SEDE-OPERADOR**
+   (`docs/prompts/2026-10-14-sede-operador.md`: sin él, el operador no puede mirar el panel de Tepuy). Las cinco preguntas
+   del número por sede son D5-a a D5-e (`PENDIENTES.md` §8); hasta construir F9.1, **no conectarle un segundo número a
+   ninguna marca** (lo que le escriban se pierde).
 1-bis. **Las sedes bien separadas (Tepuy, urgente para el dueño, 14-10):** prompt
    `docs/prompts/2026-10-14-sedes-separadas.md`, Opus, parte 1 (panel) → parte 2 (tarjeta por sede); la parte 3 (diseño
    de un número por sede y las franquicias) en paralelo. Corre junto a la parte C del ciclo: territorios distintos, una

@@ -8,6 +8,21 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [feat] — 2026-10-14 — Ciclo, fase 2 parte A: los datos de la pantalla y «Hoy no» (sin migración)
+
+- **`GET /api/dashboard/cycle/overview`** (`?mini=1` para el panel principal): ritmo de la marca con su origen, cajas por
+  etapa partidas en nuevos / ya volvieron con «hoy entran» y el retorno a 14 días con y sin mensaje (ventanas cerradas),
+  Dormidos, números (ninguno es «enviados»), segunda visita (A12, días distintos), primer uso con la pregunta de aprobación
+  del cron, «Para hoy» (cinco tarjetas, máx. 3, por clientes ÷ días) y `permisos`. **`/projection`**: por día, quién entra a
+  cada toque, eventos con su «reservado» y fechas especiales. **`/customers`**: la lista de una caja, paginada.
+- **«Hoy no» (A6), la única escritura:** `POST /hoy-no` (alcance de marca) anota el día de la próxima corrida en una clave
+  del sistema (`cycle_hoy_no_trimestral`); el cron no crea ni encola el trimestral ese día (`saltados.hoy_no`).
+- **Un solo motor:** `boxOf()`, `boxEnteredOn()`, `stageEntryDays()`, `heartbeatDueDays()`, `secondVisitRate()`,
+  `brandRhythmDetail()` (cycle-engine) y `proximaCorrida()` (cycle-touch), probadas contra `resolveStage()`/`decidirCliente()`.
+  Fechas especiales de Colombia: `src/constants/fechas-especiales.ts`. Fallo de base: 500, nunca «0».
+- **Tests:** 80 nuevos (3 archivos, 33 contra Postgres); contra el código anterior no cargan. Suite: **89 / 1.453**.
+  Detalle: `docs/API_DOCS.md` § «Ciclo de recuperación: la pantalla», `ritmo-adaptativo.md` §7, `PENDIENTES.md` §2.4.
+
 ## [fix] — 2026-10-13 — SEG-2 y SEG-3: un premio por nivel aunque lleguen dos a la vez, y la config de la marca solo la cambia un super usuario (00072 sin aplicar)
 
 - **SEG-2 (migración 00072, SIN aplicar):** dos `POST /api/mystery-box/resolve` simultáneos del mismo cliente otorgaban

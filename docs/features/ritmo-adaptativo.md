@@ -1,9 +1,10 @@
 # Feature: «Se adapta a tu clientela» — el ritmo adaptativo del ciclo de recuperación
 
-> **Estado:** 🟨 **ENVÍA, APAGADO POR MARCA** (fase 1B, 2026-10-13: migración **00071, sin aplicar**; la 00070 de la
+> **Estado:** 🟨 **ENVÍA, APAGADO POR MARCA** (fase 1B, 2026-10-13, pusheada con la 00071 aplicada; la 00070 de la
 > fase 1A, aplicada el 12-10). El cron decide y encola los toques del ciclo y el drenador los envía y otorga el regalo,
-> **solo en las marcas con `cycle_enabled = true`**: ninguna todavía. Se enciende primero `demo-ventas` (envío simulado)
-> y después el piloto (`SQL-PARA-CORRER/ciclo-fase-1b/LEEME.md`). Detalle: §7.
+> **solo en las marcas con `cycle_enabled = true`**. Se enciende primero `demo-ventas` (envío simulado) y después el
+> piloto (`SQL-PARA-CORRER/ciclo-fase-1b/LEEME.md`). **Fase 2, parte A (2026-10-14): los datos de la pantalla**
+> (portada, proyección, lista y «Hoy no»), sin migración y sin pushear. Detalle: §7.
 > Diseñado el 2026-10-11 con datos reales de producción. Piloto: **Don Alirio**, dos semanas. **No se promete en ventas
 > hasta que el piloto esté corriendo** (ver §6).
 > **Diseño completo:** `docs/superpowers/specs/2026-10-04-ciclo-de-recuperacion-design.md` §3.2.bis y §14.
@@ -138,8 +139,16 @@ completas; tiene menos de 30 regresos) · Planeta Wings → Restaurante por defe
 | El cron que decide y encola (marcas con el ciclo encendido) y lo que el drenador necesita | `src/services/cycle.service.ts`, desde `/api/cron/reactivation` y `/api/cron/queue-drain` |
 | El libro de toques al día con la cola (H6) | `supabase/migrations/00071_ciclo_envios.sql`: el trigger de `send_queue` y `cycle_reconcile_touches()` |
 | Encender, revisar, apagar y medir el piloto | `SQL-PARA-CORRER/ciclo-fase-1b/LEEME.md` |
+| **Los datos de la pantalla** (fase 2, parte A, 2026-10-14): portada, proyección, lista y «Hoy no» | `src/services/cycle-overview.service.ts` detrás de `/api/dashboard/cycle/{overview,projection,customers,hoy-no}` (`docs/API_DOCS.md` § «Ciclo de recuperación: la pantalla») |
+| En qué caja está cada cliente y qué día entra a cada toque (la MISMA regla que el cron) | `cycle-engine.ts`: `boxOf()`, `boxEnteredOn()`, `stageEntryDays()`, `heartbeatDueDays()`, `daysWithoutVisit()`, `isNewCustomer()` (nuevo = 1 visita o ninguna) |
+| El ritmo de la marca con su origen y en palabras del dueño | `brandRhythmDetail()` (`dueno` / `calculado` / `por_defecto`; `brandRhythm()` la usa) y `RHYTHM_LABELS` («Cada semana», «Cada quince días», «Cada mes», «De vez en cuando») |
+| La segunda visita (A12) | `secondVisitRate()`: de los que vinieron por PRIMERA vez en los 90 días que terminan hace 60, cuántos volvieron otro día dentro de 60 (días distintos, no `cycle_no`) |
+| El retorno con y sin mensaje de la pantalla | `medirRetorno()` en el servicio: `sent` contra `holdout`, solo ventanas de 14 días cerradas en los últimos 30 (`ATTRIBUTION_WINDOW_DAYS`, espejo del trigger) |
+| «Para hoy»: las cinco tarjetas y su orden (clientes ÷ días, máx. 3) | El servicio. La del trimestral corre `decidirCliente()` + `resolverToque()` para la PRÓXIMA corrida del cron (`proximaCorrida()`, 15:00 Bogotá) |
+| «Hoy no» (A6) | `HOY_NO_CLAVES` / `diaQuePospone()` / `pospuestoHoy()` en `cycle-touch.ts`; lo escribe `anotarHoyNo()` y lo lee `ejecutarCicloDeLaMarca()` (`cycle.service.ts`). Clave del sistema `cycle_hoy_no_trimestral` (`settings-keys.ts`) |
+| Las fechas especiales de Colombia | `src/constants/fechas-especiales.ts` (por `business_type` y rubro: el Día del Sushi solo a una marca de sushi) |
 
-**Estado (2026-10-13, fase 1B): envía, apagado por marca.** El cron decide y encola los toques del ciclo SOLO en las
-marcas con `cycle_enabled = true` (ninguna todavía: primero `demo-ventas`, después el piloto en Don Alirio) y lee
-`cycle_rhythm` ahí; en las demás sigue el camino de siempre. La migración 00071 está escrita y sin aplicar. Falta la
-pantalla (fase 2).
+**Estado (2026-10-14, fase 2 parte A): los datos de la pantalla están; la pantalla no.** El cron decide y encola los
+toques SOLO en las marcas con `cycle_enabled = true` (primero `demo-ventas`, después el piloto en Don Alirio); las 00071
+y 00072 están aplicadas. Los cuatro endpoints de la pantalla leen todo con el motor de arriba, en las marcas apagadas
+también (las cajas salen con el ritmo de la marca y `ciclo.encendido: false`). Falta dibujarla (partes B y C).

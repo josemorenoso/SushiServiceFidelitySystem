@@ -5,7 +5,7 @@
 - **Dashboard endpoints** — Cookie-based (Supabase SSR, sesión admin via `supabase.auth.getUser()`)
 - **Staff endpoints públicos** (`/api/staff/*`) — Bearer Token (Staff JWT) o `X-Device-Token`
 - **Webhooks / Cron** — `x-webhook-secret` o `CRON_SECRET`
-**Última actualización:** 2026-09-03
+**Última actualización:** 2026-10-14 (los cuatro endpoints de la pantalla del ciclo: § «Ciclo de recuperación: la pantalla»); antes 2026-09-03
 > **Nota (geolocalización):** el backend **no valida GPS** y ya no hay nada que descomentar: el
 > bloque de geocerca que dormía comentado en `src/app/api/check-in/route.ts` **se borró** en
 > multi-sede F3 (spec §3.5). Como control de acceso lo reemplazó, con ventaja, la exigencia de
@@ -164,6 +164,10 @@ impide al rol `aios_constelarys` tocar `auth.users` — ver `docs/features/alta-
 | DELETE | /api/dashboard/calendar/events/:id | Cancelar evento (soft-delete) | Admin Cookie |
 | POST | /api/dashboard/calendar/media-upload | Subir imagen/video a `event-media` | Admin Cookie |
 | DELETE | /api/dashboard/calendar/media-upload?path=X | Borrar asset del bucket | Admin Cookie |
+| GET | /api/dashboard/cycle/overview | Portada del ciclo de recuperación: ritmo, cajas por etapa (nuevos / ya volvieron, hoy entran, retorno con y sin mensaje), Dormidos, números, segunda visita, primer uso, «Para hoy» y `permisos`. `?mini=1`: solo cajas y estado (2026-10-14) | Admin Cookie |
+| GET | /api/dashboard/cycle/projection?from&to | Por día: quién entra a cada toque, eventos con su «reservado» y fechas especiales (máx. 93 días) | Admin Cookie |
+| GET | /api/dashboard/cycle/customers | La lista de una caja (`stage`, `day`, `state=dormido` o `fecha`), paginada | Admin Cookie |
+| POST | /api/dashboard/cycle/hoy-no | «Hoy no»: pospone un día lo automático de «Para hoy» (hoy: el toque trimestral). **Alcance de marca** | Admin Cookie |
 | GET | /api/dashboard/location | Ubicación de la **sede principal** (F4: ya no revienta con 2 sedes) | Admin Cookie |
 | PUT | /api/dashboard/location | Actualizar la **sede principal** (F4: ya no inserta una tercera fila) | Admin Cookie |
 | GET | /api/dashboard/staff | Listar meseros y dispositivos | Admin Cookie |
@@ -1641,6 +1645,133 @@ administrador de sede).
 
 **Response 200:** `{ "ok": true }`
 **Response 400:** `{ "error": "id es requerido" }`
+
+---
+
+## Ciclo de recuperación: la pantalla (fase 2, parte A, 2026-10-14)
+
+> Los datos de la pantalla «Ciclo» de Campañas (spec del ciclo §6, §7.4). Todo se calcula con el
+> MISMO motor que el cron (`src/lib/cycle-engine.ts`, `src/lib/cycle-touch.ts`): la pantalla y el
+> cron dicen los mismos días. Servicio: `src/services/cycle-overview.service.ts`. Lectura con
+> `requireTenantId()`: el ciclo es de la MARCA (toques con sede NULL, D12), igual que las burbujas
+> y el estimador; no aceptan `?location_id=`. Un fallo de base es **500** con un mensaje para el
+> dueño, nunca un cero. Vocabulario de dueño en las etiquetas y textos (spec §6.6). Nada en pesos.
+> Detalle: `docs/features/ritmo-adaptativo.md` §7.
+
+### `GET /api/dashboard/cycle/overview` — Admin Cookie
+
+`?mini=1` → la versión del panel principal: cajas, Dormidos y estado; sin retorno, regalos, eventos,
+tarjetas ni primer uso, y **sin preguntarle nada al proveedor**.
+
+```json
+{
+  "mini": false,
+  "ciclo": { "encendido": true, "encendido_desde": "2026-10-13T20:00:04Z", "hora": "16:30", "grupo_de_control_pct": 10 },
+  "ritmo": { "marca": "restaurant", "etiqueta": "Cada mes", "origen": "calculado", "dias": [14, 28, 42, 60, 80],
+             "mediana": 27, "regresos": 135, "con_ritmo_propio": 41 },
+  "cajas": [
+    { "key": "reciente", "etiqueta": "Recién vino", "desde": 0, "hasta": 13, "total": 120, "nuevos": 70, "ya_volvieron": 50,
+      "hoy_entran": 6, "regalo": null, "retorno": null },
+    { "key": "t4", "etiqueta": "Rescate", "desde": 60, "hasta": 79, "total": 23, "nuevos": 15, "ya_volvieron": 8, "hoy_entran": 2,
+      "regalo": "½ rollo gratis",
+      "retorno": { "con_mensaje": { "toques": 40, "volvieron": 7, "pct": 17.5 }, "sin_mensaje": { "toques": 5, "volvieron": 0, "pct": 0 } } }
+  ],
+  "dormidos": { "etiqueta": "Dormidos", "total": 508, "nuevos": 315, "ya_volvieron": 193, "sin_toques_hace_6_meses": 193,
+                "hoy_entran": 3, "regalo": "Postre del chef", "retorno": { "...": "como una caja" } },
+  "no_reciben_mensajes": 12,
+  "numeros": { "en_el_ciclo": 341, "dormidos": 508,
+               "volvieron_por_mensaje": { "clientes": 31, "con_mensaje_pct": 14, "sin_mensaje_pct": 6 },
+               "proximo_evento": { "id": "uuid", "titulo": "Noche de sushi", "fecha": "2026-10-17", "dias": 13, "estado": "scheduled",
+                                   "invitados": 412, "sin_foto": true } },
+  "segunda_visita": { "ventana_dias": 60, "desde": "2026-05-18", "hasta": "2026-08-15", "clientes": 210, "volvieron": 47, "pct": 22.4 },
+  "primer_uso": { "regalo_pequeno": { "listo": true, "titulo": "Postre del chef", "elegido_inactivo": false },
+                  "regalo_fuerte": { "listo": true, "titulo": "½ rollo gratis", "elegido_inactivo": false },
+                  "plantilla_regalo": { "estado": "pendiente" }, "listos": 2, "total": 3 },
+  "para_hoy": [
+    { "id": "trimestral", "tipo": "trimestral", "texto": "31 dormidos reciben su toque trimestral hoy a las 4:30 pm con Postre del chef.",
+      "clientes": 31, "dias": 0, "acciones": ["ok", "cambiar_regalo", "hoy_no"], "sale": "2026-10-04T21:30:00.000Z",
+      "regalo": "Postre del chef", "pospuesto": false }
+  ],
+  "permisos": { "aprobar": true, "interruptor": false }
+}
+```
+
+- **Cajas:** «Recién vino» + las etapas que existen para la marca (sin domicilio no hay «Le mostramos
+  lo otro») con el rango del ritmo de la MARCA; cada cliente cae por SU ritmo (`boxOf()`). Cuentan
+  los que aceptan mensajes y no pidieron SALIR (los mismos que lee el cron); el resto va en
+  `no_reciben_mensajes`. **Nuevo** = `total_visits` ≤ 1. `hoy_entran` = los que llegan HOY al día de
+  esa etapa (Recién vino: los que vinieron hoy). Dormidos incluye a los que ya no reciben nada
+  automático (`sin_toques_hace_6_meses`).
+- **Retorno:** toques `sent` contra `holdout` cuya ventana de 14 días se cerró en los últimos 30 días;
+  `pct: null` sin toques que medir. `volvieron_por_mensaje.clientes` = regresos reales de los
+  últimos 30 días de toques que salieron. Ninguno de los números es «enviados».
+- **Segunda visita (A12):** de los que vinieron por primera vez en los 90 días que terminan hace 60,
+  cuántos volvieron OTRO día dentro de 60. Días distintos con visita, no `cycle_no`.
+- **Primer uso:** los regalos con la misma validación que el cron (activos y de la marca) y «Regalo
+  que vence» con la misma pregunta de aprobación (`regaloQueVenceAprobada()`: Zernio y demo por el
+  puntero, Twilio preguntándole a Twilio). `pendiente` = hay plantilla pero no aprobada.
+- **Para hoy:** máximo tres, por `clientes ÷ días` (lo que mueven por día que queda). Tipos:
+  `trimestral` (solo con el ciclo encendido; lo que decide la PRÓXIMA corrida con `decidirCliente()`,
+  `pospuesto` tras «Hoy no») · `fecha_especial` (la más cercana a ≤ 30 días sin evento esa semana) ·
+  `evento_sin_foto` (auto, sin foto, sale en ≤ 30 días) · `rescate_sin_regalo` (encendido, sin regalo
+  fuerte, alguien entra al rescate en 7 días) · `cupo_sin_regalo` (encendido, sin regalo pequeño,
+  sobra más de la mitad del cupo de campaña).
+- **`permisos`:** `aprobar` = puede usar «Hoy no» (alcance de marca); `interruptor` = es el operador
+  de Cada1 (el único que enciende el ciclo). `null` en la versión mini.
+
+**500:** `{ "error": "No pudimos leer tu ciclo de recuperación en este momento. Intenta de nuevo en un minuto." }` · **401** sin sesión.
+
+### `GET /api/dashboard/cycle/projection?from=YYYY-MM-DD&to=YYYY-MM-DD` — Admin Cookie
+
+Sin rango: hoy y 30 días más. Máximo 93 días (400). Los días pasados traen eventos y fechas, no
+proyección.
+
+```json
+{
+  "desde": "2026-10-01", "hasta": "2026-10-31", "hoy": "2026-10-04", "encendido": true,
+  "dias": [
+    { "fecha": "2026-10-14", "entran": [ { "etapa": "t4", "etiqueta": "Rescate", "total": 23, "nuevos": 15 },
+                                         { "etapa": "heartbeat", "etiqueta": "Toque trimestral", "total": 31, "nuevos": 20 } ],
+      "eventos": [], "fechas_especiales": [], "reservado_para": ["uuid-del-evento"] }
+  ],
+  "eventos": [ { "id": "uuid", "titulo": "Noche de sushi", "fecha": "2026-10-17", "estado": "scheduled", "sin_foto": true,
+                 "reservado_desde": "2026-10-12" } ]
+}
+```
+
+`entran` cuenta ENTRADAS a la etapa (el cron después puede saltar a un fiel en «Le recordamos», dejar
+a uno en el grupo de control o posponerlo por los topes). `reservado_para`: eventos `planned`/`scheduled`
+cuyo blackout cubre ese día (`[fecha − blackout_days, fecha)`).
+
+### `GET /api/dashboard/cycle/customers` — Admin Cookie
+
+UN filtro: `?stage=reciente|t1…t5` (hoy en esa caja) · `?day=N` (N días sin venir) ·
+`?state=dormido` · `?fecha=YYYY-MM-DD[&stage=t1…t5|heartbeat]` (entran a un toque ese día). Más
+`&page=1&limit=50` (máx. 100). 400 con el motivo si el filtro no sirve.
+
+```json
+{
+  "filtro": { "tipo": "etapa", "etapa": "t4" }, "total": 23, "nuevos": 15, "ya_volvieron": 8, "pagina": 1, "por_pagina": 50,
+  "clientes": [
+    { "id": "uuid", "nombre": "Juanita Pérez", "ciclo": 1, "visitas": 1, "puntos": 80, "nuevo": true, "dias_sin_venir": 62,
+      "caja": "t4", "archivado": false,
+      "ultimo_toque": { "etapa": "t2", "etiqueta": "Le regalamos algo", "con_mensaje": true, "fecha": "2026-09-30T21:30:00Z", "volvio": false } }
+  ]
+}
+```
+
+Sin teléfono. `ultimo_toque.con_mensaje: false` = «sin mensaje, para comparar».
+
+### `POST /api/dashboard/cycle/hoy-no` — Admin Cookie · **alcance de marca**
+
+**Request:** `{ "tarjeta": "trimestral" }` (hoy, la única tarjeta automática).
+**Response 200:** `{ "ok": true, "tarjeta": "trimestral", "pospuesto": "2026-10-14", "mensaje": "Listo: el toque trimestral de hoy sale un día después." }`
+
+Anota en `admin_settings` (`cycle_hoy_no_trimestral`, clave del SISTEMA: el `PUT` de settings la
+rechaza) el día de la próxima corrida del cron (antes de las 15:00 de Bogotá, la de hoy; después, la
+de mañana). Esa corrida no crea ni encola el trimestral (`saltados.hoy_no` en la respuesta del cron);
+la siguiente lo decide igual. **400** tarjeta desconocida · **403** administrador de sede · **500** si
+no quedó guardado.
 
 ---
 

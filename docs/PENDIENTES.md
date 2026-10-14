@@ -1,6 +1,6 @@
 # PENDIENTES — todo lo que falta, en un solo lugar
 
-> **Última actualización:** 2026-10-13 (**SEG-2 y SEG-3 HECHOS en código**: salen de §5; entra a §6.1 el gesto de la consulta y la 00072; entra a §5 OPER-4-mudo). Antes 2026-10-13 (**ciclo, fase 1B HECHA**: sale de §1 —queda el gesto del dueño de encenderla— y de §2.4, con cada punto de lo que la 1A le dejó resuelto; N-MES y TEST-deadlock salen de §5; entran N-BLACKOUT, N-AUDIENCIA, N-CATALOGO-1B y PL-2-ciclo). Antes 2026-10-12 (**push a `main`** de la 1A, plantillas y PL-2-a; **consultas 1 y 2 de la 1A leídas**: Sushi Fun no tiene visitas perdidas; entra **N-DOBLE** en §5). Antes 2026-10-12 (**PL-2-a cerrada**: sale de §3.2 —el recordatorio de premio y «Nivel desbloqueado» del check-in ya no usan una plantilla Twilio sin aprobar—; PL-2 queda con los dos emisores que no preguntan; **la 00070 pasa a aplicada** el 12-10). Antes 2026-10-11 (**ciclo, fase 1A HECHA**: sale de §1 y de §2.4, entra lo que deja para la 1B en §2.4 y dos chicos en §5, TEST-deadlock y N-MES). Antes, el mismo día (**el dueño DECIDIÓ los bloques A y B y parte del C** con datos de producción: §8 queda como tabla de decisiones; feature nueva «se adapta a tu clientela», `docs/features/ritmo-adaptativo.md`; prompt de la fase 1A listo). Antes, el mismo día (P1-a: salen N3-quater, N7, N8 de §5 y N5, N16, N23, OPER-4, OPER-6 de §3.3; entran N5-bis, N23-bis y OPER-4-bis; OPER-6 encontró **cuatro** punteros fuera del catálogo, no dos). Antes 2026-10-10 (ciclo fase 0.bis: sale N3-bis y N3-ter de §5, entran N3-quater y N3-quinquies; la consulta de la fase 0 ya corrió y su gesto pasa al de Planeta Wings). Antes 2026-10-08 (Opus 5.5, solo docs). **Es la puerta de entrada a lo que falta.** Si algo
+> **Última actualización:** 2026-10-14 (**ciclo, fase 2 parte A HECHA** —los datos de la pantalla—: §1 fila 6 y §2.4; entra a §2.4 lo que la A les deja a B y C; la 00071 y el push de la 1B, hechos: salen de §1 fila 4). Antes 2026-10-13 (**SEG-2 y SEG-3 HECHOS en código**: salen de §5; entra a §6.1 el gesto de la consulta y la 00072; entra a §5 OPER-4-mudo). Antes 2026-10-13 (**ciclo, fase 1B HECHA**: sale de §1 —queda el gesto del dueño de encenderla— y de §2.4, con cada punto de lo que la 1A le dejó resuelto; N-MES y TEST-deadlock salen de §5; entran N-BLACKOUT, N-AUDIENCIA, N-CATALOGO-1B y PL-2-ciclo). Antes 2026-10-12 (**push a `main`** de la 1A, plantillas y PL-2-a; **consultas 1 y 2 de la 1A leídas**: Sushi Fun no tiene visitas perdidas; entra **N-DOBLE** en §5). Antes 2026-10-12 (**PL-2-a cerrada**: sale de §3.2 —el recordatorio de premio y «Nivel desbloqueado» del check-in ya no usan una plantilla Twilio sin aprobar—; PL-2 queda con los dos emisores que no preguntan; **la 00070 pasa a aplicada** el 12-10). Antes 2026-10-11 (**ciclo, fase 1A HECHA**: sale de §1 y de §2.4, entra lo que deja para la 1B en §2.4 y dos chicos en §5, TEST-deadlock y N-MES). Antes, el mismo día (**el dueño DECIDIÓ los bloques A y B y parte del C** con datos de producción: §8 queda como tabla de decisiones; feature nueva «se adapta a tu clientela», `docs/features/ritmo-adaptativo.md`; prompt de la fase 1A listo). Antes, el mismo día (P1-a: salen N3-quater, N7, N8 de §5 y N5, N16, N23, OPER-4, OPER-6 de §3.3; entran N5-bis, N23-bis y OPER-4-bis; OPER-6 encontró **cuatro** punteros fuera del catálogo, no dos). Antes 2026-10-10 (ciclo fase 0.bis: sale N3-bis y N3-ter de §5, entran N3-quater y N3-quinquies; la consulta de la fase 0 ya corrió y su gesto pasa al de Planeta Wings). Antes 2026-10-08 (Opus 5.5, solo docs). **Es la puerta de entrada a lo que falta.** Si algo
 > pendiente no está aquí, no está pendiente: o se hizo, o hay que agregarlo aquí.
 > **Regla:** lo que se termina se **saca** de este archivo (no se tacha) y pasa al `CHANGELOG.md`. El detalle de cada
 > cosa vive en su documento de origen; aquí va una línea, el estado y dónde leer más.
@@ -37,9 +37,9 @@
 | 1 | **Gestos de hoy** (§6.1): ~~la 00069~~ (aplicada el 11-10), mirar los registros del Supabase del AIOS | Nada: solo hacerlo | — |
 | 2 | ✅ **Campañas, fases 0 y 0.bis: HECHAS el 2026-10-08 y el 2026-10-10** (sin migración; **pusheadas juntas a `main` el 2026-10-11, `2746d49`**). Un envío fallido ya no bloquea 30 o 360 días, pero cada toque admite 3 fallidos y no más · la insistente sale una vez mientras el cliente no vuelva · `error_message` dice la causa real · el texto de Campañas dice la verdad · una sola escala de días, también en Clientes y en «Rescatar Perdidos» | Nada. Línea base del SQL en `ESTADO.md` 0.CICLO; repetir la consulta hacia el 2026-11-11 | no |
 | 3 | ✅ **Plantillas: un solo libro y una sola pantalla — HECHO el 2026-10-11** (sin migración, **desplegado el 2026-10-12**): el panel reconoce la WABA, las tres plantillas nuevas entraron juntas, una pantalla para Twilio y Zernio, Biblioteca para campañas (§3). Quedan B1 y B7 (AIOS, menos aprobaciones), en una sesión posterior | Por marca, «Enviar los N juntos a Meta» (§3.4) | no |
-| 4 | **Encender el ciclo** (la fase 1B, los envíos, está HECHA el 2026-10-13, `CHANGELOG.md`; el ciclo nace apagado en todas las marcas). En orden: aplicar la **00071** ANTES del push → push → encender `demo-ventas` un día (envío simulado) → Don Alirio dos semanas → medir | Elegir el regalo pequeño y el fuerte de Don Alirio (o ninguno: sale sin regalo) y mirar su `?dry=1`. Todo en `SQL-PARA-CORRER/ciclo-fase-1b/LEEME.md` | 1 (escrita) |
+| 4 | **Encender el ciclo** (la fase 1B, los envíos, está HECHA y pusheada el 2026-10-13 con la 00071 aplicada antes; el ciclo nace apagado en todas las marcas). En orden: encender `demo-ventas` un día (envío simulado) → Don Alirio dos semanas → medir | Elegir el regalo pequeño y el fuerte de Don Alirio (o ninguno: sale sin regalo) y mirar su `?dry=1`. Todo en `SQL-PARA-CORRER/ciclo-fase-1b/LEEME.md` | — |
 | 5 | ✅ **Recompensas en un solo lugar (S-1) — HECHO el 2026-10-13** (sin migración, sin desplegar): el catálogo y los selectores de qué premio usa cada mensaje viven en Recompensas › Premios para regalar; salieron de Campañas y de Ajustes; las invitaciones eligen del catálogo; las escrituras del catálogo exigen alcance de marca (§4.1). Prompt: `docs/prompts/2026-10-13-recompensas-un-solo-lugar.md` | Nada | no |
-| 6 | **Campañas, fase 2: la pantalla** — **prototipo APROBADO (14-10), prompt listo**: `docs/prompts/2026-10-14-ciclo-fase-2-pantalla.md`, tres partes en orden (A datos → B pantalla → C fecha y creadores) | Nada | 0 o 1 (parte C: «incluir dormidos») |
+| 6 | **Campañas, fase 2: la pantalla** — prototipo APROBADO (14-10), prompt `docs/prompts/2026-10-14-ciclo-fase-2-pantalla.md`, tres partes en orden. **Parte A (los datos) HECHA el 2026-10-14** (sin migración, sin pushear; §2.4). **Siguen B (la pantalla «Ciclo») y C (fecha y creadores)** | Nada | 1 en la parte C («incluir dormidos») |
 | 7 | **Optimizar: los arreglos chicos** (§5), repartidos en una o dos sesiones | Solo el texto de 18.c | no |
 | 8 | **La tarjeta, las reseñas y los referidos** (§4.2) | C4–C8 | 1–2 |
 | 9 | Campañas, fase 3: afinar con datos (un mes después de la fase 1) | Leer el reporte | no |
@@ -55,9 +55,9 @@ encuentra hecha. **5 y 6 se cruzaban** en `campaigns/page.tsx` (la pestaña «Pr
 
 **Estado:** diseñado y revisado cuatro veces (la cuarta, el 11-10, con datos de producción: spec §14). **Las fases 0 y
 0.bis están DESPLEGADAS** (`2746d49`, 11-10). **La 1A, la base del motor, está construida y desplegada** (00070 aplicada
-el 12-10). **La 1B, los envíos, está construida** (13-10, migración **00071 sin aplicar**, sin desplegar, el ciclo
-apagado en todas las marcas): el cron decide y encola, el drenador envía y otorga. Falta encenderla (§1, fila 4) y la
-fase 2 (la pantalla).
+el 12-10). **La 1B, los envíos, está construida y pusheada** (13-10, con la 00071 aplicada antes; el ciclo apagado en
+todas las marcas): el cron decide y encola, el drenador envía y otorga. Falta encenderla (§1, fila 4). **De la fase 2
+(la pantalla) está la parte A, los datos** (14-10, sin pushear); faltan B y C.
 
 ### 2.1 Qué hace el diseño, en cinco líneas
 
@@ -119,7 +119,7 @@ Y dos cosas que el spec dejó abiertas:
 
 | Fase | Qué | Estado |
 |---|---|---|
-| **2 · La pantalla** | Primer uso · «Para hoy» · seis cajas · vista por fecha con proyección y fechas especiales · mandar un regalo en tres campos · evento con texto sugerido · el calendario redirige · mini-ciclo en el panel · se retiran las burbujas y las cuatro tarjetas | ⬜ Espera A7–A8 y el prompt (se escribe cuando mires el prototipo) |
+| **2 · La pantalla** | Primer uso · «Para hoy» · seis cajas · vista por fecha con proyección y fechas especiales · mandar un regalo en tres campos · evento con texto sugerido · el calendario redirige · mini-ciclo en el panel · se retiran las burbujas y las cuatro tarjetas | 🟨 **Parte A (los datos) HECHA el 14-10** (abajo). Faltan B (la pantalla) y C (fecha y creadores): prompt `docs/prompts/2026-10-14-ciclo-fase-2-pantalla.md` |
 | **3 · Afinar** | El calibrador que sugiere el ritmo · regalos pequeños que rotan · reporte «con mensaje contra sin mensaje» por toque · texto del evento con el LLM | ⬜ Un mes después de la fase 1 |
 | **4 · Futuro** | Fechas especiales completas por rubro · ruleta · sorteos y rifas · cliente del mes · Instagram · «cumpleaños del restaurante» y «datos curiosos». **Cada una es una pieza nueva del motor de 1A** | ⬜ Decidido: después de las fases 1 y 2 |
 
@@ -136,9 +136,34 @@ escriba). **Para encender una marca:** crear «Regalo que vence» (o dejar que s
 pequeño y el fuerte (o ninguno). El ritmo no se contesta: lo calcula el sistema.
 
 **Lo que la 1B deja abierto** (para la fase 2 o la 3): la pantalla de Campañas sigue mostrando los días del camino viejo
-en una marca encendida (la reemplaza la fase 2) · los regalos pequeños no rotan (`cycle_small_reward_ids` toma el primero
+en una marca encendida (la reemplaza la parte B) · los regalos pequeños no rotan (`cycle_small_reward_ids` toma el primero
 válido; rotar es de la fase 3) · el camino viejo de reactivación y sus dos punteros legacy se retiran cuando todas las
 marcas estén en el ciclo.
+
+**La parte A de la fase 2 está construida** (14-10; `CHANGELOG.md`, `docs/API_DOCS.md` § «Ciclo de recuperación: la
+pantalla», `ritmo-adaptativo.md` §7): `/api/dashboard/cycle/overview` (con `?mini=1`), `/projection`, `/customers` y
+`POST /hoy-no`, con el MISMO motor que el cron. **Lo que les deja a B y C:**
+
+- **Para B:** la portada es `overview`; el mini-ciclo del panel principal, `overview?mini=1` (sin tocar al proveedor).
+  Botones de «Para hoy»: **OK** no escribe nada (lo automático sale solo, A6: se marca hecho en pantalla) · **Hoy no** →
+  `POST hoy-no` (mostrarlo solo con `permisos.aprobar`) · **Cambiar regalo / Elegir regalo** → Recompensas › Premios para
+  regalar · **Crear evento** trae `fecha` y `nombre` (hasta que exista el creador de C, al calendario de hoy) · **Subir
+  foto** trae `evento_id`. El interruptor del ciclo, solo con `permisos.interruptor`. La lista de una caja es
+  `customers?stage=…` / `?state=dormido`; el «Ver por día», `?day=N`.
+- **Para C:** la vista por fecha es `projection` (máx. 93 días; `reservado_para` es la sombra del blackout); «tocar un
+  día» es `customers?fecha=AAAA-MM-DD`. N-BLACKOUT y N-AUDIENCIA (§5) siguen vivos: `projection` no los arregla.
+- **Decidido sin preguntar** (técnico; reversible): «Hoy no» es una clave del sistema en `admin_settings` con el día de la
+  próxima corrida (antes de las 15:00, la de hoy; después, la de mañana), solo para el trimestral, que es lo único
+  automático de «Para hoy» · las tarjetas se ordenan por clientes ÷ días que quedan (un evento sin foto que sale mañana le
+  gana a Halloween dentro de un mes) · **«Este año no» de la fecha especial NO se construyó** (la parte B no lo lista; la
+  tarjeta se va sola cuando hay un evento esa semana o pasa la fecha) · el rubro «sushi» se reconoce por el emoji de la
+  marca o su nombre (`business_type` no lo dice) · los festivos no están en el catálogo · el ciclo se LEE de la marca (un
+  administrador de sede ve las mismas cajas, como hoy las burbujas); solo escribir es de la marca.
+- **Límites conocidos:** la segunda visita lee todas las visitas de la marca (como la analítica: si una marca pasa
+  decenas de miles, va a SQL con migración) · la tarjeta del trimestral no mira el cap de 7 días, el tope del mes ni el
+  blackout (es «a lo sumo») · el próximo evento se busca en 60 días · en una marca APAGADA la Despedida junta a todos los
+  que pasaron el día 80 (nadie los duerme hasta encender: es el dato real) · el retorno solo cuenta ventanas de 14 días ya
+  cerradas · un «Hoy no» apretado después de las 15:00 con el cron atrasado pospone la corrida de mañana, no la de hoy.
 
 ### 2.5 Lo que el diseño mide para saber si funciona
 

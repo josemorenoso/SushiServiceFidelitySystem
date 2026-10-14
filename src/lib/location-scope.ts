@@ -129,6 +129,13 @@ interface PermissionRow {
 }
 
 /**
+ * El permiso del operador de Cada1 en la marca de SU sesión: el de un super usuario
+ * (fila 3 del §5.1 — todas las sedes activas, «toda la marca» y el cubo «Sin sede»).
+ * Ver el `OR` en `requireLocationScope()`.
+ */
+const PERMISO_DEL_OPERADOR: readonly PermissionRow[] = [{ location_id: null, role: 'brand' }]
+
+/**
  * Fabrica el único `LocationScope` posible. Privada a propósito: es lo que hace
  * que el tipo sea opaco.
  */
@@ -372,9 +379,23 @@ export async function requireLocationScope(request: Request): Promise<LocationSc
   const activas = (sedes.data ?? []) as LocationOption[]
   const requested = new URL(request.url).searchParams.get(LOCATION_QUERY_PARAM)
 
+  // EL OPERADOR DE CADA1 (`app_metadata.role = 'super_admin'`) — el `OR` de la 00045.
+  // Las policies de la 00045 son `is_super_admin() OR can_see_location(location_id)`: el
+  // `OR` va AFUERA de `can_see_location()`, y acá va afuera de `decideLocationScope()`, que
+  // sigue siendo el espejo de esa función (`tests/db/multisede-permisos.test.ts`) y no se
+  // toca. El operador no tiene fila en las marcas de sus clientes, y sin esto el fail-safe
+  // le contestaba 403 en toda marca de 2+ sedes (SEDE-OPERADOR, 2026-10-14). Se lee del
+  // `app_metadata` ya leído: el mismo predicado que `isSuperAdmin()` (`src/lib/admin.ts`) y
+  // que `is_super_admin()` en SQL, sin otra vuelta a Auth.
+  //
+  // Ve la marca de SU sesión y nada más: `tenantId` sale del JWT, las sedes se leyeron con
+  // `.eq('tenant_id', tenantId)`, y una sede de otra marca en `?location_id=` no está en la
+  // lista → 403. Con 0 o 1 sede activa la fila 3 da lo mismo que la fila 1 de hoy.
+  const esOperadorDeCada1 = user.app_metadata?.role === 'super_admin'
+
   const decision = decideLocationScope({
     tenantId,
-    permissions: (permisos.data ?? []) as PermissionRow[],
+    permissions: esOperadorDeCada1 ? PERMISO_DEL_OPERADOR : ((permisos.data ?? []) as PermissionRow[]),
     activeLocationIds: activas.map((s) => s.id),
     requested,
   })
@@ -394,14 +415,15 @@ export async function requireLocationScope(request: Request): Promise<LocationSc
  * PURA a propósito, igual que `decideLocationScope()`: la decisión de permisos
  * más cara del panel no debería necesitar una base para probarse.
  *
- * Contesta la pregunta que `LocationScope` por sí solo no contesta, porque le
- * falta la mitad de arriba: **el operador de Cada1** (`app_metadata.role =
- * 'super_admin'`) no tiene fila en `dashboard_user_locations` de las marcas de
- * sus clientes, así que `requireLocationScope()` le contesta 403 en cuanto la
- * marca tiene dos sedes. En SQL esa mitad SÍ está escrita —las policies de la
- * 00045 son `is_super_admin() OR can_see_location(...)`— y el camino real del
- * panel corre con `service_role`, que se salta el RLS: sin este `OR` en
- * TypeScript, el operador pierde en el panel lo que el motor sí le concede.
+ * Lleva el `OR` del **operador de Cada1** (`app_metadata.role = 'super_admin'`),
+ * igual que las policies de la 00045 (`is_super_admin() OR can_see_location(...)`):
+ * el camino real del panel corre con `service_role`, que se salta el RLS, y sin el
+ * `OR` en TypeScript el operador perdía en el panel lo que el motor sí le concede.
+ * Desde el 2026-10-14 (SEDE-OPERADOR) `requireLocationScope()` lleva el mismo `OR`
+ * y le da al operador el alcance de marca, así que con un alcance resuelto este ya
+ * no cambia la respuesta: decide solo cuando el alcance NO se resolvió (sin marca
+ * en el JWT, o un fallo de base), y ahí `exigirAlcanceDeMarca()` saca la marca de
+ * `requireTenantId()`.
  *
  * Las dos entradas y nada más:
  *   · `scope` — `null` cuando el alcance NO se pudo resolver (sin sesión, sin
@@ -409,11 +431,12 @@ export async function requireLocationScope(request: Request): Promise<LocationSc
  *     `null` NUNCA autoriza por sí solo: el fail-closed del §5.1 vale acá igual.
  *   · `esSuperAdmin` — de `isSuperAdmin()` (`src/lib/admin.ts`), que lee el JWT.
  *
- * ⚠️ Hay un gemelo anterior, `requireBrandScope()` en
- * `src/app/api/dashboard/users/route.ts`, que exige `role === 'brand'` SIN el
- * `OR` del super-admin. No se unificaron acá porque los accesos son otra
- * pregunta —quién puede crear usuarios de una marca ajena es una decisión del
- * dueño, no una corrección— y unificarlas de paso se la habría respondido sola.
+ * ⚠️ `requireBrandScope()` (`src/app/api/dashboard/users/route.ts`) y sus dos
+ * hermanas de `users/[id]` deciden con `scope.role === 'brand'`, sin este `OR`.
+ * Hasta el 2026-10-14 eso le cerraba Accesos al operador en las marcas de 2+ sedes
+ * (y se lo dejaba abierto en las de 0 o 1, por la fila 1 del §5.1). Desde
+ * SEDE-OPERADOR el operador llega con `role='brand'` y Accesos se le abre también
+ * ahí: lo decidió el dueño ese día («super usuario en todo», también en Accesos).
  */
 export function puedeEscribirEnLaMarca(params: {
   scope: LocationScope | null

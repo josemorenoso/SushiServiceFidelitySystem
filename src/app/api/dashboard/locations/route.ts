@@ -35,7 +35,7 @@
 import { NextResponse } from 'next/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { requireLocationScope } from '@/lib/location-scope'
-import { projectLocationEditablePaths } from '@/lib/location-config-paths'
+import { projectLocationCardPaths, projectLocationEditablePaths } from '@/lib/location-config-paths'
 import { projectEditablePaths } from '@/lib/tenant-config-paths'
 
 function getServiceClient() {
@@ -119,6 +119,10 @@ export async function GET(request: Request) {
         is_primary: f.is_primary,
         sort_order: f.sort_order,
         config: projectLocationEditablePaths((f.config ?? {}) as Record<string, unknown>),
+        // La TARJETA de la sede (sedes separadas, parte 2, 00074): su sello, su decoración, su
+        // descripción y sus políticas. Va aparte de `config` (la ficha que edita «Mis sedes») para
+        // que esa pantalla no la mande de vuelta sin querer; la lee «Tarjeta principal».
+        card: projectLocationCardPaths((f.config ?? {}) as Record<string, unknown>),
       })),
     })
   } catch (error) {

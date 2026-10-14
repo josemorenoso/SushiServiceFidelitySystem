@@ -101,6 +101,36 @@ function oneOf(allowed: readonly string[]) {
   }
 }
 
+/**
+ * Uno de una lista cerrada, o vacío = "volver al de siempre". Para los dibujos de la tarjeta
+ * (símbolo del sello, decoración), donde el panel manda `''` cuando el elegido es el de siempre
+ * (el chulo, sin decoración).
+ *
+ * ⚠️ Con `oneOf()` estricto, «Tarjeta principal» no podía guardar NADA mientras el sello fuera el
+ * chulo: el panel manda todas las rutas juntas, `''` no estaba en la lista y la respuesta era un
+ * 400 «card.stamp_icon: debe ser uno de…» (sedes separadas, parte 2, 2026-10-14). El resolver ya
+ * trataba `''` como ausente (`isStampIconId('')` → el default).
+ */
+function oneOfOrEmpty(allowed: readonly string[]) {
+  const strict = oneOf(allowed)
+  return (raw: unknown): PathValidation => {
+    if (typeof raw === 'string' && raw.trim() === '') return { ok: true, value: '' }
+    return strict(raw)
+  }
+}
+
+/**
+ * Cómo se reparte la tarjeta entre las sedes (sedes separadas, parte 2, 2026-10-14). Lo decide la
+ * MARCA en «Tarjeta principal»; ausente = `shared`, que es lo de siempre.
+ *   · `shared`        — la misma tarjeta en todas las sedes (cada una con su dirección, horario,
+ *                       teléfonos y redes, que viven en «Mis sedes»).
+ *   · `per_location`  — cada sede, además, con su sello, su decoración, su descripción y sus
+ *                       políticas (`LOCATION_CARD_PATH_NAMES`, `location-config-paths.ts`).
+ */
+export const CARD_MODES = ['shared', 'per_location'] as const
+export type CardMode = (typeof CARD_MODES)[number]
+export const CARD_MODE_PER_LOCATION: CardMode = 'per_location'
+
 /** Texto libre en varias líneas (horario, políticas). Conserva los saltos de línea. */
 function multilineText(maxLength: number) {
   return (raw: unknown): PathValidation => {
@@ -199,8 +229,8 @@ const EDITABLE_PATHS: readonly EditablePath[] = [
   // pero NADIE podía editarlo: solo lo escribía el AIOS al dar de alta. Un
   // restaurante que cambiaba el teléfono de domicilios tenía que pedírnoslo.
   { path: 'delivery_phone', validate: phoneText },
-  { path: 'card.stamp_icon', validate: oneOf(STAMP_ICON_IDS) },
-  { path: 'card.motif', validate: oneOf(CARD_MOTIF_IDS) },
+  { path: 'card.stamp_icon', validate: oneOfOrEmpty(STAMP_ICON_IDS) },
+  { path: 'card.motif', validate: oneOfOrEmpty(CARD_MOTIF_IDS) },
   { path: 'card.description', validate: multilineText(400) },
   { path: 'card.facebook_url', validate: httpUrl },
   { path: 'card.tiktok_url', validate: httpUrl },
@@ -211,6 +241,10 @@ const EDITABLE_PATHS: readonly EditablePath[] = [
   { path: 'card.address', validate: freeText(160) },
   { path: 'card.hours', validate: multilineText(300) },
   { path: 'card.policies', validate: multilineText(2000) },
+  // Sedes separadas, parte 2 (2026-10-14): «la misma tarjeta para todas las sedes» o «una para
+  // cada sede». Es de la MARCA (no está en la lista de la sede) y lo escribe el PUT de
+  // `tenant-config`, que exige alcance de marca desde SEG-3.
+  { path: 'card.mode', validate: oneOf(CARD_MODES) },
 
   // Píxel de Meta (dueño, 2026-09-10) — la ÚNICA ruta de `integrations` en esta
   // lista, y el porqué está en el comentario de cabecera. Es un id público: se

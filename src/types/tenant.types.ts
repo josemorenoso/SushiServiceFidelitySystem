@@ -176,6 +176,13 @@ export interface TenantCardConfig {
   hours?: string
   /** Políticas (reservas, cancelaciones, tratamiento de datos…). Texto libre. */
   policies?: string
+  /**
+   * SOLO en `tenants.config` (la sede no lo lleva: lo impide su CHECK). `'per_location'` = «Una
+   * tarjeta para cada sede»: el sello, la decoración, la descripción y las políticas de cada sede
+   * (su `restaurant_locations.config.card`) pisan los de la marca. Ausente o `'shared'` = «La
+   * misma tarjeta para todas las sedes», lo de siempre (sedes separadas, parte 2, 2026-10-14).
+   */
+  mode?: string
 }
 
 /**

@@ -34,6 +34,8 @@
  */
 
 import type { TenantConfig } from '@/types/tenant.types'
+import { LOCATION_CARD_KEYS } from './location-config-paths'
+import { CARD_MODE_PER_LOCATION } from './tenant-config-paths'
 import {
   DEFAULT_CARD_MOTIF,
   DEFAULT_STAMP_ICON,
@@ -180,13 +182,28 @@ function text(value: string | null | undefined): string | null {
 }
 
 /**
+ * ¿La marca eligió «Una tarjeta para cada sede»? Lo decide `tenants.config.card.mode`; ausente =
+ * «La misma tarjeta para todas las sedes», que es lo de siempre (sedes separadas, parte 2).
+ */
+export function tarjetaPorSede(brand?: TenantConfig | null): boolean {
+  return brand?.card?.mode === CARD_MODE_PER_LOCATION
+}
+
+/**
  * Mezcla la config de la SEDE sobre la de la MARCA, campo a campo.
  *
  * Solo el primer nivel y `card`, que es la única forma que tiene el `config` de
  * una sede (lo garantiza el CHECK `chk_restaurant_locations_config_whitelist`,
- * migración 00058 §1). Un valor vacío o ausente en la sede NO pisa: es como una
- * sede dice *"esto lo hereda de la marca"*, y es lo que hace que una sede recién
- * creada —`config = {}`— se comporte bit a bit como antes de la 00058.
+ * migraciones 00058 §1 y 00074). Un valor vacío o ausente en la sede NO pisa: es
+ * como una sede dice *"esto lo hereda de la marca"*, y es lo que hace que una sede
+ * recién creada —`config = {}`— se comporte bit a bit como antes de la 00058.
+ *
+ * LA TARJETA DE LA SEDE (parte 2, 2026-10-14). El sello, la decoración, la
+ * descripción y las políticas de la sede (`LOCATION_CARD_KEYS`) pisan los de la
+ * marca SOLO si la marca eligió «Una tarjeta para cada sede». Con la tarjeta
+ * compartida se guardan pero no se muestran: volver a separar no obliga a
+ * rehacerlas. La FICHA de la sede (dirección, horario, teléfonos, redes, Google)
+ * pisa siempre, con cualquiera de las dos: es *"dónde estoy y cómo me contactás"*.
  *
  * PURA a propósito: es la regla de precedencia entera, probable sin base.
  */
@@ -199,6 +216,7 @@ export function mergeLocationOverConfig(
   // `unknown` es lo que permite recorrerla por nombre sin aflojar el tipo público.
   const base = (brand ?? {}) as unknown as Record<string, unknown>
   const over = location as unknown as Record<string, unknown>
+  const conTarjetaDeSede = tarjetaPorSede(brand)
 
   const out: Record<string, unknown> = { ...base }
 
@@ -213,6 +231,9 @@ export function mergeLocationOverConfig(
   const cardOver = (over.card ?? {}) as Record<string, unknown>
   const card: Record<string, unknown> = { ...cardBase }
   for (const [k, v] of Object.entries(cardOver)) {
+    // `mode` es de la marca: una sede no decide cómo se reparte la tarjeta (su CHECK ni lo deja guardar).
+    if (k === 'mode') continue
+    if (!conTarjetaDeSede && LOCATION_CARD_KEYS.includes(k)) continue
     if (text(v as string | null | undefined) !== null) card[k] = v
   }
   if (Object.keys(card).length > 0) out.card = card
@@ -230,10 +251,11 @@ export function mergeLocationOverConfig(
  * propia dirección y su propio teléfono, y sin esto las dos sedes de una marca
  * mandaban a reseñar la MISMA ficha: la de la segunda sede nacía muerta.
  *
- * Lo que la sede NO puede pisar —nombre, logo, colores, sellos— lo impone la
- * whitelist, no este archivo. El porqué está en `src/lib/location-config-paths.ts`:
- * la tarjeta muestra puntos que son de la MARCA, así que si la identidad
- * cambiara con la sede, la tarjeta mentiría.
+ * Lo que la sede NO puede pisar —nombre, logo, colores— lo impone la whitelist,
+ * no este archivo. El porqué está en `src/lib/location-config-paths.ts`: la
+ * tarjeta muestra puntos que son de la MARCA, así que si la identidad cambiara
+ * con la sede, la tarjeta mentiría. El sello, la decoración, la descripción y las
+ * políticas de la sede solo pisan con «Una tarjeta para cada sede» (arriba).
  */
 export function resolveBranding(
   config?: TenantConfig | null,

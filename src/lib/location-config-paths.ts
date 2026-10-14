@@ -61,11 +61,49 @@ export const LOCATION_EDITABLE_PATH_NAMES = [
   'card.website_url',
 ] as const
 
+/**
+ * LA TARJETA DE LA SEDE (sedes separadas, parte 2, dueño 2026-10-14): *«si escojo una sede u
+ * otra, cuando voy a modificar la tarjeta sale la misma para las dos, incoherente, a menos que
+ * haya un botón que diga "tarjetas separadas"»*.
+ *
+ * Con «Una tarjeta para cada sede» (`tenants.config.card.mode = 'per_location'`), cada sede
+ * puede tener además SU sello, SU decoración, SU descripción y SUS políticas. Con «La misma
+ * tarjeta para todas las sedes» (lo de siempre) estas claves de la sede se guardan pero NO se
+ * muestran: volver a separarlas no obliga a rehacerlas (`mergeLocationOverConfig()`).
+ *
+ * POR QUÉ ESTAS CUATRO Y NO EL NOMBRE, EL LOGO NI LOS COLORES. Siguen siendo de la marca por la
+ * razón de arriba: los puntos y los sellos del cliente son de la marca, y una tarjeta con otro
+ * nombre u otro logo en la sede de al lado mentiría. Lo que cambia entre dos locales de la misma
+ * marca es cómo se presenta cada uno, no quién es.
+ *
+ * Es una lista APARTE de la ficha a propósito: la ficha la edita «Mis sedes»
+ * (`PATCH /api/dashboard/locations/[id]`, que también abre un administrador de su sede) y la
+ * tarjeta la edita «Tarjeta principal» (`PUT /api/dashboard/locations/[id]/card`, solo con
+ * alcance de marca, como el resto de la tarjeta desde SEG-3). Si estuvieran en la misma lista,
+ * la ficha dejaría escribir la tarjeta por la puerta de al lado.
+ */
+export const LOCATION_CARD_PATH_NAMES = [
+  'card.stamp_icon',
+  'card.motif',
+  'card.description',
+  'card.policies',
+] as const
+
+/** Las claves de `card` que son de la TARJETA de la sede (no de su ficha). Las lee el resolver. */
+export const LOCATION_CARD_KEYS: readonly string[] = LOCATION_CARD_PATH_NAMES.map((p) => p.split('.')[1])
+
 const LOCATION_EDITABLE_PATHS: EditablePath[] = pickEditablePaths(LOCATION_EDITABLE_PATH_NAMES)
+const LOCATION_CARD_PATHS: EditablePath[] = pickEditablePaths(LOCATION_CARD_PATH_NAMES)
 
 const BY_PATH: ReadonlyMap<string, EditablePath> = new Map(
   LOCATION_EDITABLE_PATHS.map((p) => [p.path, p])
 )
+const CARD_BY_PATH: ReadonlyMap<string, EditablePath> = new Map(
+  LOCATION_CARD_PATHS.map((p) => [p.path, p])
+)
+
+/** Todo lo que el `config` de una sede puede llevar: su ficha y su tarjeta. Es lo que mira el CHECK. */
+const TODAS_LAS_RUTAS_DE_SEDE: readonly string[] = [...LOCATION_EDITABLE_PATH_NAMES, ...LOCATION_CARD_PATH_NAMES]
 
 /**
  * Las claves de PRIMER NIVEL que el CHECK de la base acepta.
@@ -75,18 +113,24 @@ const BY_PATH: ReadonlyMap<string, EditablePath> = new Map(
  * contra `location_config_es_valida()` avisa de que falta el otro lado.
  */
 export const LOCATION_CONFIG_TOP_LEVEL_KEYS: readonly string[] = [
-  ...new Set(LOCATION_EDITABLE_PATH_NAMES.map((p) => p.split('.')[0])),
+  ...new Set(TODAS_LAS_RUTAS_DE_SEDE.map((p) => p.split('.')[0])),
 ]
 
-/** Las claves permitidas dentro de `card`. Mismo criterio que la de arriba. */
+/** Las claves permitidas dentro de `card` (ficha + tarjeta). Mismo criterio que la de arriba. */
 export const LOCATION_CONFIG_CARD_KEYS: readonly string[] = [
   ...new Set(
-    LOCATION_EDITABLE_PATH_NAMES.filter((p) => p.startsWith('card.')).map((p) => p.split('.')[1])
+    TODAS_LAS_RUTAS_DE_SEDE.filter((p) => p.startsWith('card.')).map((p) => p.split('.')[1])
   ),
 ]
 
+/** ¿Es de la FICHA de la sede (lo que edita «Mis sedes»)? La tarjeta de la sede NO entra acá. */
 export function isLocationEditablePath(path: string): boolean {
   return BY_PATH.has(path)
+}
+
+/** ¿Es de la TARJETA de la sede (lo que edita «Tarjeta principal» con una sede elegida)? */
+export function isLocationCardPath(path: string): boolean {
+  return CARD_BY_PATH.has(path)
 }
 
 /**
@@ -106,4 +150,19 @@ export function projectLocationEditablePaths(
   config: Record<string, unknown>
 ): Record<string, unknown> {
   return projectPaths(LOCATION_EDITABLE_PATH_NAMES, config)
+}
+
+/**
+ * La tarjeta de la sede, del cuerpo plano del panel al patch anidado. Mismo contrato que
+ * `buildLocationConfigPatch()` (lo ajeno se ignora, lo mal formado corta), y las MISMAS
+ * validaciones que la tarjeta de la marca: el sello y la decoración son ids de las listas
+ * cerradas de `card-extras.ts`, nunca un SVG (el `config` es público).
+ */
+export function buildLocationCardPatch(body: Record<string, unknown>): BuildPatchResult {
+  return buildPatchFrom(CARD_BY_PATH, body)
+}
+
+/** Proyecta la tarjeta guardada de una sede a la forma plana que lee el panel. */
+export function projectLocationCardPaths(config: Record<string, unknown>): Record<string, unknown> {
+  return projectPaths(LOCATION_CARD_PATH_NAMES, config)
 }

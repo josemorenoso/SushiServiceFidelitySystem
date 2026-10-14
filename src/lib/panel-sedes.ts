@@ -101,7 +101,7 @@ export function modoDelPanel(view: LocationScopeView | null): ModoDelPanel {
 export const PANTALLAS_DE_TODA_LA_MARCA: readonly string[] = [
   '/dashboard/customers', // Clientes: los clientes son de la marca (filtrar por sede de registro: PENDIENTES)
   '/dashboard/imported-contacts', // Golden Bullet
-  '/dashboard/marca', // Tarjeta principal (hasta la parte 2: «una tarjeta por sede»)
+  '/dashboard/marca', // Tarjeta principal: de toda la marca SOLO con «La misma tarjeta para todas las sedes» (abajo)
   '/dashboard/templates', // Plantillas
   '/dashboard/staff', // Meseros: la lista entera de la marca, cada uno con su sede al lado
   '/dashboard/conexiones', // Conexiones: la línea de WhatsApp es de la marca (D6)
@@ -123,7 +123,18 @@ function coincide(lista: readonly string[], pathname: string | null): boolean {
   return lista.some((p) => pathname === p || pathname.startsWith(`${p}/`))
 }
 
-export function esPantallaDeTodaLaMarca(pathname: string | null): boolean {
+/**
+ * «Tarjeta principal» con «Una tarjeta para cada sede» (sedes separadas, parte 2): ahí el selector
+ * de arriba SÍ cambia lo que se edita (la tarjeta de la sede elegida), así que deja de ser de
+ * toda la marca. Con la tarjeta compartida —lo de siempre— sigue siéndolo.
+ */
+const PANTALLA_DE_LA_TARJETA = '/dashboard/marca'
+
+export function esPantallaDeTodaLaMarca(
+  pathname: string | null,
+  opciones: { tarjetaPorSede?: boolean } = {}
+): boolean {
+  if (opciones.tarjetaPorSede && coincide([PANTALLA_DE_LA_TARJETA], pathname)) return false
   return coincide(PANTALLAS_DE_TODA_LA_MARCA, pathname)
 }
 

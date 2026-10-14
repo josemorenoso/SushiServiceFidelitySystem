@@ -3,6 +3,7 @@
 import { usePathname } from 'next/navigation'
 import { Store } from 'lucide-react'
 import { useLocationScope } from '@/contexts/LocationScopeContext'
+import { useTarjetaPorSede } from '@/hooks/useTarjetaPorSede'
 import { esPantallaDeTodaLaMarca, fraseTodaLaMarca } from '@/lib/panel-sedes'
 
 /**
@@ -17,7 +18,9 @@ import { esPantallaDeTodaLaMarca, fraseTodaLaMarca } from '@/lib/panel-sedes'
 export function FranjaTodaLaMarca() {
   const pathname = usePathname()
   const { view } = useLocationScope()
-  if (!view?.multiSede || !esPantallaDeTodaLaMarca(pathname)) return null
+  // «Tarjeta principal» con una tarjeta por sede no es de toda la marca (parte 2, 2026-10-14).
+  const tarjetaPorSede = useTarjetaPorSede()
+  if (!view?.multiSede || !esPantallaDeTodaLaMarca(pathname, { tarjetaPorSede })) return null
   return <VistaFranjaTodaLaMarca sedes={view.brandLocationCount} />
 }
 

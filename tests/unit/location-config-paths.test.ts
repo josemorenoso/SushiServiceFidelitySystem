@@ -2,8 +2,8 @@
  * La whitelist de la SEDE, y su espejo en SQL.
  *
  * `restaurant_locations.config` tiene DOS guardianes: el CHECK
- * `location_config_es_valida()` (migración 00058 §1) y la lista de
- * `src/lib/location-config-paths.ts`. El de la base es el que manda —55 archivos
+ * `location_config_es_valida()` (migración 00058 §1, ampliada por la 00074 con la
+ * tarjeta de la sede) y las listas de `src/lib/location-config-paths.ts`. El de la base es el que manda —55 archivos
  * escriben con `service_role`, que se salta el RLS— pero si los dos se separan
  * pasa lo peor de los dos mundos: el panel ofrece un campo que la base rechaza
  * con un 23514 críptico, o deja de ofrecer uno que sí se podía guardar.
@@ -16,6 +16,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import {
   LOCATION_EDITABLE_PATH_NAMES,
+  LOCATION_CARD_PATH_NAMES,
   LOCATION_CONFIG_TOP_LEVEL_KEYS,
   LOCATION_CONFIG_CARD_KEYS,
   buildLocationConfigPatch,
@@ -27,9 +28,23 @@ import { elegirFilasDeSede } from '@/services/reward-tiers.service'
 import { mergeLocationOverConfig, resolveBranding } from '@/lib/branding'
 import type { TenantConfig } from '@/types/tenant.types'
 
-const MIGRACION = path.resolve(
-  __dirname,
-  '../../supabase/migrations/00058_sedes_de_cara_al_cliente.sql'
+/**
+ * La migración que define el CHECK VIGENTE: la ÚLTIMA que hace `CREATE OR REPLACE FUNCTION
+ * location_config_es_valida`. Era la 00058; la 00074 (la tarjeta de la sede) la reemplazó. Se
+ * busca en vez de nombrarse para que la próxima que la toque no deje este test comparando
+ * contra una versión vieja y pasando en verde.
+ */
+const DIR_MIGRACIONES = path.resolve(__dirname, '../../supabase/migrations')
+const MIGRACION = path.join(
+  DIR_MIGRACIONES,
+  fs
+    .readdirSync(DIR_MIGRACIONES)
+    .filter((f) => f.endsWith('.sql'))
+    .sort()
+    .filter((f) =>
+      fs.readFileSync(path.join(DIR_MIGRACIONES, f), 'utf-8').includes('CREATE OR REPLACE FUNCTION location_config_es_valida')
+    )
+    .at(-1) ?? '00058_sedes_de_cara_al_cliente.sql'
 )
 
 /** Las claves de una lista `k NOT IN ( 'a', 'b' )` del SQL. */
@@ -63,9 +78,19 @@ describe('la whitelist de la sede es un SUBCONJUNTO de la de la marca', () => {
       expect(isLocationEditablePath(prohibida)).toBe(false)
     }
   })
+
+  it('la TARJETA de la sede (00074) es otra lista: sus cuatro claves y nada de la identidad', () => {
+    // Con «Una tarjeta para cada sede» la sede pone su sello, su decoración, su descripción y
+    // sus políticas. El nombre, el logo, los colores y el modo siguen siendo de la marca.
+    expect([...LOCATION_CARD_PATH_NAMES]).toEqual(['card.stamp_icon', 'card.motif', 'card.description', 'card.policies'])
+    for (const ruta of LOCATION_CARD_PATH_NAMES) expect(EDITABLE_PATH_NAMES).toContain(ruta)
+    for (const prohibida of ['branding.logo_url', 'branding.primary', 'brand_name', 'card.mode', 'qr_studio.theme']) {
+      expect(LOCATION_CARD_PATH_NAMES as readonly string[]).not.toContain(prohibida)
+    }
+  })
 })
 
-describe('espejo exacto con el CHECK de la 00058', () => {
+describe('espejo exacto con el CHECK vigente (00058, ampliado por la 00074)', () => {
   const sql = fs.readFileSync(MIGRACION, 'utf-8')
 
   it('las claves de primer nivel dicen lo mismo en los dos lados', () => {

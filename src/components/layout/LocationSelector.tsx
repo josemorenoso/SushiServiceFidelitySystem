@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import { useLocationScope, LOCATION_ALL, LOCATION_UNKNOWN } from '@/contexts/LocationScopeContext'
+import { useTarjetaPorSede } from '@/hooks/useTarjetaPorSede'
 import {
   contarSedes,
   esPantallaConSuPropiaSede,
@@ -44,6 +45,9 @@ import {
 export function LocationSelector() {
   const { view, loading, selection, setSelection } = useLocationScope()
   const pathname = usePathname()
+  // Con «Una tarjeta para cada sede», en «Tarjeta principal» el selector SÍ elige qué tarjeta se
+  // edita (parte 2): ahí no es la etiqueta quieta.
+  const tarjetaPorSede = useTarjetaPorSede()
 
   // «Sin sede» ya no se ofrece: quien la tenía guardada de antes vuelve a «Toda la marca»,
   // en vez de quedar parado en un valor que el selector no muestra (el panel filtraría por él
@@ -65,7 +69,7 @@ export function LocationSelector() {
 
   // Pantalla de toda la marca: el selector no puede parecer que la cambia. Una etiqueta quieta,
   // con el mismo tamaño, en vez del desplegable; la franja de debajo dice por qué.
-  if (esPantallaDeTodaLaMarca(pathname)) {
+  if (esPantallaDeTodaLaMarca(pathname, { tarjetaPorSede })) {
     return (
       <span
         aria-label="Sede: toda la marca"

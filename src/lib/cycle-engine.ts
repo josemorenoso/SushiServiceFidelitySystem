@@ -157,6 +157,25 @@ export function effectiveRhythm(personal: CycleRhythm | null | undefined, marca:
   return personal ?? marca
 }
 
+/** De dónde salió el ritmo de la marca: lo eligió el dueño, lo calculó su mediana, o el de por defecto. */
+export type BrandRhythmOrigin = 'dueno' | 'calculado' | 'por_defecto'
+
+/**
+ * El ritmo de la MARCA y de dónde salió (la pantalla lo dice: «Tus clientes vuelven cada
+ * mes · calculado con tus visitas»). Es la ÚNICA regla: `brandRhythm()` la usa.
+ */
+export function brandRhythmDetail(input: {
+  mediana: number | null
+  regresos: number
+  elegidoPorElDueno?: string | null
+}): { ritmo: CycleRhythm; origen: BrandRhythmOrigin } {
+  if (isCycleRhythm(input.elegidoPorElDueno)) return { ritmo: input.elegidoPorElDueno, origen: 'dueno' }
+  if (input.mediana !== null && Number.isFinite(input.mediana) && input.regresos >= BRAND_RHYTHM_MIN_RETURNS) {
+    return { ritmo: rhythmFromMedian(input.mediana), origen: 'calculado' }
+  }
+  return { ritmo: DEFAULT_RHYTHM, origen: 'por_defecto' }
+}
+
 /**
  * El ritmo de la MARCA (para quien tiene 1 o 2 días con visita). Lo que eligió el dueño
  * en Ajustes manda; si eligió `auto` (el default) o nada, con 30 o más regresos la mediana
@@ -168,11 +187,15 @@ export function brandRhythm(input: {
   regresos: number
   elegidoPorElDueno?: string | null
 }): CycleRhythm {
-  if (isCycleRhythm(input.elegidoPorElDueno)) return input.elegidoPorElDueno
-  if (input.mediana !== null && Number.isFinite(input.mediana) && input.regresos >= BRAND_RHYTHM_MIN_RETURNS) {
-    return rhythmFromMedian(input.mediana)
-  }
-  return DEFAULT_RHYTHM
+  return brandRhythmDetail(input).ritmo
+}
+
+/** Cómo dice el dueño cada ritmo (las palabras del prototipo aprobado el 14-10). */
+export const RHYTHM_LABELS: Readonly<Record<CycleRhythm, string>> = {
+  cafe: 'Cada semana',
+  casual: 'Cada quince días',
+  restaurant: 'Cada mes',
+  occasional: 'De vez en cuando',
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -188,6 +211,10 @@ export const STAGE_LABELS: Readonly<Record<CycleStage | 'reciente', string>> = {
   t4: 'Rescate',
   t5: 'Despedida',
 }
+
+/** El toque de los dormidos y su caja, en palabras del dueño (spec §6.6). */
+export const HEARTBEAT_LABEL = 'Toque trimestral'
+export const DORMANT_LABEL = 'Dormidos'
 
 export interface StageOptions {
   /** `tenants.config.has_delivery_webhook` (00066). Sin domicilio no existe `t3`. */
@@ -248,6 +275,109 @@ export function bandsFromConfig(ritmo: CycleRhythm, opts: StageOptions): CycleBo
     })
   })
   return cajas
+}
+
+// ═══════════════════════════════════════════════════════════════
+// La pantalla (fase 2): cajas, entradas y proyección — con la MISMA regla que el cron
+// ═══════════════════════════════════════════════════════════════
+
+export type CycleBoxKey = CycleStage | 'reciente'
+
+/** «Nuevo» = una sola visita (o ninguna). El `cycle_no` no sirve: es la llave del libro de toques. */
+export const NEW_CUSTOMER_MAX_VISITS = 1
+
+export function isNewCustomer(totalVisits: number | null | undefined): boolean {
+  return (totalVisits ?? 0) <= NEW_CUSTOMER_MAX_VISITS
+}
+
+/**
+ * Días sin venir de un cliente activo: días de Bogotá entre el inicio de su ciclo y `ahora`
+ * (la MISMA cuenta que `decidirCliente()` en `cycle-touch.ts`).
+ */
+export function daysWithoutVisit(cycleStartedAt: Date | string, ahora: Date): number {
+  return bogotaDay(ahora) - bogotaDay(cycleStartedAt)
+}
+
+/** La caja de un cliente activo: «Recién vino» antes del primer toque, si no su etapa. */
+export function boxOf(diasSinVenir: number, ritmo: CycleRhythm, opts: StageOptions): CycleBoxKey {
+  return resolveStage(diasSinVenir, ritmo, opts) ?? 'reciente'
+}
+
+/**
+ * ¿A qué caja ENTRA hoy? «Recién vino» el día de la visita (día 0); una etapa, el día exacto
+ * en que le toca. `null` si hoy no cambia de caja.
+ */
+export function boxEnteredOn(diasSinVenir: number, ritmo: CycleRhythm, opts: StageOptions): CycleBoxKey | null {
+  if (diasSinVenir === 0) return 'reciente'
+  return cycleStages(ritmo, opts).find((e) => e.day === diasSinVenir)?.stage ?? null
+}
+
+/**
+ * El día calendario (número de `bogotaDay()`) en que el cliente entra a cada etapa de su
+ * ciclo: el inicio del ciclo + el día de la etapa en SU ritmo. Es la proyección del
+ * calendario (spec §6.4): aritmética, sin tabla nueva.
+ */
+export function stageEntryDays(
+  inicioDelCiclo: Date | string,
+  ritmo: CycleRhythm,
+  opts: StageOptions
+): Array<{ stage: CycleStage; day: number }> {
+  const inicio = bogotaDay(inicioDelCiclo)
+  return cycleStages(ritmo, opts).map((e) => ({ stage: e.stage, day: inicio + e.day }))
+}
+
+/**
+ * Los días en que a un dormido le toca cada toque trimestral: `dormant_since` + 90 × n, con
+ * n = 1 … `HEARTBEAT_MAX` (la cuenta de `decidirCliente()` para los dormidos).
+ */
+export function heartbeatDueDays(dormantSince: Date | string): Array<{ seq: number; day: number }> {
+  const dormido = bogotaDay(dormantSince)
+  return Array.from({ length: HEARTBEAT_MAX }, (_, i) => ({ seq: i + 1, day: dormido + HEARTBEAT_EVERY_DAYS * (i + 1) }))
+}
+
+/**
+ * La atribución del regreso: el toque cuyo día de envío (`due_at`) cae en los 14 días
+ * anteriores a la visita. ESPEJO del trigger `on_customer_visit` (00070), que es quien la
+ * escribe: este número solo dice cuándo se CERRÓ la ventana de un toque.
+ */
+export const ATTRIBUTION_WINDOW_DAYS = 14
+
+/** La segunda visita (A12): la ventana y la cohorte que se miden. */
+export const SECOND_VISIT_WINDOW_DAYS = 60
+export const SECOND_VISIT_COHORT_DAYS = 90
+
+export interface SecondVisitRate {
+  /** Primer día (número de `bogotaDay()`) de la cohorte: quienes vinieron por PRIMERA vez desde acá… */
+  desde: number
+  /** …hasta acá: la ventana de 60 días de todos ya cerró. */
+  hasta: number
+  clientes: number
+  volvieron: number
+}
+
+/**
+ * La segunda visita (decisión A12, métrica principal): de los clientes cuya PRIMERA visita
+ * cae en la cohorte (los `SECOND_VISIT_COHORT_DAYS` días que terminan hace
+ * `SECOND_VISIT_WINDOW_DAYS`), cuántos volvieron OTRO día dentro de los 60 siguientes. Se
+ * cuenta con DÍAS DISTINTOS con visita (hora de Bogotá), no con `cycle_no`: dos escaneos el
+ * mismo día son una visita, y el `cycle_no` sube con cada uno.
+ *
+ * `diasConVisitaPorCliente`: por cliente, los días (números de `bogotaDay()`) con visita.
+ */
+export function secondVisitRate(diasConVisitaPorCliente: Iterable<Iterable<number>>, hoy: number): SecondVisitRate {
+  const hasta = hoy - SECOND_VISIT_WINDOW_DAYS
+  const desde = hasta - SECOND_VISIT_COHORT_DAYS + 1
+  let clientes = 0
+  let volvieron = 0
+  for (const crudos of diasConVisitaPorCliente) {
+    const dias = [...new Set(crudos)].sort((a, b) => a - b)
+    if (dias.length === 0) continue
+    const primera = dias[0]
+    if (primera < desde || primera > hasta) continue
+    clientes++
+    if (dias.some((d) => d > primera && d <= primera + SECOND_VISIT_WINDOW_DAYS)) volvieron++
+  }
+  return { desde, hasta, clientes, volvieron }
 }
 
 // ═══════════════════════════════════════════════════════════════

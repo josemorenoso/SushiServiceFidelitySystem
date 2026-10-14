@@ -31,6 +31,7 @@
  */
 
 import { TEMPLATE_CATALOG } from '@/constants/template-catalog'
+import { HOY_NO_CLAVES } from '@/lib/cycle-touch'
 
 /** Ajustes que NO son punteros de plantilla. Agrupados por la pantalla que los escribe. */
 const AJUSTES = [
@@ -95,8 +96,14 @@ const AJUSTES = [
  *     apagada. Es la regla (1) del encendido —un toque solo sale si su día es igual o
  *     posterior a esta fecha—, así que escribirla a mano con una fecha vieja haría salir de
  *     golpe todos los toques atrasados: la ráfaga que la regla existe para evitar.
+ *   · `cycle_hoy_no_*` (fase 2 del ciclo, 2026-10-14, `HOY_NO_CLAVES`): el «Hoy no» de una
+ *     tarjeta automática de «Para hoy» (decisión A6). La escribe `POST
+ *     /api/dashboard/cycle/hoy-no` con el día de la próxima corrida y la lee el cron.
  */
-export const CLAVES_DEL_SISTEMA: ReadonlySet<string> = new Set<string>(['cycle_enabled_at'])
+export const CLAVES_DEL_SISTEMA: ReadonlySet<string> = new Set<string>([
+  'cycle_enabled_at',
+  ...Object.values(HOY_NO_CLAVES),
+])
 
 /**
  * Punteros que el código consume y que el catálogo NO cubre: la reactivación «con premio»

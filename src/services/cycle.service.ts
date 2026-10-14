@@ -40,8 +40,11 @@ import {
   guardaDelCicloAlEnviar,
   nextSendSlot,
   instanteEnBogota,
+  pospuestoHoy,
+  diaQuePospone,
   TOUCH_TEMPLATES,
   GIFT_TITLE_VARIABLE,
+  HOY_NO_CLAVES,
   type ClienteDelCiclo,
   type ToqueExistente,
   type ToquePlaneado,
@@ -53,6 +56,7 @@ import {
   type Premio,
   type GuardaDelCiclo,
   type MotivoPospuesto,
+  type TarjetaConHoyNo,
 } from '@/lib/cycle-touch'
 import { getPiece, piezasQuePausanElToque, CADENCE_RULES } from '@/lib/communications/registry'
 import { getMultipleSettings } from '@/services/settings.service'
@@ -127,6 +131,23 @@ export async function olvidarEncendido(tenantId: string): Promise<void> {
   if (error) logDbFailure({ scope: 'Cycle', reason: 'olvidar_encendido_error', error, context: { tenant_id: tenantId } })
 }
 
+/**
+ * «Hoy no» (decisión A6): lo automático de «Para hoy» sale solo y el dueño lo pospone UN día.
+ * Anota en `admin_settings` (clave del sistema, `HOY_NO_CLAVES`) el día de la PRÓXIMA corrida
+ * del cron; esa corrida no encola esa tarjeta y la siguiente la retoma (el toque no se crea,
+ * así que al otro día vuelve a tocar). Apretarlo dos veces el mismo día es lo mismo que una.
+ * Devuelve el día pospuesto. Un fallo de base LANZA: la pantalla no puede decir «listo» si no
+ * quedó escrito.
+ */
+export async function anotarHoyNo(tenantId: string, tarjeta: TarjetaConHoyNo, ahora: Date = new Date()): Promise<string> {
+  const dia = diaQuePospone(ahora)
+  const { error } = await getServiceClient()
+    .from('admin_settings')
+    .upsert({ key: HOY_NO_CLAVES[tarjeta], value: dia, tenant_id: tenantId }, { onConflict: 'key,tenant_id' })
+  if (error) fallo('hoy_no_error', error, { tenant_id: tenantId, tarjeta })
+  return dia
+}
+
 // ═══════════════════════════════════════════════════════════════
 // El cron: decide y encola
 // ═══════════════════════════════════════════════════════════════
@@ -182,6 +203,8 @@ export interface ResultadoDelCiclo {
     t1_fiel: number
     en_curso: number
     esperando: number
+    /** Toques trimestrales que el dueño pospuso un día («Hoy no», decisión A6). */
+    hoy_no: number
     sin_plantilla: Partial<Record<TouchStage, number>>
   }
   dormidos_por_encendido: number
@@ -207,8 +230,12 @@ interface Candidato {
   toque: ToquePlaneado
 }
 
-/** El primer premio de la lista que exista, esté activo y sea de ESTA marca. */
-async function premiosDelCiclo(ajustes: CycleSettings, tenantId: string): Promise<PremiosDelCiclo> {
+/**
+ * El primer premio de la lista que exista, esté activo y sea de ESTA marca. Lo usa también la
+ * pantalla del ciclo (`cycle-overview.service.ts`): el «regalo elegido» del primer uso es el
+ * mismo que el cron va a mandar.
+ */
+export async function premiosDelCiclo(ajustes: CycleSettings, tenantId: string): Promise<PremiosDelCiclo> {
   const ids = [...new Set([...ajustes.smallRewardIds, ...(ajustes.strongRewardId ? [ajustes.strongRewardId] : [])])]
   if (ids.length === 0) return { small: null, strong: null }
   // Una sola lectura, filtrada por marca, que LANZA ante un fallo de base: un error no puede
@@ -235,7 +262,7 @@ async function premiosDelCiclo(ajustes: CycleSettings, tenantId: string): Promis
  * le pregunta a Twilio, una vez por corrida (como `reward-reminder` desde PL-2-a); ante la
  * duda, no (sale la insistente, y el regalo igual llega a la tarjeta).
  */
-async function regaloQueVenceAprobada(tenant: Tenant, sid: string | null | undefined): Promise<boolean> {
+export async function regaloQueVenceAprobada(tenant: Tenant, sid: string | null | undefined): Promise<boolean> {
   if (!sid?.trim()) return false
   if (tenant.is_demo || tenant.messaging_provider === 'zernio') return true
   return isTwilioTemplateApproved(tenant, sid.trim())
@@ -303,7 +330,7 @@ function vacio(): Pick<ResultadoDelCiclo, 'por_etapa' | 'pospuestos' | 'saltados
   return {
     por_etapa: { t1: 0, t2: 0, t3: 0, t4: 0, t5: 0, heartbeat: 0 },
     pospuestos: { evento: 0, siete_dias: 0, tope_mes: 0 },
-    saltados: { atrasado: 0, t1_fiel: 0, en_curso: 0, esperando: 0, sin_plantilla: {} },
+    saltados: { atrasado: 0, t1_fiel: 0, en_curso: 0, esperando: 0, hoy_no: 0, sin_plantilla: {} },
   }
 }
 
@@ -323,9 +350,18 @@ export async function ejecutarCicloDeLaMarca(
 
   // ── Ajustes ──
   const crudos = await getMultipleSettings(
-    [...CYCLE_SETTING_KEYS, 'aggressive_reward_id', 'cycle_enabled_at', ...Object.values(TOUCH_TEMPLATES)],
+    [
+      ...CYCLE_SETTING_KEYS,
+      'aggressive_reward_id',
+      'cycle_enabled_at',
+      ...Object.values(HOY_NO_CLAVES),
+      ...Object.values(TOUCH_TEMPLATES),
+    ],
     tenant.id
   )
+  // «Hoy no» del toque trimestral: el dueño pospuso ESTA corrida (A6). Los trimestrales de hoy
+  // no se crean ni se encolan; mañana `decidirCliente()` los vuelve a decidir igual.
+  const trimestralPospuesto = pospuestoHoy(crudos[HOY_NO_CLAVES.trimestral], ahora)
   const { count: totalClientes, error: conteoError } = await db
     .from('customers')
     .select('id', { count: 'exact', head: true })
@@ -406,6 +442,10 @@ export async function ejecutarCicloDeLaMarca(
     cancelar.push(...viejos)
     switch (decision.tipo) {
       case 'toque':
+        if (trimestralPospuesto && decision.toque.stage === 'heartbeat') {
+          r.saltados.hoy_no++
+          break
+        }
         candidatos.push({ cliente: c, toque: decision.toque })
         break
       case 'sin_plantilla':

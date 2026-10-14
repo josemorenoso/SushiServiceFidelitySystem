@@ -109,6 +109,51 @@ export function nextSendSlot(ahora: Date, slot: SendSlot): Date {
   return hoy > ahora ? hoy : instanteEnBogota(bogotaDay(ahora) + 1, h, m)
 }
 
+/**
+ * La hora de Bogotá a la que corre el cron que decide los toques (`/api/cron/reactivation`,
+ * `vercel.json`: `0 20 * * *` UTC = 15:00).
+ */
+export const CYCLE_CRON_HOUR = 15
+
+/** La PRÓXIMA corrida del cron: hoy a las 15:00 si todavía no llegó; si ya pasó, mañana. */
+export function proximaCorrida(ahora: Date): { dia: number; instante: Date } {
+  const hoy = bogotaDay(ahora)
+  const deHoy = instanteEnBogota(hoy, CYCLE_CRON_HOUR)
+  return ahora < deHoy ? { dia: hoy, instante: deHoy } : { dia: hoy + 1, instante: instanteEnBogota(hoy + 1, CYCLE_CRON_HOUR) }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// «Hoy no» (decisión A6): lo automático sale solo; «Hoy no» lo pospone un día
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Las tarjetas automáticas de «Para hoy» que el dueño puede posponer, con su clave en
+ * `admin_settings` (claves del SISTEMA: el `PUT` del panel no las acepta, las escribe
+ * `POST /api/dashboard/cycle/hoy-no`). El valor es el día de Bogotá (`YYYY-MM-DD`) de la
+ * corrida que NO manda esa tarjeta. Hoy hay una: el toque trimestral de los dormidos.
+ */
+export const HOY_NO_CLAVES = {
+  trimestral: 'cycle_hoy_no_trimestral',
+} as const
+export type TarjetaConHoyNo = keyof typeof HOY_NO_CLAVES
+
+export function esTarjetaConHoyNo(valor: unknown): valor is TarjetaConHoyNo {
+  return typeof valor === 'string' && Object.prototype.hasOwnProperty.call(HOY_NO_CLAVES, valor)
+}
+
+/**
+ * El día que pospone un «Hoy no» apretado `ahora`: el de la PRÓXIMA corrida. Antes de las
+ * 15:00, la de hoy; después, la de mañana (la de hoy ya decidió y encoló).
+ */
+export function diaQuePospone(ahora: Date): string {
+  return isoDeDia(proximaCorrida(ahora).dia)
+}
+
+/** ¿La corrida de `ahora` es la que el dueño pospuso? Lo pregunta el cron antes de encolar. */
+export function pospuestoHoy(valor: string | null | undefined, ahora: Date): boolean {
+  return !!valor && valor.trim() === isoDeDia(bogotaDay(ahora))
+}
+
 /** Después de esto el item no sale nunca: el cierre (23:59:59 Bogotá) del día siguiente al envío. */
 export function queueExpiry(notBefore: Date): Date {
   return appEndOfDay(isoDeDia(bogotaDay(notBefore) + 1))

@@ -9,6 +9,12 @@ export interface CheckInFormProps {
    * pendiente del mesero y se le otorga el premio de la invitación.
    */
   campaignSlug?: string | null
+  /**
+   * Código de referido por el que llegó (`/r/{código}`, 00075). Viaja en `lookup` y `register`.
+   * Si el referido cuenta, la visita #1 queda pendiente del mesero y el regalo del amigo queda en
+   * su tarjeta; si no cuenta (programa apagado, código de otra marca…), el registro es el de siempre.
+   */
+  referralCode?: string | null
 }
 
 export interface LookupResult {
@@ -18,6 +24,8 @@ export interface LookupResult {
   qr_token?: string | null
   /** Premio de la invitación otorgado en este lookup a un cliente que ya existía. */
   invite_grant?: { reward_title: string } | null
+  /** Llegó por el enlace de un amigo pero ya es cliente de la marca: no cuenta como referido. */
+  referral_status?: 'ya_cliente'
   customer?: {
     id: string
     name: string
@@ -69,6 +77,8 @@ export interface RegisterResult {
   tiers?: unknown[]
   /** Premio de la invitación por la que se registró, si hubo. */
   invite_grant?: { reward_title: string; expires_at: string | null } | null
+  /** El regalo del amigo que llegó por un referido que contó («Postre», «50 puntos»), o null. */
+  referral_gift?: { tipo: 'reward' | 'points'; texto: string } | null
 }
 
 export interface CheckInResult {

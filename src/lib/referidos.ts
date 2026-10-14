@@ -342,3 +342,14 @@ export const ETIQUETA_DEL_ESTADO: Record<EstadoDeReferido, string> = {
   completed: 'Vino',
   expired: 'Venció sin venir',
 }
+
+/**
+ * A dónde manda el selector «¿En cuál estás?» del registro (el 409 de una marca de 2+ sedes,
+ * `CheckInForm`): el dominio de la sede elegida, con la MISMA ruta y el teléfono ya escrito. La
+ * ruta es lo que importa acá: quien llegó por `/r/{código}` (o por una invitación `/c/{slug}`)
+ * sigue con su enlace en la sede, en vez de caer a la raíz sin código.
+ */
+export function urlDeLaSede(dominio: string, ruta: string, telefono: string): string {
+  const camino = ruta.startsWith('/') ? ruta : `/${ruta}`
+  return `https://${dominio}${camino}?phone=${encodeURIComponent(telefono)}`
+}

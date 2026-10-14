@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Loader2, Phone, User, MapPin, ArrowLeft } from 'lucide-react'
 import { metaEventIdForRegistration } from '@/lib/meta-pixel'
+import { urlDeLaSede } from '@/lib/referidos'
 import { RewardsPreview } from './RewardsPreview'
 import { CustomerCard } from './CustomerCard'
 import type { ActiveGrant } from './AvailableRewardBanner'
@@ -67,6 +68,7 @@ export function CheckInForm({
   onCheckInSuccess,
   onError,
   campaignSlug = null,
+  referralCode = null,
 }: CheckInFormProps) {
   const [step, setStep] = useState<CheckInStep>('phone')
   const [phone, setPhone] = useState('')
@@ -297,6 +299,9 @@ export function CheckInForm({
           // Invitación con premio (00063): si el cliente ya existe, el premio se le
           // otorga acá mismo, sin pasar por el registro.
           ...(campaignSlug ? { campaign_slug: campaignSlug } : {}),
+          // Referido (00075): a un cliente que ya existe no se le otorga nada (no cuenta);
+          // viaja para que la respuesta lo diga.
+          ...(referralCode ? { referral_code: referralCode } : {}),
         }),
       })
 
@@ -353,6 +358,8 @@ export function CheckInForm({
           table_number: tableNumber,
           // Invitación con premio (00063). Solo viaja cuando la hay.
           ...(campaignSlug ? { campaign_slug: campaignSlug } : {}),
+          // Referido (00075). Solo viaja cuando lo hay.
+          ...(referralCode ? { referral_code: referralCode } : {}),
           // lat/lon standby — desactivado v1.0.5-3
         }),
       })
@@ -411,6 +418,9 @@ export function CheckInForm({
   //
   // Se navega al dominio de la sede llevando el teléfono ya escrito: obligar a
   // teclearlo de nuevo en el otro subdominio es donde se pierde a la gente.
+  // Y llevando la MISMA ruta (2026-10-15, referidos): quien llegó por `/r/{código}` o
+  // `/c/{slug}` sigue con su enlace en la sede elegida. Antes iba a la raíz de la sede y el
+  // código del amigo —o la invitación— se perdía justo en las marcas de 2+ sedes.
   if (sedesParaElegir.length > 0) {
     return (
       <div className="premium-card animate-fade-in-up w-full p-7">
@@ -433,7 +443,7 @@ export function CheckInForm({
               type="button"
               onClick={() => {
                 // `phone` viaja para que no lo tenga que escribir otra vez.
-                const destino = `https://${sede.domain}/?phone=${encodeURIComponent(phone)}`
+                const destino = urlDeLaSede(sede.domain as string, window.location.pathname, phone)
                 window.location.href = destino
               }}
               className="btn-premium flex h-[52px] w-full items-center justify-center rounded-xl text-sm font-semibold"

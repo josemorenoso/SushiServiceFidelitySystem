@@ -26,6 +26,7 @@ import {
   programaActivo,
   REFERRAL_SETTING_KEYS,
   textoDelBeneficio,
+  urlDeLaSede,
   validarAjustesDeReferidos,
 } from '@/lib/referidos'
 import { CLAVES_DE_REFERIDOS, CLAVES_ESCRIBIBLES, decidirEscrituraDeAjuste } from '@/lib/settings-keys'
@@ -189,6 +190,15 @@ describe('el dominio del enlace (§1.6: una marca de dos sedes)', () => {
     expect(
       dominioDelEnlace({ host: 'clubtepuy.constelarys.com', requiereElegirSede: true, sedes, sedeDeUltimaVisita: null })
     ).toBe('clubtepuy.constelarys.com')
+  })
+
+  it('el selector de sede del registro (409) conserva el enlace del amigo y el teléfono', () => {
+    expect(urlDeLaSede('clubtepuylaureles.constelarys.com', '/r/AB3K9Q', '3001234567')).toBe(
+      'https://clubtepuylaureles.constelarys.com/r/AB3K9Q?phone=3001234567'
+    )
+    // La invitación también (antes caía a la raíz de la sede sin el slug).
+    expect(urlDeLaSede('sede.test', '/c/promo-apertura', '300')).toBe('https://sede.test/c/promo-apertura?phone=300')
+    expect(urlDeLaSede('sede.test', '/', '300')).toBe('https://sede.test/?phone=300')
   })
 
   it('una marca de una sede, o un subdominio de sede: el host de siempre', () => {

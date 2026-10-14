@@ -33,6 +33,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Ciclo fase 2, parte B: la pantalla «Ciclo» (2026-10-14) | Sonnet 5.5 | `campaigns/page.tsx`, `dashboard/page.tsx` (solo el mini-ciclo), `src/components/dashboard/cycle/**` (nuevo), los componentes que se retiran (`AtRiskBubbles`, tira del ciclo, 4 tarjetas «Automáticas»), `src/constants/rankings.ts` (solo retirar lo sin uso), `tests/**` nuevos, `docs/features/{campaigns,dashboard}.md`, `docs/PENDIENTES.md`, `ESTADO.md`, `CHANGELOG.md` | ninguna | leyendo spec y prototipo |
 
 ## 3. Siguiente, en orden
 

@@ -33,6 +33,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| **SEDE-OPERADOR**: el operador de Cada1 (super admin) ve el panel de una marca con 2+ sedes, sin 403 (prompt `docs/prompts/2026-10-14-sede-operador.md`; sesión `f3`, 2026-10-14) | Opus 5.5 | `src/lib/location-scope.ts` (solo `requireLocationScope()` y, si hace falta, `toScopeView()`) · `tests/**` nuevos · `docs/features/multi-sede.md` (solo la regla del operador en §3.quater/§3.septies) · `docs/PENDIENTES.md` (solo §5 SEDE-OPERADOR) · `ESTADO.md` (esta fila, 0.SEDES) · `CHANGELOG.md` | — (sin migración) | en curso |
 
 ## 3. Siguiente, en orden
 

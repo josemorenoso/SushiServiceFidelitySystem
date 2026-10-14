@@ -191,12 +191,12 @@ export function CalendarioDelCiclo({
                         type="button"
                         role="gridcell"
                         aria-selected={marcado}
-                        aria-label={`${fechaLarga(fecha)}${c.total > 0 ? `: ${c.total} entran a un toque` : ''}${c.eventos.length > 0 ? `, evento ${c.eventos.map((e) => e.titulo).join(', ')}` : ''}${c.reservado ? ', reservado para un evento' : ''}`}
+                        aria-label={`${fechaLarga(fecha)}${c.total > 0 ? `: ${c.total} entran a un toque` : ''}${c.eventos.length > 0 ? `, evento ${c.eventos.map((e) => e.titulo).join(', ')}` : ''}${c.especiales.length > 0 ? `, ${c.especiales.join(', ')}` : ''}${c.reservado ? ', reservado para un evento' : ''}`}
                         onClick={() => onElegir(fecha)}
                         style={c.reservado ? SOMBRA_RESERVADA : undefined}
                         className={`flex min-h-14 min-w-0 flex-col gap-0.5 overflow-hidden rounded-md border p-1 text-left text-[11px] leading-tight transition-colors sm:min-h-24 sm:p-1.5 ${
                           marcado ? 'border-[var(--brand-primary)] ring-2 ring-[var(--brand-primary)]/30' : 'hover:bg-muted/40'
-                        } ${c.pasado ? 'opacity-55' : ''}`}
+                        } ${c.pasado ? 'opacity-55' : ''} ${c.especiales.length > 0 ? 'border-dashed' : ''}`}
                       >
                         <span className="flex items-center justify-between gap-1">
                           <span className={`text-xs font-semibold ${c.hoy ? 'text-[var(--brand-primary)]' : ''}`}>{c.numero}</span>

@@ -8,6 +8,21 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [feat] — 2026-10-14 — Ciclo, fase 2 parte C: la vista por fecha, «Mandar un regalo» y el creador de eventos (migración 00073, sin aplicar)
+
+- **Vista «por fecha»** en Campañas (`?vista=fecha`): el mes con eventos, fechas especiales, proyección y la sombra
+  «reservado para el evento»; tocar un día: quiénes (nuevos / ya volvieron) y «Crear aquí». `/dashboard/calendar` redirige.
+- **«Mandar un regalo»**, el botón principal (`GET`/`POST /api/dashboard/cycle/gift`): regalo (o escribirlo y queda) ·
+  hasta cuándo · a quién (conteo vivo) · cuándo; el cupo («Hoy puedes mandar 180») y la vista previa del WhatsApp. **Se
+  otorga y se fecha AL ENVIAR:** el regalo vive en `campaigns.filters.regalo` y el drenador lo lee (sin tocar `send_queue`).
+  Mismo adaptador que el ciclo; un regalo vivo por cliente (el ciclo tampoco apila); cuenta como manual.
+- **«Crear un evento»** con texto sugerido, foto e **«incluir dormidos»** (`restaurant_events.include_dormant`, **00073**:
+  aplicar ANTES del push); reemplaza a `EventCreateDialog`. La ficha del evento deja subir la foto.
+- **N-BLACKOUT** (días de Bogotá; lanza ante un fallo) y **N-AUDIENCIA** (la audiencia del evento pagina).
+- **`cycle_enabled` solo del operador de Cada1 también en el servidor** (403 a un super usuario de marca, H7).
+- tsc limpio · eslint 14 = la base · 98 archivos / 1.657 tests (1.655 verdes; los 2 rojos, del trabajo sin commitear de la
+  sesión de sedes). Contra el código anterior: 2 archivos nuevos no cargan (48 tests) y caen otros 28.
+
 ## [docs] — 2026-10-14 — Sedes separadas, parte 3: DISEÑO de un número por sede y las franquicias (sin código ni migración)
 
 - **Spec nuevo:** `docs/superpowers/specs/2026-10-14-numero-por-sede-design.md`, verificado contra el código (producto

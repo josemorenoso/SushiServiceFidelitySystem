@@ -92,7 +92,7 @@ export function opcionesDeTarjeta(sedes: number): Array<{ modo: CardMode; titulo
     {
       modo: 'shared',
       titulo: 'La misma tarjeta para todas las sedes',
-      detalle: `${mayuscula(lasSedes(sedes))} muestran esta tarjeta, cada una con su dirección, su horario, sus teléfonos y sus redes.`,
+      detalle: `Lo de siempre: ${lasSedes(sedes)} con la misma, cada una con su dirección, su horario, sus teléfonos y sus redes.`,
     },
     {
       modo: 'per_location',
@@ -102,10 +102,15 @@ export function opcionesDeTarjeta(sedes: number): Array<{ modo: CardMode; titulo
   ]
 }
 
-/** La línea de arriba de la pantalla, según qué se edita. `null` = no se dice nada (una sola sede). */
-export function fraseDeLaTarjeta(que: QueSeEdita, sedes: number): string | null {
+/**
+ * La línea de arriba de la pantalla, según qué se edita. `null` = no se dice nada (una sola sede).
+ * `soloLectura`: quien mira no la puede guardar (un administrador de sede), así que no «edita».
+ */
+export function fraseDeLaTarjeta(que: QueSeEdita, sedes: number, soloLectura = false): string | null {
   if (que.tipo === 'sede') {
-    return `Estás editando la tarjeta de ${que.nombre}: la ven los clientes que escanean el QR de esa sede.`
+    return soloLectura
+      ? `Esta es la tarjeta de ${que.nombre}: la ven los clientes que escanean el QR de esa sede.`
+      : `Estás editando la tarjeta de ${que.nombre}: la ven los clientes que escanean el QR de esa sede.`
   }
   if (que.motivo === 'compartida') {
     return `${mayuscula(lasSedes(sedes))} muestran esta tarjeta.`

@@ -241,7 +241,7 @@ export default function MarcaPage() {
   const que = queSeEdita({ multiSede, modo, seleccion: selection, rol: sedes?.rol ?? null, sedes: sedesActivas })
   const sedeEditada = que.tipo === 'sede' ? (sedesActivas.find((s) => s.id === que.id) ?? null) : null
   const tarjetaDeSede: CamposDeTarjeta = sedeEditada ? (ediciones[sedeEditada.id] ?? sedeEditada.card) : TARJETA_VACIA
-  const frase = fraseDeLaTarjeta(que, nSedes)
+  const frase = fraseDeLaTarjeta(que, nSedes, soloLectura)
 
   // El encabezado vive fuera de la página: con una tarjeta por sede, su selector deja de ser la
   // etiqueta quieta «Toda la marca» en esta pantalla (`useTarjetaPorSede`).
@@ -624,7 +624,8 @@ export default function MarcaPage() {
                 <CardTitle className="text-base">De la marca</CardTitle>
                 <CardDescription>
                   El nombre, el logo y los colores son los mismos en {lasSedes(nSedes)}: los puntos y los
-                  sellos de tu cliente también son de la marca. Se cambian eligiendo «Toda la marca» arriba.
+                  sellos de tu cliente también son de la marca.{' '}
+                  {soloLectura ? 'Los cambia un super usuario.' : 'Se cambian eligiendo «Toda la marca» arriba.'}
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex items-center gap-4">

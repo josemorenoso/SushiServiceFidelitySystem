@@ -236,6 +236,10 @@ describe('«Tarjeta principal»: qué tarjeta se edita', () => {
       motivo: 'base',
     })
     expect(fraseDeLaTarjeta({ tipo: 'sede', id: LAU, nombre: 'Tepuy Laureles' }, 2)).toContain('Estás editando la tarjeta de Tepuy Laureles')
+    // Quien no la puede guardar no «edita»: la ve.
+    expect(fraseDeLaTarjeta({ tipo: 'sede', id: LAU, nombre: 'Tepuy Laureles' }, 2, true)).toBe(
+      'Esta es la tarjeta de Tepuy Laureles: la ven los clientes que escanean el QR de esa sede.'
+    )
   })
 
   it('un administrador de UNA sede ve la de su sede', () => {
@@ -309,7 +313,7 @@ describe('la elección «una tarjeta para todas» / «una para cada sede»', () 
     )
     expect(s).toContain('La misma tarjeta para todas las sedes')
     expect(s).toContain('Una tarjeta para cada sede')
-    expect(s).toContain('Las dos sedes muestran esta tarjeta')
+    expect(s).toContain('Lo de siempre: las dos sedes con la misma')
     const marcadas = [...s.matchAll(/aria-checked="(true|false)"/g)].map((m) => m[1])
     expect(marcadas).toEqual(['true', 'false'])
   })
@@ -324,7 +328,7 @@ describe('la elección «una tarjeta para todas» / «una para cada sede»', () 
 
   it('el texto de cada opción dice qué sigue siendo de la marca', () => {
     const [compartida, porSede] = opcionesDeTarjeta(3)
-    expect(compartida.detalle).toContain('Las 3 sedes muestran esta tarjeta')
+    expect(compartida.detalle).toContain('las 3 sedes con la misma')
     expect(porSede.detalle).toContain('El nombre, el logo y los colores siguen siendo de la marca')
   })
 })

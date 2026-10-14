@@ -8,6 +8,20 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [feat] — 2026-10-14 — Sedes separadas, parte 1: el panel separado de verdad (sin migración)
+
+- **Selector:** «Toda la marca (N sedes)» + una por sede; «Sin sede» sale (`?location_id=unknown` sigue en las rutas).
+  En 8 pantallas de toda la marca, etiqueta quieta y la franja «Esto es de toda la marca: lo ven y lo usan las N sedes».
+- **Métricas:** con una sede elegida, arriba lo de ESA sede (clientes, nuevos, frecuentes, cumpleaños y niveles de los que
+  se registraron ahí —`origin_location_id`, con la misma función que la marca—; visitas y «vinieron» de la sede) y abajo
+  «De toda la marca», cada tarjeta con su etiqueta. Con toda la marca, **«Tus sedes»**: una tarjeta por sede, «N clientes
+  van a las dos sedes», la fila «Sin sede» solo si hay y el gráfico de visitas por día de cada sede. Un fallo se dice.
+- **ROI y eficiencia de campañas**, de la marca (con una sede daban 0: `campaigns.location_id` no la escribe nadie).
+- **El canje guarda dónde se entregó** (`redeemed_location_id`: mesero → aparato → host; sin señal, NULL). Sin backfill.
+- **El número compartido**, dicho en Conexiones y Mis sedes; el menú del celular gana Conexiones.
+- Auditoría pantalla por pantalla: `multi-sede.md` §3.octies; lo encontrado, `PENDIENTES.md` §5 `SEDE-*`.
+- tsc limpio · eslint 14 = la base · **98 archivos / 1.658 tests en verde**. Contra el código anterior caen 20 de 33.
+
 ## [feat] — 2026-10-14 — Ciclo, fase 2 parte C: la vista por fecha, «Mandar un regalo» y el creador de eventos (migración 00073, sin aplicar)
 
 - **Vista «por fecha»** en Campañas (`?vista=fecha`): el mes con eventos, fechas especiales, proyección y la sombra

@@ -50,6 +50,7 @@ Admin → /dashboard/redemptions → cuadra con POS (filtros, heatmap, export CS
 
 `POST /api/reward-redeem` body: `{ customer_id, mystery_box_result_id?, tier_id, prize_title, source?, table_number?, notes?, pos_reference? }`.
 Códigos: `409 already_redeemed`, `400 invalid_result`, `404` cliente no encontrado.
+Desde el 2026-10-14 la entrega guarda **dónde** ocurrió (`redeemed_location_id`: mesero → aparato → host, o NULL) y «Tus sedes» del panel cuenta los premios entregados por sede (`docs/features/multi-sede.md`).
 
 ## Archivos
 - `supabase/migrations/00022_reward_redemptions.sql`

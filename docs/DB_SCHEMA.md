@@ -841,7 +841,7 @@ CREATE POLICY "service_update_message_logs" ON message_logs
 | `table_number` | `integer` | SI | `NULL` | Mesa |
 | `notes` | `text` | SI | `NULL` | Notas |
 | `pos_reference` | `text` | SI | `NULL` | Ticket/factura del POS para conciliación |
-| `redeemed_location_id` | `uuid` | SI | `NULL` | **Nueva (00043).** Sede donde se **ENTREGÓ** físicamente el premio (D3 + D12). Es la que responde *"cuántos premios entrega cada sede"*. NULL = sede desconocida. FK compuesta RESTRICT |
+| `redeemed_location_id` | `uuid` | SI | `NULL` | **Nueva (00043).** Sede donde se **ENTREGÓ** físicamente el premio (D3 + D12). Es la que responde *"cuántos premios entrega cada sede"*. NULL = sede desconocida. FK compuesta RESTRICT. **La escribe `recordRedemption()` desde el 2026-10-14** (precedencia del check-in: mesero → aparato → host); lo entregado antes queda en NULL, sin backfill |
 | `created_at` | `timestamptz` | NO | `now()` | - |
 
 **Índices:** `idx_reward_redemptions_customer (customer_id, redeemed_at DESC)`, `idx_reward_redemptions_staff`, `idx_reward_redemptions_date`, `idx_reward_redemptions_pos`, índice único parcial `idx_reward_redemptions_unique_mystery_box (mystery_box_result_id) WHERE NOT NULL` (anti-duplicado), índice único parcial **`idx_reward_redemptions_unique_grant (grant_id) WHERE grant_id IS NOT NULL`** (00031 — anti doble-entrega: si dos meseros tocan "Entregar" sobre el mismo premio otorgado al mismo tiempo, el segundo INSERT choca con un 23505 que `recordRedemption()` traduce a `already_redeemed`; la garantía vive en la base de datos, no en la UI).

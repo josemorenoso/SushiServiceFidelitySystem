@@ -49,6 +49,7 @@ formulario ahora lo avisa antes de que el admin lo intente.
 |-----------|----------------|
 | `DashboardLayout` | Sidebar + header + protección + DemoProvider |
 | `DashboardSidebar` | Navegación lateral (Sushi Service branding) |
+| `TusSedes` · `Alcance` · `FranjaTodaLaMarca` · `NumeroCompartido` (`components/dashboard/sedes/`) | **Sedes separadas, parte 1 (2026-10-14).** «Tus sedes» debajo de los totales con «toda la marca» (una tarjeta por sede, quién va a las dos, la fila «Sin sede» si hay, el gráfico de visitas por día de cada sede); las etiquetas «Esta sede» / «Registrados aquí» / «Toda la marca» y los títulos de sección; la franja de las pantallas de toda la marca; la línea del número de WhatsApp compartido. → [`multi-sede.md`](multi-sede.md) §3.octies |
 | `MetricsCards` | 7 métricas reales, con jerarquía desde la capa visual v3 (2026-09-07): **"Visitas Hoy" es la tarjeta héroe** (oscura, doble columna, sparkline a lo ancho) y las otras 6 quedan claras y chicas. **Ninguna métrica se sacó**: el kit sugería dejar "1 héroe + 4 secundarias", pero quitar métricas del panel es decisión del dueño, no de quien lo pinta. El arcoíris de 7 colores decorativos sí se fue — no eran una escala ni codificaban un estado |
 | `VisitsChart` | Gráfica de área: visitas QR vs Domicilios |
 | `GrowthChart` | Gráfica compuesta: nuevos clientes + acumulado |
@@ -152,8 +153,11 @@ Doc completo: `docs/features/multi-sede.md` §3.quater. Resumen para quien traba
   vive en `localStorage` — mismo patrón que `DemoContext` — **no en la URL**: `(dashboard)` no
   tiene `loading.tsx`/Suspense en ninguna de sus 14 páginas, y `useSearchParams()` ahí forzaría un
   CSR bailout del segmento entero.
-- El selector se calla solo si no hay entre qué elegir (`role='location'` de una sola sede, sin
-  acceso a "Todas" ni a "Sin sede"). *"Todas las sedes"* solo se dibuja a un usuario de marca.
+- El selector se calla solo si no hay entre qué elegir (`role='location'` de una sola sede, o una
+  marca de una sede). Con 2+ sedes ofrece **«Toda la marca (N sedes)» y una por sede, nada más**
+  (2026-10-14): «Sin sede» salió del selector (`?location_id=unknown` sigue en las rutas). En las
+  pantallas de toda la marca es una etiqueta quieta con la franja debajo; en Mis sedes y QR Studio no
+  se dibuja (`src/lib/panel-sedes.ts`, [`multi-sede.md`](multi-sede.md) §3.octies).
 - Cualquier página nueva que necesite el filtro llama `useLocationScope()` y anexa
   `queryParam`/`selection` a su propio `fetch()` — no hay un wrapper central de fetch en este
   repo (ver `docs/02-architecture.md`), así que cada consumidor lo hace a mano, como ya hacían
@@ -169,7 +173,14 @@ Doc completo: `docs/features/multi-sede.md` §3.quater. Resumen para quien traba
 Desde F7 el JSON de `/api/dashboard/analytics` (y el de `/api/dashboard/metrics`, sin consumidores
 hoy) viene partido en dos objetos. `MetricsCards` sigue recibiendo un `summary` PLANO — cada página
 lo arma con `{ ...data.brand.summary, ...data.location.summary }` justo antes de pasarlo, que es el
-único punto donde números de marca y de sede se tocan. El resto de componentes (`CustomerTiers`,
+único punto donde números de marca y de sede se tocan.
+
+**Sedes separadas, parte 1 (2026-10-14).** El JSON suma `origin` (lo de clientes recortado por dónde se
+registró cada cliente; `null` con la marca entera) y `sedes` («Tus sedes»; solo marca + toda la marca +
+2+ sedes). **Con una sede elegida, Métricas ya no pasa `brand.summary` a la fila de tarjetas**: pasa
+`{ ...origin.summary, ...location.summary }` con `sede` (cada tarjeta dice de dónde sale), y lo de la
+marca va abajo, bajo «De toda la marca». Con 0 o 1 sede, la página es la de siempre. El detalle de cada
+métrica y la auditoría pantalla por pantalla: [`multi-sede.md`](multi-sede.md) §3.octies. El resto de componentes (`CustomerTiers`,
 `VisitsChart`, `PowerRanking`, `GrowthChart`, `VisitHeatmap`, `AcquisitionChannelChart`,
 `ReactivationRateChart`) no cambiaron: siguen recibiendo el mismo array/objeto de siempre, solo que
 ahora sale de `.brand.X` o de `.location.X` según de qué tabla venga.
@@ -215,7 +226,9 @@ tasa de reactivación, y un fallo de base se veía como «cero», que es lo mism
   `summary?.[clave] ?? 0`: con un 500 las tarjetas muestran **0** y las gráficas quedan vacías —o con los
   datos del último sondeo bueno, que se reintenta cada 60 s—, **sin ningún aviso**. Es exactamente lo que
   se vio el 2026-10-04: un fallo de la analítica se ve como «0 clientes». Lo visible de verdad es el 500 y la
-  línea `[Analytics][FALLO]` del log de Vercel. Un aviso en pantalla queda pendiente.
+  línea `[Analytics][FALLO]` del log de Vercel. **Desde el 2026-10-14 Métricas lo dice** («No pudimos leer tus
+  métricas»; sin datos no dibuja ni un número, con datos viejos avisa que pueden estar desactualizados) y el
+  hook descarta la respuesta de una sede que ya no está elegida. La sección Black de Clientes sigue sin aviso.
 - **Las reglas de sede no se tocaron.** El mapa de calor y las visitas por día son DE LA SEDE
   (`locationMatches()`; `location_id` NULL se sigue mostrando a quien ve «sin sede»). El reloj de reactivación,
   el ROI y los totales son de la MARCA.

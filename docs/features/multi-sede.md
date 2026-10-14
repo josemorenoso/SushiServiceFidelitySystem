@@ -718,8 +718,9 @@ como `anon`/`authenticated`, y un `REVOKE` los dejaría sin leer.
 El alcance viaja como `?location_id=` (ausente / `all` / uuid / `unknown`) sobre las rutas que ya
 existen, resuelto siempre en el servidor. **"Todas" significa "todas las que este usuario puede
 ver"** — si la ausencia significara "toda la marca", cada ruta que olvidara el scope filtraría de
-más. La opción *"Todas las sedes"* solo se dibuja si el usuario es de marca; el cubo *"Sin sede"*
-solo si `canSeeUnassigned`.
+más. La opción *"Toda la marca (N sedes)"* solo se dibuja si el usuario es de marca. **Desde el
+2026-10-14 el cubo *"Sin sede"* ya no es una opción del selector** (§3.octies): sigue existiendo
+como `?location_id=unknown` en las rutas, y lo que no tiene sede se muestra en «Tus sedes».
 
 El transporte NO usa `useSearchParams()` de Next.js: la encuesta de esta fase encontró que
 `(dashboard)` no tiene `loading.tsx`/Suspense en ninguna de sus 14 páginas, y meter la sede ahí
@@ -746,6 +747,11 @@ marca), leyendo la misma consulta de `visits` de 6 meses SIN el recorte de sede 
 heatmap — `locationMatches()` existe justo para sostener las dos vistas de una sola lectura sin
 duplicar la consulta.
 
+**Refinado el 2026-10-14 (§3.octies):** «de la marca para siempre» sigue valiendo para lo que el
+cliente HACE (puntos, premios, niveles), pero el reporte ahora también atribuye: `origin` recorta lo
+de `customers` por dónde se registró cada cliente (`origin_location_id`) cuando la petición no es la
+marca entera, y `sedes` trae «Tus sedes». `brand` no cambió.
+
 `getDashboardMetrics`/`/api/dashboard/metrics` se partió igual por completitud, pero es la ruta
 **muerta**: ningún componente del panel la consume (`getFullAnalytics`/`/api/dashboard/analytics`,
 vía `useDashboardAnalytics()`, es la que alimenta las 3 páginas reales). Se deja dicho por si algún
@@ -762,11 +768,13 @@ De las rutas que leen tablas con `location_id`, quedaron cableadas a `requireLoc
 esas**: `getQueueDepth()` sigue en `tenantId` porque también la usa `line-budget` (D6, per-línea,
 no per-sede) y cambiarla ahí habría sido inventar un comportamiento nuevo fuera de F7.
 
-⚠️ **`reward_grants.granted_location_id` y `reward_redemptions.redeemed_location_id` siguen
-SIEMPRE NULL** (deuda #13: llenarlas es F6). El filtro sobre esas dos columnas es hoy un no-op
-para `role='brand'` (los 4 tenants vivos) y, para un futuro `role='location'`, deja la lista
-**vacía** en vez de mostrar TODO — fail *closed*, no fail *open*, mientras F6 no exista. Lo mismo
-aplica a `campaigns.location_id` (deuda #12).
+⚠️ **`reward_grants.granted_location_id` sigue SIEMPRE NULL** (deuda #13). **`reward_redemptions.redeemed_location_id`
+SÍ se escribe desde el 2026-10-14** (§3.octies, la sede del mesero que entrega): lo entregado antes
+queda NULL. El filtro sobre `granted_location_id` es un no-op para `role='brand'` con «toda la marca»
+y, con una sede elegida o para un `role='location'`, deja la lista **vacía** en vez de mostrar TODO —
+fail *closed*, no fail *open*. Lo mismo aplica a `campaigns.location_id` (deuda #12): por eso el
+ROI y la eficiencia de campañas del panel se piden SIN sede desde el 2026-10-14 (con una sede
+elegida daban 0).
 
 Quedaron **deliberadamente sin cablear**, con la razón anotada en el código: `send-queue` GET
 (el `available:false` de degradación para un super-admin sin tenant en el JWT no tiene un
@@ -1101,6 +1109,126 @@ el GET sigue abierto. Contra el código anterior caen 5.
 
 ---
 
+## 3.octies — Sedes separadas en el panel (parte 1, 2026-10-14, sin migración)
+
+> **El dueño, mirando Tepuy (Envigado y Laureles):** *«Tiene que haber una distinción clara en el
+> dashboard de cuántos clientes entró cada una… como una jerarquía bien hecha… cada cosa en su lugar,
+> se ven desde el mismo lado pero bien separadas, mucho cuidado: los clientes deben poder redimir sus
+> premios y acumular puntos en las dos sedes.»* · *«¿Por qué salen 4 opciones?»* · *«Al cambiar de
+> sede en el dashboard no cambia nada»* (con Envigado y con Laureles el panel decía «40 clientes»).
+> Prompt: `docs/prompts/2026-10-14-sedes-separadas.md` §3.
+
+**El modelo (dueño, 14-10).** Una marca, varias sedes. **Los datos se comparten siempre** (clientes,
+puntos, premios, niveles: el cliente acumula y canjea en cualquier sede). En el panel, **dos niveles:
+arriba la marca, debajo cada sede; cada número es de la sede elegida o dice que es de toda la marca.**
+Refina el §8.4 del spec: lo que el cliente HACE sigue siendo de la marca (no se mueve ni se parte ningún
+cliente); lo nuevo es la **atribución para el reporte** — dónde se registró (`customers.origin_location_id`,
+D2) y dónde vino (`visits.location_id`).
+
+### Lo que hace el panel (Métricas)
+
+| Modo (`modoDelPanel()`, `src/lib/panel-sedes.ts`) | Qué se ve |
+|---|---|
+| **Una sede** (0 o 1 sede activa) | **El panel de siempre**, sin una etiqueta nueva (lo fija una prueba) |
+| **Toda la marca** (2+ sedes) | «Toda la marca · las N sedes juntas»: los totales; debajo **«Tus sedes»**; debajo «Toda la marca, en detalle» |
+| **Una sede elegida** | Arriba, con el nombre de la sede: las tarjetas de esa sede (visitas, QR y domicilios «en esta sede»; clientes, nuevos, frecuentes y cumpleaños «de los que se registraron aquí»; **«Vinieron a esta sede · 30 días»**, donde quien va a las dos cuenta en las dos), niveles, crecimiento, visitas por día, mapa de calor y canal de adquisición, cada uno con su etiqueta. Abajo, **«De toda la marca — lo ven y lo usan las N sedes»**: ROI, el ciclo, el ranking, la reactivación, la eficiencia de campañas, las bajas y Twilio, con la etiqueta «Toda la marca» |
+
+La regla de cada métrica, en una línea:
+
+- **De la sede, por `visits.location_id`:** visitas, QR, domicilios, «vinieron», visitas por día, mapa de calor.
+- **De la sede, por dónde se registró (`origin_location_id`):** clientes, nuevos hoy y en la semana,
+  frecuentes, cumpleaños, niveles, crecimiento y canal de adquisición. Los calcula la MISMA función que
+  los de la marca (`resumirClientes()`, `dashboard.service.ts`), así que **las sedes más «sin sede» suman
+  la marca** por construcción.
+- **De toda la marca, con su etiqueta:** el ranking (es el programa de lealtad de la marca: el nivel es
+  de la marca desde 0.GAMMA), la reactivación y el ROI (el reloj de reactivación es de la marca, §8.2),
+  el ciclo, la eficiencia de campañas (`campaigns.location_id` no la escribe nadie: con una sede elegida
+  daba 0), las bajas y Twilio.
+
+`getFullAnalytics()` devuelve, además de `{ brand, location }`, `origin` (el recorte por registro, `null`
+con la marca entera) y `sedes` («Tus sedes», solo con marca + «toda la marca» + 2+ sedes). Esas dos
+lecturas de más —las sedes de la marca (también las cerradas) y los premios entregados en 30 días— solo
+se hacen cuando «Tus sedes» se dibuja, y paginan como las demás. Un fallo de base da 500 y **la pantalla
+lo dice** («No pudimos leer tus métricas»), nunca «0 clientes»; y una respuesta vieja de otra sede ya no
+pisa la de la sede elegida (`useDashboardAnalytics`).
+
+### «Tus sedes» y el gráfico nuevo
+
+Una tarjeta por sede, lado a lado (dos columnas en el celular): **clientes que trajo** (total y este mes),
+**vinieron** (30 días), **visitas** (30 días) y **premios entregados** (30 días) — conteos, nunca pesos
+(D7). Una línea «N clientes van a las dos sedes» (se cuentan en cada tarjeta, no se reparten). **La fila
+«Sin sede»** solo si hay algo sin sede, con su frase («N clientes se registraron antes de tener dos sedes,
+o por el enlace general de la marca», las visitas de un aparato o mesero sin sede, los premios entregados
+antes de que se guardara la sede). Una sede **cerrada** que todavía tiene datos sale con su nombre y
+«Cerrada», para que los números cuadren. **El gráfico «Visitas por día, cada sede»**: una línea por sede
+con los colores de la marca (`--brand-*`, orden fijo del selector: el color sigue a la sede) y un trazo
+propio desde la tercera; «sin sede» punteada en gris, solo si tiene visitas; con más de cuatro sedes, las
+tres primeras y «Otras N sedes» sumadas (`graficoDeSedes()`).
+
+### El selector y las pantallas de toda la marca
+
+Con 2+ sedes el selector ofrece **«Toda la marca (N sedes)» y una por sede, nada más** (`opcionesDelSelector()`).
+«Sin sede» salió: no es un lugar que se elija; quien la tenía guardada vuelve a «Toda la marca». Un
+administrador de UNA sede sigue sin selector; uno de varias ve «Tus N sedes» y las suyas. En las
+**pantallas de toda la marca** (`PANTALLAS_DE_TODA_LA_MARCA`) el selector se vuelve **una etiqueta quieta**
+«Toda la marca (N sedes)» —se eligió el selector deshabilitado— y debajo del encabezado sale la franja
+**«Esto es de toda la marca: lo ven y lo usan las N sedes»** (`FranjaTodaLaMarca`). En las que eligen la
+sede adentro (Mis sedes, QR Studio) no se dibuja.
+
+### Premios entregados por sede
+
+`recordRedemption()` escribe `reward_redemptions.redeemed_location_id` con **la precedencia del check-in**
+(`resolveVisitLocation()`): la sede del mesero que entrega (`redeemed_by_staff_id`) → la del aparato → la
+del host → NULL. Un rotativo cae a la del aparato. Sin señal, NULL («sin sede»), nunca adivinada. Sin
+backfill. **El canje no depende de la sede**: un cliente registrado en Envigado suma puntos y canjea en
+Laureles igual que antes; solo queda escrito dónde (`tests/db/sedes-separadas.test.ts`).
+`reward_grants.granted_location_id` (dónde se GANÓ) sigue sin escritor: `docs/PENDIENTES.md`.
+
+### El número compartido, dicho
+
+En **Mis sedes** y en **Conexiones**, con 2+ sedes: «Las dos sedes comparten el WhatsApp {número}
+({Twilio o Zernio}). Un número propio para cada sede: próximamente» (`lineaNumeroCompartido()`). El
+número sale de donde el panel ya lo lee (`GET /api/dashboard/conexiones`); si esa lectura falla, la frase
+sale sin número. Un número por sede es la parte 3 (diseño): `docs/superpowers/specs/2026-10-14-numero-por-sede-design.md`.
+
+### Qué es de la marca y qué es de cada sede, pantalla por pantalla
+
+Auditoría del 2026-10-14 (cada pantalla del menú, leyendo el fetch de la página y la ruta). «Respeta la
+sede» = la página manda `?location_id=` y la ruta filtra con `requireLocationScope()`.
+
+| Pantalla | Qué muestra | ¿Respetaba la sede elegida? | ¿Debería? | Qué se hizo (14-10) |
+|---|---|---|---|---|
+| **Métricas** | Tarjetas, niveles, ranking, gráficas, ciclo, ROI, bajas, Twilio | En parte: visitas sí; clientes no (40 en las dos sedes); ROI y eficiencia en 0 con una sede | Mixta | Los tres modos, «Tus sedes», el gráfico nuevo, una etiqueta en cada tarjeta; ROI y eficiencia, de la marca |
+| **Clientes** | Lista, filtros, importar, sección Black | No (`requireTenantId`) | De la marca (el cliente es compartido), con un filtro por sede de registro | Franja + selector quieto. El filtro: PENDIENTES `SEDE-CLIENTES` |
+| **Rendimiento** | Escaneos, nuevos, premios por mesero, mesas | Sí | De la sede | «Premios entregados» por sede ya tiene dato (antes 0 con una sede) |
+| **Recompensas › Niveles** | Niveles de la marca o de una sede | No: tiene su propio selector de alcance | Mixta | Nada. Dos selectores desconectados: PENDIENTES `SEDE-RECOMPENSAS` |
+| **Recompensas › Invitaciones** | Enlaces o QR que regalan algo | No (`qr_campaigns.location_id` no se manda) | Mixta | Nada: PENDIENTES `SEDE-RECOMPENSAS` |
+| **Recompensas › Premios para regalar** | El catálogo y para qué se usa cada premio | No | De la marca | Nada (es de la marca; misma URL que Redenciones, por eso el selector sigue: `SEDE-RECOMPENSAS`) |
+| **Recompensas › Redenciones** | Premios entregados, resumen, embudo de reseñas | Sí | De la sede | Desde hoy hay dato (`redeemed_location_id`); lo viejo, «sin sede» |
+| **Campañas** | Ciclo, historial, mensaje libre | Ciclo: no, a propósito (de la marca); Historial: filtra `campaigns.location_id` (vacía) → lista vacía con una sede | Ciclo de la marca; historial de la marca hasta F6 | **No se tocó** (fase 2 del ciclo, parte C): PENDIENTES `SEDE-CAMPANAS` |
+| **Golden Bullet** | Bases, plantilla, tandas, ROI | No | De la marca | Franja + selector quieto |
+| **Calendario** | Eventos (desde la parte C, redirige a Campañas) | No (`audience_scope` sin usar) | Mixta (eventos de marca o de sede, D8) | **No se tocó** (parte C): PENDIENTES `SEDE-CAMPANAS` |
+| **QR Studio** | Un QR por sede | Selector propio | De la sede | El selector de arriba no se dibuja |
+| **Tarjeta principal** | Logo, colores, tarjeta | No | De la marca hasta la parte 2 («una tarjeta por sede») | Franja + selector quieto |
+| **Mis sedes** | La lista y la ficha de cada sede | Lista propia | Es la lista de sedes | Selector de arriba fuera + la línea del número compartido |
+| **Plantillas** | Plantillas de WhatsApp | No | De la marca | Franja + selector quieto |
+| **Meseros QR** | Meseros y aparatos, cada uno con su sede | No: la lista es la de la marca | De la sede, con «sin sede asignada» visible | Franja + selector quieto. Un administrador de sede ve y edita los de la otra sede: PENDIENTES `SEDE-MESEROS` |
+| **Domicilios** (y Autorizados) | Pedidos, contadores, autorizados | Sí («pedidos perdidos» es de la marca y lo dice) | De la sede | Nada |
+| **Conexiones** | La línea de WhatsApp | No, a propósito (D6) | De la marca | Franja + selector quieto + la línea del número compartido |
+| **Accesos** | Usuarios del panel y sus sedes | No | De la marca | Franja + selector quieto |
+| **Ajustes** | Ajustes, píxel, reseñas, ubicación | No | Casi todo de la marca; la «Ubicación del Local» es de UNA sede (la principal) | Franja + selector quieto. La ubicación con 2+ sedes: PENDIENTES `SEDE-AJUSTES` |
+| **Billeteras** (operador) | El saldo de cada marca | No aplica | Cruza marcas | Nada |
+
+**Pruebas:** `tests/db/sedes-separadas.test.ts` (Postgres real, la ruta de la analítica y la del canje:
+cada sede con sus números, los totales que cuadran con las sedes más «sin sede», la marca B que nunca
+aparece, el administrador de sede, la marca de una sede igual que antes, el 500, el canje en la otra sede
+con los puntos sumando igual) y `tests/unit/sedes-separadas-panel.test.ts` (el selector, la página de
+Métricas en sus tres modos y ante un fallo, `MetricsCards`, «Tus sedes», la franja, el número).
+`tests/unit/dashboard-analytics-paginacion.test.ts` fija las dos lecturas nuevas y que una marca de una
+sede no las hace.
+
+---
+
 ## 4. Reglas que valen para todas las fases
 
 - **`location_id` es SIEMPRE nullable**, con **FK compuesta** `(location_id, tenant_id)
@@ -1144,7 +1272,7 @@ Ninguna de éstas se cierra por cuenta propia: son decisiones del dueño o de un
 | ~~10~~ | ~~**`send_queue.location_id` sigue vacía.**~~ **CERRADA en F4 (00044).** El único INSERT posible pasa por la función SQL `enqueue_send_queue()` (00038:271-291), que no tiene esa columna en su lista. | Llenarla exige `CREATE OR REPLACE` de esa función, o sea **una migración**. F3 no lleva migración (la 00044 está reservada para F4). Va con F5/F6. |
 | ~~11~~ | ~~**`review_events.location_id` no se llenaba en `shown`.**~~ **CERRADA en F4 (00044).** Queda una consecuencia viva, que NO es deuda sino decision: el dedupe sigue siendo por `(tenant, cliente)` y no por sede, asi que el mismo cliente en dos sedes dentro de la ventana cuenta UNA vez, atribuido a la primera. F6 tiene que decirlo en pantalla. Texto original: El evento `shown` lo escribe la función SQL `log_review_shown_deduped()` (00032:97-115), que no recibe sede. | Mismo caso que #10: es un `CREATE OR REPLACE` en una migración. Mientras tanto, el **denominador** del embudo de reseñas por sede queda incompleto — hay que decirlo en pantalla cuando F6 lo dibuje. |
 | 12 | **`message_logs.location_id` solo la llena la «sede del acto»** (check-in, registro, domicilio). Las campañas masivas (`birthday`, `reactivation`, `reward_reminder`, `calendar_event`, `manual`, `import`) siguen en NULL. | La cascada de respaldo del §6.1 (`last_visit_location_id` → `origin_location_id`) es **F6**: toca el desglose de plata (D4), y F3 tiene prohibido cambiar lecturas de dashboard. `customers.last_visit_location_id` ya se está llenando, así que F6 tendrá de dónde leer. |
-| 13 | **`message_logs.line_location_id`, `tenant_wallet_transactions.location_id`, `campaigns.location_id`, `reward_grants.granted_location_id`, `reward_redemptions.redeemed_location_id` y `consent_events.location_id` siguen vacías.** | Fuera del alcance de F3. `line_location_id` depende de **D6**, que el dueño no decidió (F9). Las de premios son F6 (la matriz origen→destino de D12). `consent_events` **no tiene un solo escritor en TypeScript** — la tabla existe desde la 00037 y nadie inserta en ella. |
+| 13 | **`message_logs.line_location_id`, `tenant_wallet_transactions.location_id`, `campaigns.location_id`, `reward_grants.granted_location_id` y `consent_events.location_id` siguen vacías.** `reward_redemptions.redeemed_location_id` ya se escribe (2026-10-14, §3.octies). | Fuera del alcance de F3. `line_location_id` depende de **D6**, que el dueño no decidió (F9). Las de premios son F6 (la matriz origen→destino de D12). `consent_events` **no tiene un solo escritor en TypeScript** — la tabla existe desde la 00037 y nadie inserta en ella. |
 | ~~14~~ | ~~**`src/app/api/dashboard/location/route.ts` sigue con su `.single()`.**~~ **CERRADA en F4.** Y con una correccion al diagnostico: el bug NO era el `.single()`, era que el `PUT` **descartaba el error** de su sonda — por eso cambiarlo a `.maybeSingle()` no habria arreglado nada. Ver §3.ter. Texto original: Filtra solo por tenant: con 2 sedes activas devuelve 500, y su `PUT` inserta una tercera fila en vez de actualizar. Este doc decía «se arregla en F3». | **NO se arregló en F3**: el alcance de la sesión de F3 excluyó explícitamente tocar lecturas y pantallas de dashboard (eso es F6/F7). Contradicción real entre este doc y el alcance ejecutado, dejada por escrito a propósito. Ningún tenant vivo tiene 2 sedes, así que hoy no es explotable. |
 | 15 | **`staff_devices.staff_user_id` es una FK SIMPLE** a `staff_users(id)` (00018:31, `ON DELETE CASCADE`): nada en la BASE impide atribuir un dispositivo de la marca A a un mesero de la marca B. | **Mitigado, no cerrado.** El trigger `trg_staff_devices_sede_coherente` de la 00044 lo rechaza (23514) buscando al mesero DENTRO de la marca del dispositivo, pero un trigger es mas facil de saltar que una FK. Convertirla en compuesta `(staff_user_id, tenant_id)` exige un `UNIQUE (id, tenant_id)` en `staff_users` que hoy no existe, y eso no esta en el spec. |
 | ~~16~~ | ~~**No hay control en el panel para asignarle sede a un mesero.**~~ **CERRADA en F7.** `/dashboard/staff` ya dibuja el `<select>` de sede en Crear y Editar (`assignableLocations`, tomado del mismo `LocationScopeProvider` del header — cero fetch nuevo), la tabla muestra la sede de cada mesero como badge (`location_id` NULL → "Sin sede", nunca se adivina), y el aviso de D11 (mover de sede con dispositivos en otra se rechaza, 23514) queda escrito en la propia pantalla. Texto original: La API ya lo acepta (`POST`/`PATCH /api/dashboard/staff` con `location_id`) y el `GET` ya lo devuelve, pero el formulario de `/dashboard/staff` no dibuja el selector. | F4 entregó el MECANISMO, F7 la pantalla — ver §3.quater. El `<select>` solo se dibuja si la marca tiene al menos una sede activa (`assignableLocations.length > 0`); con `role='location'` el admin solo ve SUS sedes, que es la restricción correcta: no debería poder asignar meseros a una sede que no administra. |
@@ -1206,4 +1334,7 @@ sede de la marca B**.
 | `tests/unit/location-scope.test.ts` | **F7.** 23 comprobaciones de `decideLocationScope()`/`applyLocationFilter()`/`locationMatches()`/`toScopeView()`, sin base de datos. |
 | `tests/unit/location-scope-allowlist.test.ts` | **F7.** La tercera red del §5.2: falla si aparece un import nuevo de `getUnscopedServiceClient()` fuera de la lista revisada. |
 | `tests/setup/bootstrap.sql` | **F7.** `GRANT USAGE ON SCHEMA auth TO anon, authenticated` — el hueco que `docs/features/testing.md` ya avisaba (ningún test corría RLS completo como `authenticated`; éste es el primero). |
+| `src/lib/panel-sedes.ts` | **Sedes separadas, parte 1.** Puro: las opciones del selector, el modo del panel, las pantallas de toda la marca, las frases («van a las dos», «sin sede», el número compartido) y las series del gráfico por sede. |
+| `src/components/dashboard/sedes/*` | **Parte 1.** «Tus sedes» (`TusSedes`), las etiquetas y títulos de sección (`Alcance`), la franja de toda la marca y la línea del número compartido. |
+| `tests/db/sedes-separadas.test.ts` · `tests/unit/sedes-separadas-panel.test.ts` | **Parte 1.** Ver §3.octies, «Pruebas». |
 | `src/app/(dashboard)/dashboard/staff/page.tsx` | **F7 — deuda #16 CERRADA.** El `<select>` de sede en Crear/Editar mesero, y el badge de sede en la tabla (`location_id` NULL → "Sin sede"). Reutiliza `LocationScopeProvider`, cero fetch nuevo. |

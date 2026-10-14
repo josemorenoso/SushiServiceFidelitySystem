@@ -129,7 +129,7 @@ impide al rol `aios_constelarys` tocar `auth.users` — ver `docs/features/alta-
 | GET | /api/dashboard/imported-contacts/stats | Estadísticas por lote | Admin Cookie |
 | GET | /api/dashboard/imported-contacts/roi | ROI por lote | Admin Cookie |
 | GET | /api/dashboard/twilio-metrics | Métricas de entrega/lectura/opt-outs WhatsApp | Admin Cookie |
-| GET | /api/dashboard/analytics | Analytics completos del dashboard — retorno partido en `{ brand, location }` **(sede)** | Admin Cookie |
+| GET | /api/dashboard/analytics | Analytics completos del dashboard — retorno partido en `{ brand, location }` **(sede)**, más `origin` (lo de clientes recortado por dónde se registraron; `null` con la marca entera) y `sedes` («Tus sedes»: solo marca + toda la marca + 2+ sedes; si no, `null`). Sedes separadas, parte 1 (2026-10-14): `docs/features/multi-sede.md` § «Qué es de la marca y qué es de cada sede» | Admin Cookie |
 | GET | /api/dashboard/metrics | Métricas resumidas — retorno partido en `{ brand, location }` **(sede)**. ⚠️ Ningún componente del panel la consume hoy | Admin Cookie |
 | GET | /api/dashboard/location-scope | Rol, selección y sedes visibles del usuario — alimenta el selector del panel (F7) | Admin Cookie |
 | GET | /api/dashboard/qr-locations | Sedes activas **con su `domain`** — lo que el QR Studio necesita para imprimir un QR por sede (D-QR-1) | Admin Cookie |
@@ -608,12 +608,16 @@ con la sede X ya puesta" muestre el selector consistente.
   "canSeeUnassigned": true,
   "locations": [
     { "id": "uuid", "name": "Envigado", "slug": "envigado", "is_primary": true }
-  ]
+  ],
+  "multiSede": true,
+  "brandLocationCount": 2
 }
 ```
 
 `canSeeAll` solo es `true` para `role='brand'` — es lo que decide si el selector dibuja la opción
-*"Todas las sedes"*. `locations` ya viene recortada al alcance del usuario: un `role='location'`
+*"Toda la marca (N sedes)"* (antes «Todas las sedes»; desde el 2026-10-14 el selector ya no ofrece
+«Sin sede», aunque `canSeeUnassigned` siga viniendo). `brandLocationCount` (2026-10-14) son las sedes
+ACTIVAS de la MARCA, no las que ve el usuario: con él la pantalla dice «lo ven y lo usan las N sedes». `locations` ya viene recortada al alcance del usuario: un `role='location'`
 nunca ve, ni aquí, las sedes que no le asignaron.
 
 **403** — el mismo caso que cualquier otra ruta con `requireLocationScope()`: sin fila en
@@ -784,6 +788,7 @@ Registra la entrega física de un premio. Desde la migración 00031 (v2.3.0), el
 - `customer_id` y `prize_title` son obligatorios.
 - Se requiere `grant_id` **o** `mystery_box_result_id` (al menos uno) — es lo que ancla la entrega a algo que los índices únicos de la base de datos puedan proteger contra doble entrega.
 - El cliente debe pertenecer al tenant resuelto por dominio (defensa anti-IDOR).
+- **Dónde se entregó** (2026-10-14, sedes separadas parte 1): `reward_redemptions.redeemed_location_id` sale con la precedencia del check-in — la sede del mesero de `redeemed_by_staff_id` → la del aparato (`X-Device-Token`) → la del host → `NULL` (sin señal; nunca se adivina). Un rotativo cae a la del aparato. El canje no depende de la sede: el cliente canjea en cualquiera de la marca.
 
 **Response 201:**
 ```json

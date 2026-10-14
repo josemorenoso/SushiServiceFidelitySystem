@@ -1262,11 +1262,11 @@ sede» = la página manda `?location_id=` y la ruta filtra con `requireLocationS
 | **Tarjeta principal** | Logo, colores, tarjeta | No | De la marca, o de cada sede si la marca elige «Una tarjeta para cada sede» | Parte 1: franja + selector quieto. **Parte 2 (§3.nonies):** con la tarjeta compartida, igual; con una por sede, el selector elige qué tarjeta se edita y la franja no sale |
 | **Mis sedes** | La lista y la ficha de cada sede | Lista propia | Es la lista de sedes | Selector de arriba fuera + la línea del número compartido |
 | **Plantillas** | Plantillas de WhatsApp | No | De la marca | Franja + selector quieto |
-| **Meseros QR** | Meseros y aparatos, cada uno con su sede | No: la lista es la de la marca | De la sede, con «sin sede asignada» visible | Franja + selector quieto. Un administrador de sede ve y edita los de la otra sede: PENDIENTES `SEDE-MESEROS` |
+| **Meseros QR** | Meseros y aparatos, cada uno con su sede | No: la lista es la de la marca | De la sede, con «sin sede asignada» visible | Franja + selector quieto. **Desde el 2026-10-15 (SEDE-MESEROS)** un administrador de sede ve los de SU sede + los rotativos (solo lectura) y los aparatos de su sede, y toca solo los suyos (`meseros-por-sede.ts`, `staff-qr-scan.md`) |
 | **Domicilios** (y Autorizados) | Pedidos, contadores, autorizados | Sí («pedidos perdidos» es de la marca y lo dice) | De la sede | Nada |
 | **Conexiones** | La línea de WhatsApp | No, a propósito (D6) | De la marca | Franja + selector quieto + la línea del número compartido |
 | **Accesos** | Usuarios del panel y sus sedes | No | De la marca | Franja + selector quieto |
-| **Ajustes** | Ajustes, píxel, reseñas, ubicación | No | Casi todo de la marca; la «Ubicación del Local» es de UNA sede (la principal) | Franja + selector quieto. La ubicación con 2+ sedes: PENDIENTES `SEDE-AJUSTES` |
+| **Ajustes** | Ajustes, píxel, reseñas, ubicación | No | Casi todo de la marca; la «Ubicación del Local» es de UNA sede (la principal) | Franja + selector quieto. **Desde el 2026-10-15 (SEDE-AJUSTES)**, con 2+ sedes la «Ubicación del Local» ya no muestra la principal: dice cuántas sedes hay y lleva a Mis sedes |
 | **Billeteras** (operador) | El saldo de cada marca | No aplica | Cruza marcas | Nada |
 
 **Pruebas:** `tests/db/sedes-separadas.test.ts` (Postgres real, la ruta de la analítica y la del canje:

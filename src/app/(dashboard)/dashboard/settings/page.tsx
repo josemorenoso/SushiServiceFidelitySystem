@@ -4,11 +4,12 @@ import { useEffect, useState, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import { Settings, DollarSign, Save, Loader2, CheckCircle, Crown, Mail, RefreshCw, X, Plus, Zap, MapPin, Gift, ScanLine, Star, Megaphone, ArrowRight } from 'lucide-react'
 import { Input } from '@/components/ui/input'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { PointsCalibrator } from '@/components/dashboard/PointsCalibrator'
 import type { PointsEngineConfig } from '@/lib/points-engine'
 import { normalizeMetaPixelId } from '@/lib/meta-pixel'
 import { guardarAjuste, guardarAjustes } from '@/lib/guardar-ajustes'
+import { useLocationScope } from '@/contexts/LocationScopeContext'
 
 /** El motivo de un guardado que no salió, debajo de su botón (OPER-4-mudo). */
 function ErrorDeGuardado({ mensaje }: { mensaje: string | null }) {
@@ -51,6 +52,10 @@ const DEFAULT_BLACK_BENEFITS = [
 export default function SettingsPage() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+  // SEDE-AJUSTES (2026-10-15): con 2+ sedes, «Ubicación del Local» mostraba la de la sede
+  // PRINCIPAL (`/api/dashboard/location`) sin decir cuál. La de cada sede vive en Mis sedes.
+  const { view: vistaDeSedes } = useLocationScope()
+  const sedesDeLaMarca = vistaDeSedes?.multiSede ? vistaDeSedes.brandLocationCount : null
   const [settings, setSettings] = useState<Record<string, string>>({})
 
   // Ticket promedio
@@ -935,6 +940,19 @@ export default function SettingsPage() {
           </div>
         </div>
 
+        {sedesDeLaMarca !== null ? (
+          <div className="space-y-3">
+            <p className="text-sm" style={{ color: '#6b7280' }}>
+              Tu marca tiene <strong>{sedesDeLaMarca} sedes</strong>: la dirección y la ubicación de cada una se
+              editan en <strong>Mis sedes</strong>, sede por sede.
+            </p>
+            <Link href="/dashboard/sedes" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+              Ir a Mis sedes
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+        ) : (
+        <>
         {/* Overlay Próximamente */}
         <div
           className="absolute inset-0 z-10 flex flex-col items-center justify-center rounded-2xl"
@@ -978,6 +996,8 @@ export default function SettingsPage() {
             <span className="text-xs font-medium" style={{ color: '#1a1c1d' }}>Modo estricto: requerir GPS</span>
           </label>
         </div>
+        </>
+        )}
       </div>
 
       {/* ─── PLANTILLAS WHATSAPP ─── */}

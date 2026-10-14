@@ -46,6 +46,7 @@ import {
 import TemplateEditorDialog from './TemplateEditorDialog'
 import TemplateSelector from './TemplateSelector'
 import type { TemplateCatalogEntry, TemplateCatalogResponse } from '@/types/template.types'
+import { avisoDeRevision } from '@/lib/aviso-de-revision'
 
 type Provider = TemplateCatalogResponse['provider']
 
@@ -406,11 +407,18 @@ export default function TemplateCatalogEditor() {
   if (!state) return null
 
   const aviso = state.aviso ?? null
-  const pendingCount = state.entries.filter((e) =>
+  const enRevision = state.entries.filter((e) =>
     provider === 'twilio'
       ? e.enWhatsApp && !SIN_SOMETER.has(e.enWhatsApp.status) && !['approved', 'rejected'].includes(e.enWhatsApp.status) && !FRENADA.has(e.enWhatsApp.status)
       : e.pending
-  ).length
+  )
+  // El aviso amarillo dice la verdad en los dos casos (2026-10-15): solo «siguen recibiendo»
+  // los que tienen una versión aprobada saliendo. En Twilio el puntero ES la que está en
+  // revisión; en Zernio la vigente es `current` (ver `aviso-de-revision.ts`).
+  const avisoEnRevision = avisoDeRevision({
+    enRevision: enRevision.length,
+    conVersionAprobada: provider === 'twilio' ? 0 : enRevision.filter((e) => e.current !== null).length,
+  })
   const unsent = state.entries.filter((e) => isUnsent(e, provider))
   const sendable = unsent.filter((e) => !e.blockedReason)
   const adoptable = state.entries.filter((e) => isAdoptable(e, provider))
@@ -535,13 +543,11 @@ export default function TemplateCatalogEditor() {
         </div>
       )}
 
-      {pendingCount > 0 && (
+      {avisoEnRevision && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 flex items-start gap-2">
           <Clock className="h-4 w-4 mt-0.5 shrink-0" />
           <p>
-            WhatsApp está revisando {pendingCount === 1 ? 'un mensaje' : `${pendingCount} mensajes`}. Suele
-            tardar entre 1 y 3 días.{' '}
-            <strong>Mientras tanto tus clientes siguen recibiendo los mensajes actuales.</strong>
+            {avisoEnRevision.resumen} <strong>{avisoEnRevision.mientrasTanto}</strong>
           </p>
         </div>
       )}

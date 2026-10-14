@@ -131,7 +131,7 @@ visita pedida. La mediana de la banda que funciona, no su borde.
 
 | Qué ajusta | Qué NO ajusta |
 |------------|---------------|
-| `points_per_visit_min` / `_max` | El **umbral del tier** — es el gancho del dueño ("150 puntos y te lo ganas") y tiene su propio CRUD en Ajustes → Premios. |
+| `points_per_visit_min` / `_max` | El **umbral del tier** — es el gancho del dueño ("150 puntos y te lo ganas") y tiene su propio CRUD en Recompensas › Niveles y premios (el calibrador lo enlaza desde el 2026-10-15; antes decía «Ajustes → Premios»). |
 | `welcome_bonus_points_min` / `_max` — **obligatorio**: sin tocar el bono, la meta de N visitas es una mentira | El **shortfall** — se respeta el que el dueño configuró. |
 
 El bono se mantiene proporcionalmente más generoso que una visita normal

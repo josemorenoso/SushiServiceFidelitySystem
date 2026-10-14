@@ -690,7 +690,7 @@ _Responde SALIR para no recibir más mensajes._
 **Slot:** `reward_reminder_template_sid` · **MARKETING** · **Variables:** `{{1}}`=Nombre · `{{2}}`=Premio ·
 `{{3}}`=Días que le quedan (el cron manda el número pelado: «3», «1», «0»; por eso el texto no lo conjuga)
 **Cuándo se envía:** cron `reward-reminder`, unos días antes de que venza un premio sin reclamar, si el
-recordatorio está encendido en Ajustes.
+recordatorio está encendido en Recompensas › Premios para regalar (se mudó de Ajustes con S-1, 13-10).
 
 ```
 ¡Hola {{1}}! Tienes un premio esperándote 🎁[emoji]

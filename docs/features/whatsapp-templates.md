@@ -469,6 +469,12 @@ Twilio, con la tarjeta «Del set estándar te faltan N» y Ajustes › Plantilla
 | Pausado por Meta | Meta la frenó | **Elegir otra** |
 | Apunta a una plantilla que ya no existe | Twilio no conoce ese ContentSid | **Elegir otra** |
 
+**El aviso amarillo de arriba** («WhatsApp está revisando N mensajes…», `avisoDeRevision()` en
+`src/lib/aviso-de-revision.ts`, 2026-10-15) dice la verdad en los dos casos: solo promete «tus clientes siguen
+recibiendo la versión aprobada» por los mensajes que la tienen (en Zernio, `current`); los que no —todos en
+Twilio, donde el puntero ES la plantilla en revisión, y una marca nueva como Tepuy— «no les llegan» hasta que
+Meta los apruebe. Antes decía siempre «siguen recibiendo los mensajes actuales».
+
 **«Elegir otra»** está en todas las filas Twilio: el desplegable que vivía en Ajustes
 (`TemplateSelector`, con las aprobadas de la cuenta en `elegibles`) y el `PUT /api/dashboard/settings`
 de siempre. Y la reactivación «con premio» del sistema anterior (puntero + premio fijo), que no está en el

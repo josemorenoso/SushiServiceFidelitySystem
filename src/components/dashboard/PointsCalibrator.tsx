@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
+import Link from 'next/link'
 import { Target, Gift, Flame, AlertTriangle } from 'lucide-react'
 import {
   calibrate,
@@ -9,6 +10,12 @@ import {
   type PointsEngineConfig,
 } from '@/lib/points-engine'
 import { CALIBRATOR_MIN_VISITS, CALIBRATOR_MAX_VISITS } from '@/constants/rewards'
+
+/**
+ * Dónde viven los niveles y sus umbrales (S-1.7, 2026-10-15). Decía «Ajustes → Premios», que ya
+ * era inexacto antes de S-1: los niveles están en Recompensas › Niveles y premios.
+ */
+const NIVELES = '/dashboard/rewards?tab=niveles'
 
 interface PointsCalibratorProps {
   /** Umbral del primer premio (el `point_threshold` más bajo entre los tiers activos). */
@@ -59,8 +66,9 @@ export function PointsCalibrator({ threshold, config, onChange, disabled }: Poin
         <div className="flex items-start gap-2.5">
           <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" strokeWidth={1.5} style={{ color: '#a855f7' }} />
           <p className="text-xs" style={{ color: '#6b7280' }}>
-            Crea primero un premio en <strong>Ajustes → Premios</strong> para poder calibrar en cuántas
-            visitas se gana.
+            Crea primero un premio en{' '}
+            <Link href={NIVELES} className="font-semibold underline">Recompensas › Niveles y premios</Link> para poder
+            calibrar en cuántas visitas se gana.
           </p>
         </div>
       </div>
@@ -154,7 +162,8 @@ export function PointsCalibrator({ threshold, config, onChange, disabled }: Poin
             Con un umbral de <strong>{threshold} puntos</strong> solo puedes elegir entre{' '}
             <strong>{achievable[0]}</strong> y <strong>{achievable[achievable.length - 1]}</strong> visitas.
             Más visitas darían menos de 15 puntos cada una y se vería sospechoso. Si quieres alargar más el
-            camino, sube el umbral del premio en <strong>Ajustes → Premios</strong>.
+            camino, sube el umbral del premio en{' '}
+            <Link href={NIVELES} className="font-semibold underline">Recompensas › Niveles y premios</Link>.
           </p>
         </div>
       )}

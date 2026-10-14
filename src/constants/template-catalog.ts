@@ -264,8 +264,10 @@ export const TEMPLATE_CATALOG: readonly CatalogTemplate[] = [
     category: 'MARKETING',
     label: 'Recordatorio de premio',
     description: 'Le recuerda al cliente que tiene un premio sin reclamar y cuántos días le quedan.',
+    // S-1.7 (2026-10-15): el interruptor del recordatorio se mudó con el regalo fuerte a
+    // Recompensas › Premios para regalar (S-1, 13-10); decía «en Ajustes».
     whenSent:
-      'En el envío automático diario, unos días antes de que venza un premio sin reclamar. Solo si el recordatorio está encendido en Ajustes.',
+      'En el envío automático diario, unos días antes de que venza un premio sin reclamar. Solo si el recordatorio está encendido en Recompensas › Premios para regalar.',
     variables: [
       { index: 1, label: 'Nombre del cliente', sample: 'Andrea' },
       { index: 2, label: 'Premio por reclamar', sample: 'Postre del chef' },
@@ -343,10 +345,12 @@ export const TEMPLATE_CATALOG: readonly CatalogTemplate[] = [
   },
   // ⚠️ REGALO QUE VENCE (B6, 2026-10-11). La plantilla del ciclo de recuperación (spec
   // `docs/superpowers/specs/2026-10-04-ciclo-de-recuperacion-design.md` §4): una sola,
-  // aprobada una vez, y el regalo y la fecha cambian solos. Entra AHORA para que cada marca
-  // la mande a Meta en el mismo viaje que las otras nuevas; quién la usa (y el adaptador a
-  // la insistente mientras una marca no la tenga aprobada) es de la fase 1B del ciclo.
-  // Hasta entonces nadie la envía: `p1a-plantillas-paridad.test.ts` lo sabe.
+  // aprobada una vez, y el regalo y la fecha cambian solos. Entró con las otras nuevas para
+  // que cada marca la mande a Meta en el mismo viaje. Desde la fase 1B (13-10) la envían el
+  // drenador —los toques del ciclo con regalo, en las marcas con el ciclo encendido— y, desde
+  // la parte C (14-10), «Mandar un regalo»; mientras la marca no la tenga APROBADA, los dos usan
+  // el adaptador a la insistente (`elegirPlantilla()`, `plantillaDelRegalo()`). (N-CATALOGO-1B,
+  // 2026-10-15: este comentario decía «hasta entonces nadie la envía».)
   {
     key: 'gift_expiring',
     settingsKey: 'gift_expiring_template_sid',
@@ -355,7 +359,7 @@ export const TEMPLATE_CATALOG: readonly CatalogTemplate[] = [
     label: 'Regalo que vence',
     description: 'Le cuenta al cliente que le guardaste un regalo y hasta cuándo puede venir por él.',
     whenSent:
-      'Todavía no se envía: la usará el ciclo de recuperación cuando se encienda en tu marca. Puedes dejarla aprobada desde ya.',
+      'Cuando usas «Mandar un regalo» en Campañas y, con el ciclo de recuperación encendido en tu marca, cuando a un cliente le toca un regalo. Mientras no esté aprobada, esos regalos salen con la «Reactivación insistente».',
     variables: [
       { index: 1, label: 'Nombre del cliente', sample: 'Juanita' },
       { index: 2, label: 'Regalo', sample: '½ rollo gratis' },

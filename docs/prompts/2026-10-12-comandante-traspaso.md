@@ -108,6 +108,10 @@ contexto; esto es todo lo que necesitas para seguir sin que el dueño repita nad
    corrida de vitest a la vez. Al dueño se le pidió `SQL-PARA-CORRER/tepuy-sedes/01-DIAGNOSTICO.sql` (solo lectura):
    con su resultado se sabe si a los datos de Tepuy el sistema les sabe la sede (si no, la pantalla nueva los mostrará
    «sin sede», y eso no se arregla con código: no se backfillea). **El push de A+B espera** a que el tablero quede vacío.
+   **Resultado (14-10): los datos están bien** —Envigado 23 clientes, Laureles 17, sin sede 0, 1 va a las dos—; el fallo
+   es solo de la pantalla. Envigado no tiene aparato de mesero (gesto del dueño). Todo en
+   `SQL-PARA-CORRER/tepuy-sedes/RESULTADO-2026-10-14.md`; se lo pasé por `SendMessage` a las sesiones de sedes 1 y 3.
+   Al verificar la parte 1: con estos números tiene que dar 40 = 23 + 17 y no mostrar la fila «sin sede».
 2. Verificar el encendido del ciclo al día siguiente (toques, cola, fallidos, dormidos por encendido).
 3. Después: plantillas **B1/B7** (menos aprobaciones; el AIOS deja de crear plantillas) · arreglos chicos de
    `docs/PENDIENTES.md` §3.3 y §5 (PL-2, PL-2-ciclo, N-DOBLE, N6, N13, N18 + CI, OPER-4-mudo, 0.ETA, S-1.6/S-1.7…) ·

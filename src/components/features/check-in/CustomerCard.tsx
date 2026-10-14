@@ -11,6 +11,7 @@ import { ShineBorder } from '@/components/ui/shine-border'
 import { brandWalletCardTheme } from '@/constants/wallet-card-theme'
 import { AvailableRewardBanner, type ActiveGrant } from './AvailableRewardBanner'
 import { QrCountdown } from './QrCountdown'
+import { ReferidosBoton } from '@/components/features/referidos/ReferidosBoton'
 
 interface TierItem {
   tier_name: string
@@ -31,6 +32,8 @@ interface CustomerCardProps {
   justEarnedPoints: number | null
   /** Premios otorgados y sin reclamar (migración 00031). */
   activeGrants?: ActiveGrant[]
+  /** Celular del cliente: con él, la tarjeta ofrece «Gánate … por traer a un amigo» (referidos). */
+  phone?: string
   onBack: () => void
 }
 
@@ -43,6 +46,7 @@ export function CustomerCard({
   checkingStatus,
   justEarnedPoints,
   activeGrants = [],
+  phone,
   onBack,
 }: CustomerCardProps) {
   const branding = useBranding()
@@ -239,6 +243,10 @@ export function CustomerCard({
           )}
 
           <QrCountdown qrUrl={qrUrl} className="mt-3" />
+
+          {/* Referidos: solo si la marca los tiene encendidos; si no, no dibuja nada. Va DEBAJO del
+              QR a propósito: lo primero de esta pantalla es que el mesero lo escanee. */}
+          {phone && <ReferidosBoton phone={phone} />}
 
           {/* Redes, contacto y políticas — mismo bloque que la tarjeta de /tarjeta. */}
           <div className="mt-5 w-full">

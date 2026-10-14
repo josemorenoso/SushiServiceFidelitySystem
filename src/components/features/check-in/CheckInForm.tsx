@@ -762,6 +762,7 @@ export function CheckInForm({
         checkingStatus={checkingStatus}
         justEarnedPoints={justEarnedPoints}
         activeGrants={activeGrants}
+        phone={phone}
         onBack={() => {
           setStep('phone')
           setCustomerQR(null)

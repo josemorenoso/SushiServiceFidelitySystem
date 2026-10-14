@@ -4,6 +4,7 @@ import { getAllTiers } from '@/services/reward-tiers.service'
 import { validatePhone } from '@/lib/validators/phone'
 import { rateLimit } from '@/lib/rate-limit'
 import { WalletCard } from '@/components/features/wallet'
+import { ReferidosBoton } from '@/components/features/referidos/ReferidosBoton'
 import type { Branding } from '@/lib/branding'
 import { getBrandingForHost } from '@/lib/branding-server'
 import { resolveHostContext } from '@/lib/tenant'
@@ -65,6 +66,8 @@ export default async function TarjetaPage({
       totalPoints={customer.total_points ?? 0}
       totalVisits={customer.total_visits ?? 0}
       tiers={tiers}
+      // Referidos: solo con la marca encendida (el botón pregunta y, si no, no dibuja nada).
+      extra={<ReferidosBoton phone={cleaned} />}
     />
   )
 }

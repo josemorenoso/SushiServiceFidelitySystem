@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Crown } from 'lucide-react'
 import { useBranding } from '@/lib/branding-context'
 import { isBlackMember } from '@/lib/black-tier'
@@ -27,6 +27,8 @@ interface WalletCardProps {
   totalPoints: number
   totalVisits: number
   tiers: TierItem[]
+  /** Lo que la página quiera poner dentro de la tarjeta, sobre las redes (hoy: el botón de referidos). */
+  extra?: ReactNode
 }
 
 /**
@@ -45,7 +47,7 @@ interface WalletCardProps {
  * Ni una decisión de negocio cambió: los mismos puntos, los mismos niveles y el
  * mismo `isBlackMember()`.
  */
-export function WalletCard({ name, totalPoints, totalVisits, tiers }: WalletCardProps) {
+export function WalletCard({ name, totalPoints, totalVisits, tiers, extra }: WalletCardProps) {
   const branding = useBranding()
   const sorted = [...tiers].sort((a, b) => a.point_threshold - b.point_threshold)
   const nextTier = sorted.find((t) => totalPoints < t.point_threshold)
@@ -244,6 +246,8 @@ export function WalletCard({ name, totalPoints, totalVisits, tiers }: WalletCard
               })}
             </div>
           )}
+
+          {extra}
 
           {/* Redes, contacto y políticas — plegados (Tarjeta principal, 2026-09-08).
               Sin config no dibuja nada. */}

@@ -9,6 +9,7 @@ import { PointsDisplay } from './PointsDisplay'
 import { RewardChoice } from './RewardChoice'
 import { MysteryBoxResult } from './MysteryBoxResult'
 import { TiersRoadmap } from './TiersRoadmap'
+import { ReferidosBoton } from '@/components/features/referidos/ReferidosBoton'
 import type { CheckInSuccessProps } from './CheckInSuccess.types'
 import type { ReviewPromptState } from '@/types/database.types'
 
@@ -343,6 +344,10 @@ export function CheckInSuccess({
           Te hemos enviado un mensaje por WhatsApp con los detalles.
         </p>
       )}
+
+      {/* Referidos: el momento de más ganas de compartir es justo después de sumar. Solo con la
+          marca encendida; si no, no dibuja nada. */}
+      {type !== 'duplicate' && customerPhone && <ReferidosBoton phone={customerPhone} tono="claro" />}
 
       {/* Botón volver */}
       <button

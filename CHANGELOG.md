@@ -8,6 +8,21 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [docs] — 2026-10-14 — Sedes separadas, parte 3: DISEÑO de un número por sede y las franquicias (sin código ni migración)
+
+- **Spec nuevo:** `docs/superpowers/specs/2026-10-14-numero-por-sede-design.md`, verificado contra el código (producto
+  `d710862`, AIOS `4b88ab5`, archivo y línea en cada afirmación). Pedido del dueño del 14-10: «lo que puede cambiar es
+  que no compartan número».
+- **El modelo:** la sede PUEDE tener línea propia (`location_messaging` → `tenant_connections`; sin fila = la de la
+  marca). Qué línea usa cada mensaje: la sede del acto → la última visita → el origen → la principal, con una sola
+  función para imputar (F6) y para elegir línea. Plantillas y cupo por línea, sin sobrecargas (42725). El opt-out y el
+  tope de 3 al mes siguen de la marca. Franquicia = grupo con número, tarjeta y administrador propios.
+- **Encontrado:** hoy una segunda línea **pierde lo que le escriben, «SALIR» incluido** (por eso F9.1, el entrante, va
+  primero); `message_logs.line_location_id` es la llave equivocada; «franquicia» en el AIOS crea marcas separadas y su
+  rechazo propone quitar un índice que no se quita.
+- **D6 reabierta por el dueño** (`ESTADO.md` §4). Cinco preguntas con default en el §9 (`PENDIENTES.md` D5-a a D5-e);
+  tres arreglos nuevos en `PENDIENTES.md` §5 (N-OVERRIDE-LOG, N-SEDE-ENVIO, AIOS-INDICE).
+
 ## [feat] — 2026-10-14 — Ciclo, fase 2 parte B: la pantalla «Ciclo» de Campañas y el mini-ciclo del panel (sin migración)
 
 - **`/dashboard/campaigns` = «Ciclo y campañas»:** pestañas Ciclo e Historial; «Mensaje libre (avanzado)» es un enlace al

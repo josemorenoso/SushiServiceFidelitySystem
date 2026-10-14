@@ -21,6 +21,14 @@ import { evaluateNewTier, getNextTier, buildTiersRoadmap, updateCustomerTier, ge
 import { verifyCustomerQRToken, generateCustomerQRToken } from '@/lib/utils/qrcode'
 import { markConverted } from '@/services/imported-contacts.service'
 import { grantFromInvite } from '@/services/qr-campaign.service'
+import {
+  completarReferidoAlEscanear,
+  prepararReferido,
+  registrarReferido,
+  type PreparacionDeReferido,
+  type RegistroDeReferido,
+} from '@/services/referral.service'
+import { normalizarAjustesDeReferidos, programaActivo, REFERRAL_SETTING_KEYS } from '@/lib/referidos'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { jwtVerify } from 'jose'
 import { resolveHostContext } from '@/lib/tenant'
@@ -92,6 +100,13 @@ interface CheckInRequestBody {
    * se le otorga el premio de la invitación, pendiente del escaneo del mesero.
    */
   campaign_slug?: string
+  /**
+   * Código de referido por el que llegó (`/r/{código}`, 00075). Si cuenta —programa encendido,
+   * código de ESTA marca, no es el suyo, su teléfono no fue referido antes—, la visita #1 queda
+   * pendiente del mesero como con una invitación, el amigo recibe su regalo en la tarjeta, y el
+   * escaneo del mesero completa el referido. Si no cuenta, el registro es el de siempre.
+   */
+  referral_code?: string
   table_number?: number | null
   lat?: number | null
   lon?: number | null
@@ -390,6 +405,9 @@ export async function POST(request: NextRequest) {
           checkin_first_visit_free: firstVisitFree,
           qr_token,
           invite_grant: inviteGrant,
+          // Llegó por el enlace de un amigo pero YA es cliente de la marca: no cuenta como
+          // referido (regla del programa) y no se le otorga nada. La landing se lo dice.
+          ...(body.referral_code ? { referral_status: 'ya_cliente' as const } : {}),
           customer: {
             id: customer.id,
             name: customer.name || 'Cliente',
@@ -548,6 +566,20 @@ export async function POST(request: NextRequest) {
         pendingStaffScan = true
       }
 
+      // ─── Referido: misma regla que la invitación ───
+      // Quien llega por el enlace de un amigo también se registra desde su casa. SOLO si el
+      // referido cuenta (`prepararReferido()`: programa encendido, código de esta marca, no es el
+      // suyo, su teléfono no fue referido antes) la visita #1 queda pendiente del mesero: su
+      // escaneo cuenta la visita, le entrega el regalo y le da el premio a quien lo trajo. Si no
+      // cuenta, el registro sigue EXACTAMENTE como uno normal: una marca con referidos apagados
+      // no cambia en nada.
+      let referido: PreparacionDeReferido | null = null
+      if (typeof body.referral_code === 'string' && body.referral_code.trim()) {
+        referido = await prepararReferido({ codigo: body.referral_code, tenantId: tenant.id, phone: cleaned })
+        if (referido.ok) pendingStaffScan = true
+        else console.warn(`[CheckIn] (${tenant.slug}) Código de referido sin efecto: ${referido.motivo}`)
+      }
+
       // ─── SEDE DEL REGISTRO (multi-sede, precedencia del §3.1) ───
       // El registro en modo `auto` nunca pasa por auth de mesero, así que ahí las dos vías
       // fuertes llegan vacías y la precedencia cae al host — que es justo el argumento por el
@@ -619,6 +651,26 @@ export async function POST(request: NextRequest) {
           }
         } catch (err) {
           console.error('[CheckIn] Error otorgando el premio de la invitación:', err)
+        }
+      }
+
+      // ─── El referido: la fila pendiente y el regalo del amigo en su tarjeta ───
+      // Best-effort respecto del registro, como la invitación: el cliente YA existe. Si esto
+      // falla, el log dice por qué y el amigo queda como un cliente más (pendiente del mesero).
+      let referralResult: RegistroDeReferido | null = null
+      if (referido?.ok) {
+        try {
+          referralResult = await registrarReferido(
+            referido.ctx,
+            { id: customer.id, phone: cleaned },
+            tenant.id,
+            regLocation.locationId
+          )
+          if (!referralResult.ok) {
+            console.warn(`[CheckIn] (${tenant.slug}) Referido no registrado para ${customer.id}: ${referralResult.motivo}`)
+          }
+        } catch (err) {
+          console.error('[CheckIn] Error registrando el referido:', err)
         }
       }
 
@@ -719,6 +771,8 @@ export async function POST(request: NextRequest) {
             meta_event_id: regMetaEventId,
             qr_token: regQrToken,
             invite_grant: inviteGrant,
+            // El regalo del amigo («2x1 en rollos» / «50 puntos»), o null. Solo con un referido que contó.
+            ...(referralResult?.ok ? { referral_gift: referralResult.regalo } : {}),
             customer: {
               id: customer.id,
               name: customer.name,
@@ -760,11 +814,14 @@ export async function POST(request: NextRequest) {
       }
 
       // Leer templates para WhatsApp
+      // Los ajustes de referidos viajan en la MISMA lectura: una marca con el programa apagado
+      // no paga ni una consulta más por escaneo.
       const settings = await getMultipleSettings([
         'points_earned_far_template_sid',
         'points_earned_near_template_sid',
         'tier_unlocked_template_sid',
         'welcome_template_sid',
+        ...REFERRAL_SETTING_KEYS,
       ], tenant.id)
 
       // Primera visita verificada por el mesero (cliente nuevo en modo staff_verified):
@@ -983,6 +1040,37 @@ export async function POST(request: NextRequest) {
         console.error('[CheckIn] ERROR otorgando puntos (se usa fallback 0):', err)
       }
 
+      // ─── Referidos: el mesero acaba de validar la visita ───
+      // Si este cliente llegó por el enlace de un amigo y su referido sigue pendiente, la base lo
+      // completa UNA vez (dos escaneos simultáneos: el segundo ve «ya resuelto») y quien lo trajo
+      // gana su premio, con la sede de ESTA visita. Con el programa apagado no se llama nada.
+      // Nunca tumba el escaneo: lo que falle queda en el log.
+      const ajustesDeReferidos = normalizarAjustesDeReferidos(settings)
+      let referralOutcome: Awaited<ReturnType<typeof completarReferidoAlEscanear>> | null = null
+      if (programaActivo(ajustesDeReferidos)) {
+        try {
+          referralOutcome = await completarReferidoAlEscanear({
+            tenantId: tenant.id,
+            customerId: customer.id,
+            ajustes: ajustesDeReferidos,
+            locationId: visitLocation.locationId,
+          })
+          if (referralOutcome.resultado === 'completado' || referralOutcome.resultado === 'tope') {
+            console.log(
+              `[CheckIn] (${tenant.slug}) Referido ${referralOutcome.referralId} completado (${referralOutcome.resultado}); ` +
+                `premio de quien invita: ${referralOutcome.premioDeQuienInvita ?? 'ninguno'}`
+            )
+            if (referralOutcome.puntosDelAmigo) {
+              pointsResult = { ...pointsResult, newBalance: pointsResult.newBalance + referralOutcome.puntosDelAmigo }
+            }
+          }
+        } catch (err) {
+          console.error('[CheckIn] Error completando el referido:', err)
+        }
+      }
+      const referidoCompletado =
+        referralOutcome?.resultado === 'completado' || referralOutcome?.resultado === 'tope'
+
       // Evaluar si cruzó un nuevo tier
       let newTier = null
       let nextTierInfo = null
@@ -1122,6 +1210,7 @@ export async function POST(request: NextRequest) {
           } : null,
           tiers_roadmap: tiersRoadmapText,
           whatsapp: whatsappStatus,
+          ...(referidoCompletado ? { referral_completed: true } : {}),
         })
       }
 
@@ -1143,6 +1232,8 @@ export async function POST(request: NextRequest) {
         tiers_roadmap: tiersRoadmapText,
         tiers: allTiersForResponse,
         whatsapp: whatsappStatus,
+        // El mesero acaba de validar a un amigo que llegó por un referido.
+        ...(referidoCompletado ? { referral_completed: true } : {}),
       })
     }
 

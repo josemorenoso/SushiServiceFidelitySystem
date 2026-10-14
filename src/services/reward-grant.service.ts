@@ -44,6 +44,18 @@ export interface GrantRewardParams {
   campaignId?: string | null
   /** Invitación con premio que lo otorgó (source = 'invite', 00063). */
   qrCampaignId?: string | null
+  /**
+   * Referido que lo otorgó (source = 'referral', 00075): el regalo del amigo o el premio de quien
+   * lo trajo. La base no deja dos premios del mismo referido para la misma persona
+   * (`idx_reward_grants_referral_once`): un segundo intento vuelve como `duplicate_active`.
+   */
+  referralId?: string | null
+  /**
+   * Sede donde se GANÓ el premio (`reward_grants.granted_location_id`, 00043; D12). `null` = sede
+   * desconocida. Hoy lo escriben solo los referidos (la sede de la visita que lo ganó o del
+   * registro del amigo); los demás llamadores no la nombran y siguen dejando NULL.
+   */
+  grantedLocationId?: string | null
   /** Días de ventana desde ahora. Omitir (null/undefined) → el premio NO vence.
    *  Un número (incluido 0) SÍ define una ventana: 0 o negativo = vence de inmediato. */
   windowDays?: number | null
@@ -105,12 +117,15 @@ export async function grantReward(
       expires_at: expiresAt,
       // Solo cuando hace falta: un INSERT de los demás llamadores no nombra la columna nueva.
       ...(params.skipReminder ? { skip_reminder: true } : {}),
+      ...(params.referralId ? { referral_id: params.referralId } : {}),
+      ...(params.grantedLocationId ? { granted_location_id: params.grantedLocationId } : {}),
     })
     .select()
     .single()
 
   if (error) {
-    // 23505 = unique_violation → ya tiene un premio activo de este source.
+    // 23505 = unique_violation → ya tiene un premio activo de este source (o, con `referralId`,
+    // ya tiene el premio de ESE referido: la otra mitad de la misma condición esperada).
     if (error.code === '23505') {
       return { ok: false, code: 'duplicate_active', error: 'El cliente ya tiene un premio activo de este tipo' }
     }
@@ -385,8 +400,9 @@ export interface GrantMetrics {
  * clientes dormidos que la campaña despertó.
  */
 /** Multi-sede F7 (§8.4): mismo aviso que `getRedemptions()` sobre
- *  `granted_location_id` — siempre NULL hoy (deuda #13); `role='brand'` no
- *  cambia nada, un futuro `role='location'` vería la lista vacía hasta F6. */
+ *  `granted_location_id` — NULL en todo premio salvo los de referidos (00075, que anotan la
+ *  sede de la visita o del registro; deuda #13); `role='brand'` no cambia nada, un
+ *  `role='location'` ve solo los de referidos de su sede hasta F6. */
 export async function getGrantMetrics(
   params: { from?: string; to?: string },
   scope: LocationScope

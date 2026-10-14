@@ -5,8 +5,9 @@
 **Spec:** [`docs/superpowers/specs/2026-08-30-gobernanza-de-envio-design.md`](../superpowers/specs/2026-08-30-gobernanza-de-envio-design.md)
 **Ver también:** `docs/features/campaigns.md`, `docs/features/zernio-messaging.md`,
 `docs/features/wallet-billing.md`, `docs/features/golden-bullet.md`
-**Última actualización:** 2026-10-13 — los toques del ciclo de recuperación pasan por la cola y el drenador
-(fase 1B, migración `00071`): § «Los toques del ciclo en el drenador» y § «Qué encola hoy».
+**Última actualización:** 2026-10-14 — los regalos que manda el dueño («Mandar un regalo», fase 2 parte C del ciclo, sin
+migración): § «Los regalos del dueño en el drenador». Antes, 2026-10-13: los toques del ciclo de recuperación pasan por la
+cola y el drenador (fase 1B, migración `00071`): § «Los toques del ciclo en el drenador» y § «Qué encola hoy».
 
 ---
 
@@ -291,6 +292,27 @@ permite corregirlo a mano.
 > distinguirlos, así que trata cualquier `null` como reintentable. Es conservador a propósito:
 > reintentar tres veces cuesta milisegundos; cancelar por error pierde el mensaje para siempre.
 
+### Los regalos del dueño en el drenador (fase 2 parte C, 2026-10-14)
+
+«Mandar un regalo» (`POST /api/dashboard/cycle/gift`, `src/services/cycle-gift.service.ts`) encola items `manual` de una
+campaña que lleva el regalo en `campaigns.filters.regalo` (`{ reward_id, titulo, vence, plantilla }`). **El mecanismo
+mínimo, sin migración:** el regalo es de la campaña (un envío, un premio, una regla), y `filters` ya es la bolsa de
+configuración de una campaña. El drenador lo lee una vez por tanda y solo si la tanda trae items `manual`
+(`cargarContextoDeRegalos()`); los demás envíos no pagan nada. Para esos items, igual que un toque con regalo:
+
+1. **Un regalo vivo por cliente** (spec §5): si ya tiene uno activo (`reactivation` o `manual`), o le llega otro en esta
+   misma tanda (un toque del ciclo con regalo que pasa su guarda, u otro regalo del dueño), el item se CANCELA con el
+   motivo. No se pospone: el dueño eligió una fecha.
+2. **Sin Recovery Zone:** es la reserva del camino viejo de reactivación; el regalo es la herramienta del ciclo y el cap de
+   7 días y el tope del mes (que sí se aplican) ya evitan dos mensajes seguidos.
+3. **La fecha límite se calcula AL ENVIAR** con la regla del dueño (`venceSegunRegla()`: domingo con mínimo 5 días, o
+   3/7/14 días desde el envío), en la variable de su plantilla (`{{3}}` «Regalo que vence», `{{5}}` la insistente).
+4. **Solo si el mensaje salió**, `otorgarRegalosEnviados()` otorga el regalo con ESE vencimiento (`source: 'manual'`,
+   `skip_reminder`: el mensaje dice la fecha y el aviso de vencimiento es solo del regalo fuerte del ciclo, A3).
+
+Y el ciclo tampoco apila: `cargarContextoDelCiclo()` cuenta como «regalo vivo» también los `manual`
+(`FUENTES_DE_REGALO_VIVO`), así que el rescate de quien recibió un regalo del dueño espera a que ese venza.
+
 ### Los toques del ciclo en el drenador (fase 1B, 2026-10-13)
 
 Un item con `cycle_touch_id` es un toque del ciclo de recuperación (lo encola el cron de reactivación de una marca con el
@@ -356,6 +378,7 @@ cumpleaños y una campaña manual.
 | Campaña manual | ✅ Sí | Es el escenario del spec §3.4. |
 | `birthday` | ❌ Todavía no | Ver la pregunta abierta al final. |
 | `reactivation` — camino viejo (ciclo apagado) | ❌ No | Envía dentro del cron, como siempre. |
+| «Mandar un regalo» (`manual` con `filters.regalo`) | ✅ Sí (2026-10-14) | **Todo** sale por la cola, a la hora de la marca (o el día elegido), `expires_at` = 7 días. La fecha límite y el regalo, al enviar (§ «Los regalos del dueño en el drenador»). |
 | `reactivation` — toques del ciclo (ciclo encendido) | ✅ Sí (2026-10-13) | **Todo** sale por la cola, a la hora de la marca (`not_before` = la próxima `cycle_send_slot`, `expires_at` = el cierre del día siguiente). Las dos preguntas de abajo quedan respondidas para el ciclo: la fecha límite se calcula al enviar y el regalo se otorga al enviar, solo si salió (§ «Los toques del ciclo en el drenador»). |
 | `reward_reminder` | ❌ Todavía no | `days_left` caduca: encolar hoy y enviar en dos días manda un número mentiroso. Y `markReminderSent()` tendría que moverse al drenaje. |
 | `calendar_event` | ✅ Sí (2026-09-06) | Envía lo que cabe en el presupuesto del día y encola el resto. La media provider-aware se resuelve al encolar: `media_url` guarda la URL pública COMPLETA (la que Zernio necesita como `headerMediaUrl`) y `{{6}}` viaja en `variables` solo para Twilio. `expiresAt` = fin del día del evento (P1). |

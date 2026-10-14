@@ -1,7 +1,7 @@
 # Esquema de Base de Datos
 
 **Base de datos:** Supabase (PostgreSQL)
-**Última actualización:** 2026-10-13 (SEG-2: `mystery_box_results` rechaza el segundo reclamo del mismo nivel, trigger de la 00072, sin aplicar); antes 2026-10-13 (ciclo de recuperación, fase 1B: `customer_cycle_touches`, `send_queue.cycle_touch_id` y `reward_grants.skip_reminder` al día con la 00071, sin aplicar); antes 2026-09-12 (Golden Bullet por tandas: `imported_contacts` al día con la 00060 y las bases)
+**Última actualización:** 2026-10-14 (ciclo, fase 2 parte C: `restaurant_events.include_dormant`, 00073, sin aplicar); antes 2026-10-13 (SEG-2: `mystery_box_results` rechaza el segundo reclamo del mismo nivel, trigger de la 00072, sin aplicar); antes 2026-10-13 (ciclo de recuperación, fase 1B: `customer_cycle_touches`, `send_queue.cycle_touch_id` y `reward_grants.skip_reminder` al día con la 00071, sin aplicar); antes 2026-09-12 (Golden Bullet por tandas: `imported_contacts` al día con la 00060 y las bases)
 
 ---
 
@@ -473,6 +473,7 @@ CREATE POLICY "admin_insert_settings" ON admin_settings
 | `blackout_days` | `integer` | NO | `5` | Días antes del evento donde campañas manuales se bloquean (0-30) |
 | `location_id` | `uuid` | SI | `NULL` | **Nueva (00043).** ⚠️ **La única tabla del schema donde NULL NO significa "sede desconocida".** Aquí NULL solo es válido con `audience_scope='brand'`, y entonces significa **"toda la marca"**. FK compuesta RESTRICT |
 | `audience_scope` | `text` | **NO** | `'brand'` | **Nueva (00043).** A quién va dirigido el evento (D8, marcado **vital** por el dueño): `'brand'` = toda la marca (exige `location_id` NULL) \| `'location'` = una sede (exige `location_id` NOT NULL). DEFAULT `'brand'` para que los eventos que ya existen **no cambien de comportamiento** |
+| `include_dormant` | `boolean` | NO | `false` | **Nueva (00073, sin aplicar).** «Incluir a los dormidos». Con el ciclo de recuperación ENCENDIDO en la marca, la invitación solo les llega a los dormidos (`cycle_state` dormido o archivado) si es `true`; con el ciclo apagado no se mira. La lee `audienciaDelEvento()` (la misma audiencia para la invitación, el blackout del ciclo y la pantalla) |
 | `created_at` | `timestamptz` | NO | `now()` | Creación |
 | `updated_at` | `timestamptz` | NO | `now()` | Última actualización |
 

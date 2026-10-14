@@ -3,8 +3,35 @@
 > Estado: 🟢 Operativo. Plantilla de imagen **aprobada por Meta** en la cuenta master.
 > Migración: `supabase/migrations/00012_calendar_events_and_media.sql`
 > Migración del enlace: `supabase/migrations/00050_evento_link.sql` (**sin aplicar**)
-> Última actualización: 2026-09-06 (los 3 AMARILLO de la auditoría: hora de Bogotá, goteo por
-> `send_queue`, y el reclamo del despacho por conteo de filas)
+> Migración de «incluir dormidos»: `supabase/migrations/00073_evento_incluir_dormidos.sql` (**sin aplicar**)
+> Última actualización: 2026-10-14 (fase 2 del ciclo, parte C: **el calendario vive en Campañas** como la vista «por
+> fecha», con un creador nuevo; «incluir dormidos»; N-BLACKOUT y N-AUDIENCIA); antes 2026-09-06 (los 3 AMARILLO de la
+> auditoría: hora de Bogotá, goteo por `send_queue`, y el reclamo del despacho por conteo de filas)
+
+## El calendario vive en Campañas (fase 2 del ciclo, parte C, 2026-10-14)
+
+**`/dashboard/calendar` redirige** a `/dashboard/campaigns?vista=fecha` (con `fecha`, `nombre` y `evento` si venían):
+el calendario es el ciclo «por fecha», el mismo dato girado (spec §6.4). La vista, el creador y cómo se usan:
+[`campaigns.md`](campaigns.md) § «La vista por fecha y los creadores». Lo que cambió en esta capa:
+
+1. **El creador nuevo** (`CrearEvento`) reemplaza a `EventCreateDialog` (y `CalendarMonthView` a la cuadrícula vieja; los
+   dos se borraron). Crea siempre en `send_mode='auto'`, con `scheduled_send_at` = el día del evento a la hora de la marca
+   (`cycle_send_slot`; si esa hora de hoy ya pasó, sale en la próxima vuelta de `calendar-dispatch`) y `blackout_days`
+   = 5. El texto va a `description` en UNA línea. Los endpoints no cambiaron.
+2. **La ficha** (`EventDetailDrawer`, se reusa) deja **subir la foto** a un evento vivo que no la tiene (antes decía
+   «cancélalo y créalo de nuevo»): es el «Subir foto» de «Para hoy». Y dice si el evento incluye a los dormidos.
+3. **«Incluir a los dormidos»** (`restaurant_events.include_dormant`, 00073, default `false`). Con el ciclo ENCENDIDO en
+   la marca, un evento no les llega a los dormidos (ni a los que ya no reciben nada automático) salvo la casilla (spec
+   §3.1/§3.5, decisión 8). Con el ciclo apagado, la audiencia es la de siempre. La decide **`audienciaDelEvento()`**, una
+   sola función para la invitación (`executeAutoEvent()`), el blackout que pospone el toque del ciclo y el número de
+   invitados de la pantalla: si cada uno armara la suya, el toque se pospondría para alguien a quien la invitación no
+   le va a llegar. ⚠️ **La 00073 se aplica ANTES del push** (sin la columna, crear un evento da 42703).
+4. **N-AUDIENCIA:** `findCustomersForEvent()` pagina (`leerTodo()`, ordenada por `id`) y LANZA ante un fallo: con más
+   de 1.000 clientes PostgREST cortaba en silencio y la invitación —y el blackout— se quedaban con los primeros 1.000.
+5. **N-BLACKOUT:** `getActiveBlackouts()` (`campaign.service.ts`) corta la ventana `[event_date − blackout_days,
+   event_date)` en **días de Bogotá** (`bogotaDay()`; antes en UTC, a las 19:00 del día anterior) y **lanza** ante un
+   fallo de base (antes devolvía `[]`: ese día ningún toque se posponía). El cron del ciclo falla esa marca y la
+   reintenta mañana; la campaña manual, donde la consulta es solo informativa, lo deja en el log.
 
 ## Los 3 AMARILLO de la auditoría post-deploy (2026-09-06)
 
@@ -406,7 +433,7 @@ El admin puede hacer override con `force: true` si entiende el trade-off.
 | Twilio service (a modificar) | `src/services/whatsapp.service.ts` — soporte `mediaUrl` |
 | Endpoints | `src/app/api/dashboard/calendar/{events,events/[id],events/[id]/dispatch,media-upload}/route.ts` |
 | Cron | `src/app/api/cron/calendar-dispatch/route.ts` — declarado en `vercel.json` (`*/15 * * * *`) desde 2026-09-02, pero hoy lo sigue disparando el workflow de n8n "Cron Calendario" (Schedule cada 15 min → HTTP POST con Bearer `CRON_SECRET`). El disparo por Vercel empieza cuando se despliegue a producción con plan Pro activo; en ese mismo movimiento se apaga el Schedule Trigger de n8n (los dos activos a la vez = doble disparo). |
-| UI (a crear) | `src/app/(dashboard)/dashboard/calendar/page.tsx` + `src/components/dashboard/Calendar/*` |
+| UI | `/dashboard/campaigns?vista=fecha` (`src/components/dashboard/cycle/VistaPorFecha.tsx`, `CrearEvento.tsx`) + `src/components/dashboard/Calendar/{EventDetailDrawer,MediaUploader}.tsx`; `src/app/(dashboard)/dashboard/calendar/page.tsx` solo redirige |
 | Constantes (a modificar) | `src/constants/rewards.ts` — añadir `MONTHLY_MARKETING_CAP=3`, `DEFAULT_PRE_EVENT_BLACKOUT_DAYS=5` |
 | Setup Twilio (a modificar) | `scripts/twilio-setup.mjs` — crear las 2 plantillas `twilio/media` |
 
@@ -441,9 +468,9 @@ Estos componentes están implementados pero dependen de que Meta apruebe las pla
   - `reactivation/route.ts`: aplicar `filterByMonthlyCap` + marcar `source='reactivation'`
   - `birthday/route.ts`: marcar `source='birthday'` (NO aplicar cap)
 
-### ⏳ Pendiente (frontend)
-- [ ] Vista mensual del calendario en dashboard
-- [ ] Dialog de crear/editar evento con media uploader
+### Frontend (2026-10-14)
+- [x] Vista mensual: la vista «por fecha» de Campañas (`VistaPorFecha`); `/dashboard/calendar` redirige (§ arriba)
+- [x] Crear evento con foto: `CrearEvento`; subir la foto después: `EventDetailDrawer`
 - [ ] `MonthlyCapMeter` y warning de blackout en `ManualCampaigns.tsx`
 
 ### 🧪 Verificación end-to-end

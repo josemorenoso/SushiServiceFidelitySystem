@@ -5,7 +5,7 @@
 - **Dashboard endpoints** — Cookie-based (Supabase SSR, sesión admin via `supabase.auth.getUser()`)
 - **Staff endpoints públicos** (`/api/staff/*`) — Bearer Token (Staff JWT) o `X-Device-Token`
 - **Webhooks / Cron** — `x-webhook-secret` o `CRON_SECRET`
-**Última actualización:** 2026-10-14 (los cuatro endpoints de la pantalla del ciclo: § «Ciclo de recuperación: la pantalla»); antes 2026-09-03
+**Última actualización:** 2026-10-14 (parte C del ciclo: `GET`/`POST /api/dashboard/cycle/gift` —«Mandar un regalo»—, `cycle_enabled` solo del operador en el `PUT` de settings, `include_dormant` en los eventos); antes 2026-10-14 (los cuatro endpoints de la pantalla del ciclo: § «Ciclo de recuperación: la pantalla»); antes 2026-09-03
 > **Nota (geolocalización):** el backend **no valida GPS** y ya no hay nada que descomentar: el
 > bloque de geocerca que dormía comentado en `src/app/api/check-in/route.ts` **se borró** en
 > multi-sede F3 (spec §3.5). Como control de acceso lo reemplazó, con ventaja, la exigencia de
@@ -168,6 +168,8 @@ impide al rol `aios_constelarys` tocar `auth.users` — ver `docs/features/alta-
 | GET | /api/dashboard/cycle/projection?from&to | Por día: quién entra a cada toque, eventos con su «reservado» y fechas especiales (máx. 93 días) | Admin Cookie |
 | GET | /api/dashboard/cycle/customers | La lista de una caja (`stage`, `day`, `state=dormido` o `fecha`), paginada | Admin Cookie |
 | POST | /api/dashboard/cycle/hoy-no | «Hoy no»: pospone un día lo automático de «Para hoy» (hoy: el toque trimestral). **Alcance de marca** | Admin Cookie |
+| GET | /api/dashboard/cycle/gift?cuando=hoy\|AAAA-MM-DD | «Mandar un regalo»: conteo vivo por caja (y por qué no lo recibe el resto), cupo, plantilla, catálogo y cuerpos de la vista previa (2026-10-14) | Admin Cookie |
+| POST | /api/dashboard/cycle/gift | Programa un regalo (se otorga y se fecha AL ENVIAR). **Alcance de marca** | Admin Cookie |
 | GET | /api/dashboard/location | Ubicación de la **sede principal** (F4: ya no revienta con 2 sedes) | Admin Cookie |
 | PUT | /api/dashboard/location | Actualizar la **sede principal** (F4: ya no inserta una tercera fila) | Admin Cookie |
 | GET | /api/dashboard/staff | Listar meseros y dispositivos | Admin Cookie |
@@ -1579,7 +1581,10 @@ Retorna todas las configuraciones como objeto clave-valor.
 
 **`PUT /api/dashboard/settings`** — Admin JWT
 
-Actualiza una configuración por clave.
+Actualiza una configuración por clave. Alcance de marca (`exigirAlcanceDeMarca()`), lista cerrada de claves
+(`src/lib/settings-keys.ts`) y, desde la parte C del ciclo (2026-10-14), **`cycle_enabled` solo del operador de Cada1**
+(`CLAVES_DEL_OPERADOR`, decisión H7): a un super usuario de la marca le contesta **403**
+`{ "error": "Encender o apagar el ciclo lo hace el equipo de Cada1. Escríbenos y lo hacemos contigo." }`.
 
 **Request:**
 ```json
@@ -1769,6 +1774,46 @@ UN filtro: `?stage=reciente|t1…t5` (hoy en esa caja) · `?day=N` (N días sin 
 ```
 
 Sin teléfono. `ultimo_toque.con_mensaje: false` = «sin mensaje, para comparar».
+
+### `GET /api/dashboard/cycle/gift?cuando=hoy|AAAA-MM-DD` — Admin Cookie
+
+Lo que dibuja el creador «Mandar un regalo» (spec §6.5, parte C). `cuando` = `hoy` (la PRÓXIMA hora de la marca) o una
+fecha de los próximos 60 días (a la hora de la marca).
+
+```json
+{
+  "encendido": true, "hora": "16:30", "sale": "2026-10-14T21:30:00.000Z", "sale_texto": "hoy a las 4:30 pm",
+  "vence": [{ "regla": "domingo", "iso": "…", "texto": "domingo 25 de octubre" }, { "regla": "3", "iso": "…", "texto": "…" }],
+  "plantilla": { "clave": "reactivation_aggressive", "regalo_que_vence": "pendiente" },
+  "regalos": [{ "id": "uuid", "titulo": "Postre del chef" }],
+  "audiencias": [
+    { "clave": "reciente", "etiqueta": "Recién vino", "disponible": false, "total": 120, "reciben": 0, "no_reciben": { "regalo_vivo": 0, "siete_dias": 0, "tope_mes": 0 } },
+    { "clave": "t4", "etiqueta": "Rescate", "disponible": true, "total": 23, "reciben": 19, "no_reciben": { "regalo_vivo": 1, "siete_dias": 3, "tope_mes": 0 } },
+    { "clave": "dormidos", "…": "…" }, { "clave": "todos", "…": "…" }
+  ],
+  "cupo": { "estado": "con_tope", "hoy": 180, "por_dia": 250 },
+  "marca": { "nombre": "Sushi Service", "emoji": "🍣" },
+  "cuerpos": { "gift_expiring": "…", "reactivation_aggressive": "…", "event_image": "…" },
+  "ejemplo": { "nombre": "Sara", "puntos": 412, "premio_proximo": "Plata", "camino": "…" }
+}
+```
+
+`total` de cada caja = el de la portada (el mismo motor). `reciben` es «a lo sumo»: el drenador vuelve a mirar los topes
+al enviar. `cupo.estado`: `con_tope` · `sin_tope` · `congelada` · `no_se_pudo` (se dice, no se inventa un número).
+**500** si la base falla (nunca «0»).
+
+### `POST /api/dashboard/cycle/gift` — Admin Cookie · **alcance de marca**
+
+**Request:** `{ "regalo": { "id": "uuid" } | { "titulo": "Café de la casa" }, "vence": "domingo"|"3"|"7"|"14", "audiencia": "t1"…"t5"|"dormidos"|"todos", "cuando": "hoy"|"AAAA-MM-DD" }`
+
+**Response 200:** `{ "ok": true, "campaign_id": "uuid", "regalo": { "id", "titulo", "nuevo" }, "programados": 19, "sale": "…", "sale_texto": "hoy a las 4:30 pm", "vence": "domingo", "plantilla": "gift_expiring", "no_reciben": { … }, "mensaje": "Programado: 19 regalos a «Rescate» hoy a las 4:30 pm. …" }`
+
+Crea la campaña (`type`/`source` = `manual`: cuenta para la fatiga y el tope del mes) con el regalo en
+`campaigns.filters.regalo` y encola a la hora de la marca (`message_type: 'manual'`, sede NULL, `expires_at` = 7 días).
+**No otorga nada:** el drenador pone la fecha límite y otorga el regalo (`source: 'manual'`, sin recordatorio) al
+enviar. Un regalo escrito a mano entra al catálogo. **400** con el motivo (fecha pasada, «Recién vino», nadie puede
+recibirlo, sin plantilla, regalo inactivo) · **403** administrador de sede · **409** sin saldo (en mensajes, no en pesos) ·
+**500** si no se programó (la campaña se borra: no queda nada a medias).
 
 ### `POST /api/dashboard/cycle/hoy-no` — Admin Cookie · **alcance de marca**
 

@@ -1,6 +1,6 @@
 # Feature: Campañas — Control de Tráfico Centralizado
 
-**Última actualización:** 2026-10-14 (ciclo, fase 2 parte B: **la pantalla «Ciclo» reemplaza a Automáticas, la tira y las burbujas**, § «La pantalla «Ciclo»»); antes 2026-10-13 (S-1: la pestaña «Premios» **salió de Campañas** y vive en Recompensas, § «Novedades v2.10.0»); antes 2026-10-13 (ciclo, fase 1B: **el cron decide y encola por marca** —ciclo apagado: el camino de siempre; encendido: los toques del ciclo—, migración 00071 sin aplicar, ciclo apagado en todas las marcas; § «El ciclo encendido»); antes 2026-10-11 (ciclo, fase 1A: la base del motor, migración 00070, **nada se envía**; § «Fase 1A»); antes 2026-10-10 (ciclo, fase 0.bis: tope de 3 intentos fallidos por toque, la causa real del fallo, lo que salió queda marcado aunque la corrida aborte); antes 2026-10-08 (fase 0: un fallo no calla, el insistente sale una vez, una sola escala de días)
+**Última actualización:** 2026-10-14 (ciclo, fase 2 parte C: **la vista por fecha, «Mandar un regalo» y el creador de eventos**; `/dashboard/calendar` redirige; `cycle_enabled` solo del operador también en el servidor; § «La vista por fecha y los creadores»); antes 2026-10-14 (ciclo, fase 2 parte B: **la pantalla «Ciclo» reemplaza a Automáticas, la tira y las burbujas**, § «La pantalla «Ciclo»»); antes 2026-10-13 (S-1: la pestaña «Premios» **salió de Campañas** y vive en Recompensas, § «Novedades v2.10.0»); antes 2026-10-13 (ciclo, fase 1B: **el cron decide y encola por marca** —ciclo apagado: el camino de siempre; encendido: los toques del ciclo—, migración 00071 sin aplicar, ciclo apagado en todas las marcas; § «El ciclo encendido»); antes 2026-10-11 (ciclo, fase 1A: la base del motor, migración 00070, **nada se envía**; § «Fase 1A»); antes 2026-10-10 (ciclo, fase 0.bis: tope de 3 intentos fallidos por toque, la causa real del fallo, lo que salió queda marcado aunque la corrida aborte); antes 2026-10-08 (fase 0: un fallo no calla, el insistente sale una vez, una sola escala de días)
 
 > ⚠️ **El ciclo de recuperación, por marca (2026-10-13).** El cron de reactivación tiene DOS caminos y cada marca va por
 > uno: con `cycle_enabled` apagado (las 25 hoy) hace exactamente lo de siempre —el suave y el insistente que describe este
@@ -15,7 +15,8 @@
 > falla 3 veces no se intenta más (§ «Tope de reintentos»). **La fase 1A (2026-10-11, migración 00070) construyó la
 > base del motor sin enviar nada** (§ «Fase 1A»). **La fase 1B (2026-10-13, migración 00071) le dio los envíos**
 > (§ «El ciclo encendido»). **La fase 2, parte B (2026-10-14) dibujó la pantalla** (§ «La pantalla «Ciclo»»): ya no
-> muestra los días del camino viejo, sino las cajas del motor.
+> muestra los días del camino viejo, sino las cajas del motor. **La parte C (2026-10-14) la completó** (§ «La vista por
+> fecha y los creadores»): el calendario es la vista «por fecha» de esta pantalla y el botón principal es «Mandar un regalo».
 
 ### La pantalla «Ciclo» (fase 2, parte B, 2026-10-14)
 
@@ -34,15 +35,16 @@ componentes en `src/components/dashboard/cycle/`, lo puro —qué se muestra y q
    igual muestra las cajas y lo dice en una línea. **El botón de encender/apagar lo ve y lo usa SOLO el operador de
    Cada1** (`permisos.interruptor`; pide confirmación y escribe `cycle_enabled` por el `PUT` de Ajustes). «Tus clientes
    vuelven cada mes · Calculado con 135 regresos» con «cambiar» (cuatro ritmos o «que lo calcule el sistema») solo con
-   permiso de marca (`permisos.aprobar`). ⚠️ El interruptor lo esconde la pantalla; el `PUT` de Ajustes acepta
-   `cycle_enabled` de cualquier super usuario de marca (`docs/PENDIENTES.md` §2.4).
+   permiso de marca (`permisos.aprobar`). Desde la parte C no es solo la pantalla: el `PUT` de Ajustes le contesta 403 a
+   quien no es el operador («Encender o apagar el ciclo lo hace el equipo de Cada1», `CLAVES_DEL_OPERADOR`).
 2. **Primer uso** (`PrimerUso`, spec §6.0): regalo pequeño · regalo fuerte · «Regalo que vence», con barra, hasta que
    estén los tres. Ninguno bloquea el ciclo; los regalos llevan a Recompensas › Premios para regalar y la plantilla a
    Plantillas.
 3. **«Para hoy»** (`ParaHoy`, §6.1): máximo tres tarjetas. OK no escribe nada (lo automático sale solo, A6; el navegador
    recuerda el OK solo por hoy) · Hoy no → `POST /api/dashboard/cycle/hoy-no` (solo con permiso de marca; si falla, la
-   tarjeta no dice «listo») · Cambiar/Elegir regalo → Recompensas · Crear evento / Subir foto → el calendario de hoy, con
-   `fecha`, `nombre` o `evento` en la URL para que la parte C los lea.
+   tarjeta no dice «listo») · Cambiar/Elegir regalo → Recompensas · Crear evento / Subir foto → abren aquí mismo (parte C)
+   el creador de eventos con la fecha y el nombre puestos, o la ficha del evento para subirle la foto; el enlace
+   (`/dashboard/campaigns?vista=fecha&fecha=…&nombre=…` / `&evento=<id>`) queda para abrir en otra pestaña.
 4. **Tres números** (`NumerosDeArriba`, §6.3): volvieron por un mensaje (con «con mensaje X % · sin mensaje Y %» cuando
    hay grupo de control), en el ciclo · dormidos, próximo evento; debajo, la segunda visita (A12). **Ninguno es
    «enviados».**
@@ -66,11 +68,47 @@ que leer) y `RISK_LEVELS` / `deriveCycleBands()` / `deriveRiskLevels()`, que sig
 `ManualCampaigns` y su test). El panel principal (`/dashboard`) trae el **mini-ciclo** (`MiniCiclo`: las mismas cajas sin
 detalle, `overview?mini=1`, con enlace a esta pantalla; es de la marca entera).
 
-**Pendiente de la parte C:** la vista «por fecha», «Mandar un regalo» en tres campos y el creador de eventos (con eso,
-`/dashboard/calendar` redirige acá). **Deuda anotada:** `SegmentRadar` y `ManualCampaigns` siguen con la escala vieja
+**Deuda anotada:** `SegmentRadar` y `ManualCampaigns` siguen con la escala vieja
 (17 · 21 · 25 días) y `SegmentRadar` ante un fallo del endpoint muestra «NaN clientes» y ceros (`docs/PENDIENTES.md` §5).
 Tests: `tests/unit/cycle-pantalla-b.test.ts` (lo puro) y `tests/unit/cycle-pantalla-b-render.test.ts` (los componentes a
 HTML, «error ⇒ ningún número», quién ve qué, lo retirado).
+
+### La vista por fecha y los creadores (fase 2, parte C, 2026-10-14)
+
+Arriba de la pantalla: **«Por etapa | Por fecha»** y el botón principal **«🎁 Mandar un regalo»** (solo con permiso de
+marca). Todo vive en la pestaña «Ciclo»; la vista por fecha entra como `?vista=fecha` (`vistaDeUrl()`) y
+**`/dashboard/calendar` redirige** ahí con `fecha`, `nombre` y `evento` (`destinoDelCalendario()`), así que el menú, los
+favoritos y los botones viejos siguen sirviendo. La URL se lee con `useSyncExternalStore`, nunca `useSearchParams()`.
+
+1. **La vista por fecha** (`VistaPorFecha`, spec §6.4): el mes en cuadrícula (lunes a domingo) con, en cada día, los
+   eventos (●), las fechas especiales (borde punteado) y la proyección («23 → rescate», `GET …/cycle/projection`, el
+   motor del cron). Los días antes de un evento llevan la sombra **«reservado para el evento»** (el blackout, rayas de
+   `--brand-primary`). Tocar un día: quiénes entran (nuevos / ya volvieron, «Ver quiénes» → `customers?fecha=`), los
+   eventos de ese día (su ficha, con «Subir foto» si no tiene) y **«Crear aquí»** (no en un día que pasó). En el celular
+   cada día muestra el número, el punto del evento y cuántos entran; el detalle va debajo.
+2. **«Mandar un regalo»** (`MandarRegalo`, spec §6.5): regalo (del catálogo de Recompensas, o «Escribir otro…» y queda en
+   el catálogo) · hasta cuándo («Este domingo …» por defecto, 3/7/14 días) · a quién (las cajas, Dormidos, Todos, con el
+   **conteo vivo** de quiénes lo reciben y por qué no el resto: regalo vivo, 7 días, tope del mes; «Recién vino» no se
+   ofrece) · cuándo (a la hora de la marca, o una fecha). **El cupo vive aquí:** «Hoy puedes mandar 180. Si son más, el
+   resto sale en los días siguientes» (`getLineBudget()`). Vista previa del WhatsApp real (el cuerpo del catálogo con la
+   marca), con el adaptador dicho en pantalla. Abre también desde la lista de una caja («Mandarles un regalo»).
+   **Cómo funciona por dentro:** `POST /api/dashboard/cycle/gift` crea una campaña `source = 'manual'` (fatiga y tope del
+   mes como un envío manual) con el regalo en `campaigns.filters.regalo` y encola a la hora de la marca; **el regalo se
+   otorga y se fecha AL ENVIAR** (el drenador: `send-governance.md` § «Los regalos del dueño en el drenador»), con el
+   MISMO adaptador que el ciclo («Regalo que vence» aprobada, o la insistente). Un regalo vivo por cliente: ni se programa
+   ni sale si ya tiene uno, y el ciclo no le apila el suyo encima. No pasa por la Recovery Zone del camino viejo.
+3. **«Crear un evento»** (`CrearEvento`, reemplaza a `EventCreateDialog`): nombre · fecha · foto (`MediaUploader`) ·
+   **texto sugerido ya escrito y editable** (en una línea: `{{5}}` no admite saltos) · enlace opcional · **«Incluir a los
+   dormidos»** (solo con el ciclo encendido, apagada por defecto: `restaurant_events.include_dormant`, 00073). La
+   invitación sale el día del evento a la hora de la marca, con la plantilla de evento de siempre. Vista previa idéntica a
+   la invitación. Sin foto se guarda igual y «Para hoy» avisa.
+4. **«Mensaje libre (avanzado)»** sigue siendo el asistente manual de siempre (`ManualCampaigns`), desde el encabezado y
+   desde el creador («También puedes: …»). El cupo grande (`CupoEnvioCard`) se quedó ahí también: es otro lugar donde se
+   dispara un envío a mano.
+
+Tests: `tests/unit/cycle-pantalla-c.test.ts` (lo puro), `tests/unit/cycle-pantalla-c-render.test.ts` (los componentes a
+HTML), `tests/db/cycle-regalo.test.ts` (ruta, drenador y cron reales sobre Postgres), `tests/unit/blackout-y-audiencia.test.ts`
+y `tests/unit/settings-cycle-enabled.test.ts`.
 
 ### El ciclo encendido (fase 1B, 2026-10-13): el cron decide y encola, el drenador envía
 
@@ -565,9 +603,11 @@ pudimos leer el historial» en vez de «no hay campañas».
 | `src/services/cycle.service.ts` | El ciclo con I/O: el cron de una marca encendida y lo que el drenador necesita |
 | `src/app/(dashboard)/dashboard/settings/page.tsx` | UI de configuración de días |
 | `src/app/(dashboard)/dashboard/campaigns/page.tsx` | «Ciclo y campañas»: pestañas Ciclo · Historial, y el enlace «Mensaje libre (avanzado)» (`?tab=premios` redirige a Recompensas) |
-| `src/components/dashboard/cycle/` | La pantalla «Ciclo» (`CicloPantalla`, `EstadoDelCiclo`, `PrimerUso`, `ParaHoy`, `NumerosDeArriba`, `CajasDelCiclo`, `ListaDeCaja`, `VerPorDia`, `ComoDecide`), el mini-ciclo del panel (`MiniCiclo`) y `HistorialDeCampanas` |
+| `src/components/dashboard/cycle/` | La pantalla «Ciclo» (`CicloPantalla`, `EstadoDelCiclo`, `PrimerUso`, `ParaHoy`, `NumerosDeArriba`, `CajasDelCiclo`, `ListaDeCaja`, `VerPorDia`, `ComoDecide`; desde la parte C, además `VistaPorFecha` y los creadores), el mini-ciclo del panel (`MiniCiclo`) y `HistorialDeCampanas` |
 | `src/lib/cycle-screen.ts` | Lo puro de la pantalla: qué se muestra y qué no (formatos, «un fallo no es un cero», quién ve qué, rutas, colores `--brand-*`) |
 | `src/services/cycle-overview.service.ts` + `src/app/api/dashboard/cycle/*` | Los datos de la pantalla (parte A): `docs/API_DOCS.md` § «Ciclo de recuperación: la pantalla» |
+| `src/services/cycle-gift.service.ts` + `src/app/api/dashboard/cycle/gift` | «Mandar un regalo» (parte C): la vista previa, programar y lo que el drenador necesita (el regalo vive en `campaigns.filters.regalo`) |
+| `src/components/dashboard/cycle/{VistaPorFecha,MandarRegalo,CrearEvento,CreadorDelCiclo}.tsx` | La vista por fecha y los creadores (parte C) |
 | `src/components/dashboard/CampaignRewardsCatalog.tsx` | Catálogo de premios para regalar (vive en Recompensas › Premios para regalar desde 2026-10-13) |
 | `src/app/(dashboard)/dashboard/campaign-rewards/page.tsx` | Ruta vieja: redirige a `rewards?tab=premios` |
 | `src/app/api/cron/birthday/route.ts` | Cron cumpleaños |

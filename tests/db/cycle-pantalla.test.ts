@@ -676,12 +676,15 @@ describe('«Para hoy»: tarjetas armadas, ordenadas por lo que mueven, máximo t
     const ev = await evento(t, { fecha: isoDeDia(HOY + 5), envio: instanteEnBogota(HOY + 4, 16, 30) })
 
     const o = await servicio(t)
-    expect(o.para_hoy!.map((x) => x.tipo)).toEqual(['evento_sin_foto', 'trimestral', 'rescate_sin_regalo'])
-    const [sinFoto, trimestral, rescate] = o.para_hoy!
+    // Desde la parte C (00073): con el ciclo encendido, el evento NO le llega al dormido (no se
+    // marcó «Incluir a los dormidos»), así que mueve a 4 y no a 5; empata con el trimestral
+    // (4/4 = 1/1) y el trimestral, que es hoy, va primero.
+    expect(o.para_hoy!.map((x) => x.tipo)).toEqual(['trimestral', 'evento_sin_foto', 'rescate_sin_regalo'])
+    const [trimestral, sinFoto, rescate] = o.para_hoy!
     expect(sinFoto).toMatchObject({
       id: `evento_sin_foto:${ev}`,
       evento_id: ev,
-      clientes: 5,
+      clientes: 4,
       dias: 4,
       acciones: ['subir_foto'],
       texto: '«Noche de sushi» (viernes 9 de octubre) todavía no tiene foto. Sin foto no sale.',
@@ -702,7 +705,11 @@ describe('«Para hoy»: tarjetas armadas, ordenadas por lo que mueven, máximo t
       texto: '1 cliente llega al rescate esta semana y no hay regalo fuerte elegido.',
     })
     // El próximo evento, con su audiencia y la foto que falta.
-    expect(o.numeros.proximo_evento).toMatchObject({ id: ev, titulo: 'Noche de sushi', dias: 5, invitados: 5, sin_foto: true })
+    expect(o.numeros.proximo_evento).toMatchObject({ id: ev, titulo: 'Noche de sushi', dias: 5, invitados: 4, sin_foto: true })
+
+    // Con la casilla, el dormido también: 5 invitados (la MISMA audiencia que la invitación).
+    await db().query('UPDATE restaurant_events SET include_dormant = true WHERE id = $1', [ev])
+    expect((await servicio(t)).numeros.proximo_evento).toMatchObject({ id: ev, invitados: 5 })
   })
 
   it('«Hoy no»: la tarjeta queda pospuesta un día, sin el botón, y sale mañana', async () => {

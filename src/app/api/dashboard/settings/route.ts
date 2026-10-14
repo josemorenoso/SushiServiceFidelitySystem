@@ -5,7 +5,7 @@ import { requireTenantId } from '@/lib/tenant'
 import { exigirAlcanceDeMarca } from '@/lib/alcance-de-marca'
 import { isSuperAdmin } from '@/lib/admin'
 import { isDbFailure, logDbFailure } from '@/lib/db-failure'
-import { decidirEscrituraDeAjuste, esPunteroDePlantilla } from '@/lib/settings-keys'
+import { CLAVES_DEL_OPERADOR, decidirEscrituraDeAjuste, esPunteroDePlantilla } from '@/lib/settings-keys'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -138,7 +138,8 @@ export async function PUT(req: NextRequest) {
     valor: value,
     proveedor,
     valorActual: (existing?.value as string | null | undefined) ?? null,
-    esOperador: await isSuperAdmin(),
+    // Solo se pregunta para las claves que lo necesitan (hoy `cycle_enabled`): el resto no paga la lectura.
+    esOperador: CLAVES_DEL_OPERADOR.has(key) ? await isSuperAdmin() : false,
   })
   if (!decision.ok) {
     return NextResponse.json({ error: decision.error }, { status: decision.status })

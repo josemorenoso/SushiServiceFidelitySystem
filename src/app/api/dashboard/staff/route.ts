@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
-import { requireTenantId } from '@/lib/tenant'
 import bcrypt from 'bcryptjs'
 import { isDbFailure, logDbFailure } from '@/lib/db-failure'
+import { requireLocationScope } from '@/lib/location-scope'
+import {
+  alcanceDeMeseros,
+  veAlMesero,
+  veAlAparato,
+  porQueNoPuedeTocarAlMesero,
+  porQueNoPuedeAsignarSede,
+  type AlcanceDeMeseros,
+} from '@/lib/meseros-por-sede'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -60,8 +68,57 @@ function mensajeDeNombreDuplicado(message: string | undefined): string | undefin
   return undefined
 }
 
+/**
+ * La marca y el alcance de sede de quien llama (SEDE-MESEROS, 2026-10-15). Antes era
+ * `requireTenantId()`, que solo mira que el JWT traiga una marca: un administrador de UNA
+ * sede listaba y editaba los meseros de la OTRA. La decisión vive en `meseros-por-sede.ts`.
+ *
+ * Se resuelve sobre la URL SIN `?location_id=`, como `exigirAlcanceDeMarca()`: lo que se
+ * puede tocar depende del ROL, no de la sede que la pantalla esté mirando. Falla como la
+ * fábrica: 401 sin sesión, 403 sin alcance, 500 si la base no contestó.
+ */
+async function alcanceDeLaPeticion(
+  request: Request
+): Promise<{ ok: true; tenantId: string; alcance: AlcanceDeMeseros } | { ok: false; res: NextResponse }> {
+  const url = new URL(request.url)
+  url.searchParams.delete('location_id')
+  const r = await requireLocationScope(new Request(url.toString()))
+  if (!r.ok) return { ok: false, res: NextResponse.json({ error: r.error, message: r.error }, { status: r.status }) }
+  return { ok: true, tenantId: r.scope.tenantId, alcance: alcanceDeMeseros(r.scope) }
+}
+
+/**
+ * Lee el mesero `id` de ESTA marca y dice si quien llama lo puede tocar (`undefined` = sí).
+ * Un fallo de base es 500, nunca «no encontrado».
+ */
+async function porQueNoPuedeTocar(
+  db: ReturnType<typeof getServiceClient>,
+  tenantId: string,
+  alcance: AlcanceDeMeseros,
+  id: string
+): Promise<NextResponse | undefined> {
+  if (alcance.esMarca) return undefined
+  const { data, error } = await db
+    .from('staff_users')
+    .select('location_id, works_any_location')
+    .eq('id', id)
+    .eq('tenant_id', tenantId)
+    .maybeSingle()
+  if (isDbFailure(error)) {
+    logDbFailure({ scope: 'DashboardStaff', reason: 'staff_lookup_error', error, context: { tenant_id: tenantId, id } })
+    return NextResponse.json({ error: 'Error del servidor' }, { status: 500 })
+  }
+  if (!data) {
+    return NextResponse.json({ error: 'Mesero no encontrado', message: 'Mesero no encontrado' }, { status: 404 })
+  }
+  const motivo = porQueNoPuedeTocarAlMesero(alcance, data)
+  return motivo
+    ? NextResponse.json({ error: motivo.message, message: motivo.message }, { status: motivo.status })
+    : undefined
+}
+
 // ─── GET: listar meseros + dispositivos ───
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -69,7 +126,9 @@ export async function GET() {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
     }
 
-    const tenantId = await requireTenantId()
+    const quien = await alcanceDeLaPeticion(request)
+    if (!quien.ok) return quien.res
+    const { tenantId, alcance } = quien
     const db = getServiceClient()
     // `location_id` desde F4 (00044). NULL = mesero sin sede asignada, y SE MUESTRA: no se
     // adivina ni se reparte. La pantalla lo pinta como «Sin sede». `works_any_location`
@@ -100,7 +159,13 @@ export async function GET() {
       return NextResponse.json({ error: 'Error del servidor' }, { status: 503 })
     }
 
-    return NextResponse.json({ staff: staffList ?? [], devices: devices ?? [] })
+    // El recorte por sede, en memoria y con la MISMA función que decide las escrituras: la
+    // lista de una marca son decenas de filas, y lo que se ve y lo que se toca no pueden
+    // salir de dos decisiones distintas.
+    return NextResponse.json({
+      staff: (staffList ?? []).filter((s) => veAlMesero(alcance, s)),
+      devices: (devices ?? []).filter((d) => veAlAparato(alcance, d)),
+    })
   } catch (error) {
     console.error('[DashboardStaff GET] Error:', error)
     return NextResponse.json({ error: 'Error del servidor' }, { status: 500 })
@@ -180,8 +245,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const quien = await alcanceDeLaPeticion(request)
+    if (!quien.ok) return quien.res
+    const { tenantId, alcance } = quien
+
+    const fueraDeSuSede = porQueNoPuedeAsignarSede(alcance, { location_id: location_id ?? null, works_any_location })
+    if (fueraDeSuSede) {
+      return NextResponse.json({ error: 'Sede no permitida', message: fueraDeSuSede }, { status: 403 })
+    }
+
     const hashedPin = pin ? await bcrypt.hash(pin, 10) : null
-    const tenantId = await requireTenantId()
     const db = getServiceClient()
 
     if (location_id) {
@@ -293,8 +366,17 @@ export async function PATCH(request: NextRequest) {
       updateData.pin = await bcrypt.hash(pin, 10)
     }
 
-    const tenantId = await requireTenantId()
+    const quien = await alcanceDeLaPeticion(request)
+    if (!quien.ok) return quien.res
+    const { tenantId, alcance } = quien
     const db = getServiceClient()
+
+    const noPuede = await porQueNoPuedeTocar(db, tenantId, alcance, id)
+    if (noPuede) return noPuede
+    const fueraDeSuSede = porQueNoPuedeAsignarSede(alcance, { location_id, works_any_location })
+    if (fueraDeSuSede) {
+      return NextResponse.json({ error: 'Sede no permitida', message: fueraDeSuSede }, { status: 403 })
+    }
 
     // D11: mover de sede a un mesero. `null` explícito lo deja sin sede.
     if (location_id !== undefined) {
@@ -397,9 +479,23 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    const tenantId = await requireTenantId()
+    const quien = await alcanceDeLaPeticion(request)
+    if (!quien.ok) return quien.res
+    const { tenantId, alcance } = quien
     const db = getServiceClient()
-    await db.from('staff_users').delete().eq('id', id).eq('tenant_id', tenantId)
+
+    const noPuede = await porQueNoPuedeTocar(db, tenantId, alcance, id)
+    if (noPuede) return noPuede
+
+    // Sin destructurar `error`, un fallo de base salía como «eliminado».
+    const { error } = await db.from('staff_users').delete().eq('id', id).eq('tenant_id', tenantId)
+    if (error) {
+      logDbFailure({ scope: 'DashboardStaff', reason: 'staff_delete_error', error, context: { tenant_id: tenantId, id } })
+      return NextResponse.json(
+        { error: 'Error del servidor', message: 'No se pudo eliminar el mesero' },
+        { status: 500 }
+      )
+    }
 
     return NextResponse.json({ success: true })
   } catch (error) {

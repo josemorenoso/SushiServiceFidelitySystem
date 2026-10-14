@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs'
 import { createClient } from '@supabase/supabase-js'
 import { resolveHostContext } from '@/lib/tenant'
 import { isDbFailure, logDbFailure } from '@/lib/db-failure'
+import { rateLimit, getClientIp } from '@/lib/rate-limit'
 
 /**
  * POST /api/staff/device/register — activar el celular DEL LOCAL.
@@ -41,6 +42,45 @@ function getServiceClient() {
 }
 
 type Db = ReturnType<typeof getServiceClient>
+
+/**
+ * N13 (2026-10-15): el PIN del supervisor no tenía límite de intentos. Un PIN es de 4 a 6
+ * dígitos y esta ruta es pública (la abre cualquiera en `/mesero`): sin tope, 10.000
+ * combinaciones se prueban en una tarde. El MISMO patrón que `mystery-box/resolve`: por
+ * celular y por IP, en memoria de cada instancia (`rate-limit.ts`) — acota, no es un
+ * candado; uno compartido entre instancias necesita la base (anotado en PENDIENTES §5).
+ *
+ * Se cuenta ANTES de buscar el celular, y una equivocación dice lo mismo exista o no el
+ * celular: ni el tope ni el mensaje le cuentan a nadie qué teléfonos son de un supervisor.
+ */
+const INTENTOS_DE_PIN_POR_CELULAR = 5
+const INTENTOS_DE_PIN_POR_IP = 20
+const VENTANA_DE_INTENTOS_MS = 15 * 60_000
+
+/** El 401 de toda credencial que no sirve, con el mismo texto en los cuatro casos. */
+const CREDENCIALES_INVALIDAS = 'El celular o el PIN no son correctos.'
+
+/**
+ * Un hash bcrypt de verdad (costo 10, como los PIN) de una cadena que no es un PIN: con
+ * él, un celular que no existe tarda lo mismo que un PIN equivocado.
+ */
+const HASH_DE_RELLENO = '$2b$10$uZ9AKnhvjWl2pUSMn/G69.BtwSFFUl0uWpYuE6OfSHyF67Com56sC'
+
+function credencialesInvalidas() {
+  return NextResponse.json({ error: 'No autorizado', message: CREDENCIALES_INVALIDAS }, { status: 401 })
+}
+
+function demasiadosIntentos(retryAfterSeconds: number) {
+  const minutos = Math.max(1, Math.ceil(retryAfterSeconds / 60))
+  return NextResponse.json(
+    {
+      error: 'Demasiados intentos',
+      message: `Demasiados intentos con este celular. Espera ${minutos} ${minutos === 1 ? 'minuto' : 'minutos'} y vuelve a intentarlo.`,
+      retryAfter: retryAfterSeconds,
+    },
+    { status: 429, headers: { 'Retry-After': String(retryAfterSeconds) } }
+  )
+}
 
 /**
  * Valida que `location_id` sea una sede ACTIVA DE ESTA MARCA. Multi-sede F4 (D11).
@@ -101,6 +141,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // ─── N13: tope de intentos, antes de mirar si el celular existe ───
+    const porCelular = rateLimit(
+      `staff-pin:${tenant.id}:${String(phone).trim()}`,
+      INTENTOS_DE_PIN_POR_CELULAR,
+      VENTANA_DE_INTENTOS_MS
+    )
+    if (!porCelular.allowed) return demasiadosIntentos(porCelular.retryAfterSeconds)
+    const porIp = rateLimit(`staff-pin-ip:${getClientIp(request)}`, INTENTOS_DE_PIN_POR_IP, VENTANA_DE_INTENTOS_MS)
+    if (!porIp.allowed) return demasiadosIntentos(porIp.retryAfterSeconds)
+
     const supabase = getServiceClient()
 
     // ─── Validar supervisor/admin ───
@@ -127,32 +177,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!staff || !staff.is_active) {
-      return NextResponse.json(
-        { error: 'No autorizado', message: 'Usuario no encontrado o inactivo' },
-        { status: 401 }
-      )
+    // N13: «no existe», «inactivo», «sin PIN» y «PIN incorrecto» contestan lo mismo y tardan
+    // lo mismo (siempre hay un `bcrypt.compare`). Antes cada uno tenía su frase, y la de «no
+    // encontrado» le decía a quien probaba qué celulares eran de un supervisor.
+    const hashAComparar = staff && staff.is_active && staff.pin ? staff.pin : HASH_DE_RELLENO
+    const valid = await bcrypt.compare(String(pin), hashAComparar)
+    if (!staff || !staff.is_active || !staff.pin || !valid) {
+      return credencialesInvalidas()
     }
 
+    // El rol, solo DESPUÉS del PIN: antes salía primero y delataba los celulares de meseros.
     if (staff.role !== 'supervisor' && staff.role !== 'admin') {
       return NextResponse.json(
-        { error: 'No autorizado', message: 'Solo supervisores o admins pueden activar dispositivos' },
+        { error: 'No autorizado', message: 'Solo un supervisor o un administrador puede activar este celular.' },
         { status: 403 }
-      )
-    }
-
-    if (!staff.pin) {
-      return NextResponse.json(
-        { error: 'No autorizado', message: 'Este usuario no tiene PIN configurado' },
-        { status: 401 }
-      )
-    }
-
-    const valid = await bcrypt.compare(String(pin), staff.pin)
-    if (!valid) {
-      return NextResponse.json(
-        { error: 'No autorizado', message: 'PIN incorrecto' },
-        { status: 401 }
       )
     }
 

@@ -137,6 +137,10 @@ export default function StaffPage() {
   // un segundo fetch de `restaurant_locations`.
   const { view: locationScopeView } = useLocationScope()
   const assignableLocations = locationScopeView?.locations ?? []
+  // SEDE-MESEROS (2026-10-15): un administrador de sede ve y asigna solo SU sede. Volver
+  // rotativo a alguien lo pone en todas las sedes de la marca, así que no se le ofrece (la
+  // API lo rechaza igual, con el porqué).
+  const puedeMarcarRotativo = locationScopeView?.role !== 'location'
   const locationName = (id: string | null) =>
     id ? (assignableLocations.find((l) => l.id === id)?.name ?? 'Sede desconocida') : 'Sin sede'
 
@@ -184,7 +188,12 @@ export default function StaffPage() {
   const fetchData = useCallback(async () => {
     try {
       const res = await fetch('/api/dashboard/staff')
-      const json = await res.json()
+      const json = await res.json().catch(() => ({}))
+      // Un 403 o un 500 no es «no hay meseros»: se dice, y la lista no se vacía.
+      if (!res.ok) {
+        toast.error(json.message || json.error || 'Error cargando meseros')
+        return
+      }
       setData({ staff: json.staff ?? [], devices: json.devices ?? [] })
     } catch {
       toast.error('Error cargando meseros')
@@ -359,7 +368,11 @@ export default function StaffPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, is_active: !currentActive }),
       })
-      if (!res.ok) { toast.error('Error al cambiar estado'); return }
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}))
+        toast.error(json.message || json.error || 'Error al cambiar estado')
+        return
+      }
       setData((prev) => ({
         ...prev,
         staff: prev.staff.map((s) => s.id === id ? { ...s, is_active: !currentActive } : s),
@@ -381,7 +394,11 @@ export default function StaffPage() {
     setDeleting(true)
     try {
       const res = await fetch(`/api/dashboard/staff?id=${deleteTarget.id}`, { method: 'DELETE' })
-      if (!res.ok) { toast.error('Error al eliminar'); return }
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}))
+        toast.error(json.message || json.error || 'Error al eliminar')
+        return
+      }
       toast.success(`"${deleteTarget.name}" eliminado`)
       setData((prev) => ({ ...prev, staff: prev.staff.filter((s) => s.id !== deleteTarget.id) }))
       setDeleteTarget(null)
@@ -1051,7 +1068,9 @@ export default function StaffPage() {
                     {assignableLocations.map((loc) => (
                       <option key={loc.id} value={loc.id}>{loc.name}</option>
                     ))}
-                    <option value={ROTA}>Rota entre sedes (sale en todos los escáneres)</option>
+                    {puedeMarcarRotativo && (
+                      <option value={ROTA}>Rota entre sedes (sale en todos los escáneres)</option>
+                    )}
                   </select>
                   <p className="text-[10px] text-muted-foreground">
                     {rolUsaCredenciales(newRole)
@@ -1202,7 +1221,9 @@ export default function StaffPage() {
                     {assignableLocations.map((loc) => (
                       <option key={loc.id} value={loc.id}>{loc.name}</option>
                     ))}
-                    <option value={ROTA}>Rota entre sedes (sale en todos los escáneres)</option>
+                    {(puedeMarcarRotativo || editLocationId === ROTA) && (
+                      <option value={ROTA}>Rota entre sedes (sale en todos los escáneres)</option>
+                    )}
                   </select>
                   {editLocationId === ROTA && (
                     <p className="text-[10px] text-muted-foreground">

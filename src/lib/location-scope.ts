@@ -421,9 +421,10 @@ export async function requireLocationScope(request: Request): Promise<LocationSc
  * `OR` en TypeScript el operador perdía en el panel lo que el motor sí le concede.
  * Desde el 2026-10-14 (SEDE-OPERADOR) `requireLocationScope()` lleva el mismo `OR`
  * y le da al operador el alcance de marca, así que con un alcance resuelto este ya
- * no cambia la respuesta: decide solo cuando el alcance NO se resolvió (sin marca
- * en el JWT, o un fallo de base), y ahí `exigirAlcanceDeMarca()` saca la marca de
- * `requireTenantId()`.
+ * no cambia la respuesta: decide solo cuando el alcance NO se resolvió por algo que
+ * no es la base (sin marca en el JWT), y ahí `exigirAlcanceDeMarca()` saca la marca
+ * de `requireTenantId()`. Un fallo de base no llega acá: `exigirAlcanceDeMarca()`
+ * devuelve su 500 antes (OPERADOR-BASE-CAIDA, 2026-10-15).
  *
  * Las dos entradas y nada más:
  *   · `scope` — `null` cuando el alcance NO se pudo resolver (sin sesión, sin

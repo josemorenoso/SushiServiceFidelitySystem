@@ -42,19 +42,31 @@ export async function exigirAlcanceDeMarca(
   url.searchParams.delete('location_id')
 
   const scopeResult = await requireLocationScope(new Request(url.toString()))
+
+  // Un fallo de base (o de la sesión) es 500 para TODOS, el operador de Cada1 incluido, y
+  // ANTES del `OR`: si no se pudo leer el alcance, no se escribe (OPERADOR-BASE-CAIDA,
+  // 2026-10-15). Antes, `puedeEscribirEnLaMarca()` le daba `true` al operador con
+  // `scope = null` y la escritura seguía con la marca de `requireTenantId()`.
+  if (!scopeResult.ok && scopeResult.status === 500) {
+    return {
+      ok: false,
+      res: NextResponse.json({ error: scopeResult.error }, { status: 500 }),
+    }
+  }
+
   const scope = scopeResult.ok ? scopeResult.scope : null
   const esSuperAdmin = await isSuperAdmin()
 
   if (puedeEscribirEnLaMarca({ scope, esSuperAdmin })) {
     // `scope.tenantId` y `requireTenantId()` leen el MISMO `app_metadata.tenant_id`.
-    // La segunda solo hace falta para el operador de Cada1 cuando el alcance no
-    // se pudo resolver: sin marca en el JWT lanza, y el `catch` del verbo lo
-    // convierte en el 500 de siempre.
+    // La segunda solo se alcanza con el operador de Cada1 y el alcance sin resolver
+    // por algo que NO es la base (el 500 ya salió arriba): sin marca en el JWT lanza,
+    // y el `catch` del verbo lo convierte en el 500 de siempre.
     return { ok: true, tenantId: scope ? scope.tenantId : await requireTenantId() }
   }
 
   // Sin alcance y sin super-admin se contesta lo que dijo la fábrica —401 sin
-  // sesión, 403 sin permiso, **500 si la base falló**—, nunca un 403 genérico:
+  // sesión, 403 sin permiso (el 500 de la base ya salió arriba)—, nunca un 403 genérico:
   // confundir un fallo de base con "no tenés permiso" es lo que manda a alguien
   // a revisar los accesos durante media hora.
   if (!scopeResult.ok) {

@@ -85,7 +85,7 @@ el JWT.**
 | `staff_users_phone_tenant_key` **se conserva** | **19.f**: no se quita, se complementa. Sigue siendo D11 en el motor para todo el parque que sí tiene teléfono |
 | `+ CHECK (phone IS NOT NULL OR location_id IS NOT NULL)` | **19.f**: sin teléfono la sede es OBLIGATORIA — sin sede un mesero no sale en ninguna lista y no tiene llave |
 | `+ UNIQUE (tenant_id, location_id, lower(trim(name))) WHERE location_id IS NOT NULL` | **19.f**: dos «Ana» de la misma sede son indistinguibles al elegir. Parcial a propósito: **los NULL no colisionan** |
-| `+ staff_users.pin_failed_attempts` / `.pin_locked_until` · `+ admin_settings.staff_redeem_requires_pin` (por tenant) | **19.e** el contador debe ser durable (`rateLimit()` vive en memoria y Vercel tiene N instancias) · **§19.7** el PIN se activa/desactiva desde el apartado de escaneo |
+| ~~`+ staff_users.pin_failed_attempts` / `.pin_locked_until` · `+ admin_settings.staff_redeem_requires_pin`~~ | **Nunca se crearon** (verificado contra `supabase/migrations/` el 2026-10-15: ninguna migración las tiene, ningún código las lee). Era el diseño de **19.e** (un contador durable: `rateLimit()` vive en memoria de cada instancia). El límite que SÍ existe desde el 2026-10-15 (N13) es en memoria: § «El tope de intentos del PIN» |
 
 ---
 
@@ -117,6 +117,34 @@ combinación inválida (mesero, sin celular, sin sede) y el error llegaba tarde,
 desde un 23514 de Postgres. Ahora no se puede llegar hasta ahí. La validación del servidor
 en `/api/dashboard/staff` **no cambió** — sigue siendo la que manda; el formulario es el
 cinturón, no el motor.
+
+### Un administrador de sede maneja SU sede (SEDE-MESEROS, 2026-10-15)
+
+Hasta el 15-10 `/api/dashboard/staff` y `/staff/device` autenticaban con `requireTenantId()`, y
+un administrador de UNA sede (`role='location'`) listaba, editaba y borraba los meseros y los
+aparatos de la OTRA sede de su marca. Ahora resuelven el alcance con `requireLocationScope()` y
+deciden con `src/lib/meseros-por-sede.ts` (puro):
+
+| Quién | Ve | Cambia / borra |
+|---|---|---|
+| Usuario de marca y el operador de Cada1 | Todo, «Sin sede» incluido (igual que antes) | Todo |
+| Administrador de sede | Los meseros de sus sedes **+ los rotativos** (salen en su escáner) y los aparatos de sus sedes. Nunca el «Sin sede» (es de la marca, fila 4 del §5.1) | Solo los de sus sedes y solo hacia sus sedes. Un rotativo, o volver rotativo a alguien, es de la marca: 403 con el porqué |
+
+Lo de la otra sede sale como 404 («no existe» y «es de la otra sede» dicen lo mismo). Que el
+rotativo sea de solo lectura para la sede es una decisión tomada sin el dueño
+(`docs/PENDIENTES.md` §8 D); revertible tocando solo `porQueNoPuedeTocarAlMesero()`.
+
+### El tope de intentos del PIN (N13, 2026-10-15)
+
+`POST /api/staff/device/register` es pública y el PIN es de 4 a 6 dígitos: sin tope se probaba
+entero en una tarde. Ahora, con el MISMO patrón que `mystery-box/resolve` (`rateLimit()`):
+**5 intentos cada 15 min por celular** de la marca y **20 por IP**; el sexto es 429 *«Demasiados
+intentos con este celular. Espera N minutos…»* con `Retry-After`, aunque traiga el PIN bueno. El
+tope se cuenta ANTES de buscar el celular, y «no existe», «inactivo», «sin PIN» y «PIN
+incorrecto» contestan el MISMO 401 (*«El celular o el PIN no son correctos.»*) y tardan lo mismo
+(siempre hay un `bcrypt.compare`): ni el tope ni el mensaje dicen qué celulares son de un
+supervisor. El rol se mira DESPUÉS del PIN. **Límite conocido:** vive en memoria de cada
+instancia; uno compartido necesita columnas nuevas (`docs/PENDIENTES.md` §5, N13-durable).
 
 ### Los meseros que ya existen no aparecen en ningún escáner
 

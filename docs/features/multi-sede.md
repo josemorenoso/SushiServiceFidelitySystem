@@ -660,6 +660,41 @@ instante** en que su sede activa nº2 nace (`tenant_active_location_count() >= 2
 sea la red y no el camino normal. Es idempotente (no pisa a un usuario al que ya se le asignó
 `role='location'` a mano) y cubre también reactivar una sede apagada o dar de alta la 3ª, 4ª, N.
 
+### El operador de Cada1 — el `OR` de la 00045, también en TypeScript (SEDE-OPERADOR, 2026-10-14)
+
+**La regla:** el operador de Cada1 (`app_metadata.role = 'super_admin'`) tiene, en la marca de SU
+sesión (`app_metadata.tenant_id`), **el alcance de un super usuario**: todas las sedes activas,
+«Toda la marca (N sedes)» y lo sin sede (la fila 3 de la tabla). Si elige una sede en el selector,
+ve esa sede, como cualquier usuario de marca.
+
+Las policies de la 00045 son `is_super_admin() OR can_see_location(location_id)`, con el `OR`
+**afuera** de `can_see_location()`. `requireLocationScope()` (`src/lib/location-scope.ts`) lo lleva
+igual: afuera de `decideLocationScope()`, que **no se tocó** y sigue siendo el espejo de
+`can_see_location()` (lo vigila `tests/db/multisede-permisos.test.ts`). Al operador se le pasa a la
+decisión el permiso de un super usuario en lugar de sus filas, y gana aunque tenga una fila de sede
+en esa marca, porque el `OR` va afuera. El rol se lee del `app_metadata` que la fábrica ya tiene en la
+mano: el mismo predicado que `isSuperAdmin()` y que `is_super_admin()` en SQL.
+
+Antes, sin fila en `dashboard_user_locations` de las marcas de sus clientes, el fail-safe le
+contestaba **403** en Métricas, Rendimiento, Redenciones, Domicilios, Autorizados, Mis sedes y el
+historial de Campañas de toda marca con 2+ sedes (Tepuy): no podía mirar el panel para dar soporte.
+
+- **Ve la marca de su sesión y ninguna otra.** La marca sale del JWT; las sedes se leen con
+  `.eq('tenant_id', …)`; una sede de otra marca en `?location_id=` no está en la lista → 403.
+- **Falla cerrado como todos:** sin marca en el JWT, 403; sin sesión, 401; la sesión o las sedes
+  sin poder leerse, 500.
+- **Con 0 o 1 sede activa no cambia nada:** la fila 3 da lo mismo que la fila 1 de hoy.
+- **Un administrador de sede y un usuario de marca siguen exactamente igual.**
+- **Accesos también se le abre** en las marcas de 2+ sedes: las tres rutas de usuarios deciden con
+  `scope.role === 'brand'` (`requireBrandScope()` en `api/dashboard/users/route.ts` y sus dos hermanas
+  de `users/[id]`), y el operador ahora llega con `role='brand'`. En las marcas de 0 o 1 sede ya la
+  tenía abierta (fila 1), y desde el AIOS ya crea usuarios y cambia contraseñas en cualquier marca
+  (`/api/aios/tenant-admin`). **Lo decidió el dueño el 2026-10-14** («super usuario en todo»). Las
+  rutas de usuarios no se tocaron, y la lista de Accesos sigue sin mostrar al operador
+  (`listTenantUsers()` salta `super_admin`).
+- **Cómo llega a la sesión de una marca no cambió:** no hay selector de marca. Su
+  `app_metadata.tenant_id` se cambia a mano (SQL sobre `auth.users`) y hay que volver a entrar.
+
 ### `LocationScope` — el tipo opaco, y por qué importa más que el RLS aquí
 
 `src/lib/location-scope.ts`. `LocationScope` lleva una marca de un `Symbol()` real (no un
@@ -718,7 +753,8 @@ como `anon`/`authenticated`, y un `REVOKE` los dejaría sin leer.
 El alcance viaja como `?location_id=` (ausente / `all` / uuid / `unknown`) sobre las rutas que ya
 existen, resuelto siempre en el servidor. **"Todas" significa "todas las que este usuario puede
 ver"** — si la ausencia significara "toda la marca", cada ruta que olvidara el scope filtraría de
-más. La opción *"Toda la marca (N sedes)"* solo se dibuja si el usuario es de marca. **Desde el
+más. La opción *"Toda la marca (N sedes)"* solo se dibuja si el usuario es de marca (el operador
+de Cada1 cuenta como de marca desde el 2026-10-14: ver arriba). **Desde el
 2026-10-14 el cubo *"Sin sede"* ya no es una opción del selector** (§3.octies): sigue existiendo
 como `?location_id=unknown` en las rutas, y lo que no tiene sede se muestra en «Tus sedes».
 
@@ -804,6 +840,10 @@ pareja rechazando con `23514` las dos combinaciones inválidas, y una lectura RE
 `role='brand'` sí. `tests/unit/location-scope.test.ts` — 23 comprobaciones de `decideLocationScope()`,
 `applyLocationFilter()`, `locationMatches()` y `toScopeView()`, sin base de datos.
 `tests/unit/location-scope-allowlist.test.ts` — la tercera red, comprobándose a sí misma.
+`tests/db/sede-operador.test.ts` — 18 contra Postgres real con las rutas reales (Métricas, el
+selector, Redenciones, Mis sedes): el operador en una marca de 2 sedes ve «toda la marca» y, con
+`?location_id=`, esa sede; nunca la marca B; el administrador de sede, el usuario de marca y la
+marca de una sede, igual que antes; el fail-closed. Contra el código anterior caen 9.
 
 ---
 
@@ -1011,12 +1051,15 @@ corrección, y hoy choca de frente con 0.GAMMA (una sede con premios propios le 
 «ya reclamé» a toda la base de clientes). Está en ESTADO §3.
 
 **La trampa del super-admin, que había que comprobar antes de tocar la autenticación.**
-`requireLocationScope()` no tiene el `OR` del operador de Cada1, y en SQL sí lo tiene: las
+En septiembre `requireLocationScope()` no tenía el `OR` del operador de Cada1, y en SQL sí: las
 policies de la 00045 son `is_super_admin() OR can_see_location(...)`. El operador **no tiene
 fila en `dashboard_user_locations`** de las marcas de sus clientes, así que en una marca de
-dos sedes la fábrica le contesta 403 — y como el camino real del panel corre con
+dos sedes la fábrica le contestaba 403 — y como el camino real del panel corre con
 `service_role`, sin ese `OR` en TypeScript perdía en el panel lo que el motor sí le concede.
-Por eso la decisión vive en `puedeEscribirEnLaMarca()` (`src/lib/location-scope.ts`), que es
+**Desde el 2026-10-14 la fábrica también lo lleva** (SEDE-OPERADOR, §3.quater: el operador tiene
+el alcance de un super usuario en la marca de su sesión), y con un alcance resuelto el `OR` de
+abajo ya no cambia la respuesta: decide solo cuando el alcance no se resolvió.
+La decisión de escribir vive en `puedeEscribirEnLaMarca()` (`src/lib/location-scope.ts`), que es
 **pura** y toma dos entradas: el `LocationScope` (`null` si no se pudo resolver) y
 `esSuperAdmin` (de `isSuperAdmin()`). `null` nunca autoriza por sí solo: sin sesión, sin
 marca en el JWT, sin alcance con 2+ sedes **o con la base caída**, no se escribe. Y cuando
@@ -1026,12 +1069,15 @@ accesos durante media hora.
 
 `requireTenantId()` sigue importado a propósito: lee el MISMO `app_metadata.tenant_id` que
 el alcance, y es de donde sale la marca en el único caso en que no hay alcance que leer —el
-operador de Cada1.
+operador de Cada1 cuando el alcance no se resolvió (desde el 2026-10-14, solo sin marca en el
+JWT, donde lanza y da 500, o con la base caída).
 
 **Hay un gemelo que NO se unificó**: `requireBrandScope()` en
-`src/app/api/dashboard/users/route.ts` exige `role === 'brand'` sin el `OR` del super-admin.
-Se dejó como está porque quién puede crear usuarios de una marca ajena es una decisión del
-dueño, y unificarlas de paso se la habría respondido sola.
+`src/app/api/dashboard/users/route.ts` (y sus dos hermanas de `users/[id]`) exige `role === 'brand'`
+sin el `OR` del super-admin. Se dejó como estaba porque quién puede crear usuarios de una marca
+ajena era una decisión del dueño. **La tomó el 2026-10-14** («super usuario en todo»): desde
+SEDE-OPERADOR el operador llega a esas rutas con `role='brand'` y Accesos se le abre también en las
+marcas de 2+ sedes. Las rutas no se tocaron (§3.quater).
 
 **Con 0 o 1 sede activa nada cambia para las 5 marcas vivas**: sin filas de alcance, la fila
 1 del §5.1 las resuelve como `role='brand'`.

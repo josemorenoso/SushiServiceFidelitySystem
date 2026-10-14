@@ -8,6 +8,18 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [fix] — 2026-10-14 — SEDE-OPERADOR: el operador de Cada1 ve el panel de una marca con 2+ sedes (sin migración)
+
+- **Antes:** el operador (`app_metadata.role = 'super_admin'`) no tiene fila en `dashboard_user_locations` de sus clientes,
+  y el fail-safe del §5.1 le daba **403** en Métricas, Rendimiento, Redenciones, Domicilios, Autorizados, Mis sedes y
+  Campañas de toda marca con 2+ sedes (Tepuy): no podía mirar el panel para dar soporte.
+- **Ahora:** `requireLocationScope()` lleva el `OR` de la 00045 (`is_super_admin() OR can_see_location()`) **afuera** de
+  `decideLocationScope()`, que no se tocó. En la marca de SU sesión, el operador tiene el alcance de un super usuario:
+  «Toda la marca (N sedes)» en el selector, cada sede si la elige, y lo sin sede. Nunca otra marca.
+- Sin cambios para el administrador de sede, el usuario de marca ni las marcas de 0 o 1 sede.
+- **Accesos se le abre también** en las de 2+ sedes (las rutas de usuarios deciden por `role='brand'`): decisión del dueño.
+- `tests/db/sede-operador.test.ts` (18, Postgres real); contra el código anterior caen 9. → `multi-sede.md` §3.quater.
+
 ## [deploy] — 2026-10-14 — Push a `main` = `36166c5`: la fase 2 del ciclo (A, B y C) y las sedes separadas (partes 1 y 3)
 
 - Orden del dueño («pushea todo de una vez»). **La 00073 se aplicó antes** (verificada: `include_dormant | boolean | false`).

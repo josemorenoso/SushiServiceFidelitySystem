@@ -102,6 +102,15 @@ contexto; esto es todo lo que necesitas para seguir sin que el dueño repita nad
    X, empezando por su sección 1». Verificar cada parte antes de dar la siguiente. **A y B: hechas y verificadas
    (14-10). C, con Opus (lo eligió el dueño).** Lo que A y B le dejan a C está en `docs/PENDIENTES.md` §2.4 y en los
    puntos 5 y 6 de la parte C del prompt.
+1-sexies. **La noche del 14 al 15-10 (el dueño duerme):** quedaron corriendo la auditoría del AIOS
+   (`2026-10-15-aios-jerarquia.md`) y, si el dueño las abrió, **referidos** (`docs/prompts/2026-10-15-referidos.md`, Opus,
+   con migración del script; espera a que la parte 2 de sedes cierre antes de tocar la tarjeta) y **arreglos chicos**
+   (`docs/prompts/2026-10-15-arreglos-chicos.md`, Opus, 15 IDs de PENDIENTES §5 y §3.2 en cuatro grupos). La parte 2 de
+   sedes (la tarjeta, **00074**) estaba cerrando. Por la mañana: verificar cada una contra el código, leer las migraciones
+   (00074 y la de referidos) línea por línea, correr la suite entera y recién ahí pedirle al dueño las migraciones y el
+   «pushea». Las decisiones de referidos (C7) las tomó el comandante como AJUSTES por marca (los dos ganan; premio del
+   catálogo, puntos o nada; el de quien invita al validar el mesero la primera visita; tope 10/mes; vence a 30 días;
+   apagado por defecto; sin plantillas nuevas): el dueño puede cambiarlas sin código.
 1-quinquies. **15-10 (madrugada).** **Tepuy:** el producto la tenía como Twilio aunque el AIOS ya la había conectado (faltaba
    el paso «4. WhatsApp» de una SEDE del AIOS, `aios_activate_whatsapp()`); el dueño lo apretó en Envigado → Zernio
    activo → **mandó las 16 plantillas** desde el panel (Plantillas → «Enviar los 16 juntos»). A los minutos Meta aprobó 8

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type ReactNode } from 'react'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   BarChart,
@@ -16,7 +16,6 @@ import {
   Cell,
 } from 'recharts'
 import { TrendingUp, DollarSign, Target } from 'lucide-react'
-import { useLocationScope, LOCATION_ALL } from '@/contexts/LocationScopeContext'
 
 interface CampaignEfficiency {
   id: string
@@ -68,17 +67,20 @@ function formatDate(iso: string): string {
   return d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short' })
 }
 
-export function CampaignEfficiencyChart() {
+/**
+ * `etiqueta` (sedes separadas, parte 1): «Toda la marca» con varias sedes. Sin ella, como siempre.
+ */
+export function CampaignEfficiencyChart({ etiqueta }: { etiqueta?: ReactNode } = {}) {
   const [data, setData] = useState<EfficiencyResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [lookback, setLookback] = useState(90)
-  const { selection: locationSelection } = useLocationScope()
 
   useEffect(() => {
     let cancelled = false
     setLoading(true)
     const params = new URLSearchParams({ days: String(lookback) })
-    if (locationSelection !== LOCATION_ALL) params.set('location_id', locationSelection)
+    // Sin sede, a propósito: las campañas son de toda la marca (`campaigns.location_id` no la
+    // escribe nadie, F6) y con una sede elegida la gráfica salía vacía. Ver `ROICard`.
     fetch(`/api/dashboard/campaigns/efficiency?${params}`)
       .then((r) => r.json())
       .then((json) => {
@@ -93,7 +95,7 @@ export function CampaignEfficiencyChart() {
     return () => {
       cancelled = true
     }
-  }, [lookback, locationSelection])
+  }, [lookback])
 
   // Prepara data para chart: las más recientes primero, máx 12
   const chartData = (data?.campaigns ?? [])
@@ -117,6 +119,7 @@ export function CampaignEfficiencyChart() {
             style={{ color: '#1a1c1d', letterSpacing: '-0.02em' }}
           >
             Eficiencia por Campaña
+            {etiqueta && <span className="ml-2 inline-block align-middle">{etiqueta}</span>}
           </h3>
           <p className="text-xs mt-1" style={{ color: '#9ca3af' }}>
             Conversión y revenue atribuido (ventana {summary?.attribution_window_days ?? 7} días)

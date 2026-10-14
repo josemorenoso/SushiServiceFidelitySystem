@@ -435,6 +435,7 @@ export function toScopeView(scope: LocationScope, locations: LocationOption[]): 
     locations,
     // El selector no se dibuja con una sola sede (§8.3). Ver `LocationScopeView`.
     multiSede: scope.brandActiveLocationCount >= 2,
+    brandLocationCount: scope.brandActiveLocationCount,
   }
 }
 

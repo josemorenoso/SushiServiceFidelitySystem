@@ -255,9 +255,12 @@ function sembrar(): Record<string, Fila[]> {
 /**
  * El alcance se fabrica con un literal y un `as`: la marca de opacidad de `LocationScope` es
  * un símbolo que solo existe para el compilador (la ruta que se olvida del filtro no compila),
- * y `getFullAnalytics()` solo lee `tenantId`, `locationIds` e `includesUnassigned`.
+ * y `getFullAnalytics()` solo lee `tenantId`, `locationIds` e `includesUnassigned` — y, para
+ * «Tus sedes» (sedes separadas, parte 1), `role`, `selection` y `brandActiveLocationCount`.
  */
-function alcance(over: Partial<{ locationIds: string[] | null; includesUnassigned: boolean }> = {}): LocationScope {
+function alcance(
+  over: Partial<{ locationIds: string[] | null; includesUnassigned: boolean; brandActiveLocationCount: number }> = {}
+): LocationScope {
   return {
     tenantId: A,
     role: 'brand',
@@ -461,10 +464,22 @@ describe('cómo lee la base', () => {
     expect(a.brand.roiEstimate.avgTicket).toBe(35000) // sin ajuste guardado, el de siempre
     // clientes, visitas ×2, campañas y ajustes (los cumpleaños salen de los clientes, no de otra
     // lectura). Sin campañas de reactivación no se pregunta por mensajes: una lectura menos, no una
-    // que vuelve vacía.
+    // que vuelve vacía. Este alcance es de una marca de DOS sedes con «toda la marca»: suma las
+    // dos de «Tus sedes» (sedes separadas, parte 1) — las sedes y los premios entregados —, una
+    // ida cada una.
     expect(consultas.map((c) => c.tabla).sort()).toEqual(
-      ['admin_settings', 'campaigns', 'customers', 'visits', 'visits']
+      ['admin_settings', 'campaigns', 'customers', 'restaurant_locations', 'reward_redemptions', 'visits', 'visits']
     )
+  })
+
+  it('una marca de UNA sede lee lo mismo que antes de «Tus sedes»: ni sedes ni premios', async () => {
+    tablas = { customers: [], visits: [], campaigns: [], campaign_messages: [], admin_settings: [] }
+
+    const a = await analitica(alcance({ brandActiveLocationCount: 1 }))
+
+    expect(a.sedes).toBeNull()
+    expect(a.origin).toBeNull()
+    expect(consultas.map((c) => c.tabla).sort()).toEqual(['admin_settings', 'campaigns', 'customers', 'visits', 'visits'])
   })
 })
 

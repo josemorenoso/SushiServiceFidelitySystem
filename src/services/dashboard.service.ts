@@ -7,17 +7,21 @@ import { logDbFailure, type DbErrorLike } from '@/lib/db-failure'
 import { leerTodo } from '@/lib/leer-todo'
 import { getUnscopedServiceClient } from '@/lib/supabase/unscoped'
 import { applyLocationFilter, locationMatches, type LocationScope } from '@/lib/location-scope'
-import type {
-  DashboardAnalytics,
-  DailyVisits,
-  DailyNewCustomers,
-  TierCount,
-  RiskGroup,
-  RankedCustomer,
-  HeatmapCell,
-  AcquisitionChannel,
-  ReactivationData,
-  ROIEstimate,
+import {
+  SIN_SEDE,
+  type DashboardAnalytics,
+  type DashboardAnalyticsOrigin,
+  type DailyVisits,
+  type DailyNewCustomers,
+  type TierCount,
+  type RiskGroup,
+  type RankedCustomer,
+  type HeatmapCell,
+  type AcquisitionChannel,
+  type ReactivationData,
+  type ROIEstimate,
+  type ResumenDeSedes,
+  type ResumenDeUnaSede,
 } from '@/types/analytics.types'
 
 function getServiceClient() {
@@ -332,6 +336,259 @@ async function leerMensajesDeCampanas(
   return { data: lecturas.flatMap((l) => l.data), error: lecturas.find((l) => l.error)?.error ?? null }
 }
 
+// ─── Lo de cada sede (sedes separadas, parte 1, 2026-10-14) ────────────────────
+//
+// El dueño, mirando Tepuy: con Envigado elegido el panel decía «40 clientes» y con Laureles
+// también 40. Las métricas de `customers` eran de la marca sin decirlo. Ahora, con una sede
+// elegida, esas cuentas se recortan por DÓNDE SE REGISTRÓ cada cliente
+// (`customers.origin_location_id`, D2, que el check-in llena desde F3) — atribución para el
+// reporte; el cliente no se mueve ni se parte. Y con «toda la marca», «Tus sedes» pone debajo
+// de los totales lo de cada sede.
+
+/** Las fechas que comparten todas las cuentas de clientes de UNA corrida de la analítica. */
+interface VentanasDeClientes {
+  /** Claves 'AAAA-MM-DD' de los últimos 30 días, de la más vieja a hoy. */
+  dias30: string[]
+  hoy: string
+  hace30: Date
+  haceUnaSemana: Date
+  /** 'MM-DD' de hoy: los cumpleaños. */
+  mesDia: string
+  /** Claves 'AAAA-MM' de los últimos 6 meses, del más viejo al actual. */
+  meses6: string[]
+}
+
+/**
+ * Lo que sale de un conjunto de clientes: el resumen, los niveles, los nuevos por día y la
+ * adquisición por mes. UNA función para la marca y para el recorte por sede: la regla es la
+ * misma por construcción, así que las sedes más «sin sede» suman exactamente la marca.
+ */
+function resumirClientes(customers: Customer[], v: VentanasDeClientes): DashboardAnalyticsOrigin {
+  const newCustMap: Record<string, number> = {}
+  for (const key of v.dias30) newCustMap[key] = 0
+  for (const c of customers) {
+    const cDate = c.created_at.split('T')[0]
+    if (newCustMap[cDate] !== undefined) newCustMap[cDate]++
+  }
+
+  const olderCustomers = customers.filter((c) => new Date(c.created_at) < v.hace30).length
+  let cumulative = olderCustomers
+  const newCustomersPerDay: DailyNewCustomers[] = v.dias30.map((date) => {
+    cumulative += newCustMap[date]
+    return { date, count: newCustMap[date], cumulative }
+  })
+
+  const tierCounts: Record<string, number> = {}
+  for (const rank of POWER_RANKS) tierCounts[rank.name] = 0
+  for (const c of customers) {
+    const rank = getCustomerRank(c.total_visits)
+    tierCounts[rank.name]++
+  }
+  const customerTiers: TierCount[] = POWER_RANKS.map((r) => ({
+    rank: r.name,
+    count: tierCounts[r.name] ?? 0,
+    emoji: r.emoji,
+    gradient: r.gradient,
+    percentage: customers.length > 0 ? Math.round((tierCounts[r.name] / customers.length) * 100) : 0,
+  }))
+
+  // --- ACQUISITION CHANNEL BY MONTH (últimos 6 meses) ---
+  const acqMap: Record<string, { qr: number; delivery: number }> = {}
+  for (const key of v.meses6) acqMap[key] = { qr: 0, delivery: 0 }
+  for (const c of customers) {
+    const cMonth = c.created_at.substring(0, 7)
+    if (acqMap[cMonth]) {
+      const src = c.source_channels
+      if (src === 'delivery') acqMap[cMonth].delivery++
+      else if (src === 'both') {
+        acqMap[cMonth].qr++
+        acqMap[cMonth].delivery++
+      } else {
+        acqMap[cMonth].qr++
+      }
+    }
+  }
+  const acquisitionByMonth: AcquisitionChannel[] = v.meses6.map((m) => {
+    const d = new Date(m + '-15')
+    const label = d.toLocaleDateString('es-CO', { month: 'short', year: '2-digit' })
+    return { month: label, qr: acqMap[m].qr, delivery: acqMap[m].delivery }
+  })
+
+  return {
+    summary: {
+      totalCustomers: customers.length,
+      newCustomersToday: newCustMap[v.hoy] ?? 0,
+      newCustomersWeek: customers.filter((c) => new Date(c.created_at) >= v.haceUnaSemana).length,
+      frequentCustomers: customers.filter((c) => c.total_visits >= 3).length,
+      // `birthday` llega como 'AAAA-MM-DD' (columna `date`): hoy es quien coincide en mes y día.
+      birthdaysToday: customers.filter((c) => typeof c.birthday === 'string' && c.birthday.slice(5, 10) === v.mesDia)
+        .length,
+    },
+    newCustomersPerDay,
+    customerTiers,
+    acquisitionByMonth,
+  }
+}
+
+/** Una sede de la marca como la lee «Tus sedes»: también las cerradas, por su historia. */
+export interface SedeDeLaMarca {
+  id: string
+  name: string
+  is_active: boolean
+}
+
+/**
+ * «Tus sedes»: lo de cada sede en 30 días, más lo que no sabe de qué sede es. PURA.
+ *
+ * - **Clientes que trajo**: se registraron ahí (`origin_location_id`). Partición: cada cliente
+ *   está en UNA sede o en «sin sede», así que la suma da el total de la marca.
+ * - **Clientes que vinieron**: distintos, con visita ahí. NO es partición: quien fue a las dos
+ *   sedes cuenta en las dos, y `clientesEnVariasSedes` dice cuántos son (se cuentan, no se
+ *   reparten).
+ * - **Premios entregados**: `reward_redemptions.redeemed_location_id`, la sede del mesero que
+ *   entregó (lo escribe `recordRedemption()` desde esta misma parte; lo anterior queda «sin sede»).
+ *
+ * `location_id` NULL va a «sin sede» y se muestra: nunca se reparte ni se esconde. Una sede
+ * cerrada con datos sale con su nombre, para que los números sigan cuadrando.
+ */
+export function resumirSedes(p: {
+  sedes: readonly SedeDeLaMarca[]
+  clientes: readonly Pick<Customer, 'origin_location_id' | 'created_at'>[]
+  visitas30d: readonly { customer_id: string; location_id: string | null; created_at: string }[]
+  premios30d: readonly { redeemed_location_id: string | null }[]
+  dias30: readonly string[]
+  /** 'AAAA-MM' en UTC, el mismo reloj que `created_at`. */
+  mesActual: string
+}): ResumenDeSedes {
+  interface Cuenta {
+    trajo: number
+    esteMes: number
+    vinieron: Set<string>
+    visitas: number
+    premios: number
+  }
+  const nueva = (): Cuenta => ({ trajo: 0, esteMes: 0, vinieron: new Set(), visitas: 0, premios: 0 })
+  const cuentas = new Map<string, Cuenta>()
+  const nombres = new Map<string, SedeDeLaMarca>()
+  for (const s of p.sedes) {
+    cuentas.set(s.id, nueva())
+    nombres.set(s.id, s)
+  }
+  cuentas.set(SIN_SEDE, nueva())
+  const de = (locationId: string | null): Cuenta => {
+    const key = locationId ?? SIN_SEDE
+    let c = cuentas.get(key)
+    if (!c) {
+      // No debería pasar: se leen TODAS las sedes de la marca, y la FK compuesta impide una
+      // sede de otra marca. Si pasara, se muestra igual en vez de perder el dato.
+      c = nueva()
+      cuentas.set(key, c)
+      nombres.set(key, { id: key, name: 'Otra sede', is_active: false })
+    }
+    return c
+  }
+
+  for (const c of p.clientes) {
+    const cuenta = de(c.origin_location_id)
+    cuenta.trajo++
+    if (c.created_at.substring(0, 7) === p.mesActual) cuenta.esteMes++
+  }
+
+  const porDia = new Map<string, Map<string, number>>()
+  for (const dia of p.dias30) porDia.set(dia, new Map())
+  const sedesDelCliente = new Map<string, Set<string>>()
+  for (const v of p.visitas30d) {
+    const cuenta = de(v.location_id)
+    cuenta.visitas++
+    cuenta.vinieron.add(v.customer_id)
+    const key = v.location_id ?? SIN_SEDE
+    const delDia = porDia.get(v.created_at.split('T')[0])
+    if (delDia) delDia.set(key, (delDia.get(key) ?? 0) + 1)
+    if (v.location_id) {
+      const suyas = sedesDelCliente.get(v.customer_id) ?? new Set<string>()
+      suyas.add(v.location_id)
+      sedesDelCliente.set(v.customer_id, suyas)
+    }
+  }
+
+  for (const r of p.premios30d) de(r.redeemed_location_id).premios++
+
+  const fila = (key: string, cuenta: Cuenta, nombre: string, activa: boolean): ResumenDeUnaSede => ({
+    locationId: key === SIN_SEDE ? null : key,
+    nombre,
+    activa,
+    clientesQueTrajo: cuenta.trajo,
+    clientesQueTrajoEsteMes: cuenta.esteMes,
+    clientesQueVinieron: cuenta.vinieron.size,
+    visitas: cuenta.visitas,
+    premiosEntregados: cuenta.premios,
+  })
+  const tieneDatos = (c: Cuenta) => c.trajo > 0 || c.visitas > 0 || c.premios > 0
+
+  const sedes: ResumenDeUnaSede[] = []
+  for (const [key, cuenta] of cuentas) {
+    if (key === SIN_SEDE) continue
+    const sede = nombres.get(key)!
+    // Las activas salen siempre, aunque estén en cero (es justo lo que el dueño tiene que ver);
+    // una cerrada, solo si todavía tiene datos.
+    if (sede.is_active || tieneDatos(cuenta)) sedes.push(fila(key, cuenta, sede.name, sede.is_active))
+  }
+  const sinSedeCuenta = cuentas.get(SIN_SEDE)!
+  const sinSede = tieneDatos(sinSedeCuenta) ? fila(SIN_SEDE, sinSedeCuenta, 'Sin sede', true) : null
+
+  const series = [...sedes.map((s) => s.locationId as string), ...(sinSede && sinSede.visitas > 0 ? [SIN_SEDE] : [])]
+  const visitasPorDia = p.dias30.map((date) => {
+    const delDia = porDia.get(date)!
+    const porSede: Record<string, number> = {}
+    for (const key of series) porSede[key] = delDia.get(key) ?? 0
+    return { date, porSede }
+  })
+
+  return {
+    sedes,
+    sinSede,
+    clientesEnVariasSedes: [...sedesDelCliente.values()].filter((s) => s.size >= 2).length,
+    visitasPorDia,
+  }
+}
+
+/** ¿Esta petición lleva «Tus sedes»? Solo la marca, con «toda la marca», y con 2+ sedes activas. */
+function llevaTusSedes(scope: LocationScope): boolean {
+  return scope.role === 'brand' && scope.selection === 'all' && scope.brandActiveLocationCount >= 2
+}
+
+/**
+ * Todas las sedes de la marca, también las cerradas (su historia sigue contando), en el orden del
+ * selector. Pagina como toda lectura de la analítica (ESCALA-4), con `id` al final del orden.
+ */
+function leerSedesDeLaMarca(supabase: SupabaseClient, tenantId: string) {
+  return leerTodo<SedeDeLaMarca>((desde, hasta) =>
+    supabase
+      .from('restaurant_locations')
+      .select('id, name, is_active')
+      .eq('tenant_id', tenantId)
+      .order('is_primary', { ascending: false })
+      .order('sort_order', { ascending: true })
+      .order('name', { ascending: true })
+      .order('id', { ascending: true })
+      .range(desde, hasta)
+  )
+}
+
+/** Los premios entregados desde `desdeStr`, con su sede. Pagina: pueden pasar de mil. */
+function leerPremiosEntregados(supabase: SupabaseClient, tenantId: string, desdeStr: string) {
+  return leerTodo<{ id: string; redeemed_location_id: string | null }>((desde, hasta) =>
+    supabase
+      .from('reward_redemptions')
+      .select('id, redeemed_location_id')
+      .eq('tenant_id', tenantId)
+      .gte('redeemed_at', desdeStr)
+      .order('redeemed_at', { ascending: true })
+      .order('id', { ascending: true })
+      .range(desde, hasta)
+  )
+}
+
 export async function getFullAnalytics(scope: LocationScope): Promise<DashboardAnalytics> {
   const supabase = getUnscopedServiceClient()
   const tenantId = scope.tenantId
@@ -349,6 +606,27 @@ export async function getFullAnalytics(scope: LocationScope): Promise<DashboardA
   sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6)
   const sixMonthsAgoStr = formatDate(sixMonthsAgo)
 
+  const dias30: string[] = []
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(now)
+    d.setDate(d.getDate() - i)
+    dias30.push(formatDate(d))
+  }
+  const meses6: string[] = []
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    meses6.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+  }
+  const ventanas: VentanasDeClientes = {
+    dias30,
+    hoy: todayStr,
+    hace30: thirtyDaysAgo,
+    haceUnaSemana: weekAgo,
+    mesDia: `${month}-${day}`,
+    meses6,
+  }
+  const conTusSedes = llevaTusSedes(scope)
+
   // Las lecturas van en paralelo entre sí; cada una pagina por dentro (ver `leerTodo()`).
   //
   // `customers` NO se ordena por `total_visits` en la base: esa columna cambia con cada check-in,
@@ -359,7 +637,11 @@ export async function getFullAnalytics(scope: LocationScope): Promise<DashboardA
   // Hubo una (`.like('birthday', '%-MM-DD')`) y `birthday` es `date`: Postgres contesta 42883
   // («operator does not exist: date ~~ unknown»). Mientras el `error` se ignoraba daba 0 en
   // silencio; cuando se empezó a exigir, tumbó la analítica entera de todas las marcas (2026-10-04).
-  const [lecturaClientes, lecturaVisitas30d, lecturaVisitas6m, lecturaCampanas, lecturaAjustes] =
+  //
+  // «Tus sedes» suma dos lecturas, y SOLO cuando se dibuja (marca + toda la marca + 2+ sedes):
+  // las sedes de la marca (también las cerradas) y los premios entregados en 30 días. Una marca
+  // de una sede no paga ni una ida más.
+  const [lecturaClientes, lecturaVisitas30d, lecturaVisitas6m, lecturaCampanas, lecturaAjustes, lecturaSedes, lecturaPremios] =
     await Promise.all([
       leerTodo<Customer>((desde, hasta) =>
         supabase
@@ -389,16 +671,14 @@ export async function getFullAnalytics(scope: LocationScope): Promise<DashboardA
         .select('key, value')
         .eq('tenant_id', tenantId)
         .in('key', ['avg_ticket', 'reactivation_soft_days', 'reactivation_aggressive_days']),
+      conTusSedes ? leerSedesDeLaMarca(supabase, tenantId) : Promise.resolve(null),
+      conTusSedes ? leerPremiosEntregados(supabase, tenantId, thirtyDaysAgoStr) : Promise.resolve(null),
     ])
 
   const customers: Customer[] = exigirLectura(lecturaClientes, 'analitica_clientes', tenantId).sort(
     (a, b) => (b.total_visits ?? 0) - (a.total_visits ?? 0)
   )
   const recentVisits = exigirLectura(lecturaVisitas30d, 'analitica_visitas_30d', tenantId)
-  // `birthday` llega como 'AAAA-MM-DD' (columna `date`): hoy es quien coincide en mes y día.
-  const birthdaysToday = customers.filter(
-    (c) => typeof c.birthday === 'string' && c.birthday.slice(5, 10) === `${month}-${day}`
-  ).length
   const allVisits6m = exigirLectura(lecturaVisitas6m, 'analitica_visitas_6m', tenantId)
   const reactivationCampaigns = exigirLectura(lecturaCampanas, 'analitica_campanas', tenantId)
   const settingsData = exigirLectura(
@@ -414,14 +694,7 @@ export async function getFullAnalytics(scope: LocationScope): Promise<DashboardA
   const visits = recentVisits.filter((v) => locationMatches(scope, v.location_id))
 
   const visitsMap: Record<string, { qr: number; delivery: number }> = {}
-  const newCustMap: Record<string, number> = {}
-  for (let i = 29; i >= 0; i--) {
-    const d = new Date(now)
-    d.setDate(d.getDate() - i)
-    const key = formatDate(d)
-    visitsMap[key] = { qr: 0, delivery: 0 }
-    newCustMap[key] = 0
-  }
+  for (const key of dias30) visitsMap[key] = { qr: 0, delivery: 0 }
 
   for (const v of visits) {
     const vDate = v.created_at.split('T')[0]
@@ -431,37 +704,22 @@ export async function getFullAnalytics(scope: LocationScope): Promise<DashboardA
     }
   }
 
-  for (const c of customers) {
-    const cDate = c.created_at.split('T')[0]
-    if (newCustMap[cDate] !== undefined) newCustMap[cDate]++
-  }
+  const visitsPerDay: DailyVisits[] = dias30.map((date) => {
+    const v = visitsMap[date]
+    return { date, qr: v.qr, delivery: v.delivery, total: v.qr + v.delivery }
+  })
 
-  const visitsPerDay: DailyVisits[] = Object.entries(visitsMap)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([date, v]) => ({ date, qr: v.qr, delivery: v.delivery, total: v.qr + v.delivery }))
-
-  const olderCustomers = customers.filter((c) => new Date(c.created_at) < thirtyDaysAgo).length
-  let cumulative = olderCustomers
-  const newCustomersPerDay: DailyNewCustomers[] = Object.entries(newCustMap)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([date, count]) => {
-      cumulative += count
-      return { date, count, cumulative }
-    })
-
-  const tierCounts: Record<string, number> = {}
-  for (const rank of POWER_RANKS) tierCounts[rank.name] = 0
-  for (const c of customers) {
-    const rank = getCustomerRank(c.total_visits)
-    tierCounts[rank.name]++
-  }
-  const customerTiers: TierCount[] = POWER_RANKS.map((r) => ({
-    rank: r.name,
-    count: tierCounts[r.name] ?? 0,
-    emoji: r.emoji,
-    gradient: r.gradient,
-    percentage: customers.length > 0 ? Math.round((tierCounts[r.name] / customers.length) * 100) : 0,
-  }))
+  // Lo de `customers`, dos veces con la MISMA función: la marca entera, y el recorte por dónde se
+  // registró cada cliente cuando la petición no es la marca entera (una sede, las sedes de un
+  // administrador de sede, o el cubo «sin sede» que todavía se puede pedir por la URL).
+  const deLaMarca = resumirClientes(customers, ventanas)
+  const origin =
+    scope.locationIds === null
+      ? null
+      : resumirClientes(
+          customers.filter((c) => locationMatches(scope, c.origin_location_id)),
+          ventanas
+        )
 
   // Las burbujas usan la MISMA escala que la tira de Campañas y el cron: la derivan los días
   // de reactivación de esta marca (`deriveRiskLevels()`), no una tabla fija.
@@ -510,8 +768,6 @@ export async function getFullAnalytics(scope: LocationScope): Promise<DashboardA
   })
 
   const todayVisits = visitsMap[todayStr] ?? { qr: 0, delivery: 0 }
-  const newToday = newCustMap[todayStr] ?? 0
-  const newWeek = customers.filter((c) => new Date(c.created_at) >= weekAgo).length
 
   // --- HEATMAP: Día × Hora de visitas (últimos 6 meses) ---
   const DAY_LABELS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
@@ -543,34 +799,6 @@ export async function getFullAnalytics(scope: LocationScope): Promise<DashboardA
       })
     }
   }
-
-  // --- ACQUISITION CHANNEL BY MONTH (últimos 6 meses) ---
-  const acqMap: Record<string, { qr: number; delivery: number }> = {}
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-    acqMap[key] = { qr: 0, delivery: 0 }
-  }
-  for (const c of customers) {
-    const cMonth = c.created_at.substring(0, 7)
-    if (acqMap[cMonth]) {
-      const src = c.source_channels
-      if (src === 'delivery') acqMap[cMonth].delivery++
-      else if (src === 'both') {
-        acqMap[cMonth].qr++
-        acqMap[cMonth].delivery++
-      } else {
-        acqMap[cMonth].qr++
-      }
-    }
-  }
-  const acquisitionByMonth: AcquisitionChannel[] = Object.entries(acqMap)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([m, v]) => {
-      const d = new Date(m + '-15')
-      const label = d.toLocaleDateString('es-CO', { month: 'short', year: '2-digit' })
-      return { month: label, qr: v.qr, delivery: v.delivery }
-    })
 
   // --- REACTIVATION RATE (por mes, últimos 6 meses) ---
   const visits6m = allVisits6m
@@ -653,20 +881,29 @@ export async function getFullAnalytics(scope: LocationScope): Promise<DashboardA
     estimatedROI: reactivatedThisMonth * avgTicket,
   }
 
+  // --- TUS SEDES (solo marca + toda la marca + 2+ sedes) ---
+  let sedes: ResumenDeSedes | null = null
+  if (conTusSedes && lecturaSedes && lecturaPremios) {
+    const sedesDeLaMarca = exigirLectura(lecturaSedes, 'analitica_sedes', tenantId)
+    const premios = exigirLectura(lecturaPremios, 'analitica_premios_entregados', tenantId)
+    sedes = resumirSedes({
+      sedes: sedesDeLaMarca,
+      clientes: customers,
+      visitas30d: recentVisits,
+      premios30d: premios,
+      dias30,
+      mesActual: now.toISOString().slice(0, 7),
+    })
+  }
+
   return {
     brand: {
-      summary: {
-        totalCustomers: customers.length,
-        newCustomersToday: newToday,
-        newCustomersWeek: newWeek,
-        frequentCustomers: customers.filter((c) => c.total_visits >= 3).length,
-        birthdaysToday,
-      },
-      newCustomersPerDay,
-      customerTiers,
+      summary: deLaMarca.summary,
+      newCustomersPerDay: deLaMarca.newCustomersPerDay,
+      customerTiers: deLaMarca.customerTiers,
       atRiskGroups,
       topCustomers,
-      acquisitionByMonth,
+      acquisitionByMonth: deLaMarca.acquisitionByMonth,
       reactivationRate,
       roiEstimate,
     },
@@ -675,9 +912,12 @@ export async function getFullAnalytics(scope: LocationScope): Promise<DashboardA
         visitsToday: todayVisits.qr + todayVisits.delivery,
         deliveriesToday: todayVisits.delivery,
         qrToday: todayVisits.qr,
+        visitorsLast30d: new Set(visits.map((v) => v.customer_id)).size,
       },
       visitsPerDay,
       heatmap,
     },
+    origin,
+    sedes,
   }
 }

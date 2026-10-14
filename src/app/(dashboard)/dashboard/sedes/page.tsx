@@ -41,6 +41,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { NumeroCompartido } from '@/components/dashboard/sedes/NumeroCompartido'
 
 /** Espejo de lo que devuelve `GET /api/dashboard/locations`. */
 interface Sede {
@@ -271,6 +272,10 @@ export default function SedesPage() {
             : 'Elegí una sede para editar sus datos. Lo que dejes vacío lo hereda de la marca.'}
         </p>
       </div>
+
+      {/* Sedes separadas, parte 1: el número de WhatsApp es de la marca, dicho donde se miran
+          las sedes. Con una sola sede no se dibuja (lo decide el propio componente). */}
+      <NumeroCompartido />
 
       <div className={unaSola ? '' : 'grid gap-5 lg:grid-cols-[260px_1fr]'}>
         {/* ── La lista. Con una sola sede no se dibuja: no hay nada que elegir. ── */}

@@ -15,6 +15,8 @@ import {
   ToggleRight,
 } from 'lucide-react'
 import { LineHealth } from './LineHealth'
+import { useLocationScope } from '@/contexts/LocationScopeContext'
+import { lineaNumeroCompartido } from '@/lib/panel-sedes'
 import { AltaFlow } from './AltaFlow'
 import type {
   ConnectionPermissions,
@@ -66,6 +68,7 @@ export function WhatsappCard({
 }) {
   const [saving, setSaving] = useState(false)
   const isZernio = whatsapp.provider === 'zernio'
+  const { view } = useLocationScope()
 
   const handleToggle = async () => {
     if (!permissions.canAct || saving) return
@@ -128,11 +131,21 @@ export function WhatsappCard({
           </p>
         )}
 
-        {/* Por qué número sale su WhatsApp — el ámbito es la MARCA, no la sede. */}
-        <p className="text-sm" style={{ color: 'var(--brand-ink-soft)' }}>
-          Tus mensajes salen por este número, y lo comparten <strong>todas tus sedes</strong>. Los puntos y las
-          plantillas son de la marca; lo que cambia de una sede a otra viaja dentro del mensaje.
-        </p>
+        {/* Por qué número sale su WhatsApp — el ámbito es la MARCA, no la sede. Con 2+ sedes,
+            dicho con el número y cuántas lo comparten (sedes separadas, parte 1, 2026-10-14). */}
+        {view?.multiSede ? (
+          <p className="text-sm" style={{ color: 'var(--brand-ink-soft)' }} data-linea="numero-compartido">
+            <strong style={{ color: 'var(--brand-ink)' }}>
+              {lineaNumeroCompartido({ sedes: view.brandLocationCount, telefono: whatsapp.phone, proveedor: whatsapp.provider })}
+            </strong>{' '}
+            Los puntos y las plantillas son de la marca; lo que cambia de una sede a otra viaja dentro del mensaje.
+          </p>
+        ) : (
+          <p className="text-sm" style={{ color: 'var(--brand-ink-soft)' }}>
+            Tus mensajes salen por este número, y lo comparten <strong>todas tus sedes</strong>. Los puntos y las
+            plantillas son de la marca; lo que cambia de una sede a otra viaja dentro del mensaje.
+          </p>
+        )}
 
         <LineHealth budget={budget} loading={budgetLoading} />
 

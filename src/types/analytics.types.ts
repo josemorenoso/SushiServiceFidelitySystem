@@ -14,6 +14,7 @@ export interface AnalyticsSummary {
   newCustomersWeek: number
   frequentCustomers: number
   birthdaysToday: number
+  visitorsLast30d: number
 }
 
 /** Las métricas que salen de `customers`: de la MARCA para siempre (§8.4 del
@@ -33,6 +34,12 @@ export interface AnalyticsSummaryLocation {
   visitsToday: number
   deliveriesToday: number
   qrToday: number
+  /**
+   * Clientes DISTINTOS con al menos una visita en el alcance en los últimos 30 días
+   * («Vinieron a esta sede»). Un cliente que va a las dos sedes cuenta en las dos: por eso
+   * la suma de las sedes puede pasar del total de la marca, y la pantalla lo dice.
+   */
+  visitorsLast30d: number
 }
 
 export interface DailyVisits {
@@ -126,6 +133,11 @@ export interface ROIEstimate {
  *
  * `location`: sale de `visits`, que sí tiene `location_id`. Cambia con el
  * `?location_id=` de la petición.
+ *
+ * Sedes separadas, parte 1 (2026-10-14, dueño: «cada número en su lugar»): se suman
+ * `origin` (lo de `customers` recortado por dónde se REGISTRÓ el cliente) y `sedes`
+ * («Tus sedes», con toda la marca elegida). `brand` NO cambia: sigue siendo la marca entera,
+ * y la pantalla con una sede elegida la muestra bajo «De toda la marca», nunca como de la sede.
  */
 export interface DashboardAnalyticsBrand {
   summary: AnalyticsSummaryBrand
@@ -144,9 +156,72 @@ export interface DashboardAnalyticsLocation {
   heatmap: HeatmapCell[]
 }
 
+/**
+ * Las métricas de `customers` RECORTADAS por la sede donde cada cliente se REGISTRÓ
+ * (`customers.origin_location_id`, D2; sedes separadas, parte 1, 2026-10-14).
+ *
+ * No mueve ni parte a ningún cliente: lo que el cliente HACE (puntos, premios, niveles) sigue
+ * siendo de la marca. Es atribución para el reporte: «los clientes que trajo esta sede». Sale
+ * de la MISMA función que `brand` (`resumirClientes()`), así que las sedes más «sin sede»
+ * suman exactamente la marca.
+ *
+ * `null` cuando la petición ya es la marca entera (marca + «todas»): ahí el recorte da lo
+ * mismo que `brand` y no se manda dos veces.
+ */
+export interface DashboardAnalyticsOrigin {
+  summary: AnalyticsSummaryBrand
+  newCustomersPerDay: DailyNewCustomers[]
+  customerTiers: TierCount[]
+  acquisitionByMonth: AcquisitionChannel[]
+}
+
+/** La clave de la fila «Sin sede» (`location_id` NULL) en `ResumenDeSedes.visitasPorDia`. */
+export const SIN_SEDE = 'sin_sede'
+
+/** Una tarjeta de «Tus sedes». `locationId` NULL = la fila «Sin sede». Conteos, nunca pesos (D7). */
+export interface ResumenDeUnaSede {
+  locationId: string | null
+  nombre: string
+  /** `false` para una sede cerrada que todavía tiene datos (se muestra para que los números cuadren). */
+  activa: boolean
+  /** Se registraron ahí (`origin_location_id`), desde siempre. */
+  clientesQueTrajo: number
+  /** De esos, los que se registraron este mes. */
+  clientesQueTrajoEsteMes: number
+  /** Clientes distintos con visita ahí en 30 días. */
+  clientesQueVinieron: number
+  /** Visitas ahí en 30 días. */
+  visitas: number
+  /** Premios entregados ahí en 30 días (`reward_redemptions.redeemed_location_id`). */
+  premiosEntregados: number
+}
+
+/** Un día del gráfico «Visitas por día, cada sede». `porSede[locationId | SIN_SEDE]`. */
+export interface VisitasDelDiaPorSede {
+  date: string
+  porSede: Record<string, number>
+}
+
+/**
+ * «Tus sedes»: lo de cada sede, debajo de los totales de la marca (sedes separadas, parte 1).
+ * Solo viene con marca + «toda la marca» y 2+ sedes activas; en cualquier otro caso es `null`.
+ */
+export interface ResumenDeSedes {
+  /** Una por sede activa (en el orden del selector) y las cerradas que todavía tienen datos. */
+  sedes: ResumenDeUnaSede[]
+  /** Lo que no sabe de qué sede es. `null` si no hay nada: entonces la fila no aparece. */
+  sinSede: ResumenDeUnaSede | null
+  /** Clientes que vinieron a 2+ sedes en 30 días: se cuentan en cada una, no se reparten. */
+  clientesEnVariasSedes: number
+  /** 30 días, una serie por sede (y «sin sede» solo si tiene visitas). */
+  visitasPorDia: VisitasDelDiaPorSede[]
+}
+
 export interface DashboardAnalytics {
   brand: DashboardAnalyticsBrand
   location: DashboardAnalyticsLocation
+  origin: DashboardAnalyticsOrigin | null
+  sedes: ResumenDeSedes | null
 }
 
 export interface DemoCustomer {

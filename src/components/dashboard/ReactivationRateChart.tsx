@@ -1,5 +1,6 @@
 'use client'
 
+import type { ReactNode } from 'react'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   BarChart,
@@ -16,11 +17,13 @@ import {
 import type { ReactivationData } from '@/types/analytics.types'
 
 interface ReactivationRateChartProps {
+  /** Sedes separadas (parte 1): de dónde es este número, junto al título. Sin ella, como siempre. */
+  etiqueta?: ReactNode
   data: ReactivationData[]
   loading: boolean
 }
 
-export function ReactivationRateChart({ data, loading }: ReactivationRateChartProps) {
+export function ReactivationRateChart({ data, loading, etiqueta }: ReactivationRateChartProps) {
   const totalSent = data.reduce((a, b) => a + b.sent, 0)
   const totalReturned = data.reduce((a, b) => a + b.returned, 0)
   const overallRate = totalSent > 0 ? Math.round((totalReturned / totalSent) * 100) : 0
@@ -34,6 +37,7 @@ export function ReactivationRateChart({ data, loading }: ReactivationRateChartPr
             style={{ color: '#1a1c1d', letterSpacing: '-0.02em' }}
           >
             Tasa de Reactivación
+            {etiqueta && <span className="ml-2 inline-block align-middle">{etiqueta}</span>}
           </h3>
           <p className="text-xs mt-1" style={{ color: '#9ca3af' }}>
             Clientes que volvieron en 7 días tras campaña de reactivación

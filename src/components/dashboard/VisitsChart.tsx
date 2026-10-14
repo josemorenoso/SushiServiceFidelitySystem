@@ -1,5 +1,6 @@
 'use client'
 
+import type { ReactNode } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -15,11 +16,13 @@ import {
 import type { DailyVisits } from '@/types/analytics.types'
 
 interface VisitsChartProps {
+  /** Sedes separadas (parte 1): de dónde es este número, junto al título. Sin ella, como siempre. */
+  etiqueta?: ReactNode
   data: DailyVisits[]
   loading: boolean
 }
 
-export function VisitsChart({ data, loading }: VisitsChartProps) {
+export function VisitsChart({ data, loading, etiqueta }: VisitsChartProps) {
   const formatted = data.map((d) => ({
     ...d,
     label: new Date(d.date + 'T12:00:00').toLocaleDateString('es-CO', { day: '2-digit', month: 'short' }),
@@ -32,6 +35,7 @@ export function VisitsChart({ data, loading }: VisitsChartProps) {
         style={{ color: '#1a1c1d', letterSpacing: '-0.02em' }}
       >
         Visitas Diarias — Últimos 30 días
+        {etiqueta && <span className="ml-2 inline-block align-middle">{etiqueta}</span>}
       </h3>
       <div>
         {loading ? (

@@ -1,9 +1,12 @@
 'use client'
 
+import type { ReactNode } from 'react'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { RankedCustomer } from '@/types/analytics.types'
 
 interface PowerRankingProps {
+  /** Sedes separadas (parte 1): de dónde es este número, junto al título. Sin ella, como siempre. */
+  etiqueta?: ReactNode
   customers: RankedCustomer[]
   loading: boolean
   onCustomerClick?: (customerId: string) => void
@@ -23,7 +26,7 @@ function PositionBadge({ pos }: { pos: number }) {
   )
 }
 
-export function PowerRanking({ customers, loading, onCustomerClick }: PowerRankingProps) {
+export function PowerRanking({ customers, loading, onCustomerClick, etiqueta }: PowerRankingProps) {
   return (
     <div className="dashboard-card p-6">
       <h3
@@ -31,6 +34,7 @@ export function PowerRanking({ customers, loading, onCustomerClick }: PowerRanki
         style={{ color: '#1a1c1d', letterSpacing: '-0.02em' }}
       >
         Top Clientes — Ranking de Poder
+        {etiqueta && <span className="ml-2 inline-block align-middle">{etiqueta}</span>}
       </h3>
 
       {loading ? (

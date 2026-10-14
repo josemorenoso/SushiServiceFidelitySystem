@@ -45,9 +45,13 @@ export function computeDemoAnalytics(customers: DemoCustomer[]): DashboardAnalyt
   let newCustomersWeek = 0
   let frequentCustomers = 0
   let birthdaysToday = 0
+  // «Vinieron» de la demo: quien tiene su última visita en estos 30 días (la demo no guarda visitas).
+  let visitorsLast30d = 0
 
   const weekAgo = new Date(now)
   weekAgo.setDate(weekAgo.getDate() - 7)
+  const thirtyDaysAgo = new Date(now)
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
   for (const c of customers) {
     const createdDate = c.created_at.split('T')[0]
@@ -58,6 +62,7 @@ export function computeDemoAnalytics(customers: DemoCustomer[]): DashboardAnalyt
     if (new Date(c.created_at) >= weekAgo) newCustomersWeek++
     if (c.total_visits >= 3) frequentCustomers++
     if (c.birthday && c.birthday.includes(`-${month}-${day}`)) birthdaysToday++
+    if (new Date(c.last_visit_at) >= thirtyDaysAgo) visitorsLast30d++
 
     const qrPct = c.source_pct_qr ?? 0.6
     const totalV = c.total_visits
@@ -232,9 +237,13 @@ export function computeDemoAnalytics(customers: DemoCustomer[]): DashboardAnalyt
         visitsToday,
         deliveriesToday,
         qrToday,
+        visitorsLast30d,
       },
       visitsPerDay,
       heatmap,
     },
+    // Sin sedes en la demo: no hay recorte por sede ni «Tus sedes» (sedes separadas, parte 1).
+    origin: null,
+    sedes: null,
   }
 }

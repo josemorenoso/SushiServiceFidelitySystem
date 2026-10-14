@@ -34,6 +34,13 @@ export interface RecordRedemptionParams {
   prizeTitle: string
   source?: RedemptionSource
   redeemedByStaffId?: string | null
+  /**
+   * Dónde se ENTREGÓ (`reward_redemptions.redeemed_location_id`, D3 + D12). La resuelve el
+   * llamador con la misma precedencia que el check-in (`resolveVisitLocation()`: mesero →
+   * aparato → host). `null` = sede desconocida, y se muestra como «sin sede»: nunca se adivina.
+   * Es otra sede que la de `reward_grants.granted_location_id` (dónde se GANÓ).
+   */
+  redeemedLocationId?: string | null
   tableNumber?: number | null
   notes?: string | null
   posReference?: string | null
@@ -116,6 +123,8 @@ export async function recordRedemption(
       prize_title: params.prizeTitle,
       source: params.source ?? 'mystery_box',
       redeemed_by_staff_id: params.redeemedByStaffId ?? null,
+      // FK compuesta `(redeemed_location_id, tenant_id)` (00043): una sede de otra marca no entra.
+      redeemed_location_id: params.redeemedLocationId ?? null,
       table_number: params.tableNumber ?? null,
       notes: params.notes ?? null,
       pos_reference: params.posReference ?? null,
@@ -220,12 +229,10 @@ export interface RedemptionListResult {
 
 /**
  * Multi-sede F7 (§8.4): filtra por `redeemed_location_id` con el mismo
- * `LocationScope` de siempre. ⚠️ Esa columna hoy la deja SIEMPRE NULL cualquier
- * escritor (deuda #13 de `docs/features/multi-sede.md` — llenarla es F6). Con
- * `role='brand'` no cambia nada (sin filtro, igual que hoy); un futuro
- * `role='location'` vería la lista vacía hasta que F6 la llene — fail CLOSED
- * (nada) y no fail OPEN (todo), que es la opción segura mientras la columna no
- * tenga dato real.
+ * `LocationScope` de siempre. Esa columna la escribe `recordRedemption()` desde el
+ * 2026-10-14 (sedes separadas, parte 1); lo entregado ANTES quedó en NULL y no se
+ * backfillea: un `role='location'` no lo ve (es «sin sede», de la marca), y la marca
+ * lo ve en «toda la marca».
  */
 export async function getRedemptions(filters: RedemptionFilters, scope: LocationScope): Promise<RedemptionListResult> {
   const supabase = getServiceClient()
@@ -314,7 +321,7 @@ export interface RedemptionSummary {
   by_staff: { staff_id: string | null; staff_name: string | null; count: number }[]
 }
 
-/** Mismo aviso que `getRedemptions()` sobre `redeemed_location_id` (deuda #13). */
+/** Mismo aviso que `getRedemptions()` sobre `redeemed_location_id` (lo viejo, «sin sede»). */
 export async function getRedemptionSummary(params: {
   from?: string
   to?: string

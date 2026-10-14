@@ -1,5 +1,6 @@
 'use client'
 
+import type { ReactNode } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -16,11 +17,13 @@ import {
 import type { DailyNewCustomers } from '@/types/analytics.types'
 
 interface GrowthChartProps {
+  /** Sedes separadas (parte 1): de dónde es este número, junto al título. Sin ella, como siempre. */
+  etiqueta?: ReactNode
   data: DailyNewCustomers[]
   loading: boolean
 }
 
-export function GrowthChart({ data, loading }: GrowthChartProps) {
+export function GrowthChart({ data, loading, etiqueta }: GrowthChartProps) {
   const formatted = data.map((d) => ({
     ...d,
     label: new Date(d.date + 'T12:00:00').toLocaleDateString('es-CO', { day: '2-digit', month: 'short' }),
@@ -33,6 +36,7 @@ export function GrowthChart({ data, loading }: GrowthChartProps) {
         style={{ color: '#1a1c1d', letterSpacing: '-0.02em' }}
       >
         Crecimiento de Clientes
+        {etiqueta && <span className="ml-2 inline-block align-middle">{etiqueta}</span>}
       </h3>
       <div>
         {loading ? (

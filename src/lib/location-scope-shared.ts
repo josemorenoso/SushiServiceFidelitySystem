@@ -59,6 +59,12 @@ export interface LocationScopeView {
    * necesitando saber en cuál está parado.
    */
   multiSede: boolean
+  /**
+   * Cuántas sedes ACTIVAS tiene la MARCA (no las que ve este usuario). Lo dice la pantalla:
+   * «Toda la marca (2 sedes)», «Esto es de toda la marca: lo ven y lo usan las 2 sedes» —
+   * también a un administrador de una sola sede, que no la ve en su lista.
+   */
+  brandLocationCount: number
 }
 
 /** El nombre del parámetro. Uno solo, para que el cliente y el servidor no discrepen. */

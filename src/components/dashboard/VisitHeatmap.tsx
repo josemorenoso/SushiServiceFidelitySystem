@@ -1,10 +1,13 @@
 'use client'
 
+import type { ReactNode } from 'react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useMemo } from 'react'
 import type { HeatmapCell } from '@/types/analytics.types'
 
 interface VisitHeatmapProps {
+  /** Sedes separadas (parte 1): de dónde es este número, junto al título. Sin ella, como siempre. */
+  etiqueta?: ReactNode
   data: HeatmapCell[]
   loading: boolean
 }
@@ -28,7 +31,7 @@ function getColor(count: number, max: number): string {
   return 'rgba(16, 185, 129, 0.3)'
 }
 
-export function VisitHeatmap({ data, loading }: VisitHeatmapProps) {
+export function VisitHeatmap({ data, loading, etiqueta }: VisitHeatmapProps) {
   const { filteredData, maxCount } = useMemo(() => {
     const hoursSet = new Set(HOURS_TO_SHOW)
     const filtered = data.filter((c) => hoursSet.has(c.hour))
@@ -52,6 +55,7 @@ export function VisitHeatmap({ data, loading }: VisitHeatmapProps) {
           style={{ color: '#1a1c1d', letterSpacing: '-0.02em' }}
         >
           Mapa de Calor — Visitas
+          {etiqueta && <span className="ml-2 inline-block align-middle">{etiqueta}</span>}
         </h3>
         <p className="text-xs mt-1" style={{ color: '#9ca3af' }}>
           Días y horas con más afluencia de clientes (últimos 6 meses)

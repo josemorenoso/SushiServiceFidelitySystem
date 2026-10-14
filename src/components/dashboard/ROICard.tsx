@@ -1,10 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type ReactNode } from 'react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { DollarSign, TrendingUp, Settings } from 'lucide-react'
 import Link from 'next/link'
-import { useLocationScope, LOCATION_ALL } from '@/contexts/LocationScopeContext'
 
 interface EfficiencySummary {
   campaigns_count: number
@@ -24,11 +23,13 @@ function formatCOP(value: number): string {
 
 type FilterMode = 'all' | 'month'
 
-export function ROICard() {
+/**
+ * `etiqueta` (sedes separadas, parte 1): «Toda la marca» con varias sedes. Sin ella, como siempre.
+ */
+export function ROICard({ etiqueta }: { etiqueta?: ReactNode } = {}) {
   const [filter, setFilter] = useState<FilterMode>('all')
   const [summary, setSummary] = useState<EfficiencySummary | null>(null)
   const [loading, setLoading] = useState(true)
-  const { selection: locationSelection } = useLocationScope()
 
   useEffect(() => {
     let cancelled = false
@@ -37,10 +38,9 @@ export function ROICard() {
     const params = new URLSearchParams()
     if (filter === 'all') params.set('all', 'true')
     else params.set('days', String(new Date().getDate()))
-    // Multi-sede F7 (§8.4): `campaigns.location_id` la deja NULL cualquier
-    // escritor hoy (deuda #12, es F6) — no-op para `role='brand'`, listo para
-    // cuando F6 la llene.
-    if (locationSelection !== LOCATION_ALL) params.set('location_id', locationSelection)
+    // Las campañas son de TODA la marca: `campaigns.location_id` no la escribe nadie (deuda #12,
+    // F6), así que pedir una sede daba 0 campañas y 0 pesos con cualquier sede elegida
+    // (sedes separadas, parte 1, 2026-10-14). Se pide sin sede y la tarjeta dice «Toda la marca».
 
     fetch(`/api/dashboard/campaigns/efficiency?${params}`)
       .then((r) => r.json())
@@ -57,7 +57,7 @@ export function ROICard() {
     return () => {
       cancelled = true
     }
-  }, [filter, locationSelection])
+  }, [filter])
 
   return (
     <div className="metric-card rounded-2xl p-6 relative overflow-hidden">
@@ -79,6 +79,7 @@ export function ROICard() {
             <div>
               <h3 className="font-playfair text-base font-bold" style={{ color: '#1a1c1d' }}>
                 Revenue Atribuido
+                {etiqueta && <span className="ml-2 inline-block align-middle">{etiqueta}</span>}
               </h3>
               <p className="text-xs" style={{ color: '#9ca3af' }}>Por campañas enviadas</p>
             </div>

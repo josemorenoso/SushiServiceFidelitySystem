@@ -1,5 +1,6 @@
 'use client'
 
+import type { ReactNode } from 'react'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   BarChart,
@@ -14,11 +15,13 @@ import {
 import type { AcquisitionChannel } from '@/types/analytics.types'
 
 interface AcquisitionChannelChartProps {
+  /** Sedes separadas (parte 1): de dónde es este número, junto al título. Sin ella, como siempre. */
+  etiqueta?: ReactNode
   data: AcquisitionChannel[]
   loading: boolean
 }
 
-export function AcquisitionChannelChart({ data, loading }: AcquisitionChannelChartProps) {
+export function AcquisitionChannelChart({ data, loading, etiqueta }: AcquisitionChannelChartProps) {
   return (
     <div className="dashboard-card p-6">
       <div className="mb-4">
@@ -27,6 +30,7 @@ export function AcquisitionChannelChart({ data, loading }: AcquisitionChannelCha
           style={{ color: '#1a1c1d', letterSpacing: '-0.02em' }}
         >
           Canal de Adquisición por Mes
+          {etiqueta && <span className="ml-2 inline-block align-middle">{etiqueta}</span>}
         </h3>
         <p className="text-xs mt-1" style={{ color: '#9ca3af' }}>
           Nuevos clientes por QR (presencial) vs Domicilio — últimos 6 meses

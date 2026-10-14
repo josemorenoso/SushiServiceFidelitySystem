@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { recordRedemption } from '@/services/redemption.service'
 import { resolveHostContext } from '@/lib/tenant'
 import { resolveStaffAuth } from '@/lib/staff-auth'
+import { resolveVisitLocation } from '@/lib/location-resolver'
 import { isDbFailure, logDbFailure } from '@/lib/db-failure'
 import type { RedemptionSource } from '@/types/database.types'
 
@@ -45,7 +46,8 @@ export async function POST(request: NextRequest) {
     // `restaurant_locations.domain`. Sin eso, el mesero de la sede 2 abre
     // `laureles.marca.com/mesero` y toda esta superficie responde 404. `getTenantByDomain`
     // solo mira `tenants.domain` y CONSERVA su firma: la sede viaja por aqui.
-    const tenant = (await resolveHostContext(host)).tenant
+    const hostContext = await resolveHostContext(host)
+    const tenant = hostContext.tenant
     if (!tenant) {
       return NextResponse.json(
         { error: 'Restaurante no reconocido', message: 'No se pudo identificar el restaurante para este dominio' },
@@ -121,7 +123,7 @@ export async function POST(request: NextRequest) {
     // discrepancia es REGISTRARLA, no perder el registro.
     const { data: redeemer, error: redeemerError } = await supabase
       .from('staff_users')
-      .select('id, is_active')
+      .select('id, is_active, location_id')
       .eq('id', body.redeemed_by_staff_id)
       .eq('tenant_id', tenant.id)
       .maybeSingle()
@@ -180,6 +182,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // ─── Dónde se ENTREGA (sedes separadas, parte 1, 2026-10-14) ───
+    // La MISMA precedencia que el check-in (§3.1, `resolveVisitLocation()`): el mesero que
+    // entrega → el aparato → el host → NULL. Un rotativo tiene `location_id` NULL (CHECK de la
+    // 00062), así que cae a la sede del APARATO, como su visita. Sin ninguna señal queda NULL
+    // = «sin sede»: nunca se adivina. El canje NO depende de la sede: el cliente canjea en
+    // cualquiera de la marca; esto solo dice dónde ocurrió, para el reporte de «Tus sedes».
+    const redeemedAt = resolveVisitLocation({
+      staffLocationId: redeemer.location_id ?? null,
+      deviceLocationId: auth.deviceLocationId,
+      hostLocationId: hostContext.locationId,
+      hostSource: hostContext.locationSource,
+    })
+
     const result = await recordRedemption({
       customerId: customer_id,
       grantId: body.grant_id ?? null,
@@ -191,6 +206,7 @@ export async function POST(request: NextRequest) {
       // aparato desde §19 (ver `src/lib/staff-auth.ts`) justamente para que nadie vuelva a
       // atribuir por herencia sin darse cuenta.
       redeemedByStaffId: redeemer.id,
+      redeemedLocationId: redeemedAt.locationId,
       tableNumber: body.table_number ?? null,
       notes: body.notes ?? null,
       posReference: body.pos_reference ?? null,

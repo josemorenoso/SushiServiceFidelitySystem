@@ -1,15 +1,18 @@
 'use client'
 
+import type { ReactNode } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { TierCount } from '@/types/analytics.types'
 
 interface CustomerTiersProps {
+  /** Sedes separadas (parte 1): de dónde es este número, junto al título. Sin ella, como siempre. */
+  etiqueta?: ReactNode
   tiers: TierCount[]
   loading: boolean
 }
 
-export function CustomerTiers({ tiers, loading }: CustomerTiersProps) {
+export function CustomerTiers({ tiers, loading, etiqueta }: CustomerTiersProps) {
   const total = tiers.reduce((sum, t) => sum + t.count, 0)
 
   return (
@@ -19,6 +22,7 @@ export function CustomerTiers({ tiers, loading }: CustomerTiersProps) {
         style={{ color: '#1a1c1d', letterSpacing: '-0.02em' }}
       >
         Niveles de Clientes
+        {etiqueta && <span className="ml-2 inline-block align-middle">{etiqueta}</span>}
       </h3>
       <div>
         {loading ? (

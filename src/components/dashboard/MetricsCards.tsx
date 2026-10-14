@@ -1,9 +1,10 @@
 'use client'
 
 import { Skeleton } from '@/components/ui/skeleton'
-import { Users, ShoppingBag, UserPlus, Star, Cake, QrCode, TrendingUp } from 'lucide-react'
+import { Users, ShoppingBag, UserPlus, Star, Cake, QrCode, TrendingUp, Footprints } from 'lucide-react'
 import { MiniSparkline } from './MiniSparkline'
 import type { AnalyticsSummary } from '@/types/analytics.types'
+import { fraseVanAVarias } from '@/lib/panel-sedes'
 
 /**
  * La fila de métricas que abre el panel.
@@ -29,11 +30,25 @@ import type { AnalyticsSummary } from '@/types/analytics.types'
  *
  * Los colores salen de las variables del sistema (`--brand-*`), no de hex
  * horneados acá: la regla de §5 vale igual en el panel que en las públicas.
+ *
+ * SEDES SEPARADAS, PARTE 1 (dueño, 2026-10-14, mirando Tepuy: con Envigado elegido decía
+ * «TOTAL CLIENTES 40», y con Laureles también 40). Con una sede elegida (`sede`), `summary`
+ * trae lo de ESA sede y cada tarjeta dice de dónde sale su número: las visitas, «en esta
+ * sede»; lo de clientes, «se registraron aquí» (`customers.origin_location_id`). Y una franja
+ * ancha más: «Vinieron a esta sede», donde quien va a las dos cuenta en las dos. Sin `sede`
+ * (marca de una sede, o «toda la marca»), la fila de siempre, sin una letra de cambio.
  */
+
+/** Con una sede elegida: si el recorte son varias sedes (un administrador de varias) y cuántas tiene la marca. */
+export interface MetricsCardsSede {
+  varias: boolean
+  sedesDeLaMarca: number
+}
 
 interface MetricsCardsProps {
   summary: AnalyticsSummary | null
   loading: boolean
+  sede?: MetricsCardsSede | null
 }
 
 /** La métrica que abre el panel: grande, oscura y a doble columna. */
@@ -44,18 +59,57 @@ const HERO_METRIC = {
   trend: 'up' as const,
 }
 
+interface SecondaryMetric {
+  key: 'qrToday' | 'deliveriesToday' | 'newCustomersToday' | 'totalCustomers' | 'frequentCustomers' | 'birthdaysToday'
+  label: string
+  icon: typeof QrCode
+  trend: 'up' | 'stable'
+  /** Con una sede elegida: de dónde sale el número, debajo del título. */
+  nota?: (s: AnalyticsSummary | null) => string
+}
+
 /** Las otras seis: claras, chicas y todas con el mismo peso entre sí. */
-const SECONDARY_METRICS = [
-  { key: 'qrToday' as const, label: 'QR Hoy', icon: QrCode, trend: 'stable' as const },
-  { key: 'deliveriesToday' as const, label: 'Domicilios Hoy', icon: ShoppingBag, trend: 'up' as const },
-  { key: 'newCustomersToday' as const, label: 'Nuevos Hoy', icon: UserPlus, trend: 'up' as const },
-  { key: 'totalCustomers' as const, label: 'Total Clientes', icon: Users, trend: 'up' as const },
-  { key: 'frequentCustomers' as const, label: 'Frecuentes (3+)', icon: Star, trend: 'stable' as const },
-  { key: 'birthdaysToday' as const, label: 'Cumpleaños Hoy', icon: Cake, trend: 'stable' as const },
+const SECONDARY_METRICS: SecondaryMetric[] = [
+  { key: 'qrToday', label: 'QR Hoy', icon: QrCode, trend: 'stable' },
+  { key: 'deliveriesToday', label: 'Domicilios Hoy', icon: ShoppingBag, trend: 'up' },
+  { key: 'newCustomersToday', label: 'Nuevos Hoy', icon: UserPlus, trend: 'up' },
+  { key: 'totalCustomers', label: 'Total Clientes', icon: Users, trend: 'up' },
+  { key: 'frequentCustomers', label: 'Frecuentes (3+)', icon: Star, trend: 'stable' },
+  { key: 'birthdaysToday', label: 'Cumpleaños Hoy', icon: Cake, trend: 'stable' },
 ]
 
-export function MetricsCards({ summary, loading }: MetricsCardsProps) {
+/**
+ * Las mismas seis con una sede elegida, cada una diciendo de dónde sale. Lo de visitas es de la
+ * sede; lo de clientes, de los que se REGISTRARON ahí (sumando las sedes y «sin sede» da la marca).
+ */
+function metricasDeSede(varias: boolean): SecondaryMetric[] {
+  const aqui = varias ? 'En tus sedes' : 'En esta sede'
+  const registrados = varias ? 'se registraron en tus sedes' : 'se registraron aquí'
+  return [
+    { key: 'qrToday', label: 'QR Hoy', icon: QrCode, trend: 'stable', nota: () => aqui },
+    { key: 'deliveriesToday', label: 'Domicilios Hoy', icon: ShoppingBag, trend: 'up', nota: () => aqui },
+    {
+      key: 'newCustomersToday',
+      label: 'Nuevos Hoy',
+      icon: UserPlus,
+      trend: 'up',
+      nota: (s) => `${varias ? 'Se registraron en tus sedes' : 'Se registraron aquí'} · ${s?.newCustomersWeek ?? 0} esta semana`,
+    },
+    {
+      key: 'totalCustomers',
+      label: varias ? 'Clientes de tus sedes' : 'Clientes de esta sede',
+      icon: Users,
+      trend: 'up',
+      nota: () => `Los que ${registrados}`,
+    },
+    { key: 'frequentCustomers', label: 'Frecuentes (3+)', icon: Star, trend: 'stable', nota: () => `De los que ${registrados}` },
+    { key: 'birthdaysToday', label: 'Cumpleaños Hoy', icon: Cake, trend: 'stable', nota: () => `De los que ${registrados}` },
+  ]
+}
+
+export function MetricsCards({ summary, loading, sede }: MetricsCardsProps) {
   const HeroIcon = HERO_METRIC.icon
+  const secundarias = sede ? metricasDeSede(sede.varias) : SECONDARY_METRICS
 
   return (
     <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
@@ -91,6 +145,11 @@ export function MetricsCards({ summary, loading }: MetricsCardsProps) {
         >
           {HERO_METRIC.label}
         </p>
+        {sede && (
+          <p className="relative z-10 mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.65)' }}>
+            {sede.varias ? 'En tus sedes' : 'En esta sede'}
+          </p>
+        )}
 
         {!loading && (
           <div className="pointer-events-none absolute bottom-0 right-0 left-0 opacity-70">
@@ -105,7 +164,7 @@ export function MetricsCards({ summary, loading }: MetricsCardsProps) {
       </div>
 
       {/* ── Secundarias ───────────────────────────────────────────────── */}
-      {SECONDARY_METRICS.map((m, i) => {
+      {secundarias.map((m, i) => {
         const Icon = m.icon
         return (
           <div key={m.key} className="metric-card relative overflow-hidden rounded-2xl p-4">
@@ -145,6 +204,11 @@ export function MetricsCards({ summary, loading }: MetricsCardsProps) {
             >
               {m.label}
             </p>
+            {m.nota && (
+              <p className="relative z-10 mt-0.5 pr-10 text-[11px] leading-snug" style={{ color: 'var(--brand-ink-soft)' }}>
+                {m.nota(summary)}
+              </p>
+            )}
 
             {!loading && (
               <div className="pointer-events-none absolute bottom-3 right-3 opacity-45">
@@ -158,6 +222,37 @@ export function MetricsCards({ summary, loading }: MetricsCardsProps) {
           </div>
         )
       })}
+
+      {/* ── Sedes separadas: «Vinieron a esta sede» (solo con una sede elegida). A lo ancho
+          porque necesita su frase: quien va a las dos sedes cuenta en las dos. ── */}
+      {sede && (
+        <div className="metric-card col-span-full flex items-center gap-4 rounded-2xl p-4">
+          <div
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+            style={{ background: 'rgba(var(--brand-primary-rgb), 0.12)' }}
+          >
+            <Footprints className="h-5 w-5" strokeWidth={1.5} style={{ color: 'var(--brand-primary-end)' }} />
+          </div>
+          {loading ? (
+            <Skeleton className="h-8 w-14" />
+          ) : (
+            <p
+              className="tabular-nums leading-none"
+              style={{ fontSize: '1.75rem', fontWeight: 700, letterSpacing: '-0.05em', color: 'var(--brand-ink)' }}
+            >
+              {summary?.visitorsLast30d ?? 0}
+            </p>
+          )}
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase" style={{ color: 'var(--brand-ink-muted)', letterSpacing: '0.04em' }}>
+              {sede.varias ? 'Vinieron a tus sedes' : 'Vinieron a esta sede'} · 30 días
+            </p>
+            <p className="mt-0.5 text-[11px] leading-snug" style={{ color: 'var(--brand-ink-soft)' }}>
+              Clientes distintos con al menos una visita. {fraseVanAVarias(sede.sedesDeLaMarca)}
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

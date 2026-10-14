@@ -102,6 +102,17 @@ contexto; esto es todo lo que necesitas para seguir sin que el dueño repita nad
    X, empezando por su sección 1». Verificar cada parte antes de dar la siguiente. **A y B: hechas y verificadas
    (14-10). C, con Opus (lo eligió el dueño).** Lo que A y B le dejan a C está en `docs/PENDIENTES.md` §2.4 y en los
    puntos 5 y 6 de la parte C del prompt.
+1-quinquies. **15-10 (madrugada).** **Tepuy:** el producto la tenía como Twilio aunque el AIOS ya la había conectado (faltaba
+   el paso «4. WhatsApp» de una SEDE del AIOS, `aios_activate_whatsapp()`); el dueño lo apretó en Envigado → Zernio
+   activo → **mandó las 16 plantillas** desde el panel (Plantillas → «Enviar los 16 juntos»). A los minutos Meta aprobó 8
+   (logs del webhook de Zernio, 21:57-21:59 UTC) y el panel las activó solas; 11 quedaron en revisión. **Falta de Yeni:** el
+   nombre visible de la LÍNEA (sigue «Yenifer Yohana Calle Morera», Approved; ella cambió otra cosa) y la verificación del
+   negocio; el pago ya está. El cupo del AIOS (180 = el 250 por defecto) lo corrige solo el sondeo de salud de línea, cada
+   hora (`line-health.service.ts` lee el escalón de Zernio). **SEDE-OPERADOR** hecho (`131788b`, `afe7698`): código
+   verificado por el comandante (el `OR` afuera de `decideLocationScope()`, la marca sale del JWT); su suite NO la corrió el
+   comandante porque la parte 2 de sedes tenía el Postgres: correrla antes del próximo push. El dueño eligió «super usuario
+   en todo» (también Accesos). **Prompt de la auditoría del AIOS listo:** `docs/prompts/2026-10-15-aios-jerarquia.md`
+   (Opus): el WhatsApp de la marca en un solo lugar, activar como paso de la marca, sin jerga, el cupo sin contradicción.
 1-quater. **PUSHEADO el 14-10 (noche): `main` = `36166c5`, Vercel READY (`dpl_81mbhXWR…`), la 00073 aplicada antes.** El dueño
    decidió: un número por marca (el spec del número por sede quedó ARCHIVADO) y el conglomerado es D5-f (diseño
    futuro). Siguen vivas al cierre de este turno: sedes parte 2 (00074) y SEDE-OPERADOR. Tepuy: sus plantillas.

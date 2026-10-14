@@ -33,7 +33,6 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
-| Comandante: prompt de la auditoría del AIOS (jerarquía) y Tepuy activado, 2026-10-15 | Opus 5.5 | `docs/prompts/2026-10-15-aios-jerarquia.md` (nuevo), `docs/prompts/2026-10-12-comandante-traspaso.md` | — | en vuelo |
 | Sedes separadas, parte 2: la tarjeta de cada sede (2026-10-14, prompt `docs/prompts/2026-10-14-sedes-separadas.md` §4) | Opus 5.5 | `src/app/(dashboard)/dashboard/marca/page.tsx`, `src/lib/branding.ts`, `src/lib/branding-server.ts`, `src/lib/tenant-config-paths.ts`, `src/lib/location-config-paths.ts`, `src/types/tenant.types.ts` (solo `TenantCardConfig`), `src/app/(public)/tarjeta/**` y donde el check-in dibuja la tarjeta, las rutas que escriben la config de la marca y de la sede (`tenant-config`, `locations` GET, `locations/[id]/card` nueva), la regla del selector en la página de la tarjeta (`src/lib/panel-sedes.ts` solo `esPantallaDeTodaLaMarca`, `LocationSelector.tsx`, `FranjaTodaLaMarca.tsx`), nuevos `src/lib/tarjeta-de-sede.ts`, `src/hooks/useTarjetaPorSede.ts`, `src/components/dashboard/sedes/EleccionDeTarjeta.tsx`, `supabase/migrations/00074_*.sql`, `tests/**` nuevos (y `tests/unit/location-config-paths.test.ts`), `docs/features/identidad-visual.md`; **compartidos con SEDE-OPERADOR (cada una sus trozos):** `docs/features/multi-sede.md`, `docs/PENDIENTES.md`, `ESTADO.md`, `CHANGELOG.md` | **00074** (si hace falta: la whitelist de la config de sede vive en la base) | En curso |
 
 ## 3. Siguiente, en orden

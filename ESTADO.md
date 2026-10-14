@@ -33,6 +33,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Comandante: parte A verificada; docs al día (encendido sin demo, nota de la portada), 2026-10-14 | Opus 5.5 | `ESTADO.md`, `docs/PENDIENTES.md`, `docs/prompts/2026-10-12-comandante-traspaso.md` | — | en vuelo |
 
 ## 3. Siguiente, en orden
 

@@ -3,7 +3,8 @@
 > Escrito por el comandante (Opus 5.5). **El dueño aprobó el prototipo el 14-10** («me encanta»: A8 cerrada). Son **tres
 > partes, una sesión cada una, EN ORDEN** (las tres tocan Campañas): A (los datos) → B (la pantalla «Ciclo») → C (la vista
 > por fecha y los creadores). **Modelo recomendado: Sonnet** en las tres (Opus si una parte trae migración). El dueño pega
-> la línea de UNA parte; la siguiente arranca cuando el comandante verificó la anterior.
+> la línea de UNA parte; la siguiente arranca cuando el comandante verificó la anterior. **El dueño eligió Opus para B y C**
+> (14-10: son la parte visual). A y B, hechas y verificadas el 14-10.
 
 ---
 
@@ -116,7 +117,16 @@ Con los endpoints de la parte A, como el prototipo:
    `EventCreateDialog`.
 4. De paso, dos defectos que dejó anotados la 1B y viven en este código: **N-BLACKOUT** (`getActiveBlackouts()` se calla
    los errores y corta los días en UTC) y **N-AUDIENCIA** (`findCustomersForEvent()` no pagina).
+5. **El interruptor del ciclo, también en el servidor** (lo encontró la B; agregado por el comandante el 14-10). Hoy la
+   pantalla esconde «Encender/Apagar el ciclo» a quien no es operador de Cada1, pero `PUT /api/dashboard/settings` acepta
+   `cycle_enabled` de cualquier super usuario de marca (`exigirAlcanceDeMarca()`). Decisión H7: **`cycle_enabled` lo
+   escribe solo el operador** (`isSuperAdmin()`). La regla va en `decidirEscrituraDeAjuste()` (que es PURA: recibe
+   `esOperador` como dato y la ruta se lo pasa); a un dueño le contesta 403 con un motivo en español («Encender o apagar
+   el ciclo lo hace el equipo de Cada1»). `cycle_rhythm` y lo demás siguen como están.
+6. Los botones «Crear evento» y «Subir foto» de «Para hoy» (parte B) ya mandan `?fecha=…&nombre=…` / `?evento=<id>`: la
+   vista por fecha y el creador de evento los leen (`docs/PENDIENTES.md` §2.4, «Para C»).
 - Territorio C: `campaigns/page.tsx` (la vista y los creadores), `src/app/(dashboard)/dashboard/calendar/**` (redirect),
+  `src/lib/settings-keys.ts` y `src/app/api/dashboard/settings/route.ts` (solo el punto 5),
   componentes de `src/components/dashboard/cycle/` y del calendario que reemplaces, `src/app/api/dashboard/cycle/gift`
   (nuevo), `src/services/calendar.service.ts`, `getActiveBlackouts()` en `campaign.service.ts`, lo mínimo del drenador si
   el regalo manual lo pide, `supabase/migrations/<número>_*.sql` si hace falta, `tests/**`, `docs/features/calendar.md`,
@@ -130,7 +140,8 @@ de cumpleaños, Recompensas (ya hecho, S-1), el AIOS. Si necesitas algo de afuer
 Parte A: cada endpoint con Postgres real (conteos por caja con un ciclo armado a mano, nuevos contra ya volvieron, retorno
 con y sin mensaje, segunda visita, aislamiento entre marcas y por sede, un fallo de base da 500) y las fechas especiales.
 Parte B: la lógica pura de las tarjetas y de las cajas (sin React) y que la pantalla no muestra «0» ante un error.
-Parte C: el regalo manual se otorga al enviar y no al encolar; «incluir dormidos»; el redirect; N-BLACKOUT y N-AUDIENCIA.
+Parte C: el regalo manual se otorga al enviar y no al encolar; «incluir dormidos»; el redirect; N-BLACKOUT y N-AUDIENCIA;
+un super usuario de marca recibe 403 al escribir `cycle_enabled` y el operador no (punto 5).
 Siempre: la suite entera en verde (la última corrida completa dio **86 archivos / 1.373 tests**). Compruébalo sin `stash`
 (copias al scratchpad, `git show` de HEAD, corres, restauras) y di cuántos fallan contra el código anterior.
 

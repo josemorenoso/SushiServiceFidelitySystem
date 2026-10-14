@@ -336,7 +336,7 @@ describe('«Hoy no» pospone la PRÓXIMA corrida del cron, un día', () => {
     for (const clave of Object.values(HOY_NO_CLAVES)) {
       expect(CLAVES_DEL_SISTEMA.has(clave)).toBe(true)
       expect(CLAVES_ESCRIBIBLES.has(clave)).toBe(false)
-      expect(decidirEscrituraDeAjuste({ key: clave, valor: '2026-10-14', proveedor: 'twilio', valorActual: null })).toMatchObject({
+      expect(decidirEscrituraDeAjuste({ key: clave, valor: '2026-10-14', proveedor: 'twilio', valorActual: null, esOperador: true })).toMatchObject({
         ok: false,
         status: 400,
       })

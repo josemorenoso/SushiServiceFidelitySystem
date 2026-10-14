@@ -33,10 +33,13 @@ export function ListaDeCaja({
   filtro,
   titulo,
   descripcion,
+  accion,
 }: {
   filtro: FiltroDeLista
   titulo: string
   descripcion: string
+  /** Un botón bajo el título: «Mandarles un regalo» (parte C). */
+  accion?: { etiqueta: string; onClick: () => void }
 }) {
   const [estado, setEstado] = useState<Estado>({ tipo: 'cargando' })
   const [reintento, setReintento] = useState(0)
@@ -86,6 +89,11 @@ export function ListaDeCaja({
         {estado.tipo === 'lista' ? textoClientes(estado.total) : titulo}
       </h3>
       {clave && <p className="mt-0.5 text-xs text-muted-foreground">{QUE_RECIBEN[clave]}</p>}
+      {accion && (
+        <Button type="button" size="sm" className="mt-2" onClick={accion.onClick}>
+          {accion.etiqueta}
+        </Button>
+      )}
 
       {estado.tipo === 'cargando' && (
         <div className="mt-3 space-y-2" aria-busy="true">

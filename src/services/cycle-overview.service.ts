@@ -53,6 +53,7 @@ import {
   type CycleBoxKey,
   type CycleRhythm,
   type CycleSettings,
+  type SendSlot,
   type StageDays,
   type StageOptions,
 } from '@/lib/cycle-engine'
@@ -77,7 +78,7 @@ import {
 } from '@/lib/cycle-touch'
 import { getMultipleSettings } from '@/services/settings.service'
 import { premiosDelCiclo, regaloQueVenceAprobada } from '@/services/cycle.service'
-import { findCustomersForEvent, listEvents, type EventFilters } from '@/services/calendar.service'
+import { audienciaDelEvento, listEvents } from '@/services/calendar.service'
 import { getLineBudget } from '@/services/line-budget.service'
 import { fechasEspecialesEntre, rubroDeLaMarca, type FechaEspecial } from '@/constants/fechas-especiales'
 import type { Tenant } from '@/types/tenant.types'
@@ -571,8 +572,9 @@ export async function getCycleOverview(
     const audiencia = async (ev: RestaurantEvent): Promise<number> => {
       const ya = audiencias.get(ev.id)
       if (ya !== undefined) return ya
-      // La MISMA audiencia que va a recibir la invitación (`executeAutoEvent()` usa esta función).
-      const n = (await findCustomersForEvent((ev.filters ?? {}) as EventFilters, tenant.id)).length
+      // La MISMA audiencia que va a recibir la invitación (`executeAutoEvent()` usa esta función):
+      // con el ciclo encendido, sin los dormidos salvo «Incluir a los dormidos» (00073).
+      const n = (await audienciaDelEvento(ev, tenant.id)).length
       audiencias.set(ev.id, n)
       return n
     }
@@ -711,7 +713,7 @@ function horaEnPalabras(hhmm: string): string {
 }
 
 /** «hoy a las 4:30 pm» · «mañana a las 10:30 am» · «el sábado 17 de octubre a las 4:30 pm». */
-function cuandoSale(sale: Date, hoy: number, hora: string): string {
+export function cuandoSale(sale: Date, hoy: number, hora: string): string {
   const d = bogotaDay(sale) - hoy
   const dia = d === 0 ? 'hoy' : d === 1 ? 'mañana' : `el ${formatGiftDeadline(sale)}`
   return `${dia} a las ${horaEnPalabras(hora)}`
@@ -1264,5 +1266,60 @@ export async function getCycleCustomers(
       ...(x.entra ? { entra_a: x.entra } : {}),
       ultimo_toque: ultimos.get(x.c.id) ?? null,
     })),
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Las audiencias del creador «Mandar un regalo» (fase 2, parte C, 2026-10-14)
+// ═══════════════════════════════════════════════════════════════
+
+/** A quién se le manda un regalo (spec §6.5): una caja, los Dormidos, o todos. */
+export type AudienciaDeRegalo = CycleBoxKey | 'dormidos' | 'todos'
+
+export interface AudienciaDelCiclo {
+  clave: AudienciaDeRegalo
+  etiqueta: string
+  /** Los clientes que están HOY ahí (los que el ciclo trabaja: aceptan mensajes y no pidieron SALIR). */
+  ids: string[]
+  /** «Recién vino» no se ofrece: vinieron hace poco y todavía no les toca ningún mensaje. */
+  disponible: boolean
+}
+
+export interface AudienciasDelCiclo {
+  encendido: boolean
+  sendSlot: SendSlot
+  /** En el orden de la pantalla: las cajas de la marca, Dormidos y Todos. */
+  audiencias: AudienciaDelCiclo[]
+}
+
+/**
+ * Quién está HOY en cada caja, en Dormidos y en «Todos», con el MISMO motor que las cajas de la
+ * portada (`lugarDelActivo()` → `boxOf()`): el «Rescate · 23» del creador es el mismo 23 de la
+ * caja. «Todos» son los del ciclo menos los que recién vinieron, más los dormidos (también los
+ * que ya no reciben nada automático: un regalo que manda el dueño no es automático).
+ */
+export async function audienciasDelCiclo(tenant: Tenant, opciones: { ahora?: Date } = {}): Promise<AudienciasDelCiclo> {
+  const base = await cargarBase(tenant, opciones.ahora ?? new Date())
+  const cajas = bandsFromConfig(base.ritmo.marca, { tieneDomicilio: base.tieneDomicilio })
+  const porCaja = new Map<CycleBoxKey, string[]>(cajas.map((c) => [c.key, []]))
+  const dormidos: string[] = []
+  for (const c of base.alcanzables) {
+    if (esDormido(c)) {
+      dormidos.push(c.id)
+      continue
+    }
+    if (c.cycle_state !== 'activo') continue
+    const lugar = lugarDelActivo(c, base)
+    porCaja.get(lugar.caja)?.push(c.id)
+  }
+  const todos = [...cajas.filter((c) => c.key !== 'reciente').flatMap((c) => porCaja.get(c.key) ?? []), ...dormidos]
+  return {
+    encendido: base.ajustes.enabled,
+    sendSlot: base.ajustes.sendSlot,
+    audiencias: [
+      ...cajas.map((c) => ({ clave: c.key, etiqueta: c.label, ids: porCaja.get(c.key) ?? [], disponible: c.key !== 'reciente' })),
+      { clave: 'dormidos' as const, etiqueta: DORMANT_LABEL, ids: dormidos, disponible: true },
+      { clave: 'todos' as const, etiqueta: 'Todos', ids: todos, disponible: true },
+    ],
   }
 }

@@ -392,10 +392,15 @@ describe('los ajustes del ciclo', () => {
     const delCicloEnElPut = [...CLAVES_ESCRIBIBLES].filter((k) => k.startsWith('cycle_')).sort()
     expect(delCicloEnElPut).toEqual([...CYCLE_SETTING_KEYS].sort())
     for (const key of CYCLE_SETTING_KEYS) {
-      expect(decidirEscrituraDeAjuste({ key, valor: 'x', proveedor: 'twilio', valorActual: null })).toEqual({
+      expect(decidirEscrituraDeAjuste({ key, valor: 'x', proveedor: 'twilio', valorActual: null, esOperador: true })).toEqual({
         ok: true,
         escribir: true,
       })
+    }
+    // Desde la parte C (2026-10-14): `cycle_enabled` solo del operador de Cada1 (H7); el resto, de la marca.
+    for (const key of CYCLE_SETTING_KEYS) {
+      const decision = decidirEscrituraDeAjuste({ key, valor: 'x', proveedor: 'twilio', valorActual: null, esOperador: false })
+      expect(decision.ok).toBe(key !== 'cycle_enabled')
     }
   })
 })

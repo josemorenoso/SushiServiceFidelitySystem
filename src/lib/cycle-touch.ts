@@ -661,3 +661,74 @@ export function guardaDelCicloAlEnviar(input: {
   }
   return { tipo: 'enviar' }
 }
+
+// ═══════════════════════════════════════════════════════════════
+// El regalo que manda el dueño: «Mandar un regalo» (fase 2, parte C, 2026-10-14)
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Hasta cuándo vale un regalo que manda el dueño (spec §6.5): «este domingo» por defecto
+ * (`expiresOnSunday()`, mínimo 5 días: el mismo de los toques) o 3 / 7 / 14 días.
+ */
+export const REGLAS_DE_VENCIMIENTO = ['domingo', '3', '7', '14'] as const
+export type ReglaDeVencimiento = (typeof REGLAS_DE_VENCIMIENTO)[number]
+
+export function esReglaDeVencimiento(valor: unknown): valor is ReglaDeVencimiento {
+  return typeof valor === 'string' && (REGLAS_DE_VENCIMIENTO as readonly string[]).includes(valor)
+}
+
+/**
+ * El vencimiento de un regalo que sale `alEnviar`, en hora de Bogotá: «domingo» es el cierre
+ * del domingo siguiente con el mínimo de 5 días; «N» es el cierre del día N después del envío.
+ * Se calcula AL ENVIAR, nunca al programar (spec §5): un regalo que esperó cupo dos días sigue
+ * valiendo sus días completos.
+ */
+export function venceSegunRegla(regla: ReglaDeVencimiento, alEnviar: Date): Date {
+  if (regla === 'domingo') return expiresOnSunday(alEnviar)
+  return appEndOfDay(isoDeDia(bogotaDay(alEnviar) + Number(regla)))
+}
+
+/**
+ * La plantilla del regalo del dueño: el MISMO adaptador que «Le regalamos algo» y el Rescate
+ * (spec §4) — «Regalo que vence» si está aprobada en la marca; si no, la insistente con el
+ * regalo en `{{4}}` y la fecha en `{{5}}` (el regalo igual llega a la tarjeta). `null` si la
+ * marca no tiene ninguna de las dos.
+ */
+export function plantillaDelRegalo(plantillas: PlantillasDeLaMarca): PlantillaElegida | null {
+  return elegirPlantilla('t2', true, null, plantillas)
+}
+
+/** Lo que el drenador le pone al regalo del dueño AL ENVIAR: la fecha límite según su regla. */
+export function variablesDelRegaloAlEnviar(
+  key: TouchTemplateKey,
+  regla: ReglaDeVencimiento,
+  variables: Record<string, string>,
+  ahora: Date
+): { variables: Record<string, string>; vence: Date } {
+  const vence = venceSegunRegla(regla, ahora)
+  const indice = DEADLINE_VARIABLE[key]
+  return { variables: indice ? { ...variables, [indice]: formatGiftDeadline(vence) } : variables, vence }
+}
+
+/** Hasta cuántos días adelante se puede programar un regalo. */
+export const MAX_DIAS_PARA_PROGRAMAR_UN_REGALO = 60
+
+/**
+ * Cuándo sale un regalo (spec §6.5, «cuándo»): `hoy` es la PRÓXIMA hora de la marca (si la de
+ * hoy ya pasó, mañana: `nextSendSlot()`, H3); una fecha `AAAA-MM-DD` es esa fecha a la hora de
+ * la marca. `null` si la fecha no sirve: mal escrita, ya pasó (incluida la hora de hoy) o más
+ * allá de `MAX_DIAS_PARA_PROGRAMAR_UN_REGALO`.
+ */
+export function instanteDelRegalo(cuando: string, slot: SendSlot, ahora: Date): Date | null {
+  if (cuando === 'hoy') return nextSendSlot(ahora, slot)
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(cuando)
+  if (!m) return null
+  const ms = Date.parse(`${cuando}T00:00:00Z`)
+  if (Number.isNaN(ms) || new Date(ms).toISOString().slice(0, 10) !== cuando) return null
+  const dia = Math.floor(ms / DIA_MS)
+  const hoy = bogotaDay(ahora)
+  if (dia < hoy || dia > hoy + MAX_DIAS_PARA_PROGRAMAR_UN_REGALO) return null
+  const [h, min] = SEND_SLOTS[slot].split(':').map(Number)
+  const instante = instanteEnBogota(dia, h, min)
+  return instante > ahora ? instante : null
+}

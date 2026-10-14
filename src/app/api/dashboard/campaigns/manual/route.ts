@@ -177,7 +177,11 @@ export async function POST(request: NextRequest) {
 
     // Pre-event blackout: hoy solo informativo — la exclusión real la hacen el
     // frequency cap + monthly cap. Se mantiene la consulta para trazabilidad.
-    await getActiveBlackouts(tenantId)
+    // Desde N-BLACKOUT (2026-10-14) la consulta LANZA ante un fallo de base; como acá no
+    // decide nada, un fallo no puede tumbar una campaña ya creada: queda en el log.
+    await getActiveBlackouts(tenantId).catch((err) =>
+      console.error('[ManualCampaign] No se pudo leer el blackout (solo informativo):', err instanceof Error ? err.message : err)
+    )
     const eligible = afterRecoveryZone
     const skippedBlackout = 0
 

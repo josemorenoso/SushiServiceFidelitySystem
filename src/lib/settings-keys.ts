@@ -75,7 +75,8 @@ const AJUSTES = [
   // Ciclo de recuperación (fase 1A, 2026-10-11). Ninguna pantalla las escribe todavía: la
   // de la fase 2 lo hará por esta ruta. Defaults y saneamiento en `normalizeCycleSettings()`
   // (`src/lib/cycle-engine.ts`, `CYCLE_SETTING_KEYS`: un test exige que las dos listas
-  // coincidan). `cycle_enabled` nace apagado en todas las marcas.
+  // coincidan). `cycle_enabled` nace apagado en todas las marcas, y SOLO lo escribe el
+  // operador de Cada1 (`CLAVES_DEL_OPERADOR`, decisión H7).
   'cycle_enabled',
   'cycle_rhythm',
   'cycle_small_reward_ids',
@@ -106,6 +107,19 @@ export const CLAVES_DEL_SISTEMA: ReadonlySet<string> = new Set<string>([
 ])
 
 /**
+ * Claves que el panel acepta, pero SOLO del operador de Cada1 (`isSuperAdmin()`), nunca de un
+ * super usuario de la marca.
+ *
+ *   · `cycle_enabled` (fase 2 parte C, 2026-10-14; decisión H7 del comandante): encender el
+ *     ciclo sube el volumen de mensajes y el costo de la línea de un día para otro, así que lo
+ *     decide Cada1 con el dueño. Hasta la parte B solo la PANTALLA escondía el interruptor: el
+ *     `PUT` lo aceptaba de cualquier super usuario de la marca (`exigirAlcanceDeMarca()`).
+ */
+export const CLAVES_DEL_OPERADOR: ReadonlyMap<string, string> = new Map([
+  ['cycle_enabled', 'Encender o apagar el ciclo lo hace el equipo de Cada1. Escríbenos y lo hacemos contigo.'],
+])
+
+/**
  * Punteros que el código consume y que el catálogo NO cubre: la reactivación «con premio»
  * del sistema anterior, que una marca Twilio elige en Plantillas (bloque «Sistema
  * antiguo»). Es excepción de `p1a-plantillas-paridad.test.ts` (como la legacy
@@ -133,19 +147,23 @@ export function esPunteroDePlantilla(key: string): boolean {
 
 export type DecisionDeAjuste =
   | { ok: true; escribir: boolean }
-  | { ok: false; status: 400; error: string }
+  | { ok: false; status: 400 | 403; error: string }
 
 /**
  * La regla entera, PURA. `valorActual` es lo que hoy guarda `admin_settings` para esa
  * clave (`null` si no hay fila); solo importa para un puntero de una marca Zernio.
+ * `esOperador` es si quien escribe es el operador de Cada1 (`isSuperAdmin()`): lo resuelve la
+ * ruta y llega como dato, para que la regla siga siendo pura. Sin él no se escribe una clave
+ * del operador (falla cerrado).
  */
 export function decidirEscrituraDeAjuste(input: {
   key: string
   valor: string
   proveedor: string | null | undefined
   valorActual: string | null
+  esOperador: boolean
 }): DecisionDeAjuste {
-  const { key, valor, proveedor, valorActual } = input
+  const { key, valor, proveedor, valorActual, esOperador } = input
 
   if (CLAVES_DEL_SISTEMA.has(key)) {
     return {
@@ -162,6 +180,9 @@ export function decidirEscrituraDeAjuste(input: {
       error: `«${key}» no es un ajuste que se pueda cambiar desde el panel.`,
     }
   }
+
+  const delOperador = CLAVES_DEL_OPERADOR.get(key)
+  if (delOperador && !esOperador) return { ok: false, status: 403, error: delOperador }
 
   if (esPunteroDePlantilla(key) && proveedor === 'zernio') {
     // Mismo valor = nada que cambiar (vacío y «sin fila» cuentan igual).

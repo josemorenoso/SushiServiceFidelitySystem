@@ -1,27 +1,73 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState, type Ref } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type Ref } from 'react'
+import { Gift } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useDemo } from '@/contexts/DemoContext'
 import {
   hoyEnBogota,
+  leerJson,
   leerPortadaDelCiclo,
   mostrarPrimerUso,
+  pedidoDeLaUrl,
   rangoDeCaja,
+  type AccionDeTarjeta,
   type ClaveDeCaja,
   type FiltroDeLista,
   type PortadaDelCiclo,
 } from '@/lib/cycle-screen'
+import type { RestaurantEvent } from '@/types/database.types'
+import type { TarjetaParaHoy } from '@/services/cycle-overview.service'
+import { EventDetailDrawer } from '@/components/dashboard/Calendar/EventDetailDrawer'
 import { CajasDelCiclo } from './CajasDelCiclo'
 import { ComoDecide } from './ComoDecide'
+import { CreadorDelCiclo, type PedidoDelCreador } from './CreadorDelCiclo'
 import { EstadoDelCiclo } from './EstadoDelCiclo'
 import { ListaDeCaja } from './ListaDeCaja'
 import { NumerosDeArriba } from './NumerosDeArriba'
 import { ParaHoy } from './ParaHoy'
 import { PrimerUso } from './PrimerUso'
 import { VerPorDia } from './VerPorDia'
+import { VistaPorFecha } from './VistaPorFecha'
+
+/** Por etapa (las cajas, default) o por fecha (el calendario, parte C). */
+export type VistaDelCicloEn = 'etapa' | 'fecha'
+
+/** Lo que se toca en la vista por etapa: una caja o una barra del histograma. */
+type SeleccionPorEtapa = Exclude<FiltroDeLista, { tipo: 'fecha' }>
+
+// La URL se lee con `useSyncExternalStore` (como la página), nunca con `useSearchParams()`.
+const sinSuscripcion = () => () => {}
+const leerBusqueda = () => {
+  try {
+    return window.location.search
+  } catch {
+    return ''
+  }
+}
+
+/** La ficha de un evento (para «Subir foto» y los eventos de la vista por fecha). */
+async function leerEvento(id: string): Promise<{ ok: true; evento: RestaurantEvent } | { ok: false; mensaje: string }> {
+  const r = await leerJson<{ event?: RestaurantEvent }>(
+    `/api/dashboard/calendar/events/${encodeURIComponent(id)}`,
+    'No pudimos abrir ese evento. Intenta de nuevo en un minuto.'
+  )
+  if (!r.ok) return r
+  return r.datos.event ? { ok: true, evento: r.datos.event } : { ok: false, mensaje: 'No encontramos ese evento.' }
+}
+
+/** Quita de la URL lo que ya se atendió (recargar no lo vuelve a abrir). */
+function limpiarPedidoDeLaUrl() {
+  try {
+    const url = new URL(window.location.href)
+    for (const k of ['fecha', 'nombre', 'evento']) url.searchParams.delete(k)
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}`)
+  } catch {
+    // Sin historial (navegador raro): la URL queda como estaba. No pasa nada.
+  }
+}
 
 export type EstadoDeLaPantalla =
   | { tipo: 'cargando' }
@@ -43,13 +89,80 @@ export type EstadoDeLaPantalla =
  *
  * Esta función tiene los efectos (leer, recordar qué caja se tocó); `VistaDelCiclo` solo dibuja
  * un estado, y es la que se prueba sin navegador.
+ *
+ * PARTE C (2026-10-14): arriba, «Por etapa | Por fecha» y el botón principal «Mandar un regalo».
+ * La vista por fecha es el calendario (el mismo dato girado, spec §6.4); el creador
+ * (`CreadorDelCiclo`) abre directo en el regalo, y «Crear aquí» de un día, «Crear evento» y
+ * «Subir foto» de «Para hoy» abren el creador de eventos o la ficha del evento sin salir de acá.
+ * Una URL con `?fecha=…&nombre=…` (o `?evento=<id>`) —el viejo `/dashboard/calendar` redirige
+ * así— abre lo mismo al entrar.
  */
-export function CicloPantalla() {
+export function CicloPantalla({
+  vista = 'etapa',
+  onVista,
+  onMensajeLibre,
+}: {
+  vista?: VistaDelCicloEn
+  onVista?: (v: VistaDelCicloEn) => void
+  onMensajeLibre?: () => void
+} = {}) {
   const { isDemo } = useDemo()
   const [estado, setEstado] = useState<EstadoDeLaPantalla>({ tipo: 'cargando' })
   const [lectura, setLectura] = useState(0)
-  const [seleccion, setSeleccion] = useState<FiltroDeLista | null>(null)
+  const [seleccion, setSeleccion] = useState<SeleccionPorEtapa | null>(null)
+  const [creador, setCreador] = useState<PedidoDelCreador | null>(null)
+  const [evento, setEvento] = useState<RestaurantEvent | null>(null)
+  const [errorDelEvento, setErrorDelEvento] = useState<string | null>(null)
+  const [recargaDelCalendario, setRecargaDelCalendario] = useState(0)
   const detalle = useRef<HTMLDivElement>(null)
+  /** El evento cuya ficha está abierta: una relectura que llega tarde no reabre una ficha cerrada. */
+  const fichaAbierta = useRef<string | null>(null)
+
+  /** Lo leído llega acá; si mientras tanto se cerró (u se abrió otra), no se aplica. */
+  const aplicarEvento = useCallback((id: string, r: Awaited<ReturnType<typeof leerEvento>>) => {
+    if (fichaAbierta.current !== id) return
+    if (r.ok) {
+      setErrorDelEvento(null)
+      setEvento(r.evento)
+    } else {
+      setErrorDelEvento(r.mensaje)
+    }
+  }, [])
+  const abrirEvento = useCallback(
+    (id: string, soloSiSigueAbierta = false) => {
+      if (!soloSiSigueAbierta) fichaAbierta.current = id
+      return leerEvento(id).then((r) => aplicarEvento(id, r))
+    },
+    [aplicarEvento]
+  )
+
+  // Lo que pide la URL al entrar («Crear evento» / «Subir foto» desde otra pantalla, o el
+  // calendario viejo que redirige): `?fecha=…&nombre=…` abre el creador de eventos; `?evento=`,
+  // la ficha. Se atiende una vez; al cerrar se limpia de la URL para que recargar no lo reabra.
+  const busqueda = useSyncExternalStore(sinSuscripcion, leerBusqueda, () => '')
+  const pedidoUrl = useMemo(() => pedidoDeLaUrl(busqueda), [busqueda])
+  const [urlAtendida, setUrlAtendida] = useState(false)
+  const creadorPedido: PedidoDelCreador | null =
+    creador ??
+    (!isDemo && !urlAtendida && pedidoUrl.fecha && !pedidoUrl.evento
+      ? { tipo: 'evento', fecha: pedidoUrl.fecha, nombre: pedidoUrl.nombre }
+      : null)
+  useEffect(() => {
+    if (isDemo || urlAtendida || !pedidoUrl.evento) return
+    const id = pedidoUrl.evento
+    fichaAbierta.current = id
+    let activo = true
+    leerEvento(id).then((r) => {
+      if (activo) aplicarEvento(id, r)
+    })
+    return () => {
+      activo = false
+    }
+  }, [isDemo, urlAtendida, pedidoUrl.evento, aplicarEvento])
+  const atenderUrl = useCallback(() => {
+    setUrlAtendida(true)
+    limpiarPedidoDeLaUrl()
+  }, [])
 
   useEffect(() => {
     if (isDemo) return
@@ -70,8 +183,12 @@ export function CicloPantalla() {
   }, [isDemo, lectura])
 
   const recargar = useCallback(() => setLectura((n) => n + 1), [])
+  const trasCrear = useCallback(() => {
+    setLectura((n) => n + 1)
+    setRecargaDelCalendario((n) => n + 1)
+  }, [])
 
-  const elegir = useCallback((filtro: FiltroDeLista) => {
+  const elegir = useCallback((filtro: SeleccionPorEtapa) => {
     setSeleccion(filtro)
     // En el celular la lista queda debajo de las cajas: se lleva la vista hasta ella.
     if (typeof window !== 'undefined' && !window.matchMedia('(min-width: 1024px)').matches) {
@@ -94,18 +211,82 @@ export function CicloPantalla() {
     )
   }
 
+  const portada = estado.tipo === 'listo' ? estado.portada : null
+  const accionDeTarjeta = (accion: AccionDeTarjeta, t: TarjetaParaHoy): boolean => {
+    if (accion === 'crear_evento') {
+      setCreador({ tipo: 'evento', fecha: t.fecha, nombre: t.nombre })
+      return true
+    }
+    if (accion === 'subir_foto' && t.evento_id) {
+      void abrirEvento(t.evento_id)
+      return true
+    }
+    return false
+  }
+
   return (
-    <VistaDelCiclo
-      estado={estado}
-      seleccion={seleccion}
-      detalleRef={detalle}
-      onElegir={elegir}
-      onReintentar={() => {
-        setEstado({ tipo: 'cargando' })
-        recargar()
-      }}
-      onCambio={recargar}
-    />
+    <>
+      <VistaDelCiclo
+        estado={estado}
+        seleccion={seleccion}
+        detalleRef={detalle}
+        onElegir={elegir}
+        onReintentar={() => {
+          setEstado({ tipo: 'cargando' })
+          recargar()
+        }}
+        onCambio={recargar}
+        vista={vista}
+        onVista={onVista}
+        onCrear={setCreador}
+        onAbrirEvento={(id) => void abrirEvento(id)}
+        onAccionDeTarjeta={accionDeTarjeta}
+        recargaDelCalendario={recargaDelCalendario}
+        avisoDelEvento={errorDelEvento}
+      />
+      {portada && (
+        <CreadorDelCiclo
+          pedido={creadorPedido}
+          onCerrar={() => {
+            setCreador(null)
+            atenderUrl()
+          }}
+          numeros={{
+            enElCiclo: portada.numeros.en_el_ciclo,
+            dormidos: portada.numeros.dormidos,
+            encendido: portada.ciclo.encendido,
+            hora: portada.ciclo.hora,
+          }}
+          puedeMandarRegalos={portada.permisos?.aprobar === true}
+          onListo={trasCrear}
+          onMensajeLibre={
+            onMensajeLibre
+              ? () => {
+                  setCreador(null)
+                  atenderUrl()
+                  onMensajeLibre()
+                }
+              : undefined
+          }
+        />
+      )}
+      <EventDetailDrawer
+        open={evento !== null}
+        onOpenChange={(o) => {
+          if (!o) {
+            fichaAbierta.current = null
+            setEvento(null)
+            atenderUrl()
+          }
+        }}
+        event={evento}
+        onUpdated={() => {
+          trasCrear()
+          // La ficha muestra lo que se acaba de guardar (la foto, por ejemplo).
+          if (fichaAbierta.current) void abrirEvento(fichaAbierta.current, true)
+        }}
+      />
+    </>
   )
 }
 
@@ -117,13 +298,30 @@ export function VistaDelCiclo({
   onElegir,
   onReintentar,
   onCambio,
+  vista = 'etapa',
+  onVista,
+  onCrear,
+  onAbrirEvento,
+  onAccionDeTarjeta,
+  recargaDelCalendario = 0,
+  avisoDelEvento = null,
 }: {
   estado: EstadoDeLaPantalla
-  seleccion: FiltroDeLista | null
+  seleccion: SeleccionPorEtapa | null
   detalleRef?: Ref<HTMLDivElement>
-  onElegir: (filtro: FiltroDeLista) => void
+  onElegir: (filtro: SeleccionPorEtapa) => void
   onReintentar: () => void
   onCambio?: () => void
+  vista?: VistaDelCicloEn
+  onVista?: (v: VistaDelCicloEn) => void
+  /** Abre el creador («Mandar un regalo», «Crear aquí», «Mandarles un regalo»). */
+  onCrear?: (pedido: PedidoDelCreador) => void
+  onAbrirEvento?: (eventoId: string) => void
+  /** «Crear evento» / «Subir foto» de «Para hoy» sin salir de la pantalla. */
+  onAccionDeTarjeta?: (accion: AccionDeTarjeta, t: TarjetaParaHoy) => boolean
+  recargaDelCalendario?: number
+  /** Un evento que no se pudo abrir. */
+  avisoDelEvento?: string | null
 }) {
   if (estado.tipo === 'cargando') return <PantallaCargando />
 
@@ -144,6 +342,7 @@ export function VistaDelCiclo({
 
   const { portada, aviso } = estado
   const permisos = portada.permisos ?? null
+  const puedeMandar = permisos?.aprobar === true
   const claveElegida: ClaveDeCaja | null = seleccion?.tipo === 'caja' ? seleccion.clave : null
   const diaElegido = seleccion?.tipo === 'dia' ? seleccion.dia : null
 
@@ -159,6 +358,12 @@ export function VistaDelCiclo({
 
   return (
     <div className="space-y-5">
+      <BarraDelCiclo
+        vista={vista}
+        onVista={onVista}
+        onMandarRegalo={onCrear && puedeMandar ? () => onCrear({ tipo: 'regalo' }) : undefined}
+      />
+
       {aviso && (
         <p role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-900">
           {aviso} Lo que ves es lo último que pudimos leer.
@@ -169,12 +374,32 @@ export function VistaDelCiclo({
 
       {mostrarPrimerUso(portada.primer_uso) && <PrimerUso datos={portada.primer_uso} />}
 
+      {avisoDelEvento && (
+        <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-2.5 text-xs text-red-900">
+          {avisoDelEvento}
+        </p>
+      )}
+
       {portada.para_hoy && (
-        <ParaHoy tarjetas={portada.para_hoy} permisos={permisos} hoyIso={hoyEnBogota()} onCambio={onCambio} />
+        <ParaHoy
+          tarjetas={portada.para_hoy}
+          permisos={permisos}
+          hoyIso={hoyEnBogota()}
+          onCambio={onCambio}
+          onAccion={onAccionDeTarjeta}
+        />
       )}
 
       <NumerosDeArriba portada={portada} />
 
+      {vista === 'fecha' ? (
+        <VistaPorFecha
+          hoyIso={hoyEnBogota()}
+          recarga={recargaDelCalendario}
+          onCrearAqui={(fecha) => onCrear?.({ tipo: 'evento', fecha })}
+          onAbrirEvento={(id) => onAbrirEvento?.(id)}
+        />
+      ) : (
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
         <Card>
           <CardContent className="space-y-3">
@@ -212,6 +437,15 @@ export function VistaDelCiclo({
                   filtro={seleccion}
                   titulo={tituloDeLaLista}
                   descripcion={descripcionDeLaLista}
+                  accion={
+                    onCrear && puedeMandar && seleccion.tipo === 'caja' && seleccion.clave !== 'reciente'
+                      ? {
+                          etiqueta: 'Mandarles un regalo',
+                          onClick: () =>
+                            onCrear({ tipo: 'regalo', audiencia: seleccion.clave }),
+                        }
+                      : undefined
+                  }
                 />
               ) : (
                 <p className="text-sm text-muted-foreground">Toca una caja para ver quiénes son.</p>
@@ -221,6 +455,49 @@ export function VistaDelCiclo({
           <ComoDecide grupoDeControlPct={portada.ciclo.grupo_de_control_pct} />
         </aside>
       </div>
+      )}
+    </div>
+  )
+}
+
+/** «Por etapa | Por fecha» y el botón principal (spec §6.5: «Mandar un regalo» abre directo). */
+function BarraDelCiclo({
+  vista,
+  onVista,
+  onMandarRegalo,
+}: {
+  vista: VistaDelCicloEn
+  onVista?: (v: VistaDelCicloEn) => void
+  onMandarRegalo?: () => void
+}) {
+  if (!onVista && !onMandarRegalo) return null
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      {onVista ? (
+        <div role="group" aria-label="Vista" className="inline-flex rounded-lg border p-0.5">
+          {(['etapa', 'fecha'] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              aria-pressed={vista === v}
+              onClick={() => onVista(v)}
+              className={`rounded-md px-3 py-1 text-sm font-medium transition-colors ${
+                vista === v ? 'bg-[var(--brand-primary)] text-[var(--brand-on-primary)]' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {v === 'etapa' ? 'Por etapa' : 'Por fecha'}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <span />
+      )}
+      {onMandarRegalo && (
+        <Button type="button" onClick={onMandarRegalo}>
+          <Gift className="size-4" aria-hidden="true" />
+          Mandar un regalo
+        </Button>
+      )}
     </div>
   )
 }

@@ -44,6 +44,14 @@
  * regalo) y lo que le cambia al cliente. Todo desenlace escribe el toque (H6): lo que solo el
  * drenador sabe (el cap de 7 días y el tope del mes posponen con su fecha) se escribe ANTES de
  * cancelar el item; lo demás lo lleva el trigger de la cola (00071). `src/services/cycle.service.ts`.
+ *
+ * LOS REGALOS QUE MANDA EL DUEÑO («Mandar un regalo», fase 2 parte C, 2026-10-14: items `manual`
+ * cuya campaña lleva `filters.regalo`). Igual que un toque con regalo: (a) si el cliente ya tiene
+ * un regalo vivo —o le llega otro en esta misma tanda— el item se cancela; (b) la fecha límite se
+ * calcula AL ENVIAR con la regla del dueño (domingo, 3, 7 o 14 días); (c) solo si el mensaje
+ * salió se otorga el regalo con ESE vencimiento. No pasan por la Recovery Zone (es la reserva del
+ * camino viejo de reactivación; el regalo es la herramienta del ciclo y el cap de 7 días ya evita
+ * dos mensajes seguidos). `src/services/cycle-gift.service.ts`.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -84,6 +92,16 @@ import {
   type ContextoDelCicloEnLaTanda,
   type ToqueEnviado,
 } from '@/services/cycle.service'
+import {
+  cargarContextoDeRegalos,
+  regaloDelItem,
+  guardaDelRegalo,
+  prepararEnvioDelRegalo,
+  otorgarRegalosEnviados,
+  type ContextoDeRegalosEnLaTanda,
+  type RegaloDeLaCampana,
+  type RegaloEnviado,
+} from '@/services/cycle-gift.service'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { isDbFailure, logDbFailure } from '@/lib/db-failure'
 
@@ -296,9 +314,12 @@ async function drenarTenant(tenantId: string, res: Resultado): Promise<Resultado
   // Los toques del ciclo de la tanda (solo si hay alguno): sus guardas se leen acá, dentro del
   // mismo try, así que una lectura que falla devuelve la tanda a la cola como cualquier guarda.
   let ciclo: ContextoDelCicloEnLaTanda | null = null
+  // Los regalos del dueño de la tanda (solo si trae items `manual`): mismas reglas que el ciclo.
+  let regalos: ContextoDeRegalosEnLaTanda | null = null
   try {
     if (items.some((i) => i.cycle_touch_id)) ciclo = await cargarContextoDelCiclo(tenantId, items)
-    permitidos = await filtrarPorGuardas(tenantId, items, res, ciclo)
+    regalos = await cargarContextoDeRegalos(tenantId, items)
+    permitidos = await filtrarPorGuardas(tenantId, items, res, ciclo, regalos)
   } catch (err) {
     const motivo = `No se pudieron verificar las guardas de envío: ${err instanceof Error ? err.message : 'error desconocido'}`
     console.error(`[QueueDrain][FALLO] reason=guardas_error tenant=${tenantId} detalle="${motivo}"`)
@@ -331,9 +352,13 @@ async function drenarTenant(tenantId: string, res: Resultado): Promise<Resultado
   // Un toque del ciclo sale con la fecha límite de su regalo calculada AHORA, no al encolar.
   const alEnviar = new Date()
   const envioDelCiclo = new Map<string, { variables: Record<string, string>; vence: Date | null }>()
+  // Lo mismo para el regalo del dueño: su fecha límite, con SU regla, contada desde ahora.
+  const envioDelRegalo = new Map<string, { variables: Record<string, string>; vence: Date; regalo: RegaloDeLaCampana }>()
   for (const item of permitidos) {
     const toque = item.cycle_touch_id ? ciclo?.toques.get(item.cycle_touch_id) : undefined
     if (toque) envioDelCiclo.set(item.id, prepararEnvioDelToque(item, toque, alEnviar))
+    const regalo = regaloDelItem(item, regalos)
+    if (regalo) envioDelRegalo.set(item.id, { ...prepararEnvioDelRegalo(item, regalo, alEnviar), regalo })
   }
 
   // Lotes concurrentes, igual que las campañas.
@@ -349,7 +374,7 @@ async function drenarTenant(tenantId: string, res: Resultado): Promise<Resultado
         const enviado = await sendTemplateMessage(
           item.phone,
           item.template_sid,
-          envioDelCiclo.get(item.id)?.variables ?? item.variables ?? {},
+          envioDelCiclo.get(item.id)?.variables ?? envioDelRegalo.get(item.id)?.variables ?? item.variables ?? {},
           tenant,
           { customerId: item.customer_id, messageType: item.message_type },
           { ...construirOpciones(item, proveedor), provider: proveedor }
@@ -484,6 +509,16 @@ async function drenarTenant(tenantId: string, res: Resultado): Promise<Resultado
     if (enviadosDelCiclo.length > 0) await completarToquesEnviados(tenantId, enviadosDelCiclo)
   }
 
+  // ── Los regalos del dueño que SALIERON: recién ahora se otorgan, con el vencimiento del mensaje ──
+  if (envioDelRegalo.size > 0) {
+    const enviadosConRegalo: RegaloEnviado[] = []
+    for (const { item, enviado } of resultados) {
+      const envio = envioDelRegalo.get(item.id)
+      if (enviado && envio) enviadosConRegalo.push({ item, regalo: envio.regalo, vence: envio.vence })
+    }
+    if (enviadosConRegalo.length > 0) await otorgarRegalosEnviados(tenantId, enviadosConRegalo)
+  }
+
   await cerrarCampanasVacias(campanasTocadas)
 
   return { procesados: items.length, agotado: false, quedaCola: true }
@@ -500,7 +535,8 @@ async function filtrarPorGuardas(
   tenantId: string,
   items: QueueRow[],
   res: Resultado,
-  ciclo: ContextoDelCicloEnLaTanda | null
+  ciclo: ContextoDelCicloEnLaTanda | null,
+  regalos: ContextoDeRegalosEnLaTanda | null = null
 ): Promise<QueueRow[]> {
   const db = getServiceClient()
 
@@ -539,6 +575,17 @@ async function filtrarPorGuardas(
 
   const porId = new Map((clientes ?? []).map((c) => [c.id as string, c]))
 
+  // Un regalo por cliente también DENTRO de la tanda: quien recibe aquí un toque del ciclo con
+  // regalo (que pasa su guarda) no recibe además el del dueño, y de dos regalos del dueño sale uno.
+  const conRegaloEnLaTanda = new Set<string>()
+  if (regalos && ciclo) {
+    const ahora = new Date()
+    for (const item of conCliente) {
+      const toque = item.cycle_touch_id ? ciclo.toques.get(item.cycle_touch_id) : undefined
+      if (toque?.gift_size && guardaDelItem(item, ciclo, ahora).tipo === 'enviar') conRegaloEnLaTanda.add(item.customer_id!)
+    }
+  }
+
   // La ventana reservada al cron, según los días que este tenant configuró.
   // Se lee una vez por tanda, no por item.
   const recoveryZone = await getRecoveryZoneConfig(tenantId)
@@ -575,6 +622,18 @@ async function filtrarPorGuardas(
       }
     }
 
+    // ── La guarda del regalo del dueño (solo items cuya campaña lleva `filters.regalo`) ──
+    const regalo = regaloDelItem(item, regalos)
+    if (regalo && regalos) {
+      const guarda = guardaDelRegalo(item, regalos, conRegaloEnLaTanda)
+      if (guarda.tipo !== 'enviar') {
+        await cancelQueueItem(item.id, guarda.motivo)
+        res.skipped++
+        continue
+      }
+      conRegaloEnLaTanda.add(item.customer_id!)
+    }
+
     if (
       !EXENTOS_DEL_CAP.has(item.message_type) &&
       !passesFrequencyCap(cliente.last_campaign_at as string | null)
@@ -604,6 +663,7 @@ async function filtrarPorGuardas(
     // días de reactivación de este tenant, no las constantes fijas.
     if (
       item.message_type === 'manual' &&
+      !regalo &&
       isInRecoveryZone(cliente.last_visit_at as string | null, recoveryZone)
     ) {
       await cancelQueueItem(item.id, 'Volvió al restaurante: entró en la zona de recuperación')

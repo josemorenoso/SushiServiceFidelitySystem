@@ -23,10 +23,13 @@
  */
 
 import { BRAND_RHYTHM_MIN_RETURNS, CYCLE_RHYTHMS, RHYTHM_LABELS, type CycleBoxKey, type CycleRhythm } from '@/lib/cycle-engine'
+import { APP_UTC_OFFSET } from '@/lib/timezone'
 import type {
   CajaDelCiclo,
   ClienteDeLaLista,
   CycleOverview,
+  DiaDeLaProyeccion,
+  EventoDelCalendario,
   PorDia,
   PrimerUso,
   RetornoDeEtapa,
@@ -34,6 +37,7 @@ import type {
   TarjetaParaHoy,
   UltimoToque,
 } from '@/services/cycle-overview.service'
+import type { EstadoDelCupo, NoLoReciben, VistaPreviaDelRegalo } from '@/services/cycle-gift.service'
 
 // ═══════════════════════════════════════════════════════════════
 // Rutas a las que la pantalla lleva (todas existen hoy)
@@ -43,8 +47,11 @@ export const RUTAS_DEL_CICLO = {
   /** Recompensas › «Premios para regalar»: donde se eligen el regalo pequeño y el fuerte (S-1). */
   regalos: '/dashboard/rewards?tab=premios',
   plantillas: '/dashboard/templates',
-  /** Hasta que la parte C traiga el creador, eventos y fotos viven en el calendario de hoy. */
-  calendario: '/dashboard/calendar',
+  /**
+   * La vista «por fecha» de Campañas (parte C): el calendario de antes vive ahí, con el creador
+   * de eventos. `/dashboard/calendar` redirige acá con sus parámetros.
+   */
+  calendario: '/dashboard/campaigns?vista=fecha',
   campanas: '/dashboard/campaigns',
 } as const
 
@@ -485,19 +492,22 @@ export interface BotonDeTarjeta {
   href?: string
 }
 
-/** El enlace a «Crear evento»: trae la fecha y el nombre que la tarjeta sugirió. */
+/**
+ * El enlace a «Crear evento»: la vista por fecha con la fecha y el nombre que la tarjeta sugirió
+ * (la pantalla los lee al abrir y abre el creador ya lleno: `pedidoDeLaUrl()`).
+ */
 export function enlaceParaCrearEvento(t: Pick<TarjetaParaHoy, 'fecha' | 'nombre'>): string {
-  const q = new URLSearchParams()
+  const q = new URLSearchParams({ vista: 'fecha' })
   if (t.fecha) q.set('fecha', t.fecha)
   if (t.nombre) q.set('nombre', t.nombre)
-  const resto = q.toString()
-  return resto ? `${RUTAS_DEL_CICLO.calendario}?${resto}` : RUTAS_DEL_CICLO.calendario
+  return `${RUTAS_DEL_CICLO.campanas}?${q.toString()}`
 }
 
+/** «Subir foto»: la vista por fecha con ese evento abierto (su ficha deja subir la foto). */
 export function enlaceParaSubirFoto(t: Pick<TarjetaParaHoy, 'evento_id'>): string {
-  return t.evento_id
-    ? `${RUTAS_DEL_CICLO.calendario}?${new URLSearchParams({ evento: t.evento_id }).toString()}`
-    : RUTAS_DEL_CICLO.calendario
+  const q = new URLSearchParams({ vista: 'fecha' })
+  if (t.evento_id) q.set('evento', t.evento_id)
+  return `${RUTAS_DEL_CICLO.campanas}?${q.toString()}`
 }
 
 /**
@@ -580,7 +590,11 @@ export function barrasPorDia(
 // La lista de quiénes (tocar una caja o una barra)
 // ═══════════════════════════════════════════════════════════════
 
-export type FiltroDeLista = { tipo: 'caja'; clave: ClaveDeCaja } | { tipo: 'dia'; dia: number }
+export type FiltroDeLista =
+  | { tipo: 'caja'; clave: ClaveDeCaja }
+  | { tipo: 'dia'; dia: number }
+  /** La vista por fecha: los que ENTRAN a un toque ese día (parte C). */
+  | { tipo: 'fecha'; fecha: string }
 
 export const POR_PAGINA_DE_LA_LISTA = 20
 
@@ -588,6 +602,7 @@ export const POR_PAGINA_DE_LA_LISTA = 20
 export function consultaDeLista(f: FiltroDeLista, pagina = 1): string {
   const q = new URLSearchParams()
   if (f.tipo === 'dia') q.set('day', String(f.dia))
+  else if (f.tipo === 'fecha') q.set('fecha', f.fecha)
   else if (f.clave === 'dormidos') q.set('state', 'dormido')
   else q.set('stage', f.clave)
   q.set('page', String(pagina))
@@ -630,8 +645,11 @@ export function textoSegundaVisita(s: SegundaVisita | null): string | null {
 // En qué vista de Campañas abre la pantalla
 // ═══════════════════════════════════════════════════════════════
 
-/** `ciclo` (default) · `historial` · `libre` («Mensaje libre (avanzado)», no es una pestaña). */
-export type VistaDeCampanas = 'ciclo' | 'historial' | 'libre'
+/**
+ * `ciclo` (default, por etapa) · `fecha` (el ciclo por fecha: el calendario, parte C) ·
+ * `historial` · `libre` («Mensaje libre (avanzado)», no es una pestaña).
+ */
+export type VistaDeCampanas = 'ciclo' | 'fecha' | 'historial' | 'libre'
 
 /**
  * Lee `?vista=` o el viejo `?tab=` de `window.location.search` (no `useSearchParams()`: fuerza el
@@ -643,5 +661,317 @@ export function vistaDeUrl(search: string | null | undefined): VistaDeCampanas {
   const pedida = q.get('vista') ?? q.get('tab')
   if (pedida === 'historial') return 'historial'
   if (pedida === 'libre' || pedida === 'manuales') return 'libre'
+  if (pedida === 'fecha') return 'fecha'
   return 'ciclo'
+}
+
+export interface PedidoDeLaUrl {
+  /** `AAAA-MM-DD`: abrir el creador de eventos con esta fecha («Crear evento» de «Para hoy»). */
+  fecha?: string
+  /** El nombre sugerido para ese evento («Halloween»). */
+  nombre?: string
+  /** Abrir la ficha de este evento («Subir foto»). */
+  evento?: string
+}
+
+const FECHA_ISO = /^\d{4}-\d{2}-\d{2}$/
+const ID_DE_EVENTO = /^[0-9a-f-]{8,64}$/i
+
+/**
+ * Lo que una URL le pide a la vista por fecha al abrir (`?fecha=…&nombre=…` / `?evento=<id>`).
+ * Solo lo que tiene la forma correcta: una fecha mal escrita no abre nada.
+ */
+export function pedidoDeLaUrl(search: string | null | undefined): PedidoDeLaUrl {
+  const q = new URLSearchParams(search ?? '')
+  const pedido: PedidoDeLaUrl = {}
+  const fecha = q.get('fecha')
+  if (fecha && FECHA_ISO.test(fecha)) pedido.fecha = fecha
+  const nombre = q.get('nombre')?.replace(/\s+/g, ' ').trim()
+  if (nombre) pedido.nombre = nombre.slice(0, 120)
+  const evento = q.get('evento')
+  if (evento && ID_DE_EVENTO.test(evento)) pedido.evento = evento
+  return pedido
+}
+
+// ═══════════════════════════════════════════════════════════════
+// La vista «por fecha» (spec §6.4, parte C): el mismo dato, girado
+// ═══════════════════════════════════════════════════════════════
+
+export const NOMBRES_DE_MES = MESES
+
+/** El mes que se mira: `mes` va de 0 (enero) a 11. */
+export interface MesDelCalendario {
+  anio: number
+  mes: number
+}
+
+const dosCifras = (n: number) => String(n).padStart(2, '0')
+
+/** `(2026, 9, 1)` → `2026-10-01`. */
+export function isoDelDia(anio: number, mes: number, dia: number): string {
+  return `${anio}-${dosCifras(mes + 1)}-${dosCifras(dia)}`
+}
+
+/** El mes de un `AAAA-MM-DD`. */
+export function mesDeFecha(iso: string): MesDelCalendario {
+  const m = /^(\d{4})-(\d{2})/.exec(iso)
+  return m ? { anio: Number(m[1]), mes: Number(m[2]) - 1 } : { anio: 1970, mes: 0 }
+}
+
+export function moverMes(m: MesDelCalendario, delta: number): MesDelCalendario {
+  const total = m.anio * 12 + m.mes + delta
+  return { anio: Math.floor(total / 12), mes: ((total % 12) + 12) % 12 }
+}
+
+/** El primer y el último día del mes, para `/api/dashboard/cycle/projection?from&to` (≤ 31 días). */
+export function rangoDelMes(m: MesDelCalendario): { desde: string; hasta: string } {
+  const ultimo = new Date(Date.UTC(m.anio, m.mes + 1, 0)).getUTCDate()
+  return { desde: isoDelDia(m.anio, m.mes, 1), hasta: isoDelDia(m.anio, m.mes, ultimo) }
+}
+
+/** «octubre 2026». */
+export function tituloDelMes(m: MesDelCalendario): string {
+  return `${MESES[m.mes]} ${m.anio}`
+}
+
+/**
+ * La cuadrícula del mes: semanas de lunes a domingo (como el prototipo), con `null` en los
+ * huecos de antes del día 1 y después del último. Es diseño de calendario, no un día del ciclo.
+ */
+export function semanasDelMes(m: MesDelCalendario): Array<Array<string | null>> {
+  const ultimo = new Date(Date.UTC(m.anio, m.mes + 1, 0)).getUTCDate()
+  // 0 = lunes … 6 = domingo.
+  const primerDia = (new Date(Date.UTC(m.anio, m.mes, 1)).getUTCDay() + 6) % 7
+  const celdas: Array<string | null> = new Array<string | null>(primerDia).fill(null)
+  for (let d = 1; d <= ultimo; d++) celdas.push(isoDelDia(m.anio, m.mes, d))
+  while (celdas.length % 7 !== 0) celdas.push(null)
+  const semanas: Array<Array<string | null>> = []
+  for (let i = 0; i < celdas.length; i += 7) semanas.push(celdas.slice(i, i + 7))
+  return semanas
+}
+
+export const DIAS_DE_LA_SEMANA_CORTOS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'] as const
+
+/** Lo que dibuja una celda del calendario. Todo sale de la proyección del servidor. */
+export interface CeldaDelCalendario {
+  fecha: string
+  numero: number
+  pasado: boolean
+  hoy: boolean
+  /** «Reservado para el evento»: la sombra del blackout. */
+  reservado: boolean
+  eventos: Array<{ id: string; titulo: string; sinFoto: boolean }>
+  especiales: string[]
+  /** Hasta tres líneas «23 → rescate», en el orden del ciclo. */
+  entran: Array<{ etapa: string; texto: string; total: number }>
+  /** Cuántos entran ese día a cualquier toque. */
+  total: number
+}
+
+const eventosDelDia = (ids: readonly string[], eventos: ReadonlyMap<string, EventoDelCalendario>) =>
+  ids.map((id) => eventos.get(id)).filter((e): e is EventoDelCalendario => !!e)
+
+export function celdaDelCalendario(
+  dia: DiaDeLaProyeccion,
+  eventos: ReadonlyMap<string, EventoDelCalendario>,
+  hoyIso: string
+): CeldaDelCalendario {
+  return {
+    fecha: dia.fecha,
+    numero: Number(dia.fecha.slice(8, 10)),
+    pasado: dia.fecha < hoyIso,
+    hoy: dia.fecha === hoyIso,
+    reservado: dia.reservado_para.length > 0,
+    eventos: eventosDelDia(dia.eventos, eventos).map((e) => ({ id: e.id, titulo: e.titulo, sinFoto: e.sin_foto })),
+    especiales: dia.fechas_especiales.map((f) => f.nombre),
+    entran: dia.entran
+      .slice(0, 3)
+      .map((e) => ({ etapa: e.etapa, texto: `${cantidad(e.total)} → ${e.etiqueta.toLowerCase()}`, total: e.total })),
+    total: dia.entran.reduce((n, e) => n + e.total, 0),
+  }
+}
+
+/** El encabezado del detalle de un día (el panel al lado del calendario). */
+export function detalleDelDia(
+  dia: DiaDeLaProyeccion,
+  eventos: ReadonlyMap<string, EventoDelCalendario>,
+  hoyIso: string
+): { titulo: string; texto: string; sePuedeCrear: boolean } {
+  const total = dia.entran.reduce((n, e) => n + e.total, 0)
+  const pasado = dia.fecha < hoyIso
+  const delDia = eventosDelDia(dia.eventos, eventos)
+  const reservadoPara = eventosDelDia(dia.reservado_para, eventos)
+  const titulo = pasado
+    ? 'Ya pasó'
+    : total > 0
+      ? `${clientes(total)} ${total === 1 ? 'entra' : 'entran'} a un toque`
+      : 'Nadie entra a un toque'
+  let texto: string
+  if (delDia.length > 0) {
+    texto = `Evento: ${delDia.map((e) => e.titulo).join(', ')}. Los días antes quedan reservados: los toques del ciclo de sus invitados esperan a que pase.`
+  } else if (reservadoPara.length > 0) {
+    const e = reservadoPara[0]
+    texto = `Reservado para «${e.titulo}» (${fechaLarga(e.fecha)}): los toques de sus invitados esperan al día siguiente del evento.`
+  } else if (dia.fechas_especiales.length > 0) {
+    texto = `${dia.fechas_especiales.map((f) => f.nombre).join(', ')}: buen día para un evento.`
+  } else {
+    texto = pasado ? 'Este día ya pasó.' : 'Sin eventos. Buen día para un regalo.'
+  }
+  return { titulo, texto, sePuedeCrear: !pasado }
+}
+
+/** «12 nuevos · 11 ya volvieron antes». */
+export function particionDeEntrada(e: { total: number; nuevos: number }): string {
+  return `${cantidad(e.nuevos)} ${e.nuevos === 1 ? 'nuevo' : 'nuevos'} · ${cantidad(e.total - e.nuevos)} ya volvieron antes`
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Los creadores (spec §6.5): «Mandar un regalo» y «Crear un evento»
+// ═══════════════════════════════════════════════════════════════
+
+/** Reemplaza `{{n}}` por su valor (vacío si falta). Para la vista previa del WhatsApp. */
+export function rellenarPlantilla(cuerpo: string, variables: Readonly<Record<string, string>>): string {
+  return cuerpo.replace(/\{\{(\d+)\}\}/g, (_, n: string) => variables[n] ?? '')
+}
+
+/**
+ * Un texto en UNA línea: `{{5}}` del evento es una variable de plantilla y Twilio rechaza
+ * (21656) las variables con saltos de línea, lo que tumbaría la invitación de toda la audiencia.
+ */
+export function textoDeUnaLinea(texto: string): string {
+  return texto.replace(/\s*[\r\n]+\s*/g, ' ').replace(/[ \t]{2,}/g, ' ').trim()
+}
+
+/** El tope del texto del evento (la descripción, `{{5}}`). */
+export const MAX_TEXTO_DEL_EVENTO = 500
+
+/**
+ * El texto sugerido del evento, ya escrito (spec §6.5: «texto sugerido ya escrito y editable»).
+ * El dueño lo cambia si quiere; sin tocarlo, sale este.
+ */
+export function textoSugeridoDelEvento(nombre: string, fechaIso: string | null | undefined): string {
+  const que = nombre.replace(/\s+/g, ' ').trim() || 'algo especial'
+  const cuando = fechaIso && FECHA_ISO.test(fechaIso) ? `El ${fechaLarga(fechaIso)}` : 'Muy pronto'
+  return `${cuando} tenemos ${que}. Ven con tu tarjeta: sumas puntos y te acercas a tu próximo premio. ¡Te esperamos!`
+}
+
+/**
+ * El cierre de la invitación (`{{5}}`): el texto y, si hay, el enlace pegado con « 👉 ». Es la
+ * MISMA regla que `buildEventCta()` del servidor (un test compara las dos): la vista previa
+ * tiene que decir lo que va a salir.
+ */
+export function ctaDelEvento(texto: string | null | undefined, enlace: string | null | undefined): string {
+  const t = texto?.trim() || '¡Te esperamos!'
+  const l = enlace?.trim()
+  return l ? `${t} 👉 ${l}` : t
+}
+
+/** «sábado, 17 de octubre»: la fecha como la escribe la invitación (`{{4}}`, `formatEventDate()`). */
+export function fechaDeLaInvitacion(fechaIso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(fechaIso)
+  if (!m) return fechaIso
+  return new Intl.DateTimeFormat('es-CO', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' }).format(
+    Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+  )
+}
+
+/** El instante (ISO) en que sale la invitación: ese día a la hora de la marca, en Bogotá. */
+export function salidaDeLaInvitacion(fechaIso: string, hora: string): string | null {
+  if (!FECHA_ISO.test(fechaIso) || !/^\d{2}:\d{2}$/.test(hora)) return null
+  const t = Date.parse(`${fechaIso}T${hora}:00${APP_UTC_OFFSET}`)
+  return Number.isNaN(t) ? null : new Date(t).toISOString()
+}
+
+/** «Programar para el sábado 17 de octubre a las 4:30 pm». */
+export function textoDelBotonDelEvento(fechaIso: string, hora: string): string {
+  return FECHA_ISO.test(fechaIso) ? `Programar para el ${fechaLarga(fechaIso)} a las ${horaLegible(hora)}` : 'Programar'
+}
+
+/** Cuántos reciben la invitación: los del ciclo y, con la casilla (o el ciclo apagado), los dormidos. */
+export function invitadosDelEvento(n: { enElCiclo: number; dormidos: number; encendido: boolean; incluirDormidos: boolean }): number {
+  return n.enElCiclo + (n.encendido && !n.incluirDormidos ? 0 : n.dormidos)
+}
+
+/** «Hoy puedes mandar 180. Si son más, el resto sale en los días siguientes.» (spec §5). */
+export function textoDelCupo(cupo: EstadoDelCupo, esHoy: boolean): string {
+  switch (cupo.estado) {
+    case 'con_tope':
+      return esHoy
+        ? `Hoy puedes mandar ${cantidad(cupo.hoy)}. Si son más, el resto sale en los días siguientes.`
+        : `Tu línea manda hasta ${cantidad(cupo.por_dia)} al día. Si son más, el resto sale en los días siguientes.`
+    case 'sin_tope':
+      return 'Tu línea todavía no tiene un tope diario fijado por Meta: sale todo el mismo día.'
+    case 'congelada':
+      return 'Tu línea está detenida por calidad: nada sale hasta que se reactive. Lo que programes espera.'
+    case 'no_se_pudo':
+      return 'No pudimos leer el cupo de hoy. Si son muchos, el resto sale en los días siguientes.'
+  }
+}
+
+/** «3 recibieron otro mensaje hace menos de 7 días · 1 ya tiene un regalo vivo». `null` si nadie queda fuera. */
+export function textoNoLoReciben(no: NoLoReciben): string | null {
+  const partes: string[] = []
+  if (no.regalo_vivo) partes.push(`${cantidad(no.regalo_vivo)} ya ${no.regalo_vivo === 1 ? 'tiene' : 'tienen'} un regalo vivo`)
+  if (no.siete_dias) partes.push(`${cantidad(no.siete_dias)} recibieron otro mensaje hace menos de 7 días`)
+  if (no.tope_mes) partes.push(`${cantidad(no.tope_mes)} ya ${no.tope_mes === 1 ? 'tiene' : 'tienen'} sus 3 mensajes del mes`)
+  return partes.length > 0 ? partes.join(' · ') : null
+}
+
+/** Lo que dice el creador sobre la plantilla con que va a salir (spec §4: el adaptador, dicho). */
+export function avisoDePlantillaDelRegalo(p: VistaPreviaDelRegalo['plantilla']): string | null {
+  if (p.clave === null) return 'Tu marca todavía no tiene con qué mandar un regalo: crea «Regalo que vence» en Plantillas.'
+  if (p.clave === 'gift_expiring') return null
+  return p.regalo_que_vence === 'pendiente'
+    ? '«Regalo que vence» está en revisión de Meta: mientras tanto sale con tu mensaje insistente de siempre. El regalo igual llega a la tarjeta con su fecha.'
+    : 'Esta marca aún no tiene «Regalo que vence»: sale con tu mensaje insistente de siempre. El regalo igual llega a la tarjeta con su fecha.'
+}
+
+/**
+ * El WhatsApp de la vista previa del regalo, con el cliente de ejemplo. Con «Regalo que vence»
+ * el regalo y la fecha van en el mensaje; con la insistente del catálogo, no (van a la tarjeta).
+ */
+export function vistaPreviaDelWhatsAppDelRegalo(
+  v: Pick<VistaPreviaDelRegalo, 'cuerpos' | 'ejemplo'>,
+  plantilla: 'gift_expiring' | 'reactivation_aggressive',
+  regalo: string,
+  vence: string
+): string {
+  if (plantilla === 'gift_expiring') {
+    return rellenarPlantilla(v.cuerpos.gift_expiring, { '1': v.ejemplo.nombre, '2': regalo, '3': vence, '4': v.ejemplo.camino })
+  }
+  return rellenarPlantilla(v.cuerpos.reactivation_aggressive, {
+    '1': v.ejemplo.nombre,
+    '2': cantidad(v.ejemplo.puntos),
+    '3': v.ejemplo.premio_proximo ?? 'premios exclusivos',
+    '4': regalo,
+    '5': vence,
+  })
+}
+
+/** La invitación del evento tal como la recibe el cliente de ejemplo. */
+export function vistaPreviaDelWhatsAppDelEvento(
+  cuerpo: string,
+  datos: { cliente: string; marca: string; nombre: string; fecha: string; texto: string; enlace: string }
+): string {
+  return rellenarPlantilla(cuerpo, {
+    '1': datos.cliente,
+    '2': datos.marca,
+    '3': datos.nombre.trim() || 'Tu evento',
+    '4': datos.fecha ? fechaDeLaInvitacion(datos.fecha) : '…',
+    '5': ctaDelEvento(textoDeUnaLinea(datos.texto), datos.enlace),
+  })
+}
+
+/**
+ * A dónde lleva el viejo `/dashboard/calendar`: la vista por fecha de Campañas, con lo que pedía
+ * la URL (`fecha`, `nombre`, `evento`). Lo usa la página que redirige.
+ */
+export function destinoDelCalendario(pedidos: Readonly<Record<string, string | string[] | undefined>>): string {
+  const q = new URLSearchParams({ vista: 'fecha' })
+  for (const k of ['fecha', 'nombre', 'evento'] as const) {
+    const v = pedidos[k]
+    const valor = Array.isArray(v) ? v[0] : v
+    if (valor) q.set(k, valor)
+  }
+  return `${RUTAS_DEL_CICLO.campanas}?${q.toString()}`
 }

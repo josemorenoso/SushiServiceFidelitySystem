@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { requireTenantId } from '@/lib/tenant'
 import { exigirAlcanceDeMarca } from '@/lib/alcance-de-marca'
+import { isSuperAdmin } from '@/lib/admin'
 import { isDbFailure, logDbFailure } from '@/lib/db-failure'
 import { decidirEscrituraDeAjuste, esPunteroDePlantilla } from '@/lib/settings-keys'
 
@@ -52,6 +53,10 @@ export async function GET() {
  * (`src/lib/settings-keys.ts`): lo que las pantallas escriben de verdad. Un puntero de
  * plantilla se acepta en una marca Twilio (el dueño la elige en Ajustes) y se rechaza
  * con 400 en una marca Zernio, donde el único escritor es `promoteVersion()`.
+ *
+ * Y desde la fase 2 parte C del ciclo (2026-10-14) hay claves que solo escribe el operador de
+ * Cada1 (`CLAVES_DEL_OPERADOR`: hoy `cycle_enabled`, decisión H7): a un super usuario de la
+ * marca se le contesta 403 con el motivo en español.
  */
 export async function PUT(req: NextRequest) {
   const guardia = await exigirAlcanceDeMarca(
@@ -133,6 +138,7 @@ export async function PUT(req: NextRequest) {
     valor: value,
     proveedor,
     valorActual: (existing?.value as string | null | undefined) ?? null,
+    esOperador: await isSuperAdmin(),
   })
   if (!decision.ok) {
     return NextResponse.json({ error: decision.error }, { status: decision.status })

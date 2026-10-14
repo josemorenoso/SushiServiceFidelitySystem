@@ -276,7 +276,7 @@ describe('«Para hoy»: Hoy no solo con permiso de marca', () => {
     expect(t).not.toContain('Hoy no')
   })
 
-  it('«Cambiar regalo» y «Elegir regalo» llevan a Recompensas › Premios para regalar; «Subir foto», al calendario', () => {
+  it('«Cambiar regalo» y «Elegir regalo» llevan a Recompensas › Premios para regalar; «Subir foto», a la vista por fecha', () => {
     const marcado = html(
       dibujo({ aprobar: true, interruptor: false }, [
         tarjetaTrimestral,
@@ -285,7 +285,7 @@ describe('«Para hoy»: Hoy no solo con permiso de marca', () => {
       ])
     )
     expect(marcado.match(/href="\/dashboard\/rewards\?tab=premios"/g)).toHaveLength(2)
-    expect(marcado).toContain('href="/dashboard/calendar?evento=ev1"')
+    expect(marcado).toContain('href="/dashboard/campaigns?vista=fecha&amp;evento=ev1"')
   })
 
   it('sin tarjetas: «Hoy no hay nada que aprobar» (no una sección vacía)', () => {
@@ -438,7 +438,7 @@ describe('lo que se retira de Campañas y del panel', () => {
   })
 
   it('Campañas abre en el Ciclo y tiene dos pestañas; el mensaje libre es un enlace, no una pestaña', () => {
-    expect(pagina).toContain('<CicloPantalla />')
+    expect(pagina).toContain('<CicloPantalla')
     expect(pagina).toContain('<TabsTrigger value="ciclo">Ciclo</TabsTrigger>')
     expect(pagina).toContain('<TabsTrigger value="historial">Historial</TabsTrigger>')
     expect(pagina).not.toContain('<TabsTrigger value="manuales"')

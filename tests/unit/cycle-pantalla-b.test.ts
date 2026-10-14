@@ -519,12 +519,13 @@ describe('botonesDeTarjeta', () => {
       tarjeta({ tipo: 'fecha_especial', acciones: ['crear_evento'], fecha: '2026-10-31', nombre: 'Halloween' }),
       { aprobar: true }
     )
-    expect(crear[0].href).toBe('/dashboard/calendar?fecha=2026-10-31&nombre=Halloween')
-    expect(enlaceParaCrearEvento({})).toBe('/dashboard/calendar')
+    // Desde la parte C (2026-10-14) el calendario es la vista por fecha de Campañas.
+    expect(crear[0].href).toBe('/dashboard/campaigns?vista=fecha&fecha=2026-10-31&nombre=Halloween')
+    expect(enlaceParaCrearEvento({})).toBe('/dashboard/campaigns?vista=fecha')
 
     const foto = botonesDeTarjeta(tarjeta({ tipo: 'evento_sin_foto', acciones: ['subir_foto'], evento_id: 'ev-1' }), { aprobar: false })
-    expect(foto[0]).toMatchObject({ etiqueta: 'Subir foto', href: '/dashboard/calendar?evento=ev-1' })
-    expect(enlaceParaSubirFoto({})).toBe('/dashboard/calendar')
+    expect(foto[0]).toMatchObject({ etiqueta: 'Subir foto', href: '/dashboard/campaigns?vista=fecha&evento=ev-1' })
+    expect(enlaceParaSubirFoto({})).toBe('/dashboard/campaigns?vista=fecha')
   })
 
   it('el «OK» recordado vale solo HOY', () => {
@@ -640,7 +641,7 @@ describe('vistaDeUrl', () => {
 
   it('lo desconocido abre el ciclo; `?vista=` manda sobre `?tab=`', () => {
     expect(vistaDeUrl('?tab=cualquiera')).toBe('ciclo')
-    expect(vistaDeUrl('?vista=fecha')).toBe('ciclo') // la vista por fecha es de la parte C
+    expect(vistaDeUrl('?vista=fecha')).toBe('fecha') // la parte C la construyó
     expect(vistaDeUrl('?vista=historial&tab=manuales')).toBe('historial')
   })
 })

@@ -3,6 +3,7 @@ import type { Customer, Campaign, CampaignMessage, RestaurantEvent } from '@/typ
 import { isDbFailure, logDbFailure } from '@/lib/db-failure'
 import { leerTodo } from '@/lib/leer-todo'
 import { APP_UTC_OFFSET } from '@/lib/timezone'
+import { bogotaDay } from '@/lib/cycle-engine'
 import {
   REACTIVATION_DAYS,
   FREQUENCY_CAP_DAYS,
@@ -770,32 +771,38 @@ export function isInRecoveryZone(
 // manuales NO asociadas a ese evento excluyen clientes para reservarles cupo.
 
 /**
- * Returns active blackouts: events whose blackout window contains `refDate`.
- * Blackout window: [event_date - blackout_days, event_date).
+ * Los eventos cuyo blackout contiene `refDate`: la ventana `[event_date − blackout_days,
+ * event_date)`, en DÍAS DE BOGOTÁ.
+ *
+ * N-BLACKOUT (2026-10-14, lo encontró la 1B). Antes (a) un fallo de base devolvía `[]` con un
+ * `console.error` suelto: ese día ningún toque del ciclo se posponía por un evento y la
+ * pantalla no se enteraba; ahora LANZA (quien llama decide: el cron del ciclo falla esa marca
+ * y la reintenta mañana, que es mejor que mandarle el rescate el lunes y la invitación el
+ * sábado). Y (b) cortaba los días en UTC (`T00:00:00Z`): la ventana empezaba y terminaba a las
+ * 19:00 de Bogotá del día anterior. Ahora usa `bogotaDay()`, el mismo día del ciclo y de la
+ * sombra «reservado para el evento» de la pantalla (`getCycleProjection()`).
  */
 export async function getActiveBlackouts(tenantId: string, refDate: Date = new Date()): Promise<RestaurantEvent[]> {
   const supabase = getServiceClient()
-  const today = refDate.toISOString().split('T')[0]
+  const hoy = bogotaDay(refDate)
+  const hoyIso = new Date(hoy * DIA_MS).toISOString().slice(0, 10)
 
-  // Pull only future-or-today events that haven't been sent/cancelled
+  // Solo los eventos de hoy en adelante que todavía van a salir.
   const { data, error } = await supabase
     .from('restaurant_events')
     .select('*')
     .eq('tenant_id', tenantId)
-    .gte('event_date', today)
+    .gte('event_date', hoyIso)
     .in('status', ['planned', 'scheduled'])
 
   if (error) {
-    console.error(`[Blackout] Error consultando eventos: ${error.message}`)
-    return []
+    logDbFailure({ scope: 'Blackout', reason: 'eventos_error', error, context: { tenant_id: tenantId } })
+    throw new Error(`No se pudieron leer los eventos del blackout: ${error.message}`)
   }
 
-  // Filter in JS: keep only events whose blackout window includes refDate
-  const refTime = refDate.getTime()
-  return (data ?? []).filter((ev: RestaurantEvent) => {
-    const eventDate = new Date(`${ev.event_date}T00:00:00Z`)
-    const blackoutStart = new Date(eventDate.getTime() - ev.blackout_days * 24 * 60 * 60 * 1000)
-    return refTime >= blackoutStart.getTime() && refTime < eventDate.getTime()
+  return ((data ?? []) as RestaurantEvent[]).filter((ev) => {
+    const dia = Math.floor(Date.parse(`${ev.event_date.slice(0, 10)}T00:00:00Z`) / DIA_MS)
+    return hoy >= dia - Math.max(0, ev.blackout_days ?? 0) && hoy < dia
   })
 }
 

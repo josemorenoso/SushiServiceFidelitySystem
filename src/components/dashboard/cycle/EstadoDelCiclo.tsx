@@ -30,8 +30,8 @@ type Confirmando = 'encender' | 'apagar' | null
  *      hoy) la pantalla igual muestra las cajas, y esta franja lo dice en una línea. **El
  *      interruptor lo ve y lo usa SOLO el operador de Cada1** (`permisos.interruptor`, decisión
  *      H7: encender sube el volumen de mensajes y el costo). El dueño del restaurante ve el
- *      estado, no el botón. Ojo: es la pantalla la que lo esconde; el `PUT` de Ajustes acepta
- *      `cycle_enabled` de cualquier super usuario de marca (queda anotado en PENDIENTES).
+ *      estado, no el botón. Y no es solo la pantalla: desde la parte C (2026-10-14) el `PUT` de
+ *      Ajustes le contesta 403 a quien no es el operador (`CLAVES_DEL_OPERADOR`, `settings-keys.ts`).
  *   2. **El ritmo de su clientela** (spec §6.0): «Tus clientes vuelven cada mes · Calculado con
  *      135 regresos de tu marca · cambiar». Lo calcula el sistema; «cambiar» deja que el dueño
  *      lo fije (solo con permiso de marca).

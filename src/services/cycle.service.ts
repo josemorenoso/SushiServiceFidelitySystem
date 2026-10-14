@@ -69,7 +69,7 @@ import {
   getMonthBoundaries,
   finalizeCampaign,
 } from '@/services/campaign.service'
-import { findCustomersForEvent, type EventFilters } from '@/services/calendar.service'
+import { audienciaDelEvento } from '@/services/calendar.service'
 import { enqueueSendBatch, type EnqueueItem, type QueueRow } from '@/services/send-queue.service'
 import { getNextTier, buildTiersRoadmap } from '@/services/reward-tiers.service'
 import { isTwilioTemplateApproved } from '@/services/twilio-catalog.service'
@@ -274,8 +274,9 @@ async function blackoutsDeLaMarca(tenantId: string, ahora: Date): Promise<Map<st
   if (piezasQuePausanElToque().length === 0) return hasta
   const eventos = await getActiveBlackouts(tenantId, ahora)
   for (const ev of eventos) {
-    // La MISMA audiencia que va a recibir la invitación (`executeAutoEvent()` usa esta función).
-    const audiencia = await findCustomersForEvent((ev.filters ?? {}) as EventFilters, tenantId)
+    // La MISMA audiencia que va a recibir la invitación (`executeAutoEvent()` usa esta función):
+    // con el ciclo encendido, sin los dormidos salvo «Incluir a los dormidos» (00073).
+    const audiencia = await audienciaDelEvento(ev, tenantId)
     const reevaluar = instanteEnBogota(diaDeFecha(ev.event_date) + 1)
     for (const c of audiencia) {
       const antes = hasta.get(c.id)
@@ -757,6 +758,13 @@ async function cerrarSiNoTieneCola(campaignId: string, tenantId: string): Promis
 // El drenador: guardas al enviar y lo que pasa después
 // ═══════════════════════════════════════════════════════════════
 
+/**
+ * Los regalos que cuentan para «un regalo activo por cliente» (spec §5): los del ciclo y los
+ * que manda el dueño. Las invitaciones con premio y las reseñas son otra cosa (y su índice
+ * único de la 00031 es por `source`, así que pueden convivir).
+ */
+export const FUENTES_DE_REGALO_VIVO = ['reactivation', 'manual'] as const
+
 export interface ToqueDelDrenador {
   id: string
   customer_id: string
@@ -773,7 +781,7 @@ export interface ContextoDelCicloEnLaTanda {
   encendido: boolean
   toques: Map<string, ToqueDelDrenador>
   clientes: Map<string, { cycle_no: number; cycle_state: string; heartbeats_sent: number }>
-  /** Cliente → vencimiento de su regalo de reactivación vivo (`null` = sin vencimiento). */
+  /** Cliente → vencimiento de su regalo vivo, del ciclo o del dueño (`null` = sin vencimiento). */
   regalosVivos: Map<string, string | null>
 }
 
@@ -813,7 +821,9 @@ export async function cargarContextoDelCiclo(tenantId: string, items: readonly Q
     for (const c of (data ?? []) as Array<{ id: string; cycle_no: number; cycle_state: string; heartbeats_sent: number }>) {
       clientes.set(c.id, { cycle_no: c.cycle_no, cycle_state: c.cycle_state, heartbeats_sent: c.heartbeats_sent })
     }
-    // Un regalo activo por cliente (spec §5): el de reactivación vivo, activo y sin vencer.
+    // Un regalo activo por cliente (spec §5): el del ciclo (`reactivation`) o el que mandó el
+    // dueño con «Mandar un regalo» (`manual`, fase 2 parte C), vivo y sin vencer. Sin el
+    // segundo, el rescate le apilaba un regalo encima al que el dueño acababa de mandarle.
     const { data: vivos, error: vivosError } = await db
       .from('reward_grants')
       .select('customer_id, expires_at')
@@ -821,7 +831,7 @@ export async function cargarContextoDelCiclo(tenantId: string, items: readonly Q
       .in('customer_id', lote)
       .eq('status', 'active')
       .eq('grant_type', 'campaign_prize')
-      .eq('source', 'reactivation')
+      .in('source', FUENTES_DE_REGALO_VIVO)
       .or(`expires_at.is.null,expires_at.gt.${ahoraIso}`)
     if (vivosError) fallo('drenador_regalos_error', vivosError, { tenant_id: tenantId })
     for (const g of (vivos ?? []) as Array<{ customer_id: string; expires_at: string | null }>) {

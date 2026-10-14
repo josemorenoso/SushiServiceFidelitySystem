@@ -17,6 +17,7 @@ import type {
   EventStatus,
 } from '@/types/database.types'
 import { formatInAppTz } from '@/lib/timezone'
+import { MediaUploader } from './MediaUploader'
 import {
   Calendar,
   Clock,
@@ -95,6 +96,7 @@ export function EventDetailDrawer({ open, onOpenChange, event, onUpdated }: Even
   const [dispatchResult, setDispatchResult] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [settings, setSettings] = useState<Record<string, string> | null>(null)
+  const [subiendoFoto, setSubiendoFoto] = useState(false)
 
   useEffect(() => {
     if (event) {
@@ -220,6 +222,34 @@ export function EventDetailDrawer({ open, onOpenChange, event, onUpdated }: Even
       setError(err instanceof Error ? err.message : 'Error desconocido')
     } finally {
       setBusy(false)
+    }
+  }
+
+  /**
+   * «Subir foto» (fase 2 del ciclo, parte C): un evento vivo sin foto la recibe aquí mismo —antes
+   * había que cancelarlo y crearlo de nuevo—. El archivo sube al bucket del evento y se guarda en
+   * el evento con el PATCH de siempre.
+   */
+  async function guardarFoto(media: { url: string; type: 'image' | 'video'; path: string } | null) {
+    if (!event || !media) return
+    setSubiendoFoto(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/dashboard/calendar/events/${event.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ media_url: media.url, media_type: media.type }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setError(data.error || 'No pudimos guardar la foto. Intenta de nuevo.')
+        return
+      }
+      onUpdated?.()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error desconocido')
+    } finally {
+      setSubiendoFoto(false)
     }
   }
 
@@ -368,17 +398,23 @@ export function EventDetailDrawer({ open, onOpenChange, event, onUpdated }: Even
             )}
 
             {isLive && !event.media_url && (
-              <div className="rounded-lg bg-destructive/10 border border-destructive/30 p-2.5 text-xs space-y-1">
+              <div className="rounded-lg bg-destructive/10 border border-destructive/30 p-2.5 text-xs space-y-2">
                 <div className="font-medium text-destructive flex items-center gap-1.5">
                   <AlertTriangle className="h-3.5 w-3.5" />
-                  Falta la imagen o video del evento
+                  Falta la foto del evento: sin foto no sale
                 </div>
                 <div className="text-destructive/90 text-[11px]">
-                  Las plantillas de evento son de tipo media: sin flyer no hay nada que enviar.
-                  Cancela este evento y créalo de nuevo con su imagen.
+                  Las plantillas de evento llevan la imagen o el video arriba. Súbela aquí:
                 </div>
+                <MediaUploader value={null} onChange={guardarFoto} eventId={event.id} disabled={subiendoFoto} />
               </div>
             )}
+
+            <p className="text-xs text-muted-foreground">
+              {event.include_dormant
+                ? 'Incluye a los dormidos.'
+                : 'Con el ciclo encendido, no les llega a los dormidos.'}
+            </p>
 
             {isLive && templateMissing && (
               <div className="rounded-lg bg-destructive/10 border border-destructive/30 p-2.5 text-xs space-y-1">

@@ -30,6 +30,11 @@ import { RUTAS_DEL_CICLO, vistaDeUrl, type VistaDeCampanas } from '@/lib/cycle-s
  * `useSearchParams()`: en esta versión de Next fuerza el CSR bailout (ver la trampa en
  * CLAUDE.md). Se lee con `useSyncExternalStore`, igual que Recompensas. Los enlaces viejos
  * siguen sirviendo: `?tab=manuales` abre el mensaje libre y `?tab=premios` lleva a Recompensas.
+ *
+ * Parte C (2026-10-14): `?vista=fecha` abre el ciclo POR FECHA (el calendario, spec §6.4), dentro
+ * de la misma pestaña «Ciclo»; `/dashboard/calendar` redirige acá. El creador («Mandar un
+ * regalo», «Crear un evento») vive en `CicloPantalla`; desde él, «Mensaje libre (avanzado)»
+ * trae al asistente manual de siempre.
  */
 
 const noSubscribe = () => () => {}
@@ -53,6 +58,20 @@ export default function CampaignsPage() {
 
   const vista = elegida ?? vistaDeUrl(busqueda)
 
+  /** Cambia de vista y deja la URL al día (recargar abre donde estaba), sin navegar. */
+  const irA = (v: VistaDeCampanas) => {
+    setElegida(v)
+    try {
+      const url = new URL(window.location.href)
+      url.searchParams.delete('tab')
+      if (v === 'ciclo') url.searchParams.delete('vista')
+      else url.searchParams.set('vista', v)
+      window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}`)
+    } catch {
+      // Sin historial: la vista cambia igual, la URL no.
+    }
+  }
+
   if (vista === 'libre') {
     return (
       <div className="space-y-6">
@@ -61,7 +80,7 @@ export default function CampaignsPage() {
             <MessageSquareText className="h-6 w-6" />
             Mensaje libre
           </h1>
-          <Button type="button" variant="outline" size="sm" onClick={() => setElegida('ciclo')}>
+          <Button type="button" variant="outline" size="sm" onClick={() => irA('ciclo')}>
             <ArrowLeft className="size-3.5" aria-hidden="true" />
             Volver al ciclo
           </Button>
@@ -88,7 +107,7 @@ export default function CampaignsPage() {
           Ciclo y campañas
         </h1>
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={() => setElegida('libre')}>
+          <Button type="button" variant="outline" size="sm" onClick={() => irA('libre')}>
             <MessageSquareText className="size-3.5" aria-hidden="true" />
             Mensaje libre (avanzado)
           </Button>
@@ -98,14 +117,19 @@ export default function CampaignsPage() {
         </div>
       </div>
 
-      <Tabs value={vista} onValueChange={(v) => setElegida(v as VistaDeCampanas)}>
+      {/* «Por fecha» es el ciclo girado: la misma pestaña «Ciclo». */}
+      <Tabs value={vista === 'fecha' ? 'ciclo' : vista} onValueChange={(v) => irA(v as VistaDeCampanas)}>
         <TabsList>
           <TabsTrigger value="ciclo">Ciclo</TabsTrigger>
           <TabsTrigger value="historial">Historial</TabsTrigger>
         </TabsList>
 
         <TabsContent value="ciclo" className="space-y-5 pt-4">
-          <CicloPantalla />
+          <CicloPantalla
+            vista={vista === 'fecha' ? 'fecha' : 'etapa'}
+            onVista={(v) => irA(v === 'fecha' ? 'fecha' : 'ciclo')}
+            onMensajeLibre={() => irA('libre')}
+          />
           <WalletCard />
         </TabsContent>
 

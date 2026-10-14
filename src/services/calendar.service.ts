@@ -13,6 +13,8 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { logDbFailure } from '@/lib/db-failure'
+import { leerTodo } from '@/lib/leer-todo'
+import { normalizeCycleSettings } from '@/lib/cycle-engine'
 import type {
   RestaurantEvent,
   EventType,
@@ -72,6 +74,11 @@ export interface CreateEventInput {
   /** Enlace opcional que se agrega al final del CTA de la invitación (00050). */
   link_url?: string | null
   blackout_days?: number
+  /**
+   * «Incluir a los dormidos» (00073). Con el ciclo encendido en la marca, sin esta casilla la
+   * invitación no les llega a los dormidos (`audienciaDelEvento()`). Default `false`.
+   */
+  include_dormant?: boolean
 }
 
 /** Tope de la columna `restaurant_events.link_url` (CHECK de la 00050). */
@@ -141,6 +148,7 @@ export interface UpdateEventInput {
   media_type?: EventMediaType | null
   link_url?: string | null
   blackout_days?: number
+  include_dormant?: boolean
   status?: EventStatus
 }
 
@@ -189,6 +197,8 @@ export async function createEvent(input: CreateEventInput, tenantId: string): Pr
       link_url: linkUrl,
       content_sid: null,
       blackout_days: input.blackout_days ?? 5,
+      // Solo `true` cuenta: la casilla nace apagada (spec §3.5, decisión 8).
+      include_dormant: input.include_dormant === true,
       status: initialStatus,
       tenant_id: tenantId,
     })
@@ -246,6 +256,9 @@ export async function updateEvent(
   // lo pagaría es el envío entero (ver normalizeEventLink).
   if (patch.link_url !== undefined) {
     updatePayload.link_url = normalizeEventLink(patch.link_url)
+  }
+  if (patch.include_dormant !== undefined) {
+    updatePayload.include_dormant = patch.include_dormant === true
   }
 
   // Realineación de status. La invariante es simple: un evento está 'scheduled'
@@ -327,38 +340,80 @@ export async function armEventForDispatch(id: string, tenantId: string): Promise
  * Aplica los filtros JSONB del evento sobre la tabla customers y devuelve
  * los candidatos que aceptan marketing. Útil para previsualizar audiencia
  * antes de programar un envío.
+ *
+ * PAGINA (N-AUDIENCIA, 2026-10-14). PostgREST corta en 1.000 filas en silencio: una audiencia
+ * de 1.200 devolvía 1.000, la invitación no le llegaba al resto y el blackout del ciclo
+ * (que usa esta MISMA audiencia) tampoco les posponía el toque. Ahora se lee de a páginas,
+ * ordenado por `id`, y un fallo a mitad de camino LANZA (nunca «esa era toda la audiencia»).
+ *
+ * `soloActivos`: solo los clientes que están EN el ciclo (`cycle_state = 'activo'`): fuera los
+ * dormidos y los que ya no reciben nada automático. Lo decide `audienciaDelEvento()`.
  */
-export async function findCustomersForEvent(filters: EventFilters, tenantId: string): Promise<Customer[]> {
+export async function findCustomersForEvent(
+  filters: EventFilters,
+  tenantId: string,
+  opciones: { soloActivos?: boolean } = {}
+): Promise<Customer[]> {
   const supabase = getServiceClient()
 
-  let query = supabase
-    .from('customers')
-    .select('*')
-    .eq('tenant_id', tenantId)
-    .eq('accepts_marketing', true)
-    .is('whatsapp_opt_out_at', null)
+  const consulta = () => {
+    let query = supabase
+      .from('customers')
+      .select('*')
+      .eq('tenant_id', tenantId)
+      .eq('accepts_marketing', true)
+      .is('whatsapp_opt_out_at', null)
 
-  if (filters.city) query = query.ilike('city', `%${filters.city}%`)
-  if (typeof filters.minVisits === 'number') query = query.gte('total_visits', filters.minVisits)
-  if (typeof filters.maxVisits === 'number') query = query.lte('total_visits', filters.maxVisits)
-  if (filters.source && filters.source !== 'all') {
-    if (filters.source === 'qr_only') query = query.eq('source_channels', 'qr')
-    else if (filters.source === 'delivery_only') query = query.eq('source_channels', 'delivery')
-  }
-  if (typeof filters.minAge === 'number') {
-    const maxBirthday = new Date()
-    maxBirthday.setFullYear(maxBirthday.getFullYear() - filters.minAge)
-    query = query.lte('birthday', maxBirthday.toISOString().split('T')[0])
-  }
-  if (typeof filters.maxAge === 'number') {
-    const minBirthday = new Date()
-    minBirthday.setFullYear(minBirthday.getFullYear() - filters.maxAge - 1)
-    query = query.gte('birthday', minBirthday.toISOString().split('T')[0])
+    if (opciones.soloActivos) query = query.eq('cycle_state', 'activo')
+    if (filters.city) query = query.ilike('city', `%${filters.city}%`)
+    if (typeof filters.minVisits === 'number') query = query.gte('total_visits', filters.minVisits)
+    if (typeof filters.maxVisits === 'number') query = query.lte('total_visits', filters.maxVisits)
+    if (filters.source && filters.source !== 'all') {
+      if (filters.source === 'qr_only') query = query.eq('source_channels', 'qr')
+      else if (filters.source === 'delivery_only') query = query.eq('source_channels', 'delivery')
+    }
+    if (typeof filters.minAge === 'number') {
+      const maxBirthday = new Date()
+      maxBirthday.setFullYear(maxBirthday.getFullYear() - filters.minAge)
+      query = query.lte('birthday', maxBirthday.toISOString().split('T')[0])
+    }
+    if (typeof filters.maxAge === 'number') {
+      const minBirthday = new Date()
+      minBirthday.setFullYear(minBirthday.getFullYear() - filters.maxAge - 1)
+      query = query.gte('birthday', minBirthday.toISOString().split('T')[0])
+    }
+    return query
   }
 
-  const { data, error } = await query
-  if (error) throw new Error(`Error filtrando clientes del evento: ${error.message}`)
-  return (data ?? []) as Customer[]
+  const { data, error } = await leerTodo<Customer>((desde, hasta) =>
+    consulta().order('id', { ascending: true }).range(desde, hasta)
+  )
+  if (error) {
+    logDbFailure({ scope: 'Calendar', reason: 'audiencia_error', error, context: { tenant_id: tenantId } })
+    throw new Error(`Error filtrando clientes del evento: ${error.message}`)
+  }
+  return data
+}
+
+/**
+ * LA audiencia de un evento: sus filtros y, con el ciclo de recuperación ENCENDIDO en la marca,
+ * sin los dormidos salvo que el dueño haya marcado «Incluir a los dormidos» (00073; spec §3.1 y
+ * §3.5, decisión 8). Con el ciclo apagado, la de siempre: todos los que aceptan mensajes.
+ *
+ * Es una sola función a propósito: la usan la invitación (`executeAutoEvent()`), el blackout
+ * que pospone el toque del ciclo (`cycle.service.ts`) y el número de invitados de la pantalla
+ * (`cycle-overview.service.ts`). Si cada uno armara la suya, el toque del ciclo se pospondría
+ * para alguien a quien la invitación no le va a llegar.
+ */
+export async function audienciaDelEvento(
+  ev: Pick<RestaurantEvent, 'filters'> & { include_dormant?: boolean | null },
+  tenantId: string
+): Promise<Customer[]> {
+  const ajustes = await getMultipleSettings(['cycle_enabled'], tenantId)
+  const cicloEncendido = normalizeCycleSettings(ajustes, { totalClientes: 0 }).enabled
+  return findCustomersForEvent((ev.filters ?? {}) as EventFilters, tenantId, {
+    soloActivos: cicloEncendido && ev.include_dormant !== true,
+  })
 }
 
 /**
@@ -648,8 +703,8 @@ export async function executeAutoEvent(eventId: string): Promise<ExecuteAutoEven
       )
     }
 
-    // Build audience
-    const candidates = await findCustomersForEvent(event.filters as EventFilters, tenant.id)
+    // Build audience (con el ciclo encendido, sin los dormidos salvo la casilla: 00073)
+    const candidates = await audienciaDelEvento(event, tenant.id)
     const { eligible, excluded } = await filterByMonthlyCap(candidates)
 
     // Create campaign record

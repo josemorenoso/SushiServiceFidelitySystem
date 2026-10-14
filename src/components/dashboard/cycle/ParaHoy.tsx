@@ -10,6 +10,7 @@ import {
   botonesDeTarjeta,
   claveDeOk,
   leerJson,
+  type AccionDeTarjeta,
   type BotonDeTarjeta,
   type Lectura,
   type PermisosDelCiclo,
@@ -58,7 +59,9 @@ function recordarOk(id: string, hoyIso: string) {
  *   · OK no escribe nada —lo automático sale solo (decisión A6)—, solo se marca hecho aquí.
  *   · Hoy no pospone UN día lo automático (solo con permiso de marca).
  *   · Cambiar / Elegir regalo → Recompensas › Premios para regalar.
- *   · Crear evento / Subir foto → el calendario (hasta que la parte C traiga el creador).
+ *   · Crear evento / Subir foto → la vista por fecha (parte C): con `onAccion`, abren el creador
+ *     de eventos o la ficha del evento sin salir de la pantalla; el `href` queda para abrir en
+ *     otra pestaña.
  */
 export function ParaHoy({
   tarjetas,
@@ -66,6 +69,7 @@ export function ParaHoy({
   hoyIso,
   posponer = posponerHoy,
   onCambio,
+  onAccion,
 }: {
   tarjetas: TarjetaParaHoy[]
   permisos: PermisosDelCiclo | null
@@ -75,6 +79,8 @@ export function ParaHoy({
   posponer?: (t: TarjetaParaHoy) => Promise<Lectura<{ mensaje?: string }>>
   /** Avisa que algo cambió en el servidor (para volver a leer la portada). */
   onCambio?: () => void
+  /** Hace la acción en el lugar (Crear evento, Subir foto). `true` = ya la hizo: el enlace no navega. */
+  onAccion?: (accion: AccionDeTarjeta, t: TarjetaParaHoy) => boolean
 }) {
   // El valor inicial se lee UNA vez, ya en el navegador (esta sección solo se dibuja con la portada cargada).
   const [aprobadas, setAprobadas] = useState<Set<string>>(() => leerOkDeHoy(tarjetas, hoyIso))
@@ -154,6 +160,7 @@ export function ParaHoy({
                             ocupado={ocupada === t.id}
                             onOk={() => aprobar(t)}
                             onHoyNo={() => decirHoyNo(t)}
+                            onEnlace={onAccion ? () => onAccion(b.accion, t) : undefined}
                           />
                         ))}
                       </div>
@@ -174,16 +181,25 @@ function BotonDeLaTarjeta({
   ocupado,
   onOk,
   onHoyNo,
+  onEnlace,
 }: {
   boton: BotonDeTarjeta
   ocupado: boolean
   onOk: () => void
   onHoyNo: () => void
+  /** Si la hace en el lugar (devuelve `true`), el enlace no navega. */
+  onEnlace?: () => boolean
 }) {
   const variante = boton.estilo === 'primario' ? 'default' : boton.estilo === 'secundario' ? 'outline' : 'ghost'
   if (boton.href) {
     return (
-      <Link href={boton.href} className={buttonVariants({ variant: variante, size: 'sm' })}>
+      <Link
+        href={boton.href}
+        className={buttonVariants({ variant: variante, size: 'sm' })}
+        onClick={(e) => {
+          if (onEnlace?.()) e.preventDefault()
+        }}
+      >
         {boton.etiqueta}
       </Link>
     )

@@ -171,6 +171,12 @@ export interface RestaurantEvent {
   location_id: string | null
   /** 'brand' exige `location_id` NULL · 'location' lo exige NOT NULL (00043). */
   audience_scope: EventAudienceScope
+  /**
+   * «Incluir a los dormidos» (00073). Con el ciclo de recuperación ENCENDIDO en la marca, la
+   * invitación solo les llega a los dormidos si es `true`; con el ciclo apagado no se mira
+   * (`audienciaDelEvento()`, `calendar.service.ts`).
+   */
+  include_dormant: boolean
   created_at: string
   updated_at: string
 }

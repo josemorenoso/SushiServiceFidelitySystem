@@ -1,5 +1,11 @@
 # Un número por sede, y las franquicias — diseño
 
+> ⚠️ **ARCHIVADO por decisión del dueño (2026-10-14, noche): por ahora NO se construye.** Un número por marca, compartido
+> por todas sus sedes («si acumula todo desde varias sedes no debería recibir mensajes desde varios números… eventualmente
+> va a bloquear un número»; «simple es mejor, dejalo así»). D5-a, D5-c y D5-e decididas; D5-d («franquicia» en el AIOS)
+> queda abierta; el conglomerado de marcas con un solo número es D5-f (`docs/PENDIENTES.md` §8). Lo que sigue vale como
+> inventario verificado (qué emisor manda por dónde, el entrante de Zernio) para el día que se reabra.
+
 > **Estado:** DISEÑO, sin código y sin migración escrita (parte 3 de `docs/prompts/2026-10-14-sedes-separadas.md` §5).
 > **Fecha:** 2026-10-14 · **Modelo:** Opus 5.5 · **Para quién:** el comandante y las sesiones que construyan F9. El §0 y
 > el §9 son para el dueño.

@@ -102,6 +102,9 @@ contexto; esto es todo lo que necesitas para seguir sin que el dueño repita nad
    X, empezando por su sección 1». Verificar cada parte antes de dar la siguiente. **A y B: hechas y verificadas
    (14-10). C, con Opus (lo eligió el dueño).** Lo que A y B le dejan a C está en `docs/PENDIENTES.md` §2.4 y en los
    puntos 5 y 6 de la parte C del prompt.
+1-quater. **PUSHEADO el 14-10 (noche): `main` = `36166c5`, Vercel READY (`dpl_81mbhXWR…`), la 00073 aplicada antes.** El dueño
+   decidió: un número por marca (el spec del número por sede quedó ARCHIVADO) y el conglomerado es D5-f (diseño
+   futuro). Siguen vivas al cierre de este turno: sedes parte 2 (00074) y SEDE-OPERADOR. Tepuy: sus plantillas.
 1-ter. **Estado al cierre del 14-10 (noche):** la parte C del ciclo y las partes 1 y 3 de sedes están HECHAS y
    **verificadas por el comandante** (tsc limpio, 98 / 1.658). Sigue: el dueño aplica la **00073** → «pushea» (A, B, C, sedes 1
    y 3 juntas) → mirar el deploy → en paralelo, **sedes parte 2** (tarjeta por sede) y **SEDE-OPERADOR**

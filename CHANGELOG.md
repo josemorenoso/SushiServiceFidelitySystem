@@ -8,6 +8,14 @@
 > **Desde 2026-09-05 el proyecto usa el Método Maestro LuisRAI v3:** una entrada por versión, **≤ 15 líneas**.
 > El detalle largo vive en el commit y en `docs/features/`. Las entradas anteriores quedan como estaban.
 
+## [deploy] — 2026-10-14 — Push a `main` = `36166c5`: la fase 2 del ciclo (A, B y C) y las sedes separadas (partes 1 y 3)
+
+- Orden del dueño («pushea todo de una vez»). **La 00073 se aplicó antes** (verificada: `include_dormant | boolean | false`).
+- Antes del push (comandante): tsc limpio, **98 archivos / 1.658 tests**, la 00073 leída línea por línea, el drenador y el
+  canje revisados. Vercel `cada1` READY en producción: `dpl_81mbhXWR6vGZ3TkXbYUiZnVEYLe6`.
+- Decisiones del dueño del mismo día: **un número por marca** para todas sus sedes (el número por sede queda archivado:
+  D5-a/c/e) y el **conglomerado** de marcas con un solo número, a diseñar cuando llegue uno real (D5-f).
+
 ## [feat] — 2026-10-14 — Sedes separadas, parte 1: el panel separado de verdad (sin migración)
 
 - **Selector:** «Toda la marca (N sedes)» + una por sede; «Sin sede» sale (`?location_id=unknown` sigue en las rutas).

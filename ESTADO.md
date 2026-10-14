@@ -33,6 +33,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Comandante: C, sedes 1 y sedes 3 verificadas; prompt SEDE-OPERADOR, 2026-10-14 | Opus 5.5 | `ESTADO.md`, `docs/PENDIENTES.md`, `docs/prompts/2026-10-14-sede-operador.md` (nuevo), `docs/prompts/2026-10-12-comandante-traspaso.md` | — | en vuelo |
 
 ## 3. Siguiente, en orden
 

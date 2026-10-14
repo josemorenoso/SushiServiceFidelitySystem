@@ -13,7 +13,7 @@ export interface PendingGrant {
   customer_phone: string | null
   prize_title: string
   grant_type: 'tier_prize' | 'campaign_prize'
-  source: 'mystery_box' | 'safe_choice' | 'reactivation' | 'review' | 'manual' | 'invite'
+  source: 'mystery_box' | 'safe_choice' | 'reactivation' | 'review' | 'manual' | 'invite' | 'referral'
   expires_at: string | null
   granted_at: string
   tier_id: string | null
@@ -38,6 +38,8 @@ const SOURCE_BADGE: Record<PendingGrant['source'], { label: string; className: s
   review: { label: 'RESEÑA', className: 'bg-emerald-100 text-emerald-700' },
   manual: { label: 'MANUAL', className: 'bg-gray-100 text-gray-700' },
   invite: { label: 'INVITACIÓN', className: 'bg-pink-100 text-pink-700' },
+  // Referidos (00075): el regalo del amigo que vino o el premio de quien lo trajo.
+  referral: { label: 'REFERIDO', className: 'bg-teal-100 text-teal-700' },
 }
 
 /** El origen de la redención, tal como lo espera `reward_redemptions.source`. */

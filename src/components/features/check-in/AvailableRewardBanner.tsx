@@ -7,7 +7,7 @@ export interface ActiveGrant {
   id: string
   prize_title: string
   grant_type: 'tier_prize' | 'campaign_prize'
-  source: 'mystery_box' | 'safe_choice' | 'reactivation' | 'review' | 'manual'
+  source: 'mystery_box' | 'safe_choice' | 'reactivation' | 'review' | 'manual' | 'invite' | 'referral'
   /** null = no vence */
   expires_at: string | null
   granted_at: string
@@ -49,7 +49,8 @@ export function AvailableRewardBanner({ grants, staffLabel }: Props) {
               <Gift className="mt-0.5 h-5 w-5 shrink-0 text-amber-300" strokeWidth={2} />
               <div className="min-w-0 flex-1">
                 <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-300/80">
-                  Disponible
+                  {/* Referidos (00075): el regalo del amigo, o el premio por haberlo traído. */}
+                  {grant.source === 'referral' ? 'Disponible · por un amigo' : 'Disponible'}
                 </p>
                 <p className="mt-0.5 text-base font-bold leading-tight text-white">
                   {grant.prize_title}

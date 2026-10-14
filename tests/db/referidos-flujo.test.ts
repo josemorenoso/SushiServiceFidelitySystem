@@ -392,6 +392,48 @@ describe('el registro con código y la primera visita', () => {
 })
 
 // ═══════════════════════════════════════════════════════════════
+// El mesero: los dos premios en su lista, con el badge REFERIDO
+// ═══════════════════════════════════════════════════════════════
+
+describe('la lista del mesero', () => {
+  async function pendientes(m: Marca, sede: string) {
+    const { GET } = await import('@/app/api/staff/pending-rewards/route')
+    const res = await GET(
+      new Request(`https://${m.dominio}/api/staff/pending-rewards`, {
+        headers: { host: m.dominio, 'x-device-token': m.sedes[sede].aparato },
+      }) as never
+    )
+    return ((await res.json()) as { grants: Array<{ customer_id: string; source: string; prize_title: string }> }).grants
+  }
+
+  it('el regalo del amigo al escanearlo, y el premio de quien invita cuando él viene: los dos como «referral»', async () => {
+    const ana = await clienteExistente(A, 'Gabriela')
+    const telAmigo = nuevoTelefono()
+    await registrar(A.dominio, telAmigo, 'Héctor', (await me(A.dominio, ana.phone)).body.codigo)
+    await escanear(A.dominio, telAmigo, A.sedes.Centro.mesero)
+    const amigo = (await filaCliente(A, telAmigo))!
+
+    const lista = await pendientes(A, 'Centro')
+    expect(lista).toContainEqual(expect.objectContaining({ customer_id: amigo.id, source: 'referral', prize_title: 'Postre de bienvenida' }))
+    // Ana todavía no vino hoy: su premio existe pero no estorba la pantalla del mesero.
+    expect(lista.find((g) => g.customer_id === ana.id)).toBeUndefined()
+
+    await escanear(A.dominio, ana.phone, A.sedes.Centro.mesero)
+    expect(await pendientes(A, 'Centro')).toContainEqual(
+      expect.objectContaining({ customer_id: ana.id, source: 'referral', prize_title: 'Rollo gratis' })
+    )
+  })
+
+  it('las dos pantallas del mesero le ponen «REFERIDO» a esa fuente', async () => {
+    const fs = await import('node:fs')
+    const lista = fs.readFileSync('src/components/features/staff/PendingRewardsList.tsx', 'utf8')
+    const alerta = fs.readFileSync('src/components/features/staff/RewardAlert.tsx', 'utf8')
+    expect(lista).toMatch(/referral:\s*\{\s*label:\s*'REFERIDO'/)
+    expect(alerta).toContain('REFERIDO')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════
 // Lo que no cuenta
 // ═══════════════════════════════════════════════════════════════
 

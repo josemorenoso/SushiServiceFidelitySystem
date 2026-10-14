@@ -7,7 +7,7 @@ interface ActiveGrant {
   id: string
   prize_title: string
   grant_type: 'tier_prize' | 'campaign_prize'
-  source: 'mystery_box' | 'safe_choice' | 'reactivation' | 'review' | 'manual' | 'invite'
+  source: 'mystery_box' | 'safe_choice' | 'reactivation' | 'review' | 'manual' | 'invite' | 'referral'
   expires_at: string | null
   granted_at: string
   tier_id: string | null
@@ -157,10 +157,17 @@ export function RewardAlert({ phone, authHeaders, tableNumber, onRedeemed }: Pro
             <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600" />
             <div className="flex-1">
               <p className="text-sm font-bold text-amber-800">
-                {grant.grant_type === 'campaign_prize'
-                  ? '🎁 Cliente tiene premio de campaña'
-                  : '⚠️ Cliente tiene premio pendiente'}
+                {grant.source === 'referral'
+                  ? '🎁 Premio de REFERIDO'
+                  : grant.grant_type === 'campaign_prize'
+                    ? '🎁 Cliente tiene premio de campaña'
+                    : '⚠️ Cliente tiene premio pendiente'}
               </p>
+              {grant.source === 'referral' && (
+                <span className="mt-1 inline-block rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-bold tracking-wide text-teal-700">
+                  REFERIDO
+                </span>
+              )}
               <p className="mt-0.5 flex items-center gap-1.5 text-base font-semibold text-amber-900">
                 <Gift className="h-4 w-4" /> {grant.prize_title}
               </p>

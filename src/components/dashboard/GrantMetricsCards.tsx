@@ -32,6 +32,8 @@ const SOURCE_LABEL: Record<string, string> = {
   reactivation: 'Reactivación agresiva',
   review: 'Reseña de Google',
   manual: 'Manual',
+  invite: 'Invitación',
+  referral: 'Referidos',
 }
 
 /**

@@ -33,6 +33,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Comandante: parte B verificada; el interruptor del servidor pasa a la parte C, 2026-10-14 | Opus 5.5 | `ESTADO.md`, `docs/PENDIENTES.md`, `docs/prompts/2026-10-14-ciclo-fase-2-pantalla.md`, `docs/prompts/2026-10-12-comandante-traspaso.md` | — | en vuelo |
 
 ## 3. Siguiente, en orden
 

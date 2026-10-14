@@ -73,7 +73,10 @@ contexto; esto es todo lo que necesitas para seguir sin que el dueño repita nad
   `meta-conversions` solo los escribe el super usuario de la marca).
 - **AIOS v1.15.2**: el link pide «Nombre visible» = la marca y habla de tú; el paso 3 muestra qué le falta a la marca para
   escribir primero (`GET /v1/whatsapp/number-info`; verificado por el comandante con los datos reales de Tepuy: 3 tareas).
-- Última verificación completa (comandante, 14-10): tsc limpio · **86 archivos / 1.373 tests** · AIOS tsc limpio.
+- Última verificación completa (comandante, 14-10, con la parte A de la fase 2): tsc limpio · **89 archivos / 1.453
+  tests** · mutación del cron sin leer «Hoy no»: cae 1 test, como dijo el informe.
+- **Sin pushear (la rama va por delante de `origin/main` = `b1039b0`):** la fase 2 parte A del ciclo (`b3f652b` +
+  `304d5b7`), **verificada por el comandante el 14-10**, sin migración: se puede pushear cuando el dueño diga «pushea».
 
 ### Lo del dueño, abierto
 1. **Encender el ciclo en Don Alirio y Sushi Fun** (decidido el 14-10: sin pasar por la demo; Sushi Service espera a
@@ -93,7 +96,8 @@ contexto; esto es todo lo que necesitas para seguir sin que el dueño repita nad
 1. **Fase 2 del ciclo, la pantalla** (prototipo APROBADO el 14-10): prompt listo
    `docs/prompts/2026-10-14-ciclo-fase-2-pantalla.md`, **tres partes EN ORDEN** (A datos → B pantalla «Ciclo» → C vista
    por fecha y creadores). El dueño pega «Lee entero docs/prompts/2026-10-14-ciclo-fase-2-pantalla.md y ejecuta la PARTE
-   A, empezando por su sección 1». Verificar cada parte antes de dar la siguiente.
+   X, empezando por su sección 1». Verificar cada parte antes de dar la siguiente. **A: hecha y verificada (14-10).**
+   Lo que A les deja a B y C está en `docs/PENDIENTES.md` §2.4 (la sesión de B lo lee en su §1.3).
 2. Verificar el encendido del ciclo al día siguiente (toques, cola, fallidos, dormidos por encendido).
 3. Después: plantillas **B1/B7** (menos aprobaciones; el AIOS deja de crear plantillas) · arreglos chicos de
    `docs/PENDIENTES.md` §3.3 y §5 (PL-2, PL-2-ciclo, N-DOBLE, N6, N13, N18 + CI, OPER-4-mudo, 0.ETA, S-1.6/S-1.7…) ·

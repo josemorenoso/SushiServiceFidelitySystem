@@ -33,6 +33,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Ciclo fase 2, parte A: los datos (endpoints de lectura + «Hoy no»), 2026-10-14 | Opus 5.5 | `src/app/api/dashboard/cycle/**` (nuevo), `src/services/cycle-overview.service.ts` (nuevo), `src/constants/fechas-especiales.ts` (nuevo), lo mínimo de `src/services/cycle.service.ts` y `src/lib/settings-keys.ts` para «Hoy no», `tests/**` nuevos, `docs/features/ritmo-adaptativo.md`, `docs/API_DOCS.md`, `docs/PENDIENTES.md`, `ESTADO.md`, `CHANGELOG.md` | ninguna | en curso |
 
 ## 3. Siguiente, en orden
 

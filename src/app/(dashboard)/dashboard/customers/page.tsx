@@ -20,6 +20,7 @@ import { CustomerDetailDialog } from '@/components/dashboard/CustomerDetailDialo
 import { BlackTierSection } from '@/components/dashboard/BlackTierSection'
 import { useDashboardAnalytics } from '@/hooks/useDashboardAnalytics'
 import type { Customer } from '@/types/database.types'
+import { importarCliente, resumenVacio, sumarFila, textoDelResumen } from '@/lib/importar-clientes-csv'
 
 /**
  * Apartado de Clientes.
@@ -135,34 +136,22 @@ export default function CustomersPage() {
 
       if (phoneIdx === -1) { toast.error('CSV debe tener columna "telefono" o "celular"'); return }
 
-      let imported = 0
-      let skipped = 0
+      // 0.ETA (2026-10-15): solo cuenta como importado lo que la base ACEPTÓ (`res.ok`). Antes
+      // un 409 (2+ sedes, D21) o un 500 sumaban «importados» sobre cero filas.
+      let resumen = resumenVacio()
 
       for (let i = 1; i < lines.length; i++) {
         const cols = parseCSVLine(lines[i])
         const phone = cols[phoneIdx]?.replace(/[^0-9]/g, '').slice(-10)
-        if (!phone || !/^3\d{9}$/.test(phone)) { skipped++; continue }
+        if (!phone || !/^3\d{9}$/.test(phone)) { resumen = { ...resumen, invalidos: resumen.invalidos + 1 }; continue }
 
         const name = cols[nameIdx] || 'Importado'
-        try {
-          const res = await fetch('/api/check-in', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phone, action: 'lookup' }),
-          })
-          const data = await res.json()
-          if (data.found) { skipped++; continue }
-
-          await fetch('/api/check-in', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phone, action: 'register', name, accepts_marketing: true }),
-          })
-          imported++
-        } catch { skipped++ }
+        resumen = sumarFila(resumen, await importarCliente(phone, name))
       }
 
-      toast.success(`Importados: ${imported}, Omitidos: ${skipped} (ya existían o inválidos)`)
+      const { tipo, texto } = textoDelResumen(resumen)
+      if (tipo === 'exito') toast.success(texto)
+      else toast.error(texto, { duration: 15_000 })
       fetchCustomers()
     } catch {
       toast.error('Error al importar CSV')

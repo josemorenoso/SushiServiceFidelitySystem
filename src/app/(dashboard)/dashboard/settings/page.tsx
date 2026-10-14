@@ -8,6 +8,17 @@ import { Button } from '@/components/ui/button'
 import { PointsCalibrator } from '@/components/dashboard/PointsCalibrator'
 import type { PointsEngineConfig } from '@/lib/points-engine'
 import { normalizeMetaPixelId } from '@/lib/meta-pixel'
+import { guardarAjuste, guardarAjustes } from '@/lib/guardar-ajustes'
+
+/** El motivo de un guardado que no salió, debajo de su botón (OPER-4-mudo). */
+function ErrorDeGuardado({ mensaje }: { mensaje: string | null }) {
+  if (!mensaje) return null
+  return (
+    <p role="alert" className="text-xs mt-2 font-medium text-destructive">
+      {mensaje}
+    </p>
+  )
+}
 
 function SaveButton({ saving, saved, onClick, disabled }: { saving: boolean; saved: boolean; onClick: () => void; disabled: boolean }) {
   return (
@@ -39,6 +50,7 @@ const DEFAULT_BLACK_BENEFITS = [
 
 export default function SettingsPage() {
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [settings, setSettings] = useState<Record<string, string>>({})
 
   // Ticket promedio
@@ -51,6 +63,7 @@ export default function SettingsPage() {
   const [benefits, setBenefits] = useState<string[]>(DEFAULT_BLACK_BENEFITS)
   const [benefitsSaving, setBenefitsSaving] = useState(false)
   const [benefitsSaved, setBenefitsSaved] = useState(false)
+  const [benefitsError, setBenefitsError] = useState<string | null>(null)
 
   // Las plantillas de WhatsApp ya no se eligen acá (2026-10-11): se crean, se mandan a
   // Meta y se eligen en Plantillas, una sola pantalla para Twilio y Zernio. Esta página
@@ -67,6 +80,7 @@ export default function SettingsPage() {
   const [pointsEnabled, setPointsEnabled] = useState(true)
   const [pointsSaving, setPointsSaving] = useState(false)
   const [pointsSaved, setPointsSaved] = useState(false)
+  const [pointsError, setPointsError] = useState<string | null>(null)
   /** Umbral del primer premio: el `point_threshold` más bajo entre los tiers activos. */
   const [firstTierThreshold, setFirstTierThreshold] = useState<number | null>(null)
 
@@ -75,6 +89,7 @@ export default function SettingsPage() {
   const [firstVisitFree, setFirstVisitFree] = useState(true)
   const [checkinSaving, setCheckinSaving] = useState(false)
   const [checkinSaved, setCheckinSaved] = useState(false)
+  const [checkinError, setCheckinError] = useState<string | null>(null)
 
   // Reactivation days config
   const [reactivationSoftDays, setReactivationSoftDays] = useState('21')
@@ -113,8 +128,6 @@ export default function SettingsPage() {
   const [locationRadius, setLocationRadius] = useState('20')
   const [locationAddress, setLocationAddress] = useState('')
   const [geoStrictMode, setGeoStrictMode] = useState(false)
-  const [locationSaving, setLocationSaving] = useState(false)
-  const [locationSaved, setLocationSaved] = useState(false)
 
   /** Los seis inputs de Ajustes avanzados, traducidos a la config que entiende el motor. */
   const pointsConfig = useMemo<PointsEngineConfig>(() => ({
@@ -137,21 +150,17 @@ export default function SettingsPage() {
     setPointsSaved(false)
   }, [])
 
-  const saveSetting = useCallback(async (key: string, value: string) => {
-    const res = await fetch('/api/dashboard/settings', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key, value }),
-    })
-    if (!res.ok) {
-      const data = await res.json()
-      throw new Error(data.error ?? 'Error guardando')
-    }
-  }, [])
+  // Lanza con el motivo del servidor en español (un 403 de OPER-4 incluido): `guardar-ajustes.ts`.
+  const saveSetting = useCallback((key: string, value: string) => guardarAjuste(key, value), [])
 
   useEffect(() => {
     Promise.all([
-      fetch('/api/dashboard/settings').then((r) => r.json()),
+      // Un fallo al LEER no puede verse como «tus ajustes son los de fábrica»: los valores
+      // por defecto de los campos parecerían los guardados, y guardarlos pisaría los reales.
+      fetch('/api/dashboard/settings').then(async (r) => {
+        if (!r.ok) throw new Error('settings')
+        return r.json()
+      }),
       fetch('/api/dashboard/location').then((r) => r.ok ? r.json() : null).catch(() => null),
       fetch('/api/dashboard/reward-tiers').then((r) => r.ok ? r.json() : []).catch(() => []),
       fetch('/api/dashboard/tenant-config').then((r) => r.ok ? r.json() : null).catch(() => null),
@@ -202,7 +211,9 @@ export default function SettingsPage() {
           setLocationAddress(locationData.address ?? '')
         }
       })
-      .catch(() => {})
+      .catch(() => {
+        setLoadError('No pudimos leer tu configuración. Lo que ves abajo son valores de ejemplo, no los tuyos: recarga la página antes de guardar.')
+      })
       .finally(() => {
         setLoading(false)
       })
@@ -223,52 +234,52 @@ export default function SettingsPage() {
     }
   }
 
+  // OPER-4-mudo (2026-10-15): estas tres secciones guardaban con un `catch` vacío y un 403
+  // (administrador de sede) o un 500 no se veía. Ahora el motivo sale debajo del botón y
+  // «Guardado» solo aparece si se guardó TODO (`guardarAjustes()` espera a cada valor).
   const handleSaveBenefits = async () => {
     setBenefitsSaving(true)
     setBenefitsSaved(false)
-    try {
-      await saveSetting('black_benefits', JSON.stringify(benefits.filter((b) => b.trim())))
-      setBenefitsSaved(true)
-      setTimeout(() => setBenefitsSaved(false), 3000)
-    } catch { /* silent */ } finally {
-      setBenefitsSaving(false)
-    }
+    setBenefitsError(null)
+    const error = await guardarAjustes([['black_benefits', JSON.stringify(benefits.filter((b) => b.trim()))]])
+    setBenefitsSaving(false)
+    if (error) { setBenefitsError(error); return }
+    setBenefitsSaved(true)
+    setTimeout(() => setBenefitsSaved(false), 3000)
   }
 
   const handleSavePoints = async () => {
     setPointsSaving(true)
     setPointsSaved(false)
-    try {
-      await Promise.all([
-        saveSetting('points_per_visit_min', pointsMin),
-        saveSetting('points_per_visit_max', pointsMax),
-        saveSetting('welcome_bonus_points_min', welcomeMin),
-        saveSetting('welcome_bonus_points_max', welcomeMax),
-        saveSetting('shortfall_min', shortfallMin),
-        saveSetting('shortfall_max', shortfallMax),
-        saveSetting('pity_timer_threshold', pityThreshold),
-        saveSetting('points_system_enabled', String(pointsEnabled)),
-      ])
-      setPointsSaved(true)
-      setTimeout(() => setPointsSaved(false), 3000)
-    } catch { /* silent */ } finally {
-      setPointsSaving(false)
-    }
+    setPointsError(null)
+    const error = await guardarAjustes([
+      ['points_per_visit_min', pointsMin],
+      ['points_per_visit_max', pointsMax],
+      ['welcome_bonus_points_min', welcomeMin],
+      ['welcome_bonus_points_max', welcomeMax],
+      ['shortfall_min', shortfallMin],
+      ['shortfall_max', shortfallMax],
+      ['pity_timer_threshold', pityThreshold],
+      ['points_system_enabled', String(pointsEnabled)],
+    ])
+    setPointsSaving(false)
+    if (error) { setPointsError(error); return }
+    setPointsSaved(true)
+    setTimeout(() => setPointsSaved(false), 3000)
   }
 
   const handleSaveCheckin = async () => {
     setCheckinSaving(true)
     setCheckinSaved(false)
-    try {
-      await Promise.all([
-        saveSetting('checkin_mode', checkinMode),
-        saveSetting('checkin_first_visit_free', String(firstVisitFree)),
-      ])
-      setCheckinSaved(true)
-      setTimeout(() => setCheckinSaved(false), 3000)
-    } catch { /* silent */ } finally {
-      setCheckinSaving(false)
-    }
+    setCheckinError(null)
+    const error = await guardarAjustes([
+      ['checkin_mode', checkinMode],
+      ['checkin_first_visit_free', String(firstVisitFree)],
+    ])
+    setCheckinSaving(false)
+    if (error) { setCheckinError(error); return }
+    setCheckinSaved(true)
+    setTimeout(() => setCheckinSaved(false), 3000)
   }
 
   const handleSaveReview = async () => {
@@ -427,30 +438,9 @@ export default function SettingsPage() {
     }
   }
 
-  const handleSaveLocation = async () => {
-    setLocationSaving(true)
-    setLocationSaved(false)
-    try {
-      const [resLoc] = await Promise.all([
-        fetch('/api/dashboard/location', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            lat: parseFloat(locationLat),
-            lon: parseFloat(locationLon),
-            radius_meters: parseInt(locationRadius) || 20,
-            address: locationAddress || undefined,
-          }),
-        }),
-        saveSetting('geo_strict_mode', String(geoStrictMode)),
-      ])
-      if (!resLoc.ok) throw new Error('Error guardando')
-      setLocationSaved(true)
-      setTimeout(() => setLocationSaved(false), 3000)
-    } catch { /* silent */ } finally {
-      setLocationSaving(false)
-    }
-  }
+  // «Ubicación del Local» no guarda nada desde aquí: la sección está bajo «Próximamente» y su
+  // `handleSaveLocation()` (con un `catch` vacío y sin botón que lo llamara) se retiró el
+  // 2026-10-15 (OPER-4-mudo). La ubicación de cada sede se edita en Mis sedes.
 
   const updateBenefit = (index: number, value: string) => {
     const next = [...benefits]
@@ -474,6 +464,12 @@ export default function SettingsPage() {
           Ajustes
         </h1>
       </div>
+
+      {loadError && (
+        <div role="alert" className="max-w-2xl rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive">
+          {loadError}
+        </div>
+      )}
 
       {/* ─── TICKET PROMEDIO ─── */}
       <div className="dashboard-card p-6 max-w-2xl">
@@ -545,6 +541,7 @@ export default function SettingsPage() {
           </Button>
           <SaveButton saving={benefitsSaving} saved={benefitsSaved} onClick={handleSaveBenefits} disabled={benefitsSaving} />
         </div>
+        <ErrorDeGuardado mensaje={benefitsError} />
       </div>
 
       {/* ─── SISTEMA DE PUNTOS ─── */}
@@ -660,6 +657,7 @@ export default function SettingsPage() {
           </div>
 
           <SaveButton saving={pointsSaving} saved={pointsSaved} onClick={handleSavePoints} disabled={pointsSaving || loading} />
+          <ErrorDeGuardado mensaje={pointsError} />
         </div>
       </div>
 
@@ -737,6 +735,7 @@ export default function SettingsPage() {
           </div>
 
           <SaveButton saving={checkinSaving} saved={checkinSaved} onClick={handleSaveCheckin} disabled={checkinSaving || loading} />
+          <ErrorDeGuardado mensaje={checkinError} />
         </div>
       </div>
 

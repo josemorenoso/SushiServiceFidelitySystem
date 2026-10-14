@@ -96,7 +96,7 @@ El sistema funciona como un **CRM automatizado con gamificación** que conecta t
 | **Cap mensual de marketing** | Máximo 3 mensajes de marketing por cliente al mes. Protege la cuenta de WhatsApp de bloqueos. |
 | **Pre-event blackout** | Antes de eventos programados, las campañas manuales se pausan automáticamente para no saturar. |
 | **Mensajes dopamínicos** | Tono cálido, cercano, enérgico. Con emojis moderados, números visibles, progreso claro. Aprobado por Meta (compliant). |
-| **Segmentación inteligente** | SegmentRadar en dashboard: Activos, Recuperación, Perdidos, Cumpleaños. Filtros por ciudad, visitas, tier. |
+| **Segmentación inteligente** | Las cajas del ciclo en Campañas: quién vino hace poco, en qué etapa de recuperación está cada cliente y quién se durmió (desde el 2026-10-15 reemplazan al viejo «Radar de Segmentos»). Filtros por ciudad, visitas, tier. |
 
 ### 3.1.bis Se adapta a tu clientela *(en construcción: piloto en Don Alirio)*
 

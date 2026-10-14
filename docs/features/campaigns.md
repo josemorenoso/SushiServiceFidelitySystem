@@ -22,8 +22,10 @@
 
 `/dashboard/campaigns` es ahora **«Ciclo y campañas»**: dos pestañas, **Ciclo** (la que abre) e **Historial**.
 «Mensaje libre (avanzado)» NO es una pestaña: es un botón de arriba que lleva al asistente manual de siempre
-(`ManualCampaigns`) con su «Volver al ciclo»; ahí viven también el cupo de la línea (`CupoEnvioCard`, que salió de la
-portada: la parte C lo lleva al creador de «Mandar un regalo») y el radar de segmentos (`SegmentRadar`). La vista se lee
+(`ManualCampaigns`) con su «Volver al ciclo»; ahí vive también el cupo de la línea (`CupoEnvioCard`, que salió de la
+portada: la parte C lo lleva al creador de «Mandar un regalo»). El radar de segmentos (`SegmentRadar` y su
+`GET /api/dashboard/campaigns/segments`) **se retiró el 2026-10-15** (N-RADAR): contaba con la escala vieja (17 · 21 · 25)
+y ante un 500 pintaba «NaN clientes»; quién está en cada etapa lo dicen las cajas de esta pantalla. La vista se lee
 de `?vista=` o del viejo `?tab=` con `window.location` + `useSyncExternalStore` (nunca `useSearchParams()`): `?tab=manuales`
 abre el mensaje libre, `?tab=historial` el historial, `?tab=automaticas` y lo desconocido el ciclo, `?tab=premios`
 redirige a Recompensas (S-1).
@@ -68,8 +70,8 @@ que leer) y `RISK_LEVELS` / `deriveCycleBands()` / `deriveRiskLevels()`, que sig
 `ManualCampaigns` y su test). El panel principal (`/dashboard`) trae el **mini-ciclo** (`MiniCiclo`: las mismas cajas sin
 detalle, `overview?mini=1`, con enlace a esta pantalla; es de la marca entera).
 
-**Deuda anotada:** `SegmentRadar` y `ManualCampaigns` siguen con la escala vieja
-(17 · 21 · 25 días) y `SegmentRadar` ante un fallo del endpoint muestra «NaN clientes» y ceros (`docs/PENDIENTES.md` §5).
+**Deuda anotada:** los presets de `ManualCampaigns` siguen con la escala vieja (17 · 21 · 25 días). `SegmentRadar`, que
+tenía la misma deuda y además pintaba «NaN clientes» ante un 500, se retiró el 2026-10-15 (N-RADAR).
 Tests: `tests/unit/cycle-pantalla-b.test.ts` (lo puro) y `tests/unit/cycle-pantalla-b-render.test.ts` (los componentes a
 HTML, «error ⇒ ningún número», quién ve qué, lo retirado).
 

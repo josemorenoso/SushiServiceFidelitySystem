@@ -33,7 +33,7 @@ Plataforma integral (Full-Stack) de fidelización, CRM y automatización de mark
 | 6 | Deploy Vercel + Fixes post-deploy | ✅ v0.24.0 — Control de tráfico, frequency cap, recovery zone |
 | 7 | UX Check-in mejorado | ✅ v0.25–0.29 — Dropdowns, combobox ciudad, consentimiento legal |
 | 8 | Modelo clone-por-cliente | ✅ En producción — Sushi Service desplegado |
-| 9 | Radar de Segmentos + dashboard auto-refresh | ✅ v0.25.0 — SegmentRadar en campañas |
+| 9 | Radar de Segmentos + dashboard auto-refresh | ✅ v0.25.0 — SegmentRadar en campañas. **Retirado el 2026-10-15** (N-RADAR): lo reemplazan las cajas de la pestaña «Ciclo» |
 | 10 | Sistema de Puntos + Mystery Box | ✅ v1.0.0–v1.0.3 — Algoritmo inteligente de 3 visitas, tiers acumulativos, pity timer, global caps. v1.0.3: Dashboard CRUD de tiers + Mystery Box, configuración de puntos en settings, welcome bonus aleatorio |
 | 11 | Geolocalización anti QR-scam | ⏸️ STANDBY (v1.0.5-3) — Código comentado por fricción con usuarios. Reactivación futura o reemplazo por `staff-qr-scan.md` |
 | 12 | Staff QR Scan (Verificación presencial con mesero) | ✅ v1.1.0–v1.1.7 — QR dinámico, login de meseros (PIN/device trust), polling automático para flujo completo del cliente. Fixes de producción: base64url decode, race condition scanner, auth headers fallback |

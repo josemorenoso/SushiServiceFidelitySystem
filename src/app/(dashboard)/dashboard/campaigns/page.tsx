@@ -9,7 +9,6 @@ import { CicloPantalla } from '@/components/dashboard/cycle/CicloPantalla'
 import { HistorialDeCampanas } from '@/components/dashboard/cycle/HistorialDeCampanas'
 import { CupoEnvioCard } from '@/components/dashboard/CupoEnvioCard'
 import { ManualCampaigns } from '@/components/dashboard/ManualCampaigns'
-import { SegmentRadar } from '@/components/dashboard/SegmentRadar'
 import { WalletCard } from '@/components/dashboard/WalletCard'
 import { RUTAS_DEL_CICLO, vistaDeUrl, type VistaDeCampanas } from '@/lib/cycle-screen'
 
@@ -18,8 +17,9 @@ import { RUTAS_DEL_CICLO, vistaDeUrl, type VistaDeCampanas } from '@/lib/cycle-s
  *
  * Dos pestañas: **Ciclo** (la que abre) e **Historial**. «Mensaje libre (avanzado)» NO es una
  * pestaña: es un enlace aquí arriba que lleva al asistente manual de siempre (`ManualCampaigns`)
- * y, como ese es el lugar desde donde se dispara un envío a mano, ahí viven también el cupo de
- * la línea y el radar de segmentos (la parte C lleva el cupo al creador de «Mandar un regalo»).
+ * y, como ese es el lugar desde donde se dispara un envío a mano, ahí vive también el cupo de
+ * la línea (la parte C lo lleva al creador de «Mandar un regalo»). El radar de segmentos que
+ * estaba al lado se retiró el 2026-10-15 (N-RADAR): ver el comentario en la vista «libre».
  *
  * Desaparecen con esta pantalla (spec §6.7, §7.6): las tarjetas de «Automáticas» (cumpleaños y
  * reactivación, con su «Ejecutar ahora» y la insignia «Activa» que no miraba la plantilla
@@ -93,7 +93,9 @@ export default function CampaignsPage() {
         {/* Encima del asistente a propósito: el cupo se ve desde donde se dispara un envío. Es de la
             MARCA, así que no lo filtra el selector de sede del encabezado. */}
         <CupoEnvioCard />
-        <SegmentRadar />
+        {/* El radar de segmentos se retiró el 2026-10-15 (N-RADAR): contaba con una segunda
+            escala de días (17 · 21 · 25) que no es la del ciclo, y ante un 500 pintaba «NaN
+            clientes». Quién está en cada etapa lo dice la pestaña Ciclo, con el motor. */}
         <ManualCampaigns />
       </div>
     )

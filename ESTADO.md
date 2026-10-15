@@ -33,6 +33,7 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
+| Comandante (2026-10-15): verificación de lo de la noche, push del producto y del AIOS | Opus 5.5 | `ESTADO.md`, `docs/PENDIENTES.md`, `CHANGELOG.md` | — | En curso |
 
 ## 3. Siguiente, en orden
 

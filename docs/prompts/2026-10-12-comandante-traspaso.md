@@ -1,5 +1,8 @@
 # Prompt de traspaso — el comandante general (2026-10-12)
 
+> ⚠️ **REEMPLAZADO el 2026-10-15 por `docs/prompts/2026-10-15-comandante-traspaso.md`.** Este queda como historia: no lo
+> pegues para abrir un comandante nuevo.
+
 > Para abrir una sesión nueva que siga **exactamente** con la misma forma de trabajo. El dueño la pega entera en una
 > sesión nueva (Opus) abierta en la raíz del repo. La escribió el comandante anterior (Opus 5.5) al llenarse su contexto.
 

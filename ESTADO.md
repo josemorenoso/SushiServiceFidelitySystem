@@ -33,7 +33,6 @@
 
 | Sesión (qué, quién, cuándo) | Modelo | Archivos / carpetas que toca | Migración | Estado |
 |---|---|---|---|---|
-| Comandante: traspaso a una sesión nueva, 2026-10-15 | Opus 5.5 | `docs/prompts/2026-10-15-comandante-traspaso.md` (nuevo), `docs/prompts/2026-10-12-comandante-traspaso.md` (aviso arriba) | — | en vuelo |
 
 ## 3. Siguiente, en orden
 
